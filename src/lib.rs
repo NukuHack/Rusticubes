@@ -61,11 +61,12 @@ pub async fn run() {
                                 wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated,
                             ) => state.resize(state.size),
                             // The system is out of memory, we should probably quit
-                            Err(wgpu::SurfaceError::OutOfMemory | wgpu::SurfaceError::Other) => {
+                            Err(
+                                wgpu::SurfaceError::OutOfMemory | wgpu::SurfaceError::Other
+                            ) => {
                                 log::error!("OutOfMemory");
                                 control_flow.exit();
                             }
-
                             // This happens when the frame takes too long to present
                             Err(wgpu::SurfaceError::Timeout) => {
                                 log::warn!("Surface timeout")
@@ -90,7 +91,7 @@ impl<'a> State<'a> {
         // Backends::all => Vulkan + Metal + DX12 + Browser WebGPU
         let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
             #[cfg(not(target_arch = "wasm32"))]
-            backends: wgpu::Backends::PRIMARY,
+            backends: wgpu::Backends::PRIMARY, // Use the primary backends (Vulkan/DX12/Metal)
             #[cfg(target_arch = "wasm32")]
             backends: wgpu::Backends::GL,
             ..Default::default()
@@ -102,46 +103,54 @@ impl<'a> State<'a> {
         let adapter = instance
             .enumerate_adapters(wgpu::Backends::all())
             .into_iter() // Convert Vec to iterator
-            .filter(|adapter| {
-                adapter.is_surface_supported(&surface)
-            })
+            .filter(|adapter| adapter.is_surface_supported(&surface))
             .next()
-            .unwrap();
+            .expect("No suitable GPU adapter found");
 
-        let (device, queue) = adapter.request_device(
-            &wgpu::DeviceDescriptor {
-                required_features: wgpu::Features::empty(),
-                required_limits: if cfg!(target_arch = "wasm32") {
-                    wgpu::Limits::downlevel_webgl2_defaults()
-                } else {
-                    wgpu::Limits::default()
+        let (device, queue) = adapter
+            .request_device(
+                &wgpu::DeviceDescriptor {
+                    required_features: wgpu::Features::empty(),
+                    required_limits: if cfg!(target_arch = "wasm32") {
+                        wgpu::Limits::downlevel_webgl2_defaults()
+                    } else {
+                        wgpu::Limits::default()
+                    },
+                    label: None,
+                    memory_hints: Default::default(),
                 },
-                label: None,
-                memory_hints: Default::default(),
-            },
-            None, // Trace path
-        )
+                None,
+            )
             .await
             .unwrap();
 
-        let surface_caps = surface.get_capabilities(&adapter);
+
         // Shader code in this tutorial assumes an sRGB surface texture. Using a different
         // one will result in all the colors coming out darker. If you want to support non
         // sRGB surfaces, you'll need to account for that when drawing to the frame.
+        let surface_caps = surface.get_capabilities(&adapter);
         let surface_format = surface_caps.formats.iter()
-            .find(|f| f.is_srgb())
             .copied()
+            .find(|f| f.is_srgb())
             .unwrap_or(surface_caps.formats[0]);
+
+        let present_mode = surface_caps.present_modes.iter().copied()
+            .find(|mode| *mode == wgpu::PresentMode::Fifo)
+            .unwrap_or(surface_caps.present_modes[0]);
+
         let config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             format: surface_format,
             width: size.width,
             height: size.height,
-            present_mode: surface_caps.present_modes[0],
+            present_mode,
             alpha_mode: surface_caps.alpha_modes[0],
             view_formats: vec![],
             desired_maximum_frame_latency: 2,
         };
+
+        // After creating `config`, configure the surface
+        surface.configure(&device, &config);
 
         Self {
             surface,
