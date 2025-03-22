@@ -1,0 +1,26 @@
+﻿Variables :
+
+by default everything in i32 (32-bit integer)
+by default every variable is a constant ?
+ - use "mut" at declaring variables to make them non-constant
+ - declare variables like <declare><mut><name>:<type>=<value>
+ - here is a basic int variable named number_one what is equal to one
+    let mut number_one: i32 = 1;
+ - here is a constant array named array_two with 10 elements (from 0(in) to 10(ex))
+    let array_two: Vec<i32> = (0..10).collect();
+ - and ofc there are pairs - containing 2 (or more?) variables as one
+    let mut nice:(char,i32) = ('1',1);
+    access them with .<id> to get the thing in it like
+    let mut nice_1:i32=nice.1;
+
+
+ function variables ..... (they have to be mutable)
+        let mut print_many = || {
+            println!("0");
+        };
+
+ loops containing unused values have to make their variables start with "_"
+
+            for _i in 0..10 {
+                println!("0");
+            }

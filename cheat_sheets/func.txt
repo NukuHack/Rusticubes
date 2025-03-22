@@ -1,0 +1,45 @@
+﻿Functions:
+
+just like in "all" other languages
+fn
+<name>
+<out>(if any)
+(<input>)
+{<stuff to do>}
+;
+
+like a void function what writes a line with a variable given to it :
+    fn do_stuff(
+        val: &i32
+    ){
+        println(val);
+    }
+
+    do_stuff(&hello);
+
+ a non-void function
+     fn dice_glitch() -> i32 {
+        4
+     }// returns 4
+
+     do_stuff(&hello);
+
+
+ immediate functions : {}
+ so like here is a variable declared in a function :
+ let mut nice_1:i32={
+    let nice_x:i32 = 1;
+    let nice_y:i32 = 3;
+    nice_x+nice_y //returned value without the ";"
+ };
+
+ there is a weird switch-case thingy here :
+    fn dice_glitch(
+        val: &i32
+    ) -> i32 {
+        match val{
+            10 => 10,
+            2 => 5,
+            _ => 0
+        }
+    }// the matching value or 0 by default
