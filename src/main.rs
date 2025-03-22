@@ -1,5 +1,5 @@
 use std::io::{stdout, Write};
-use console_test::run;
+use test_app::run;
 //use std::cmp::max;
 
 struct Point{
