@@ -5,10 +5,10 @@ edition = "2024"
 
 [dependencies]
 winit = { version = "0.29", features = ["rwh_05"] }
-env_logger = "0.10"
-log = "0.4"
-wgpu = "24.0"
-pollster = "0.3"
+env_logger = "^0.10"
+log = "^0.4"
+wgpu = { version = "^24", features = ["dx12", "metal"] } # not sure how to add vulkan to this ...
+pollster = "^0.3"
 
 [lib]
 crate-type = ["cdylib", "rlib"]
