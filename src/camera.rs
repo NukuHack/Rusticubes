@@ -4,7 +4,73 @@ use winit::{
     keyboard::{KeyCode, PhysicalKey},
 };
 use cgmath::*;
+use wgpu::SurfaceConfiguration;
+use wgpu::util::DeviceExt;
 
+pub struct CameraSystem {
+    pub camera: Camera,
+    pub uniform: CameraUniform,
+    pub buffer: wgpu::Buffer,
+    pub bind_group: wgpu::BindGroup,
+    pub bind_group_layout: wgpu::BindGroupLayout,
+}
+
+impl CameraSystem {
+    pub fn new(
+        device: &wgpu::Device,
+        config: &SurfaceConfiguration,
+        camera: Camera,
+    ) -> Self {
+        let mut uniform = CameraUniform::new();
+        uniform.update_view_proj(&camera);
+
+        let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Camera Buffer"),
+            contents: bytemuck::cast_slice(&[uniform]),
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        });
+
+        let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            entries: &[wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::VERTEX,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            }],
+            label: Some("camera_bind_group_layout"),
+        });
+
+        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            layout: &bind_group_layout,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: buffer.as_entire_binding(),
+            }],
+            label: Some("camera_bind_group"),
+        });
+
+        Self {
+            camera,
+            uniform,
+            buffer,
+            bind_group,
+            bind_group_layout,
+        }
+    }
+
+    pub fn update(&mut self, queue: &wgpu::Queue) {
+        self.uniform.update_view_proj(&self.camera);
+        queue.write_buffer(
+            &self.buffer,
+            0,
+            bytemuck::cast_slice(&[self.uniform]),
+        );
+    }
+}
 
 pub struct Camera {
     pub eye: cgmath::Point3<f32>,
@@ -124,11 +190,7 @@ impl CameraController {
         }
     }
 
-    pub fn update_camera_two(&self, camera: &mut Camera) {
-        use cgmath::InnerSpace;
 
-
-    }
     pub fn update_camera(&self, camera: &mut Camera) {
         use cgmath::InnerSpace;
 

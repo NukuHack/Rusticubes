@@ -1,6 +1,9 @@
-﻿use image::GenericImageView;
-#[allow(clippy::wildcard_imports)]
+﻿
 use anyhow::*;
+use image::*;
+use std::{fs, path::Path, env, result::Result::Ok, path::PathBuf};
+use crate::texture;
+
 
 pub struct Texture {
     #[allow(unused)]
@@ -77,5 +80,103 @@ impl Texture {
         );
 
         Ok(Self { texture, view, sampler })
+    }
+}
+
+
+pub struct TextureManager {
+    pub texture: texture::Texture,
+    pub bind_group: wgpu::BindGroup,
+    pub bind_group_layout: wgpu::BindGroupLayout,
+}
+
+pub fn load_texture_bytes(path: &str) -> Result<Vec<u8>, std::io::Error> {
+    std::fs::read(path)
+}
+
+impl TextureManager {
+    pub fn new(
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        path: &str,
+    ) -> Self {
+        // Get current directory (handle potential error)
+        let current_dir = match env::current_dir() {
+            Ok(path) => path,
+            Err(e) => {
+                eprintln!("Failed to get current directory: {}", e);
+                // Handle error (panic, return, etc.)
+                panic!("Cannot proceed without current directory");
+            }
+        };
+        // Build the full path using PathBuf (platform-agnostic)
+        let full_path = current_dir
+            .join("resources") // Add "resources" directory
+            .join(path);       // Add the final path component
+        // Convert PathBuf to string (handle possible invalid UTF-8)
+        let raw_path = full_path
+            .to_str()
+            .expect("Path contains invalid UTF-8 characters")
+            .to_string();
+        // Load texture bytes and handle errors
+        let bytes = match load_texture_bytes(&raw_path) {
+            Ok(b) => b,
+            Err(e) => {
+                eprintln!("Failed to load texture bytes: {}", e);
+                panic!("Error loading texture bytes from path: {}", raw_path);
+            }
+        };
+        // Create texture with proper error handling
+        let texture = match texture::Texture::from_bytes(device, queue, &bytes, path) {
+            Ok(t) => t,
+            Err(e) => {
+                eprintln!("Failed to create texture: {}", e);
+                panic!("Error creating texture from bytes");
+            }
+        };
+
+
+        let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        multisampled: false,
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                    count: None,
+                },
+            ],
+            label: Some("texture_bind_group_layout"),
+        });
+
+        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            layout: &bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&texture.view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Sampler(&texture.sampler),
+                },
+            ],
+            label: Some("diffuse_bind_group"),
+        });
+
+        Self {
+            texture,
+            bind_group,
+            bind_group_layout,
+        }
     }
 }

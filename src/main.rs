@@ -1,11 +1,11 @@
+
 use std::io::{stdout, Write};
-use test_app::run;
 use std::env;
-use std::cmp::*;
+
+use test_app::run;
 
 fn main() {
-    initialize();
-
+    //initialize();
     let mut lock = stdout().lock();
     write!(lock, "Begin code:\n\n\n").unwrap();
 

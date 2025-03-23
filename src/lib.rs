@@ -1,10 +1,10 @@
 ﻿mod texture;
 mod camera;
+mod config;
 
-use winit::window::Window;
 use std::iter::Iterator;
-use bytemuck::{Pod, Zeroable};
 use winit::{
+    window::Window,
     event::*,
     event_loop::EventLoop,
     keyboard::{KeyCode, PhysicalKey},
@@ -16,17 +16,13 @@ use cgmath::Vector3;
 
 
 
-
 struct State<'a> {
     surface: wgpu::Surface<'a>,
     device: wgpu::Device,
     queue: wgpu::Queue,
 
-    camera: camera::Camera,
-    camera_uniform: camera::CameraUniform,
+    camera_system: camera::CameraSystem,
     camera_controller: camera::CameraController,
-    camera_buffer: wgpu::Buffer,
-    camera_bind_group: wgpu::BindGroup,
 
     config: wgpu::SurfaceConfiguration,
     size: winit::dpi::PhysicalSize<u32>,
@@ -34,13 +30,11 @@ struct State<'a> {
     render_pipeline: wgpu::RenderPipeline,
 
     vertex_buffer: wgpu::Buffer,
-    num_vertices: u32,
     index_buffer: wgpu::Buffer,
     num_indices: u32,
 
     // NEW
-    diffuse_bind_group: wgpu::BindGroup,
-    diffuse_texture: texture::Texture,
+    texture_manager: texture::TextureManager,
 }
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
@@ -85,6 +79,12 @@ const INDICES: &[u16] = &[
     2, 3, 4,
 ];
 
+const BACKGROUND_COLOR: wgpu::Color =wgpu::Color {
+    r: 0.1,
+    g: 0.2,
+    b: 0.3,
+    a: 1.0,
+};
 
 impl<'a> State<'a> {
     // Creating some of the wgpu types requires async code
@@ -153,109 +153,31 @@ impl<'a> State<'a> {
             desired_maximum_frame_latency: 2,
         };
 
-
         let camera = camera::Camera {
-            // position the camera 1 unit up and 2 units back
-            // +z is out of the screen
             eye: (0.0, 1.0, 2.0).into(),
-            // make it look at the origin
             target: (0.0, 0.0, 0.0).into(),
-            // which way is "up"
-            up: cgmath::Vector3::unit_y(),
+            up: Vector3::unit_y(),
             aspect: config.width as f32 / config.height as f32,
             fovy: 45.0,
             znear: 0.1,
             zfar: 100.0,
         };
-
-        let mut camera_uniform = camera::CameraUniform::new();
-        camera_uniform.update_view_proj(&camera);
-
-        let camera_buffer = device.create_buffer_init(
-            &wgpu::util::BufferInitDescriptor {
-                label: Some("Camera Buffer"),
-                contents: bytemuck::cast_slice(&[camera_uniform]),
-                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-            }
+        let camera_system = camera::CameraSystem::new(
+            &device,
+            &config,
+            camera,
         );
-
-        let camera_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            entries: &[
-                wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::VERTEX,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count: None,
-                }
-            ],
-            label: Some("camera_bind_group_layout"),
-        });
-
-        let camera_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            layout: &camera_bind_group_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: camera_buffer.as_entire_binding(),
-                }
-            ],
-            label: Some("camera_bind_group"),
-        });
-
         let camera_controller = camera::CameraController::new(1.0f32,0.05f32);
 
         // After creating `config`, configure the surface
         surface.configure(&device, &config);
 
-        let diffuse_bytes = include_bytes!("happy-tree.png"); // CHANGED!
-        let diffuse_texture = texture::Texture::from_bytes(&device, &queue, diffuse_bytes, "happy-tree.png").unwrap(); // CHANGED!
 
 
-        let texture_bind_group_layout =
-            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                entries: &[
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 0,
-                        visibility: wgpu::ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Texture {
-                            multisampled: false,
-                            view_dimension: wgpu::TextureViewDimension::D2,
-                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                        },
-                        count: None,
-                    },
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 1,
-                        visibility: wgpu::ShaderStages::FRAGMENT,
-                        // This should match the filterable field of the
-                        // corresponding Texture entry above.
-                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                        count: None,
-                    },
-                ],
-                label: Some("texture_bind_group_layout"),
-            });
-
-
-        let diffuse_bind_group = device.create_bind_group(
-            &wgpu::BindGroupDescriptor {
-                layout: &texture_bind_group_layout,
-                entries: &[
-                    wgpu::BindGroupEntry {
-                        binding: 0,
-                        resource: wgpu::BindingResource::TextureView(&diffuse_texture.view), // CHANGED!
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 1,
-                        resource: wgpu::BindingResource::Sampler(&diffuse_texture.sampler), // CHANGED!
-                    }
-                ],
-                label: Some("diffuse_bind_group"),
-            }
+        let texture_manager = texture::TextureManager::new(
+            &device,
+            &queue,
+            "happy-tree.png"
         );
 
 
@@ -286,8 +208,8 @@ impl<'a> State<'a> {
             &wgpu::PipelineLayoutDescriptor {
                 label: Some("Render Pipeline Layout"),
                 bind_group_layouts: &[
-                    &texture_bind_group_layout,
-                    &camera_bind_group_layout,
+                    &texture_manager.bind_group_layout,
+                    &camera_system.bind_group_layout,
                 ],
                 push_constant_ranges: &[],
             }
@@ -345,11 +267,8 @@ impl<'a> State<'a> {
             device,
             queue,
 
-            camera,
-            camera_uniform,
+            camera_system,
             camera_controller,
-            camera_buffer,
-            camera_bind_group,
 
             config,
             size,
@@ -357,19 +276,16 @@ impl<'a> State<'a> {
             render_pipeline,
 
             vertex_buffer,
-            num_vertices,
             index_buffer,
             num_indices,
 
             // NEW!
-            diffuse_bind_group,
-            diffuse_texture,
+            texture_manager,
         }
     }
 
     pub fn window(&self) -> &Window {
         &self.window
-
     }
 
     // impl State
@@ -384,16 +300,18 @@ impl<'a> State<'a> {
 
 
     fn input(&mut self, event: &WindowEvent) -> bool {
+        // passing the event so the movement gets processed
         self.camera_controller.process_events(event)
     }
 
     fn update(&mut self, _event: &WindowEvent) {
-        self.camera_controller.update_camera(&mut self.camera);
-        self.camera_uniform.update_view_proj(&self.camera);
-        self.queue.write_buffer(&self.camera_buffer, 0, bytemuck::cast_slice(&[self.camera_uniform]));
+        // making camera move
+        self.camera_controller.update_camera(&mut self.camera_system.camera);
+        // making the movement actually do stuff with displaying
+        self.camera_system.update(&mut self.queue);
     }
 
-    // impl State
+
 
     fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
         // Get the current surface texture
@@ -424,12 +342,7 @@ impl<'a> State<'a> {
                         view: &view,
                         resolve_target: None,
                         ops: wgpu::Operations {
-                            load: wgpu::LoadOp::Clear(wgpu::Color {
-                                r: 0.1,
-                                g: 0.2,
-                                b: 0.3,
-                                a: 1.0,
-                            }),
+                            load: wgpu::LoadOp::Clear(BACKGROUND_COLOR),
                             store: wgpu::StoreOp::Store,
                         },
                     }),
@@ -441,10 +354,10 @@ impl<'a> State<'a> {
 
             // Set the render pipeline
             render_pass.set_pipeline(&self.render_pipeline);
-            render_pass.set_bind_group(0, &self.diffuse_bind_group, &[]);
+            render_pass.set_bind_group(0, &self.texture_manager.bind_group, &[]);
 
             // NEW!
-            render_pass.set_bind_group(1, &self.camera_bind_group, &[]);
+            render_pass.set_bind_group(1, &self.camera_system.bind_group, &[]);
             render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
             render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
 
@@ -470,8 +383,17 @@ pub async fn run() {
     // Window setup...
     env_logger::init();
     let event_loop = EventLoop::new().unwrap();
-    let window = WindowBuilder::new().build(&event_loop).unwrap();
+    let config = config::AppConfig::default();
+    let window = WindowBuilder::new()
+        .with_title(&config.window_title)
+        .with_inner_size(winit::dpi::PhysicalSize::new(
+            config.initial_window_size.0,
+            config.initial_window_size.1,
+        ))
+        .build(&event_loop)
+        .unwrap();
     let mut state = State::new(&window).await;
+
 
     event_loop.run(move |event, control_flow| {
         match event {
@@ -490,29 +412,13 @@ pub async fn run() {
                         },
                         ..
                     } => control_flow.exit(),
-                    /*
-                    // useless -> close with space
-                    WindowEvent::KeyboardInput {
-                        event:
-                        KeyEvent {
-                            state: ElementState::Pressed,
-                            physical_key: PhysicalKey::Code(KeyCode::Space),
-                            ..
-                        },
-                        ..
-                    } => control_flow.exit(),
-                     */
                     WindowEvent::Resized(physical_size) => {
                         state.resize(*physical_size);
                     }
                     WindowEvent::RedrawRequested => {
                         // This tells winit that we want another frame after this one
                         state.window().request_redraw();
-                        /*
-                        if !surface_configured {
-                            return;
-                        }
-                        */
+
                         state.update(event);
 
                         match state.render() {
