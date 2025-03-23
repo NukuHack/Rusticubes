@@ -1,8 +1,11 @@
 ﻿
-use anyhow::*;
 use image::*;
-use std::{fs, path::Path, env, result::Result::Ok, path::PathBuf};
+use std::fs;
+use std::result::Result::Ok;
+use std::path::{Path, PathBuf};
+use std::env;
 use crate::texture;
+
 
 
 pub struct Texture {
@@ -17,8 +20,8 @@ impl Texture {
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         bytes: &[u8],
-        label: &str
-    ) -> Result<Self> {
+        label: &str,
+    ) -> Result<Self, ImageError> {
         let img = image::load_from_memory(bytes)?;
         Self::from_image(device, queue, &img, Some(label))
     }
@@ -26,9 +29,9 @@ impl Texture {
     pub fn from_image(
         device: &wgpu::Device,
         queue: &wgpu::Queue,
-        img: &image::DynamicImage,
-        label: Option<&str>
-    ) -> Result<Self> {
+        img: &DynamicImage,
+        label: Option<&str>,
+    ) -> Result<Self, ImageError> {
         let rgba = img.to_rgba8();
         let dimensions = img.dimensions();
 
@@ -37,18 +40,16 @@ impl Texture {
             height: dimensions.1,
             depth_or_array_layers: 1,
         };
-        let texture = device.create_texture(
-            &wgpu::TextureDescriptor {
-                label,
-                size,
-                mip_level_count: 1,
-                sample_count: 1,
-                dimension: wgpu::TextureDimension::D2,
-                format: wgpu::TextureFormat::Rgba8UnormSrgb,
-                usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-                view_formats: &[],
-            }
-        );
+        let texture = device.create_texture(&wgpu::TextureDescriptor {
+            label,
+            size,
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8UnormSrgb,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+            view_formats: &[],
+        });
 
         queue.write_texture(
             wgpu::TexelCopyTextureInfo {
@@ -67,73 +68,67 @@ impl Texture {
         );
 
         let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
-        let sampler = device.create_sampler(
-            &wgpu::SamplerDescriptor {
-                address_mode_u: wgpu::AddressMode::ClampToEdge,
-                address_mode_v: wgpu::AddressMode::ClampToEdge,
-                address_mode_w: wgpu::AddressMode::ClampToEdge,
-                mag_filter: wgpu::FilterMode::Linear,
-                min_filter: wgpu::FilterMode::Nearest,
-                mipmap_filter: wgpu::FilterMode::Nearest,
-                ..Default::default()
-            }
-        );
+        let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            address_mode_u: wgpu::AddressMode::ClampToEdge,
+            address_mode_v: wgpu::AddressMode::ClampToEdge,
+            address_mode_w: wgpu::AddressMode::ClampToEdge,
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Nearest,
+            mipmap_filter: wgpu::FilterMode::Nearest,
+            ..Default::default()
+        });
 
         Ok(Self { texture, view, sampler })
     }
+
+
+    pub fn load_texture_bytes(
+        path: &str
+    ) -> Result<Vec<u8>, std::io::Error> {
+        std::fs::read(path)
+    }
 }
+
 
 
 pub struct TextureManager {
     pub texture: texture::Texture,
     pub bind_group: wgpu::BindGroup,
     pub bind_group_layout: wgpu::BindGroupLayout,
-}
-
-pub fn load_texture_bytes(path: &str) -> Result<Vec<u8>, std::io::Error> {
-    std::fs::read(path)
+    pub path: String,
 }
 
 impl TextureManager {
     pub fn new(
         device: &wgpu::Device,
         queue: &wgpu::Queue,
-        path: &str,
+        raw_path: &str,
     ) -> Self {
         // Get current directory (handle potential error)
         let current_dir = match env::current_dir() {
             Ok(path) => path,
             Err(e) => {
-                eprintln!("Failed to get current directory: {}", e);
-                // Handle error (panic, return, etc.)
+                eprintln!("Error getting current directory: {}", e);
                 panic!("Cannot proceed without current directory");
             }
         };
+        println!("Current directory: {:?}", current_dir);
         // Build the full path using PathBuf (platform-agnostic)
         let full_path = current_dir
             .join("resources") // Add "resources" directory
-            .join(path);       // Add the final path component
+            .join(raw_path);       // Add the final path component
         // Convert PathBuf to string (handle possible invalid UTF-8)
-        let raw_path = full_path
+        let path: &str = full_path
             .to_str()
-            .expect("Path contains invalid UTF-8 characters")
-            .to_string();
+            .expect("Path contains invalid UTF-8 characters");
         // Load texture bytes and handle errors
-        let bytes = match load_texture_bytes(&raw_path) {
-            Ok(b) => b,
-            Err(e) => {
-                eprintln!("Failed to load texture bytes: {}", e);
-                panic!("Error loading texture bytes from path: {}", raw_path);
-            }
-        };
+        let bytes = texture::Texture::load_texture_bytes(&path)
+            .expect("Failed to load texture bytes");
         // Create texture with proper error handling
-        let texture = match texture::Texture::from_bytes(device, queue, &bytes, path) {
-            Ok(t) => t,
-            Err(e) => {
-                eprintln!("Failed to create texture: {}", e);
-                panic!("Error creating texture from bytes");
-            }
-        };
+        let texture =
+            texture::Texture::from_bytes(device, queue, &bytes, path)
+                .expect("Failed to load texture");
+
 
 
         let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -177,6 +172,7 @@ impl TextureManager {
             texture,
             bind_group,
             bind_group_layout,
+            path: path.to_string(),
         }
     }
 }

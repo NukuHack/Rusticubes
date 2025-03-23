@@ -5,14 +5,24 @@ edition = "2024"
 # include = ["shader.wgsl"]
 
 [dependencies]
-winit = { version = "0.29", features = ["rwh_05"] }
-env_logger = "^0.10"
-log = "^0.4"
+# core lib for events and orhet utility stuff
+winit = { version = "^0.29", features = ["rwh_05"] }
+# core lib used to make windows and display stuff on them
 wgpu = { version = "^24", features = ["dx12", "metal"] } # not sure how to add vulkan to this ...
-pollster = "^0.3"
+# advanced lib for math and extra complex stuff
 bytemuck = { version = "1.16", features = [ "derive" ] }
-anyhow = "^1"
-cgmath = "0.18"
+# pretty logging
+log = "^0.4"
+# pretty errors
+env_logger = "^0.10"
+#just the basic math : 3d points vectors rotation etc...
+cgmath = "^0.18"
+
+[profile.dev]
+incremental = true
+
+[profile.release]
+incremental = true
 
 [dependencies.image]
 version = "0.24"

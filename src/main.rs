@@ -1,5 +1,7 @@
 
-use std::io::{stdout, Write};
+use std::io::*;
+use std::future::Future;
+use std::task::{Context, Poll, Waker};
 use std::env;
 
 use test_app::run;
@@ -24,6 +26,23 @@ fn initialize(){
     return;
 }
 fn run_app(){
-    pollster::block_on(run());
-    return;
+    let future = run();
+    // Convert the future into a pinned box
+    let mut future = Box::pin(future);
+    // Create a dummy Waker (needed for Context)
+    let waker = Waker::noop();
+    let mut context = Context::from_waker(&waker);
+    // Poll the future in a loop (e.g., inside your game frame loop)
+    loop {
+        // Poll the future
+        match future.as_mut().poll(&mut context) {
+            Poll::Ready(()) => {
+                // The future completed
+                break;
+            },
+            Poll::Pending => {
+                // The future is not ready yet, continue polling next frame
+            }
+        }
+    }
 }
