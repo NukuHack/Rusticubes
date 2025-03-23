@@ -1,4 +1,5 @@
 ﻿use image::GenericImageView;
+#[allow(clippy::wildcard_imports)]
 use anyhow::*;
 
 pub struct Texture {
