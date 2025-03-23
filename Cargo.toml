@@ -11,6 +11,7 @@ log = "^0.4"
 wgpu = { version = "^24", features = ["dx12", "metal"] } # not sure how to add vulkan to this ...
 pollster = "^0.3"
 bytemuck = { version = "1.16", features = [ "derive" ] }
+anyhow = "1.0" # NEW!
 
 [dependencies.image]
 version = "0.24"
