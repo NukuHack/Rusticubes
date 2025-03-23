@@ -1,10 +1,7 @@
 ﻿
-use winit::window::Window;
 use winit::{
     event::*,
-    event_loop::EventLoop,
     keyboard::{KeyCode, PhysicalKey},
-    window::WindowBuilder,
 };
 use cgmath::{Vector3, Point3, Deg, Rad, Matrix4, InnerSpace};
 

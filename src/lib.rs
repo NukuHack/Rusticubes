@@ -387,7 +387,7 @@ impl<'a> State<'a> {
         self.camera_controller.process_events(event)
     }
 
-    fn update(&mut self, event: &WindowEvent) {
+    fn update(&mut self, _event: &WindowEvent) {
         self.camera_controller.update_camera(&mut self.camera);
         self.camera_uniform.update_view_proj(&self.camera);
         self.queue.write_buffer(&self.camera_buffer, 0, bytemuck::cast_slice(&[self.camera_uniform]));
