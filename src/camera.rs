@@ -160,7 +160,7 @@ impl CameraController {
         }
 
         if total_rotation != 0.0 {
-            let rotation = Matrix3::from_angle_y(cgmath::Rad(total_rotation));
+            let rotation = cgmath::Matrix3::from_angle_y(cgmath::Rad(total_rotation));
             let new_forward = rotation * forward_norm;
             camera.target = camera.eye + new_forward * forward_mag;
         }
