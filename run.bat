@@ -2,42 +2,43 @@
 color 0F
 echo.
 echo ####################################################
-echo #                   RUN SCRIPT                      #
+echo #                   RUN SCRIPT                     #
 echo ####################################################
 echo.
 
-REM --- Check for Rust installation ---
+REM --- System Checks ---
+echo [[34mCHECK[0m] Verifying Rust installation...
 where cargo >nul 2>nul
 if %errorlevel% neq 0 (
-    echo Error: Rust/Cargo is not installed!
-    echo Run 'install.bat' before running app.
+    echo [[31mERROR[0m] Rust/Cargo not found. Please run 'install.bat' first.
     pause
     exit /b 1
 )
 
-REM --- Check for project directory ---
+echo [[34mCHECK[0m] Validating project directory...
 if not exist "Cargo.toml" (
-    echo Error: No Cargo.toml found!
-    echo Please run this script from your Rust project directory.
+    echo [[31mERROR[0m] No 'Cargo.toml' found. Run this script from your project root.
+    echo Current directory: %CD%
     pause
     exit /b 1
 )
 
-REM --- Run the application ---
+REM --- Execution ---
 echo.
-echo Starting your application...
+echo [[34mRUN[0m] Starting application...
 cargo run
 
-REM --- Handle errors ---
+REM --- Post-run Handling ---
 if %errorlevel% neq 0 (
     echo.
-    echo Error: Application failed to run. Check the output above.
-    echo This might be triggered by the Application.
+    echo [[31mERROR[0m] Application failed to execute properly.
+    echo Check the build output above for details.
+    echo.
     pause
     exit /b %errorlevel%
 )
 
-REM --- Success message ---
 echo.
-echo Application exited successfully!
+echo [[32mSUCCESS[0m] Application exited successfully!
+echo.
 pause

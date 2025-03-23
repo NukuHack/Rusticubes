@@ -1,5 +1,9 @@
 To install Rust and use `cargo run` in the command prompt (CMD) on Windows, follow these steps:
- - decided to make it easy - just run the `install.bat` and in theory everything should work
+
+**decided to make it easy**
+ - just run the `install.bat` and in theory everything should work
+ - you may be prompted to run the `download_tools.bat` if so the run it (might need admin for installing everything)
+ - then just run the `run.bat` every time you want to launch the app
 
 ---
 
