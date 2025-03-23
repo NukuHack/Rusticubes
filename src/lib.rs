@@ -11,7 +11,7 @@ use winit::{
     window::WindowBuilder,
 };
 use wgpu::util::DeviceExt;
-use cgmath::{Vector3, Point3, Deg, Rad, Matrix4, InnerSpace};
+use cgmath::Vector3;
 
 
 
@@ -206,7 +206,7 @@ impl<'a> State<'a> {
             label: Some("camera_bind_group"),
         });
 
-        let camera_controller = camera::CameraController::new(0.2);
+        let camera_controller = camera::CameraController::new(1.0f32,0.05f32);
 
         // After creating `config`, configure the surface
         surface.configure(&device, &config);
