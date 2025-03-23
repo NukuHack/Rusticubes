@@ -1,11 +1,15 @@
 ﻿use winit::window::Window;
 use std::iter::Iterator;
+use bytemuck::{Pod, Zeroable};
 use winit::{
     event::*,
     event_loop::EventLoop,
     keyboard::{KeyCode, PhysicalKey},
     window::WindowBuilder,
 };
+use wgpu::util::DeviceExt;
+
+
 
 
 
@@ -16,10 +20,31 @@ struct State<'a> {
     config: wgpu::SurfaceConfiguration,
     size: winit::dpi::PhysicalSize<u32>,
     window: &'a Window,
-    // NEW!
     render_pipeline: wgpu::RenderPipeline,
+    // NEW!
+    vertex_buffer: wgpu::Buffer,
+    num_vertices: u32,
 }
+#[repr(C)]
+#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+struct Vertex {
+    position: [f32; 3],
+    color: [f32; 3],
+}
+impl Vertex {
+    const ATTRIBS: [wgpu::VertexAttribute; 2] =
+        wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3];
 
+    fn desc() -> wgpu::VertexBufferLayout<'static> {
+        use std::mem;
+
+        wgpu::VertexBufferLayout {
+            array_stride: mem::size_of::<Self>() as wgpu::BufferAddress,
+            step_mode: wgpu::VertexStepMode::Vertex,
+            attributes: &Self::ATTRIBS,
+        }
+    }
+}
 
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen(start))]
 pub async fn run() {
@@ -85,6 +110,11 @@ pub async fn run() {
     }).expect("Event call function:");
 }
 
+const VERTICES: &[Vertex] = &[
+    Vertex { position: [0.0, 0.5, 0.0], color: [1.0, 0.0, 0.0] },
+    Vertex { position: [-0.5, -0.5, 0.0], color: [0.0, 1.0, 0.0] },
+    Vertex { position: [0.5, -0.5, 0.0], color: [0.0, 0.0, 1.0] },
+];
 
 impl<'a> State<'a> {
     // Creating some of the wgpu types requires async code
@@ -160,6 +190,15 @@ impl<'a> State<'a> {
             label: Some("Shader"),
             source: wgpu::ShaderSource::Wgsl(include_str!("shader.wgsl").into()),
         });
+        let vertex_buffer = device.create_buffer_init(
+            &wgpu::util::BufferInitDescriptor {
+                label: Some("Vertex Buffer"),
+                contents: bytemuck::cast_slice(VERTICES),
+                usage: wgpu::BufferUsages::VERTEX,
+            }
+        );
+        let num_vertices = VERTICES.len() as u32;
+
         //let shader = device.create_shader_module(wgpu::include_wgsl!("shader.wgsl"));
         let render_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -174,7 +213,9 @@ impl<'a> State<'a> {
             vertex: wgpu::VertexState {
                 module: &shader,
                 entry_point: Some("vs_main"), // 1.
-                buffers: &[], // 2.
+                buffers: &[
+                    Vertex::desc(),
+                ],
                 compilation_options: wgpu::PipelineCompilationOptions::default(),
             },
             fragment: Some(wgpu::FragmentState { // 3.
@@ -219,8 +260,10 @@ impl<'a> State<'a> {
             config,
             size,
             window,
-            // NEW!
             render_pipeline,
+            // NEW!
+            vertex_buffer,
+            num_vertices,
         }
     }
 
@@ -298,7 +341,8 @@ impl<'a> State<'a> {
             render_pass.set_pipeline(&self.render_pipeline);
 
             // Draw a triangle (or other geometry)
-            render_pass.draw(0..3, 0..1);
+            render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
+            render_pass.draw(0..self.num_vertices, 0..1);
         }
 
         // Submit the command buffer to the queue
