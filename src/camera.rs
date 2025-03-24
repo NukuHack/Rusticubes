@@ -191,48 +191,38 @@ impl CameraController {
     }
 
 
-    pub fn update_camera(&self, camera: &mut Camera) {
+    pub fn update_camera(&self, camera: &mut Camera, delta_time: f32) {
         use cgmath::InnerSpace;
-
         let forward = camera.target - camera.eye;
         let forward_norm = forward.normalize();
         let forward_mag = forward.magnitude();
 
-        // Prevents glitching when the camera gets too close to the
-        // center of the scene.
-        if self.is_forward_pressed && forward_mag > self.speed {
-            camera.eye += forward_norm * self.speed;
+        // Forward/Backward movement with delta_time
+        if self.is_forward_pressed && forward_mag > self.speed * delta_time {
+            camera.eye += forward_norm * self.speed * delta_time;
         }
         if self.is_backward_pressed {
-            camera.eye -= forward_norm * self.speed;
+            camera.eye -= forward_norm * self.speed * delta_time;
         }
 
-
-        // removed cus it looks too bad ...
-
-        // Redo radius calc in case the forward/backward is pressed.
-        let forward = camera.target - camera.eye;
-        let forward_mag = forward.magnitude();
+        // Right/Left movement with delta_time
         let right = forward_norm.cross(camera.up);
-
-
         if self.is_right_pressed {
-            // Rescale the distance between the target and the eye so
-            // that it doesn't change. The eye, therefore, still
-            // lies on the circle made by the target and eye.
-            camera.eye = camera.target - (forward + right * self.speed).normalize() * forward_mag;
+            let movement = right * self.speed * delta_time;
+            camera.eye = camera.target - (forward + movement).normalize() * forward_mag;
         }
         if self.is_left_pressed {
-            camera.eye = camera.target - (forward - right * self.speed).normalize() * forward_mag;
+            let movement = right * self.speed * delta_time;
+            camera.eye = camera.target - (forward - movement).normalize() * forward_mag;
         }
 
-        // Handle rotation
+        // Rotation with delta_time
         let mut total_rotation = 0.0;
         if self.is_rotate_left {
-            total_rotation -= self.rotation_speed;
+            total_rotation -= self.rotation_speed * delta_time;
         }
         if self.is_rotate_right {
-            total_rotation += self.rotation_speed;
+            total_rotation += self.rotation_speed * delta_time;
         }
 
         if total_rotation != 0.0 {

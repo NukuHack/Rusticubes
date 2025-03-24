@@ -1,13 +1,20 @@
 
-use std::io::*;
-use std::future::Future;
-use std::task::{Context, Poll, Waker};
-use std::env;
+use std::{
+    io::*,
+    future::Future,
+    task::{Context, Poll, Waker},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
+    env,
+};
 
 use test_app::run;
 
+
 fn main() {
-    //initialize();
+    initialize();
     let mut lock = stdout().lock();
     write!(lock, "Begin code:\n\n\n").unwrap();
 
@@ -15,6 +22,24 @@ fn main() {
 
     write!(lock, "\n\nEnd code:").unwrap();
 }
+
+// Custom Waker implementation
+struct MyWaker {
+    flag: AtomicBool,
+}
+
+impl std::task::Wake for MyWaker {
+    fn wake(self: Arc<Self>) {
+        self.flag.store(true, Ordering::Relaxed);
+    }
+
+    fn wake_by_ref(self: &Arc<Self>) {
+        self.flag.store(true, Ordering::Relaxed);
+    }
+}
+
+
+
 fn initialize(){
     unsafe {
         // Disable Vulkan layers to avoid errors from missing files
@@ -26,22 +51,31 @@ fn initialize(){
     return;
 }
 fn run_app(){
+    // Initialize the future
     let future = run();
-    // Convert the future into a pinned box
     let mut future = Box::pin(future);
-    // Create a dummy Waker (needed for Context)
-    let waker = Waker::noop();
+
+    // Create the custom Waker
+    let my_waker = Arc::new(MyWaker {
+        flag: AtomicBool::new(false),
+    });
+    let waker = Waker::from(my_waker.clone());
     let mut context = Context::from_waker(&waker);
-    // Poll the future in a loop (e.g., inside your game frame loop)
+
     loop {
+        // Check if the Waker was triggered
+        if my_waker.flag.swap(false, Ordering::Relaxed) {
+            // Poll again immediately
+            if let Poll::Ready(_) = future.as_mut().poll(&mut context) {
+                break;
+            }
+        }
+
         // Poll the future
         match future.as_mut().poll(&mut context) {
-            Poll::Ready(()) => {
-                // The future completed
-                break;
-            },
+            Poll::Ready(()) => break,
             Poll::Pending => {
-                // The future is not ready yet, continue polling next frame
+                // Continue to next frame
             }
         }
     }
