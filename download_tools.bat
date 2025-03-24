@@ -42,7 +42,9 @@ if %errorlevel% neq 0 (
 REM Install silently to user directory
 set "INSTALL_DIR=%USERPROFILE%\VSBuildTools"
 echo [[34mINSTALL[0m] Installing Build Tools to %INSTALL_DIR%...
-"%TEMP%\vs_buildtools.exe" --quiet --wait --norestart --nocache --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended --installPath "%INSTALL_DIR%"
+Echo --Not working currently--
+Echo PS %TEMP%> .\vs_buildtools.exe --layout %INSTALL_DIR%
+Echo "%TEMP%\vs_buildtools.exe" --quiet --wait --norestart --nocache --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended --installPath "%INSTALL_DIR%"
 if %errorlevel% neq 0 (
     echo [[31mERROR[0m] Build Tools installation failed.
     exit /b 1
