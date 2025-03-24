@@ -71,9 +71,9 @@ if exist "%USERPROFILE%\.cargo\bin\cargo.exe" (
 :install_rust
 echo [[34mINSTALL[0m] Downloading Rust...
 REM Detect system architecture
-set "RUSTUP_URL=https://win.rustup.rs/x86_64.exe"
+set "RUSTUP_URL=https://win.rustup.rs/x86_64"
 if "%PROCESSOR_ARCHITECTURE%" == "x86" (
-    set "RUSTUP_URL=https://win.rustup.rs/i686.exe"
+    set "RUSTUP_URL=https://win.rustup.rs/i686"
 )
 
 REM Download installer
