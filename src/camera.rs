@@ -3,9 +3,8 @@ use winit::{
     event::*,
     keyboard::{KeyCode, PhysicalKey},
 };
-use cgmath::*;
-use wgpu::SurfaceConfiguration;
-use wgpu::util::DeviceExt;
+//use cgmath::*;
+use wgpu::{util::DeviceExt, SurfaceConfiguration};
 
 pub struct CameraSystem {
     pub camera: Camera,
@@ -83,6 +82,26 @@ pub struct Camera {
 }
 
 impl Camera {
+    pub fn new(
+        eye: cgmath::Point3<f32>,
+        target: cgmath::Point3<f32>,
+        up: cgmath::Vector3<f32>,
+        aspect: f32,
+        fovy: f32,
+        znear: f32,
+        zfar: f32,
+    ) -> Self {
+
+        Self {
+            eye,
+            target,
+            up,
+            aspect,
+            fovy,
+            znear,
+            zfar,
+        }
+    }
     fn build_view_projection_matrix(&self) -> cgmath::Matrix4<f32> {
         // 1.
         let view = cgmath::Matrix4::look_at_rh(self.eye, self.target, self.up);

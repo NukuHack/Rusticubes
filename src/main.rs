@@ -22,6 +22,16 @@ fn main() {
 
     write!(lock, "\n\nEnd code:").unwrap();
 }
+fn initialize(){
+    unsafe {
+        // Disable Vulkan layers to avoid errors from missing files
+        env::set_var("VK_LAYER_PATH", ""); // Ignore custom layer paths
+        env::set_var("VK_INSTANCE_LAYERS", ""); // Disable all instance layers
+        env::set_var("VK_DEVICE_LAYERS", ""); // Disable all device layers (optional)
+        env::set_var("VK_LAYER_DISABLE", "EOSOverlayVkLayer;bdcamvk");
+    }
+    return;
+}
 
 // Custom Waker implementation
 struct MyWaker {
@@ -38,18 +48,6 @@ impl std::task::Wake for MyWaker {
     }
 }
 
-
-
-fn initialize(){
-    unsafe {
-        // Disable Vulkan layers to avoid errors from missing files
-        env::set_var("VK_LAYER_PATH", ""); // Ignore custom layer paths
-        env::set_var("VK_INSTANCE_LAYERS", ""); // Disable all instance layers
-        env::set_var("VK_DEVICE_LAYERS", ""); // Disable all device layers (optional)
-        env::set_var("VK_LAYER_DISABLE", "EOSOverlayVkLayer;bdcamvk");
-    }
-    return;
-}
 fn run_app(){
     // Initialize the future
     let future = run();

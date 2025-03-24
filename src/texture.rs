@@ -1,9 +1,9 @@
 ﻿
 use image::*;
-use std::fs;
-use std::result::Result::Ok;
-use std::path::{Path, PathBuf};
-use std::env;
+use std::{
+    result::Result::Ok,
+    env,
+};
 use crate::texture;
 
 

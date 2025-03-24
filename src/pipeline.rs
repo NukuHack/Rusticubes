@@ -1,5 +1,13 @@
+
 use super::geometry::Vertex;
-use wgpu::{Device, PipelineLayout, RenderPipeline, ShaderModuleDescriptor, ShaderSource, SurfaceConfiguration, TextureFormat};
+use wgpu::{
+    Device,
+    PipelineLayout,
+    RenderPipeline,
+    ShaderModuleDescriptor,
+    ShaderSource,
+    SurfaceConfiguration
+};
 
 pub struct Pipeline {
     pub render_pipeline: RenderPipeline,

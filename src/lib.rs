@@ -1,15 +1,20 @@
-﻿mod texture;
+﻿
+mod texture;
 mod camera;
 mod config;
 mod geometry;
 mod pipeline;
-//mod triangulation;
 
-use std::iter::Iterator;
-use std::time::Instant;
-use texture::TextureManager;
-use wgpu::util::DeviceExt;
-use wgpu::{Adapter, Buffer, PipelineLayout, PresentMode, ShaderModule, TextureFormat};
+use std::{
+    iter::Iterator,
+    time::Instant
+};
+use wgpu::{
+    Adapter,
+    PipelineLayout,
+    PresentMode,
+    TextureFormat
+};
 use winit::{
     dpi::PhysicalSize,
     window::Window,
@@ -19,6 +24,9 @@ use winit::{
     window::WindowBuilder,
 };
 
+
+use crate::texture::*;
+use crate::camera::*;
 
 
 
@@ -37,16 +45,14 @@ struct State<'a> {
 
     pipeline:pipeline::Pipeline,
 
-    vertex_buffer: wgpu::Buffer,
-    index_buffer: wgpu::Buffer,
-    num_indices: u32,
+    geometry_buffer:geometry::GeometryBuffer,
 
     // NEW
     texture_manager: texture::TextureManager,
 }
 
 
-const BACKGROUND_COLOR: wgpu::Color =wgpu::Color {
+const BACKGROUND_COLOR: wgpu::Color = wgpu::Color {
     r: 0.1,
     g: 0.2,
     b: 0.3,
@@ -120,17 +126,17 @@ impl<'a> State<'a> {
             desired_maximum_frame_latency: 2,
         };
 
-        let camera = camera::Camera {
-            eye: (0.0, 1.0, 2.0).into(),
-            target: (0.0, 0.0, 0.0).into(),
-            up: cgmath::Vector3::unit_y(),
-            aspect: config.width as f32 / config.height as f32,
-            fovy: 45.0,
-            znear: 0.1,
-            zfar: 100.0,
+        let camera:Camera = camera::Camera::new(
+            (0.0, 1.0, 2.0).into(),
+            (0.0, 0.0, 0.0).into(),
+            cgmath::Vector3::unit_y(),
+            config.width as f32 / config.height as f32,
+            45.0,
+            0.1,
+            100.0,
             //yaw: 90,
-        };
-        let camera_system = camera::CameraSystem::new(
+        );
+        let camera_system:CameraSystem = camera::CameraSystem::new(
             &device,
             &config,
             camera,
@@ -144,32 +150,17 @@ impl<'a> State<'a> {
         surface.configure(&device, &config);
 
 
-
         let texture_manager:TextureManager = texture::TextureManager::new(
             &device,
             &queue,
             "happy-tree.png"
         );
 
-
-        let vertex_buffer: Buffer = device.create_buffer_init(
-            &wgpu::util::BufferInitDescriptor {
-                label: Some("Vertex Buffer"),
-                contents: bytemuck::cast_slice(geometry::VERTICES),
-                usage: wgpu::BufferUsages::VERTEX,
-            }
+        let geometry_buffer:geometry::GeometryBuffer = geometry::GeometryBuffer::new(
+            &device,
+            &geometry::INDICES,
+            &geometry::VERTICES,
         );
-        
-        let index_buffer: Buffer = device.create_buffer_init(
-            &wgpu::util::BufferInitDescriptor {
-                label: Some("Index Buffer"),
-                contents: bytemuck::cast_slice(geometry::INDICES),
-                usage: wgpu::BufferUsages::INDEX,
-            }
-        );
-        
-        let num_indices: u32 = geometry::INDICES.len() as u32;
-        let num_vertices:u32 = geometry::VERTICES.len() as u32;
 
         //let shader = device.create_shader_module(wgpu::include_wgsl!("shader.wgsl"));
         let render_pipeline_layout:PipelineLayout = device.create_pipeline_layout(
@@ -201,13 +192,11 @@ impl<'a> State<'a> {
             config,
             size,
             window,
+
             pipeline,
 
-            vertex_buffer,
-            index_buffer,
-            num_indices,
+            geometry_buffer,
 
-            // NEW!
             texture_manager,
         }
     }
@@ -297,10 +286,10 @@ fn update(&mut self, _event: &WindowEvent) {
 
             // NEW!
             render_pass.set_bind_group(1, &self.camera_system.bind_group, &[]);
-            render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
-            render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
+            render_pass.set_vertex_buffer(0, self.geometry_buffer.vertex_buffer.slice(..));
+            render_pass.set_index_buffer(self.geometry_buffer.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
 
-            render_pass.draw_indexed(0..self.num_indices, 0, 0..1);
+            render_pass.draw_indexed(0..self.geometry_buffer.num_indices, 0, 0..1);
         }
 
         // Submit the command buffer to the queue

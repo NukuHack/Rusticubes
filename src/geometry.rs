@@ -1,10 +1,15 @@
 
+use wgpu::{
+    Buffer,
+    Device,
+    util::DeviceExt
+};
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct Vertex {
     position: [f32; 3],
-    tex_coords: [f32; 2], // NEW!
+    tex_coords: [f32; 2],
 }
 impl Vertex {
     pub fn desc() -> wgpu::VertexBufferLayout<'static> {
@@ -56,3 +61,45 @@ pub const INDICES: &[u16] = &[
     1, 2, 4,
     2, 3, 4,
 ];
+
+pub struct GeometryBuffer {
+    pub vertex_buffer: Buffer,
+    pub index_buffer: Buffer,
+    pub num_indices: u32,
+    pub num_vertices:u32,
+}
+
+impl GeometryBuffer {
+    pub fn new(
+        device: &Device,
+        indices: &[u16],
+        vertices: &[Vertex],
+    ) -> Self {
+
+        let vertex_buffer: Buffer = device.create_buffer_init(
+            &wgpu::util::BufferInitDescriptor {
+                label: Some("Vertex Buffer"),
+                contents: bytemuck::cast_slice(vertices),
+                usage: wgpu::BufferUsages::VERTEX,
+            }
+        );
+
+        let index_buffer: Buffer = device.create_buffer_init(
+            &wgpu::util::BufferInitDescriptor {
+                label: Some("Index Buffer"),
+                contents: bytemuck::cast_slice(indices),
+                usage: wgpu::BufferUsages::INDEX,
+            }
+        );
+
+        let num_indices: u32 = indices.len() as u32;
+        let num_vertices:u32 = vertices.len() as u32;
+
+        Self {
+            vertex_buffer,
+            index_buffer,
+            num_indices,
+            num_vertices,
+        }
+    }
+}
