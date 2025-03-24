@@ -1,20 +1,20 @@
 @echo off
-color 0F
+color 0A
 setlocal EnableDelayedExpansion
 
 echo ####################################################
 echo #               INSTALLATION SCRIPT                #
 echo ####################################################
+echo This script requires Administrator privileges to run.
 echo Choose between Visual Studio Build Tools or LLVM
-echo I did try to make this without Admin prev. but I faled ...
-echo This is not maintained, nor will i ever care about it ... bye
+echo.
 
 :main
 echo.
 echo [[34mSELECT[0m] Choose installation option:
-echo [[36mY[0m] Install Visual Studio Build Tools
-echo [[35mN[0m] Install LLVM Tools (including lld)
-set /p CONFIRM=^> [Y/N] 
+echo [[36mY[0m] Install Visual Studio Build Tools (requires Admin)
+echo [[35mN[0m] Install LLVM Tools (including lld) (no Admin needed)
+set /p CONFIRM=^> [Y/N]
 if /i "!CONFIRM!" == "Y" (
     call :install_vs_buildtools
     if %errorlevel% neq 0 goto :error
@@ -44,11 +44,9 @@ if %errorlevel% neq 0 (
 REM Install silently to user directory
 set "INSTALL_DIR=%USERPROFILE%\VSBuildTools"
 echo [[34mINSTALL[0m] Installing Build Tools to %INSTALL_DIR%...
-Echo --Not working currently--
-Echo PS %TEMP%> .\vs_buildtools.exe --layout %INSTALL_DIR%
 "%TEMP%\vs_buildtools.exe" --quiet --wait --norestart --nocache --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended --installPath "%INSTALL_DIR%"
 if %errorlevel% neq 0 (
-    echo [[31mERROR[0m] Build Tools installation failed.
+    echo [[31mERROR[0m] Build Tools installation failed. Ensure you're running as Administrator.
     exit /b 1
 )
 
@@ -82,7 +80,6 @@ exit /b 0
 REM Install LLVM tools from the provided EXE
 set "LLVM_URL=https://github.com/llvm/llvm-project/releases/download/llvmorg-20.1.0/LLVM-20.1.0-win64.exe"
 echo [[34mDOWNLOAD[0m] Getting LLVM installer...
-Echo --Not working currently--
 bitsadmin /transfer "LLVMInstaller" /priority high "%LLVM_URL%" "%TEMP%\llvm-installer.exe"
 if %errorlevel% neq 0 (
     echo [[31mERROR[0m] Failed to download LLVM installer.
@@ -92,7 +89,7 @@ if %errorlevel% neq 0 (
 REM Install to user directory
 set "LLVM_INSTALL_DIR=%USERPROFILE%\LLVM"
 echo [[34mINSTALL[0m] Installing LLVM Tools to %LLVM_INSTALL_DIR%...
-"%TEMP%\llvm-installer.exe" /VERYSILENT /SUPPRESSMSGBOXES /LOG=%TEMP%\llvm-install.log /DIR="%LLVM_INSTALL_DIR%"
+"%TEMP%\llvm-installer.exe" /VERYSILENT /SUPPRESSMSGBOXES /LOG="%TEMP%\llvm-install.log" /DIR="%LLVM_INSTALL_DIR%"
 if %errorlevel% neq 0 (
     echo [[31mERROR[0m] LLVM Tools installation failed.
     exit /b 1
