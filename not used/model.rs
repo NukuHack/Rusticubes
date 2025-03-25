@@ -60,7 +60,6 @@ pub struct Mesh {
 }
 
 
-// model.rs
 pub trait DrawModel<'a> {
     fn draw_mesh(&mut self, mesh: &'a Mesh);
     fn draw_mesh_instanced(

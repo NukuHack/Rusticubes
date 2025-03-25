@@ -4,7 +4,6 @@ use std::{
     result::Result::Ok,
     env,
 };
-use crate::texture;
 
 pub struct Texture {
     #[allow(unused)]
@@ -79,16 +78,18 @@ impl Texture {
         Ok(Self { texture, view, sampler })
     }
 
-    pub fn load_texture_bytes(
-        path: &str
-    ) -> std::io::Result<Vec<u8>> {
+    pub fn load_texture_bytes(path: &str) -> std::io::Result<Vec<u8>> {
         std::fs::read(path)
     }
 
-    pub const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float; // 1.
+    pub const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
 
-    pub fn create_depth_texture(device: &wgpu::Device, config: &wgpu::SurfaceConfiguration, label: &str) -> Self {
-        let size = wgpu::Extent3d { // 2.
+    pub fn create_depth_texture(
+        device: &wgpu::Device,
+        config: &wgpu::SurfaceConfiguration,
+        label: &str,
+    ) -> Self {
+        let size = wgpu::Extent3d {
             width: config.width.max(1),
             height: config.height.max(1),
             depth_or_array_layers: 1,
@@ -100,42 +101,37 @@ impl Texture {
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
             format: Self::DEPTH_FORMAT,
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT // 3.
-                | wgpu::TextureUsages::TEXTURE_BINDING,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
             view_formats: &[],
         };
-        let texture: wgpu::Texture = device.create_texture(&desc);
+        let texture = device.create_texture(&desc);
 
-        let view: wgpu::TextureView = texture.create_view(&wgpu::TextureViewDescriptor::default());
-        let sampler: wgpu::Sampler = device.create_sampler(
-            &wgpu::SamplerDescriptor { // 4.
-                address_mode_u: wgpu::AddressMode::ClampToEdge,
-                address_mode_v: wgpu::AddressMode::ClampToEdge,
-                address_mode_w: wgpu::AddressMode::ClampToEdge,
-                mag_filter: wgpu::FilterMode::Linear,
-                min_filter: wgpu::FilterMode::Linear,
-                mipmap_filter: wgpu::FilterMode::Nearest,
-                compare: Some(wgpu::CompareFunction::LessEqual), // 5.
-                lod_min_clamp: 0.0,
-                lod_max_clamp: 100.0,
-                ..Default::default()
-            }
-        );
+        let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            address_mode_u: wgpu::AddressMode::ClampToEdge,
+            address_mode_v: wgpu::AddressMode::ClampToEdge,
+            address_mode_w: wgpu::AddressMode::ClampToEdge,
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Linear,
+            mipmap_filter: wgpu::FilterMode::Nearest,
+            compare: Some(wgpu::CompareFunction::LessEqual),
+            lod_min_clamp: 0.0,
+            lod_max_clamp: 100.0,
+            ..Default::default()
+        });
 
         Self {
             texture,
             view,
-            sampler
+            sampler,
         }
     }
 }
 
-
-
 pub struct TextureManager {
     #[allow(unused)]
-    pub texture: self::Texture,
-    pub depth_texture: self::Texture,
+    pub texture: Texture,
+    pub depth_texture: Texture,
     pub bind_group: wgpu::BindGroup,
     pub bind_group_layout: wgpu::BindGroupLayout,
     pub path: String,
@@ -148,37 +144,18 @@ impl TextureManager {
         config: &wgpu::SurfaceConfiguration,
         raw_path: &str,
     ) -> Self {
-        // Get current directory (handle potential error)
-        let current_dir = match env::current_dir() {
-            Ok(path) => path,
-            Err(e) => {
-                eprintln!("Error getting current directory: {}", e);
-                panic!("Cannot proceed without current directory");
-            }
-        };
+        let current_dir = env::current_dir().expect("Failed to get current directory");
         println!("Current directory: {:?}", current_dir);
-        // Build the full path using PathBuf (platform-agnostic)
         let full_path = current_dir
-            .join("resources") // Add "resources" directory
-            .join(raw_path);       // Add the final path component
-        // Convert PathBuf to string (handle possible invalid UTF-8)
-        let path: &str = full_path
-            .to_str()
-            .expect("Path contains invalid UTF-8 characters");
-        // Load texture bytes and handle errors
-        let bytes = self::Texture::load_texture_bytes(&path)
+            .join("resources")
+            .join(raw_path);
+        let path = full_path.to_str().expect("Path contains invalid UTF-8");
+        let bytes = Texture::load_texture_bytes(path)
             .expect("Failed to load texture bytes");
-        // Create texture with proper error handling
-        let texture =
-            self::Texture::from_bytes(device, queue, &bytes, path)
-                .expect("Failed to load texture");
+        let texture = Texture::from_bytes(device, queue, &bytes, path)
+            .expect("Failed to load texture");
 
-
-        let depth_texture: texture::Texture = texture::Texture::create_depth_texture(
-            &device,
-            &config,
-            "depth_texture"
-        );
+        let depth_texture = Texture::create_depth_texture(device, config, "depth_texture");
 
         let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             entries: &[

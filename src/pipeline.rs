@@ -1,21 +1,13 @@
+use std::borrow::Cow;
+use wgpu::{Device, PipelineLayout, RenderPipeline, ShaderModule, ShaderModuleDescriptor, ShaderSource, SurfaceConfiguration};
 
-use wgpu::{
-    Device,
-    PipelineLayout,
-    RenderPipeline,
-    ShaderModuleDescriptor,
-    ShaderSource,
-    SurfaceConfiguration
-};
-
-// * to use classes
 use super::instances::*;
-// nothing to use variables
 use super::{geometry, texture};
 
 pub struct Pipeline {
     #[allow(unused)]
     pub render_pipeline: RenderPipeline,
+    shader: ShaderModule, // Keep the shader alive as long as the pipeline exists
 }
 
 impl Pipeline {
@@ -24,60 +16,60 @@ impl Pipeline {
         config: &SurfaceConfiguration,
         render_pipeline_layout: &PipelineLayout,
     ) -> Self {
+        // Create the shader module and keep it in the struct to prevent dropping
         let shader = device.create_shader_module(ShaderModuleDescriptor {
             label: Some("Shader"),
-            source: ShaderSource::Wgsl(include_str!("shader.wgsl").into()),
+            source: ShaderSource::Wgsl(Cow::from(include_str!("shader.wgsl"))), // Removed unnecessary .into()
         });
 
-        let render_pipeline:RenderPipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("Render Pipeline"),
-            layout: Some(&render_pipeline_layout),
+            layout: Some(render_pipeline_layout),
             vertex: wgpu::VertexState {
                 module: &shader,
-                entry_point: Some("vs_main"), // 1.
+                entry_point: Option::from("vs_main"), // Simplified from Some("vs_main") if the shader uses that name
+                compilation_options: Default::default(),
                 buffers: &[
                     geometry::Vertex::desc(),
-                    InstanceRaw::desc()
-                    ],
-                compilation_options: wgpu::PipelineCompilationOptions::default(),
+                    InstanceRaw::desc(),
+                ],
+                // compilation_options are default, so they can be omitted
             },
-            fragment: Some(wgpu::FragmentState { // 3.
+            fragment: Some(wgpu::FragmentState {
                 module: &shader,
-                entry_point: Some("fs_main"),
-                targets: &[Some(wgpu::ColorTargetState { // 4.
+                entry_point: Option::from("fs_main"),
+                compilation_options: Default::default(),
+                targets: &[Some(wgpu::ColorTargetState {
                     format: config.format,
                     blend: Some(wgpu::BlendState::REPLACE),
                     write_mask: wgpu::ColorWrites::ALL,
                 })],
-                compilation_options: wgpu::PipelineCompilationOptions::default(),
+                // compilation_options are default, so they can be omitted
             }),
-            // continued ...
             primitive: wgpu::PrimitiveState {
-                topology: wgpu::PrimitiveTopology::TriangleList, // 1.
+                topology: wgpu::PrimitiveTopology::TriangleList,
                 strip_index_format: None,
-                front_face: wgpu::FrontFace::Ccw, // 2.
+                front_face: wgpu::FrontFace::Ccw,
                 cull_mode: Some(wgpu::Face::Back),
-                // Setting this to anything other than Fill requires Features::NON_FILL_POLYGON_MODE
                 polygon_mode: wgpu::PolygonMode::Fill,
-                // Requires Features::DEPTH_CLIP_CONTROL
                 unclipped_depth: false,
-                // Requires Features::CONSERVATIVE_RASTERIZATION
                 conservative: false,
             },
             depth_stencil: Some(wgpu::DepthStencilState {
                 format: texture::Texture::DEPTH_FORMAT,
                 depth_write_enabled: true,
-                depth_compare: wgpu::CompareFunction::Less, // 1.
-                stencil: wgpu::StencilState::default(), // 2.
+                depth_compare: wgpu::CompareFunction::Less,
+                stencil: wgpu::StencilState::default(),
                 bias: wgpu::DepthBiasState::default(),
             }),
-            multiview: None, // 5.
-            cache: None, // 6.
-            multisample: Default::default(),
+            multisample: wgpu::MultisampleState::default(), // Explicitly set to default for clarity
+            multiview: None,
+            cache: None,
         });
 
         Pipeline {
             render_pipeline,
+            shader, // Ensure shader is stored to keep it alive
         }
     }
 }

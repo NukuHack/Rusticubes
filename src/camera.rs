@@ -16,6 +16,7 @@ pub struct CameraSystem {
 
 impl CameraSystem {
     pub fn new(
+        #[allow(unused)]
         device: &wgpu::Device,
         config: &SurfaceConfiguration,
         camera: Camera,
