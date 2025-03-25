@@ -1,36 +1,51 @@
-
-
-use std::{
-    iter::Iterator,
-    time::{Duration, Instant},
-    
-};
-use wgpu::{
-    util::DeviceExt, Adapter, Buffer, PipelineLayout, PresentMode, TextureFormat
-};
-use winit::{
-    dpi::PhysicalSize,
-    window::Window,
-    event::*,
-    event_loop::EventLoop,
-    keyboard::{KeyCode, PhysicalKey},
-    window::WindowBuilder,
-};
-use cgmath::{prelude::*, Vector3};
-
-
+use cgmath::{InnerSpace, Rotation3, Zero};
+use wgpu::Buffer;
+use wgpu::util::DeviceExt;
 
 pub struct InstanceManager {
-    pub int: u32,
+    #[allow(unused)]
+    pub instances:Vec<Instance>,
+    pub instance_data:Vec<InstanceRaw>,
+    pub instance_buffer:Buffer,
 }
 
 impl InstanceManager {
     pub fn new(
         device: &wgpu::Device,
     ) -> Self {
-        
+
+        const SPACE_BETWEEN: f32 = 3.0;
+        let instances = (0..NUM_INSTANCES_PER_ROW).flat_map(|z| {
+            (0..NUM_INSTANCES_PER_ROW).map(move |x| {
+                let x = SPACE_BETWEEN * (x as f32 - NUM_INSTANCES_PER_ROW as f32 / 2.0);
+                let z = SPACE_BETWEEN * (z as f32 - NUM_INSTANCES_PER_ROW as f32 / 2.0);
+
+                let position = cgmath::Vector3 { x, y: 0.0, z };
+
+                let rotation = if position.is_zero() {
+                    cgmath::Quaternion::from_axis_angle(cgmath::Vector3::unit_z(), cgmath::Deg(0.0))
+                } else {
+                    cgmath::Quaternion::from_axis_angle(position.normalize(), cgmath::Deg(45.0))
+                };
+
+                Instance {
+                    position, rotation,
+                }
+            })
+        }).collect::<Vec<_>>();
+        let instance_data:Vec<InstanceRaw> = instances.iter().map(Instance::to_raw).collect::<Vec<_>>();
+        let instance_buffer:Buffer = device.create_buffer_init(
+            &wgpu::util::BufferInitDescriptor {
+                label: Some("Instance Buffer"),
+                contents: bytemuck::cast_slice(&instance_data),
+                usage: wgpu::BufferUsages::VERTEX,
+            }
+        );
+
         Self {
-            int: 10,
+            instances,
+            instance_data,
+            instance_buffer,
         }
     }
 }
@@ -39,6 +54,7 @@ impl InstanceManager {
 
 
 pub struct Instance {
+    #[allow(unused)]
     pub position: cgmath::Vector3<f32>,
     pub rotation: cgmath::Quaternion<f32>,
 }
@@ -55,6 +71,7 @@ impl Instance {
 #[repr(C)]
 #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct InstanceRaw {
+    #[allow(unused)]
     pub model: [[f32; 4]; 4],
 }
 impl InstanceRaw {
@@ -99,5 +116,9 @@ impl InstanceRaw {
 
 
 pub const NUM_INSTANCES_PER_ROW: u32 = 10;
-pub const INSTANCE_DISPLACEMENT: cgmath::Vector3<f32> = cgmath::Vector3::new(NUM_INSTANCES_PER_ROW as f32 * 0.5, 0.0, NUM_INSTANCES_PER_ROW as f32 * 0.5);
+pub const INSTANCE_DISPLACEMENT: cgmath::Vector3<f32> = cgmath::Vector3::new(
+        NUM_INSTANCES_PER_ROW as f32 * 0.5,
+        0.0,
+        NUM_INSTANCES_PER_ROW as f32 * 0.5
+    );
 

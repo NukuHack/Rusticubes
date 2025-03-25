@@ -3,10 +3,10 @@ use winit::{
     event::*,
     keyboard::{KeyCode, PhysicalKey},
 };
-//use cgmath::*;
 use wgpu::{util::DeviceExt, SurfaceConfiguration};
 
 pub struct CameraSystem {
+    #[allow(unused)]
     pub camera: Camera,
     pub uniform: CameraUniform,
     pub buffer: wgpu::Buffer,
@@ -72,6 +72,7 @@ impl CameraSystem {
 }
 
 pub struct Camera {
+    #[allow(unused)]
     pub eye: cgmath::Point3<f32>,
     pub target: cgmath::Point3<f32>,
     pub up: cgmath::Vector3<f32>,
@@ -108,7 +109,7 @@ impl Camera {
         // 2.
         let proj = cgmath::perspective(cgmath::Deg(self.fovy), self.aspect, self.znear, self.zfar);
         // 3.
-        return OPENGL_TO_WGPU_MATRIX * proj * view;
+        OPENGL_TO_WGPU_MATRIX * proj * view
     }
 }
 
@@ -125,6 +126,7 @@ pub const OPENGL_TO_WGPU_MATRIX: cgmath::Matrix4<f32> = cgmath::Matrix4::new(
 // This is so we can store this in a buffer
 #[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct CameraUniform {
+    #[allow(unused)]
     // We can't use cgmath with bytemuck directly, so we'll have
     // to convert the Matrix4 into a 4x4 f32 array
     view_proj: [[f32; 4]; 4],
@@ -146,6 +148,7 @@ impl CameraUniform {
 
 
 pub struct CameraController {
+    #[allow(unused)]
     speed: f32,
     rotation_speed: f32,
     is_forward_pressed: bool,

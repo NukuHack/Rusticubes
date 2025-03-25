@@ -9,10 +9,12 @@ mod instances;
 use std::{
     iter::Iterator,
     time::{Duration, Instant},
-    
 };
 use wgpu::{
-    util::DeviceExt, Adapter, Buffer, PipelineLayout, PresentMode, TextureFormat
+    Adapter,
+    PipelineLayout,
+    PresentMode,
+    TextureFormat
 };
 use winit::{
     dpi::PhysicalSize,
@@ -22,17 +24,13 @@ use winit::{
     keyboard::{KeyCode, PhysicalKey},
     window::WindowBuilder,
 };
-use cgmath::{prelude::*, Vector3};
-
-
 
 use crate::texture::*;
-use crate::camera::*;
-use crate::instances::*;
 
 
 
 struct State<'a> {
+    #[allow(unused)]
     surface: wgpu::Surface<'a>,
     device: wgpu::Device,
     queue: wgpu::Queue,
@@ -45,14 +43,13 @@ struct State<'a> {
     size: winit::dpi::PhysicalSize<u32>,
     window: &'a Window,
 
-    pipeline:pipeline::Pipeline,
+    pipeline: pipeline::Pipeline,
 
-    geometry_buffer:geometry::GeometryBuffer,
+    geometry_buffer: geometry::GeometryBuffer,
 
     texture_manager: texture::TextureManager,
-    
-    instances:Vec<Instance>,
-    instance_buffer:Buffer,
+
+    instance_manager: instances::InstanceManager,
 }
 
 
@@ -77,9 +74,6 @@ impl<'a> State<'a> {
             backends: wgpu::Backends::GL,
             ..Default::default()
         });
-
-
-
 
         let surface = instance.create_surface(window).unwrap();
 
@@ -108,33 +102,9 @@ impl<'a> State<'a> {
             .await
             .unwrap();
 
-
-        let instances:Vec<Instance> = (0..NUM_INSTANCES_PER_ROW).flat_map(|z| {
-            (0..NUM_INSTANCES_PER_ROW).map(move |x| {
-                let position:Vector3<f32> = cgmath::Vector3 { x: x as f32, y: 0.0, z: z as f32 } - INSTANCE_DISPLACEMENT;
-
-                let rotation = if position.is_zero() {
-                    // this is needed so an object at (0, 0, 0) won't get scaled to zero
-                    // as Quaternions can affect scale if they're not created correctly
-                    cgmath::Quaternion::from_axis_angle(cgmath::Vector3::unit_z(), cgmath::Deg(0.0))
-                } else {
-                    cgmath::Quaternion::from_axis_angle(position.normalize(), cgmath::Deg(45.0))
-                };
-
-                Instance {
-                    position, rotation,
-                }
-            })
-        }).collect::<Vec<_>>();
-        let instance_data:Vec<InstanceRaw> = instances.iter().map(Instance::to_raw).collect::<Vec<_>>();
-        let instance_buffer:Buffer = device.create_buffer_init(
-            &wgpu::util::BufferInitDescriptor {
-                label: Some("Instance Buffer"),
-                contents: bytemuck::cast_slice(&instance_data),
-                usage: wgpu::BufferUsages::VERTEX,
-            }
+        let instance_manager: instances::InstanceManager = instances::InstanceManager::new(
+            &device,
         );
-
 
         // Shader code in this tutorial assumes an sRGB surface texture. Using a different
         // one will result in all the colors coming out darker. If you want to support non
@@ -160,7 +130,7 @@ impl<'a> State<'a> {
             desired_maximum_frame_latency: 2,
         };
 
-        let camera:Camera = camera::Camera::new(
+        let camera:camera::Camera = camera::Camera::new(
             (0.0, 1.0, 2.0).into(),
             (0.0, 0.0, 0.0).into(),
             cgmath::Vector3::unit_y(),
@@ -170,12 +140,12 @@ impl<'a> State<'a> {
             100.0,
             //yaw: 90,
         );
-        let camera_system:CameraSystem = camera::CameraSystem::new(
+        let camera_system: camera::CameraSystem = camera::CameraSystem::new(
             &device,
             &config,
             camera,
         );
-        let camera_controller = camera::CameraController::new(
+        let camera_controller: camera::CameraController = camera::CameraController::new(
             2f32,
             1f32
         );
@@ -183,10 +153,10 @@ impl<'a> State<'a> {
         // After creating `config`, configure the surface
         surface.configure(&device, &config);
 
-
         let texture_manager:TextureManager = texture::TextureManager::new(
             &device,
             &queue,
+            &config,
             "happy-tree.png"
         );
 
@@ -232,9 +202,8 @@ impl<'a> State<'a> {
             geometry_buffer,
 
             texture_manager,
-            
-            instances,
-            instance_buffer,
+
+            instance_manager,
         }
     }
 
@@ -249,6 +218,7 @@ impl<'a> State<'a> {
             self.config.width = new_size.width;
             self.config.height = new_size.height;
             self.surface.configure(&self.device, &self.config);
+            self.texture_manager.depth_texture = texture::Texture::create_depth_texture(&self.device, &self.config, "depth_texture");
         }
     }
 
@@ -258,23 +228,23 @@ impl<'a> State<'a> {
         self.camera_controller.process_events(event)
     }
 
-// In your main loop or update function:
-fn update(&mut self, _event: &WindowEvent) {
-    // Calculate delta time
-    let current_time:Instant = Instant::now();
-    let delta_time:Duration = current_time - self.previous_frame_time;
-    let delta_seconds:f32 = delta_time.as_secs_f32(); // Convert to seconds as f32
-    self.previous_frame_time = current_time;
+    // In your main loop or update function:
+    fn update(&mut self, _event: &WindowEvent) {
+        // Calculate delta time
+        let current_time:Instant = Instant::now();
+        let delta_time:Duration = current_time - self.previous_frame_time;
+        let delta_seconds:f32 = delta_time.as_secs_f32(); // Convert to seconds as f32
+        self.previous_frame_time = current_time;
 
-    // Update the camera with delta_time
-    self.camera_controller.update_camera(
-        &mut self.camera_system.camera,
-        delta_seconds,
-    );
+        // Update the camera with delta_time
+        self.camera_controller.update_camera(
+            &mut self.camera_system.camera,
+            delta_seconds,
+        );
 
-    // Update the camera system buffer
-    self.camera_system.update(&mut self.queue);
-}
+        // Update the camera system buffer
+        self.camera_system.update(&mut self.queue);
+    }
 
 
 
@@ -312,7 +282,14 @@ fn update(&mut self, _event: &WindowEvent) {
                         },
                     }),
                 ],
-                depth_stencil_attachment: None,
+                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                    view: &self.texture_manager.depth_texture.view,
+                    depth_ops: Some(wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(1.0),
+                        store: wgpu::StoreOp::Store,
+                    }),
+                    stencil_ops: None,
+                }),
                 timestamp_writes: None,
                 occlusion_query_set: None,
             });
@@ -323,11 +300,11 @@ fn update(&mut self, _event: &WindowEvent) {
             render_pass.set_bind_group(1, &self.camera_system.bind_group, &[]);
             render_pass.set_vertex_buffer(0, self.geometry_buffer.vertex_buffer.slice(..));
             // NEW!
-            render_pass.set_vertex_buffer(1, self.instance_buffer.slice(..));
+            render_pass.set_vertex_buffer(1, self.instance_manager.instance_buffer.slice(..));
             render_pass.set_index_buffer(self.geometry_buffer.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
 
             // UPDATED!
-            render_pass.draw_indexed(0..self.geometry_buffer.num_indices, 0, 0..self.instances.len() as _);
+            render_pass.draw_indexed(0..self.geometry_buffer.num_indices, 0, 0..self.instance_manager.instances.len() as _);
         }
 
         // Submit the command buffer to the queue
@@ -349,8 +326,8 @@ pub async fn run() {
     // Window setup...
     env_logger::init();
     let event_loop = EventLoop::new().unwrap();
-    let config = config::AppConfig::default();
-    let window = WindowBuilder::new()
+    let config: config::AppConfig = config::AppConfig::default();
+    let window:Window = WindowBuilder::new()
         .with_title(&config.window_title)
         .with_inner_size(winit::dpi::PhysicalSize::new(
             config.initial_window_size.0,
@@ -358,7 +335,7 @@ pub async fn run() {
         ))
         .build(&event_loop)
         .unwrap();
-    let mut state = State::new(&window).await;
+    let mut state:State = State::new(&window).await;
 
 
     event_loop.run(move |event, control_flow| {

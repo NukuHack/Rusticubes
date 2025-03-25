@@ -1,6 +1,4 @@
 
-use super::geometry::Vertex;
-use super::instances::InstanceRaw;
 use wgpu::{
     Device,
     PipelineLayout,
@@ -10,7 +8,13 @@ use wgpu::{
     SurfaceConfiguration
 };
 
+// * to use classes
+use super::instances::*;
+// nothing to use variables
+use super::{geometry, texture};
+
 pub struct Pipeline {
+    #[allow(unused)]
     pub render_pipeline: RenderPipeline,
 }
 
@@ -32,7 +36,7 @@ impl Pipeline {
                 module: &shader,
                 entry_point: Some("vs_main"), // 1.
                 buffers: &[
-                    Vertex::desc(),
+                    geometry::Vertex::desc(),
                     InstanceRaw::desc()
                     ],
                 compilation_options: wgpu::PipelineCompilationOptions::default(),
@@ -60,15 +64,16 @@ impl Pipeline {
                 // Requires Features::CONSERVATIVE_RASTERIZATION
                 conservative: false,
             },
-            // continued ...
-            depth_stencil: None, // 1.
-            multisample: wgpu::MultisampleState {
-                count: 1, // 2.
-                mask: !0, // 3.
-                alpha_to_coverage_enabled: false, // 4.
-            },
+            depth_stencil: Some(wgpu::DepthStencilState {
+                format: texture::Texture::DEPTH_FORMAT,
+                depth_write_enabled: true,
+                depth_compare: wgpu::CompareFunction::Less, // 1.
+                stencil: wgpu::StencilState::default(), // 2.
+                bias: wgpu::DepthBiasState::default(),
+            }),
             multiview: None, // 5.
             cache: None, // 6.
+            multisample: Default::default(),
         });
 
         Pipeline {

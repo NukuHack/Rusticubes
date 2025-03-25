@@ -6,8 +6,6 @@ use std::{
 };
 use crate::texture;
 
-
-
 pub struct Texture {
     #[allow(unused)]
     pub texture: wgpu::Texture,
@@ -81,18 +79,63 @@ impl Texture {
         Ok(Self { texture, view, sampler })
     }
 
-
     pub fn load_texture_bytes(
         path: &str
-    ) -> Result<Vec<u8>, std::io::Error> {
+    ) -> std::io::Result<Vec<u8>> {
         std::fs::read(path)
+    }
+
+    pub const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float; // 1.
+
+    pub fn create_depth_texture(device: &wgpu::Device, config: &wgpu::SurfaceConfiguration, label: &str) -> Self {
+        let size = wgpu::Extent3d { // 2.
+            width: config.width.max(1),
+            height: config.height.max(1),
+            depth_or_array_layers: 1,
+        };
+        let desc = wgpu::TextureDescriptor {
+            label: Some(label),
+            size,
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: Self::DEPTH_FORMAT,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT // 3.
+                | wgpu::TextureUsages::TEXTURE_BINDING,
+            view_formats: &[],
+        };
+        let texture: wgpu::Texture = device.create_texture(&desc);
+
+        let view: wgpu::TextureView = texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let sampler: wgpu::Sampler = device.create_sampler(
+            &wgpu::SamplerDescriptor { // 4.
+                address_mode_u: wgpu::AddressMode::ClampToEdge,
+                address_mode_v: wgpu::AddressMode::ClampToEdge,
+                address_mode_w: wgpu::AddressMode::ClampToEdge,
+                mag_filter: wgpu::FilterMode::Linear,
+                min_filter: wgpu::FilterMode::Linear,
+                mipmap_filter: wgpu::FilterMode::Nearest,
+                compare: Some(wgpu::CompareFunction::LessEqual), // 5.
+                lod_min_clamp: 0.0,
+                lod_max_clamp: 100.0,
+                ..Default::default()
+            }
+        );
+
+        Self {
+            texture,
+            view,
+            sampler
+        }
     }
 }
 
 
 
 pub struct TextureManager {
-    pub texture: texture::Texture,
+    #[allow(unused)]
+    pub texture: self::Texture,
+    pub depth_texture: self::Texture,
     pub bind_group: wgpu::BindGroup,
     pub bind_group_layout: wgpu::BindGroupLayout,
     pub path: String,
@@ -102,6 +145,7 @@ impl TextureManager {
     pub fn new(
         device: &wgpu::Device,
         queue: &wgpu::Queue,
+        config: &wgpu::SurfaceConfiguration,
         raw_path: &str,
     ) -> Self {
         // Get current directory (handle potential error)
@@ -122,14 +166,19 @@ impl TextureManager {
             .to_str()
             .expect("Path contains invalid UTF-8 characters");
         // Load texture bytes and handle errors
-        let bytes = texture::Texture::load_texture_bytes(&path)
+        let bytes = self::Texture::load_texture_bytes(&path)
             .expect("Failed to load texture bytes");
         // Create texture with proper error handling
         let texture =
-            texture::Texture::from_bytes(device, queue, &bytes, path)
+            self::Texture::from_bytes(device, queue, &bytes, path)
                 .expect("Failed to load texture");
 
 
+        let depth_texture: texture::Texture = texture::Texture::create_depth_texture(
+            &device,
+            &config,
+            "depth_texture"
+        );
 
         let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             entries: &[
@@ -170,6 +219,7 @@ impl TextureManager {
 
         Self {
             texture,
+            depth_texture,
             bind_group,
             bind_group_layout,
             path: path.to_string(),

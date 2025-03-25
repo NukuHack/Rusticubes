@@ -1,13 +1,13 @@
 
 use wgpu::{
     Buffer,
-    Device,
-    util::DeviceExt
+    util::DeviceExt,
 };
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct Vertex {
+    #[allow(unused)]
     position: [f32; 3],
     tex_coords: [f32; 2],
 }
@@ -33,24 +33,24 @@ impl Vertex {
     }
 }
 
-pub const VERTICES: &[Vertex] = &[
-    Vertex {
+pub const VERTICES: &[self::Vertex] = &[
+    self::Vertex {
         position: [-0.0625, 0.5, 0.0],
         tex_coords: [0.4375, 0.0],
     }, // A
-    Vertex {
+    self::Vertex {
         position: [-0.5, 0.0625, 0.0],
         tex_coords: [0.0, 0.4375],
     }, // B
-    Vertex {
+    self::Vertex {
         position: [-0.25, -0.4375, 0.0],
         tex_coords: [0.25, 0.9375],
     }, // C
-    Vertex {
+    self::Vertex {
         position: [0.375, -0.375, 0.0],
         tex_coords: [0.875, 0.84375],
     }, // D
-    Vertex {
+    self::Vertex {
         position: [0.4375, 0.25, 0.0],
         tex_coords: [0.9375, 0.25],
     }, // E
@@ -63,6 +63,7 @@ pub const INDICES: &[u16] = &[
 ];
 
 pub struct GeometryBuffer {
+    #[allow(unused)]
     pub vertex_buffer: Buffer,
     pub index_buffer: Buffer,
     pub num_indices: u32,
@@ -71,9 +72,9 @@ pub struct GeometryBuffer {
 
 impl GeometryBuffer {
     pub fn new(
-        device: &Device,
+        device: &wgpu::Device,
         indices: &[u16],
-        vertices: &[Vertex],
+        vertices: &[self::Vertex],
     ) -> Self {
 
         let vertex_buffer: Buffer = device.create_buffer_init(
@@ -93,7 +94,7 @@ impl GeometryBuffer {
         );
 
         let num_indices: u32 = indices.len() as u32;
-        let num_vertices:u32 = vertices.len() as u32;
+        let num_vertices: u32 = vertices.len() as u32;
 
         Self {
             vertex_buffer,

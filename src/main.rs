@@ -35,6 +35,7 @@ fn initialize(){
 
 // Custom Waker implementation
 struct MyWaker {
+    #[allow(unused)]
     flag: AtomicBool,
 }
 
