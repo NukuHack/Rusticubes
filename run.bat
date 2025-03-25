@@ -29,6 +29,7 @@ echo [[34mCOMPILING[0m] Compiling...
 cargo build
 if %errorlevel% neq 0 (
     echo [[31mERROR[0m] Build failed
+	pause
     exit /b 1
 )
 REM Verify executable
@@ -38,6 +39,7 @@ for /f "tokens=2 delims== " %%a in ('findstr /R /C:"^name *= *" Cargo.toml') do 
 set "CRATE_NAME=%CRATE_NAME:"=%"
 if not exist "target\debug\%CRATE_NAME%.exe" (
     echo [[31mERROR[0m] Executable not found
+	pause
     exit /b 1
 )
 echo [[32mOK[0m] Deployment completed successfully!

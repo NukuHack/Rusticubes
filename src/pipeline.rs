@@ -1,5 +1,6 @@
 
 use super::geometry::Vertex;
+use super::instances::InstanceRaw;
 use wgpu::{
     Device,
     PipelineLayout,
@@ -32,7 +33,8 @@ impl Pipeline {
                 entry_point: Some("vs_main"), // 1.
                 buffers: &[
                     Vertex::desc(),
-                ],
+                    InstanceRaw::desc()
+                    ],
                 compilation_options: wgpu::PipelineCompilationOptions::default(),
             },
             fragment: Some(wgpu::FragmentState { // 3.

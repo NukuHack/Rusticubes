@@ -4,16 +4,15 @@ mod camera;
 mod config;
 mod geometry;
 mod pipeline;
+mod instances;
 
 use std::{
     iter::Iterator,
-    time::Instant
+    time::{Duration, Instant},
+    
 };
 use wgpu::{
-    Adapter,
-    PipelineLayout,
-    PresentMode,
-    TextureFormat
+    util::DeviceExt, Adapter, Buffer, PipelineLayout, PresentMode, TextureFormat
 };
 use winit::{
     dpi::PhysicalSize,
@@ -23,10 +22,13 @@ use winit::{
     keyboard::{KeyCode, PhysicalKey},
     window::WindowBuilder,
 };
+use cgmath::{prelude::*, Vector3};
+
 
 
 use crate::texture::*;
 use crate::camera::*;
+use crate::instances::*;
 
 
 
@@ -47,8 +49,10 @@ struct State<'a> {
 
     geometry_buffer:geometry::GeometryBuffer,
 
-    // NEW
     texture_manager: texture::TextureManager,
+    
+    instances:Vec<Instance>,
+    instance_buffer:Buffer,
 }
 
 
@@ -73,6 +77,9 @@ impl<'a> State<'a> {
             backends: wgpu::Backends::GL,
             ..Default::default()
         });
+
+
+
 
         let surface = instance.create_surface(window).unwrap();
 
@@ -100,6 +107,33 @@ impl<'a> State<'a> {
             )
             .await
             .unwrap();
+
+
+        let instances:Vec<Instance> = (0..NUM_INSTANCES_PER_ROW).flat_map(|z| {
+            (0..NUM_INSTANCES_PER_ROW).map(move |x| {
+                let position:Vector3<f32> = cgmath::Vector3 { x: x as f32, y: 0.0, z: z as f32 } - INSTANCE_DISPLACEMENT;
+
+                let rotation = if position.is_zero() {
+                    // this is needed so an object at (0, 0, 0) won't get scaled to zero
+                    // as Quaternions can affect scale if they're not created correctly
+                    cgmath::Quaternion::from_axis_angle(cgmath::Vector3::unit_z(), cgmath::Deg(0.0))
+                } else {
+                    cgmath::Quaternion::from_axis_angle(position.normalize(), cgmath::Deg(45.0))
+                };
+
+                Instance {
+                    position, rotation,
+                }
+            })
+        }).collect::<Vec<_>>();
+        let instance_data:Vec<InstanceRaw> = instances.iter().map(Instance::to_raw).collect::<Vec<_>>();
+        let instance_buffer:Buffer = device.create_buffer_init(
+            &wgpu::util::BufferInitDescriptor {
+                label: Some("Instance Buffer"),
+                contents: bytemuck::cast_slice(&instance_data),
+                usage: wgpu::BufferUsages::VERTEX,
+            }
+        );
 
 
         // Shader code in this tutorial assumes an sRGB surface texture. Using a different
@@ -198,6 +232,9 @@ impl<'a> State<'a> {
             geometry_buffer,
 
             texture_manager,
+            
+            instances,
+            instance_buffer,
         }
     }
 
@@ -224,9 +261,9 @@ impl<'a> State<'a> {
 // In your main loop or update function:
 fn update(&mut self, _event: &WindowEvent) {
     // Calculate delta time
-    let current_time = Instant::now();
-    let delta_time = current_time - self.previous_frame_time;
-    let delta_seconds = delta_time.as_secs_f32(); // Convert to seconds as f32
+    let current_time:Instant = Instant::now();
+    let delta_time:Duration = current_time - self.previous_frame_time;
+    let delta_seconds:f32 = delta_time.as_secs_f32(); // Convert to seconds as f32
     self.previous_frame_time = current_time;
 
     // Update the camera with delta_time
@@ -283,13 +320,14 @@ fn update(&mut self, _event: &WindowEvent) {
             // Set the render pipeline
             render_pass.set_pipeline(&self.pipeline.render_pipeline);
             render_pass.set_bind_group(0, &self.texture_manager.bind_group, &[]);
-
-            // NEW!
             render_pass.set_bind_group(1, &self.camera_system.bind_group, &[]);
             render_pass.set_vertex_buffer(0, self.geometry_buffer.vertex_buffer.slice(..));
+            // NEW!
+            render_pass.set_vertex_buffer(1, self.instance_buffer.slice(..));
             render_pass.set_index_buffer(self.geometry_buffer.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
 
-            render_pass.draw_indexed(0..self.geometry_buffer.num_indices, 0, 0..1);
+            // UPDATED!
+            render_pass.draw_indexed(0..self.geometry_buffer.num_indices, 0, 0..self.instances.len() as _);
         }
 
         // Submit the command buffer to the queue
@@ -375,3 +413,4 @@ pub async fn run() {
         }
     }).expect("Event call function:");
 }
+
