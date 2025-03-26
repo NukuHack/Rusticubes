@@ -19,7 +19,7 @@ impl Pipeline {
         // Create the shader module and keep it in the struct to prevent dropping
         let shader = device.create_shader_module(ShaderModuleDescriptor {
             label: Some("Shader"),
-            source: ShaderSource::Wgsl(Cow::from(include_str!("shader.wgsl"))), // Removed unnecessary .into()
+            source: ShaderSource::Wgsl(Cow::from(include_str!("shader.wgsl"))),
         });
 
         let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
@@ -27,10 +27,11 @@ impl Pipeline {
             layout: Some(render_pipeline_layout),
             vertex: wgpu::VertexState {
                 module: &shader,
-                entry_point: Option::from("vs_main"), // Simplified from Some("vs_main") if the shader uses that name
+                entry_point: Option::from("vs_main"),
                 compilation_options: Default::default(),
                 buffers: &[
                     geometry::Vertex::desc(),
+                    geometry::TexCoord::desc(), // New buffer for texture coordinates
                     InstanceRaw::desc(),
                 ],
                 // compilation_options are default, so they can be omitted

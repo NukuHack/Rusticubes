@@ -5,6 +5,7 @@ mod config;
 mod geometry;
 mod pipeline;
 mod instances;
+mod cube;
 
 use std::{
     iter::Iterator,
@@ -117,8 +118,8 @@ impl<'a> State<'a> {
         let camera_controller = camera::CameraController::new(2.0, 1.0);
 
         surface.configure(&device, &config);
-        let texture_manager = texture::TextureManager::new(&device, &queue, &config, "happy-tree.png");
-        let geometry_buffer = geometry::GeometryBuffer::new(&device, &geometry::INDICES, &geometry::VERTICES);
+        let texture_manager = texture::TextureManager::new(&device, &queue, &config);
+        let geometry_buffer = geometry::GeometryBuffer::new(&device, &geometry::INDICES, &geometry::VERTICES, &geometry::TEXTURE_COORDS);
 
         let render_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("Render Pipeline Layout"),
@@ -180,45 +181,25 @@ impl<'a> State<'a> {
     fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
         let output = self.surface.get_current_texture()?;
         let view = output.texture.create_view(&Default::default());
-
-        let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-            label: Some("Render Encoder"),
-            ..Default::default()
-        });
-
+        let depth_view = &self.texture_manager.depth_texture.view;
+        let mut encoder = self.device.create_command_encoder(&Default::default());
         {
-            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("Render Pass"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &view,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(BACKGROUND_COLOR),
-                        store: wgpu::StoreOp::Store,
-                    },
-                })],
-                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                    view: &self.texture_manager.depth_texture.view,
-                    depth_ops: Some(wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(1.0),
-                        store: wgpu::StoreOp::Store,
-                    }),
-                    stencil_ops: None,
-                }),
-                ..Default::default()
-            });
+            let mut pass = begin_render_pass(&mut encoder, &view, depth_view);
 
-            pass.set_pipeline(&self.pipeline.render_pipeline);
-            pass.set_bind_group(0, &self.texture_manager.bind_group, &[]);
-            pass.set_bind_group(1, &self.camera_system.bind_group, &[]);
-
-            pass.set_vertex_buffer(0, self.geometry_buffer.vertex_buffer.slice(..));
-            pass.set_vertex_buffer(1, self.instance_manager.instance_buffer.slice(..));
-            pass.set_index_buffer(self.geometry_buffer.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
-
-            pass.draw_indexed(0..self.geometry_buffer.num_indices, 0, 0..self.instance_manager.instances.len() as _);
+            draw_geometry(
+                &mut pass,
+                &self.pipeline.render_pipeline,
+                &[&self.texture_manager.bind_group, &self.camera_system.bind_group], // Pass bind groups as a slice
+                &[
+                    &self.geometry_buffer.vertex_buffer,
+                    &self.geometry_buffer.texture_coord_buffer,
+                    &self.instance_manager.instance_buffer,
+                ],
+                &self.geometry_buffer.index_buffer,
+                self.geometry_buffer.num_indices,
+                self.instance_manager.instances.len(),
+            );
         }
-
         self.queue.submit(Some(encoder.finish()));
         output.present();
 
@@ -226,7 +207,51 @@ impl<'a> State<'a> {
     }
 }
 
-
+fn begin_render_pass<'a>(
+    encoder: &'a mut wgpu::CommandEncoder,
+    view: &wgpu::TextureView,
+    depth_view: &wgpu::TextureView,
+) -> wgpu::RenderPass<'a> {
+    encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+        label: Some("Render Pass"),
+        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+            view,
+            resolve_target: None,
+            ops: wgpu::Operations {
+                load: wgpu::LoadOp::Clear(BACKGROUND_COLOR),
+                store: wgpu::StoreOp::Store,
+            },
+        })],
+        depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+            view: depth_view,
+            depth_ops: Some(wgpu::Operations {
+                load: wgpu::LoadOp::Clear(1.0),
+                store: wgpu::StoreOp::Store,
+            }),
+            stencil_ops: None,
+        }),
+        ..Default::default()
+    })
+}
+fn draw_geometry(
+    pass: &mut wgpu::RenderPass,
+    pipeline: &wgpu::RenderPipeline,
+    bind_groups: &[&wgpu::BindGroup], // Use a slice of bind groups
+    vertex_buffers: &[&wgpu::Buffer],
+    index_buffer: &wgpu::Buffer,
+    num_indices: u32,
+    instances: usize,
+) {
+    pass.set_pipeline(pipeline);
+    for (i, bind_group) in bind_groups.iter().enumerate() {
+        pass.set_bind_group(i as _, *bind_group, &[]); // Dereference the bind group
+    }
+    for (i, buffer) in vertex_buffers.iter().enumerate() {
+        pass.set_vertex_buffer(i as _, buffer.slice(..));
+    }
+    pass.set_index_buffer(index_buffer.slice(..), wgpu::IndexFormat::Uint16);
+    pass.draw_indexed(0..num_indices, 0, 0..instances as _);
+}
 
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen(start))]
 pub async fn run() {

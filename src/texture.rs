@@ -142,17 +142,21 @@ impl TextureManager {
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         config: &wgpu::SurfaceConfiguration,
-        raw_path: &str,
     ) -> Self {
         let current_dir = env::current_dir().expect("Failed to get current directory");
         println!("Current directory: {:?}", current_dir);
+
+        let raw_path:&str = r"happy-tree.png";
+
         let full_path = current_dir
             .join("resources")
             .join(raw_path);
-        let path = full_path.to_str().expect("Path contains invalid UTF-8");
+        let path = full_path
+            .to_str()
+            .expect("Path contains invalid UTF-8");
         let bytes = Texture::load_texture_bytes(path)
             .expect("Failed to load texture bytes");
-        let texture = Texture::from_bytes(device, queue, &bytes, path)
+        let texture:Texture = Texture::from_bytes(device, queue, &bytes, path)
             .expect("Failed to load texture");
 
         let depth_texture = Texture::create_depth_texture(device, config, "depth_texture");
@@ -199,7 +203,7 @@ impl TextureManager {
             depth_texture,
             bind_group,
             bind_group_layout,
-            path: path.to_string(),
+            path: raw_path.to_string(),
         }
     }
 }
