@@ -14,9 +14,9 @@ pub struct CameraSystem {
     pub bind_group_layout: wgpu::BindGroupLayout,
 }
 
+#[allow(dead_code,unused,redundant_imports,unused_results,unused_features,unused_variables,unused_mut,dead_code,unused_unsafe,unused_attributes)]
 impl CameraSystem {
     pub fn new(
-        #[allow(unused)]
         device: &wgpu::Device,
         config: &SurfaceConfiguration,
         camera: Camera,

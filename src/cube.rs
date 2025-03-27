@@ -4,6 +4,7 @@ use super::cube;
 /// Stores position for X, Y, Z as 4-bit fields: [X:4, Y:4, Z:4, Empty: 4]
 /// Stores rotations for X, Y, Z as 2-bit fields: [X:2, Y:2, Z:2, Empty: 2]
 /// Stores 3*3*3 points as a 32 bit "array" [Points: 3*3*3->27, Empty: 5]
+#[allow(dead_code)]
 pub struct Cube {
     pub position: u16,
     pub material: u16,
@@ -11,6 +12,7 @@ pub struct Cube {
     pub rotation: u8,
 }
 
+#[allow(dead_code,unused,redundant_imports,unused_results,unused_features,unused_variables,unused_mut,dead_code,unused_unsafe,unused_attributes)]
 impl Cube {
     /// Returns whether the cube is "nice" (placeholder for future functionality).
     fn nice() -> bool {
@@ -183,6 +185,7 @@ impl Cube {
         config
     }
 }
+#[allow(dead_code)]
 pub const DOT_ARRAY: [[u8; 3]; 27] = [
     [2, 0, 0], [2, 0, 1], [2, 0, 2],
     [2, 1, 0], [2, 1, 1], [2, 1, 2],
@@ -199,6 +202,7 @@ pub const DOT_ARRAY: [[u8; 3]; 27] = [
 
 
 // Define the Marching Cubes lookup table
+#[allow(dead_code)]
 pub const MARCHING_CUBES_TABLE: [[u8; 1];0] = [
     /* ... */ // Fill in the full table here
 ];

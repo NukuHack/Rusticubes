@@ -79,6 +79,7 @@ impl TexCoord {
 }
 
 // Update GeometryBuffer to include texture coordinate buffer
+#[allow(dead_code,unused,redundant_imports,unused_results,unused_features,unused_variables,unused_mut,dead_code,unused_unsafe,unused_attributes)]
 pub struct GeometryBuffer {
     pub vertex_buffer: wgpu::Buffer,
     pub texture_coord_buffer: wgpu::Buffer, // New field

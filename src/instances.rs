@@ -3,8 +3,8 @@ use cgmath::{InnerSpace, Rotation3, Zero};
 use wgpu::Buffer;
 use wgpu::util::DeviceExt;
 
+#[allow(dead_code,unused,redundant_imports,unused_results,unused_features,unused_variables,unused_mut,dead_code,unused_unsafe,unused_attributes)]
 pub struct InstanceManager {
-    #[allow(unused)]
     pub instances: Vec<Instance>,
     pub instance_data: Vec<InstanceRaw>,
     pub instance_buffer: Buffer,

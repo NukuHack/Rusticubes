@@ -4,8 +4,8 @@ use wgpu::{Device, PipelineLayout, RenderPipeline, ShaderModule, ShaderModuleDes
 use super::instances::*;
 use super::{geometry, texture};
 
+#[allow(dead_code,unused,redundant_imports,unused_results,unused_features,unused_variables,unused_mut,dead_code,unused_unsafe,unused_attributes)]
 pub struct Pipeline {
-    #[allow(unused)]
     pub render_pipeline: RenderPipeline,
     shader: ShaderModule, // Keep the shader alive as long as the pipeline exists
 }

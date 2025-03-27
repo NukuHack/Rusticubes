@@ -128,10 +128,10 @@ impl Texture {
     }
 }
 
+#[allow(dead_code,unused,redundant_imports,unused_results,unused_features,unused_variables,unused_mut,dead_code,unused_unsafe,unused_attributes)]
 pub struct TextureManager {
-    #[allow(unused)]
-    pub texture: Texture,
-    pub depth_texture: Texture,
+    pub texture: self::Texture,
+    pub depth_texture: self::Texture,
     pub bind_group: wgpu::BindGroup,
     pub bind_group_layout: wgpu::BindGroupLayout,
     pub path: String,
@@ -207,3 +207,22 @@ impl TextureManager {
         }
     }
 }
+
+#[allow(dead_code,unused,redundant_imports,unused_results,unused_features,unused_variables,unused_mut,dead_code,unused_unsafe,unused_attributes)]
+pub struct TextureMap {
+    pub texture: self::Texture,
+}
+/*
+impl TextureMap {
+
+    pub fn make_map(
+
+    ) -> Result<Self, Error> {
+
+        Self {
+            texture:
+        }
+    }
+}
+
+ */
