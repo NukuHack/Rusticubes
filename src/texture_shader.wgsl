@@ -56,3 +56,10 @@ var s_diffuse: sampler;
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     return textureSample(t_diffuse, s_diffuse, in.uv);
 }
+/*
+fn fs_main(in: FragmentInput) -> @location(0) vec4<f32> {
+    // Sample the same texture for all faces
+    let texture = texture_2d<f32>(textureSampler);
+    let color = textureSample(texture, textureSampler, in.uv);
+    return color;
+}*/

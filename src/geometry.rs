@@ -30,6 +30,7 @@ impl Vertex {
     }
 }
 
+
 pub const VERTICES: &[Vertex] = &[
     // front
     Vertex { position: [0, 0, -1], normal: [0.0, 0.0, 1.0] },

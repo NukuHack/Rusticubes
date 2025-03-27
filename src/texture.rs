@@ -208,21 +208,3 @@ impl TextureManager {
     }
 }
 
-#[allow(dead_code,unused,redundant_imports,unused_results,unused_features,unused_variables,unused_mut,dead_code,unused_unsafe,unused_attributes)]
-pub struct TextureMap {
-    pub texture: self::Texture,
-}
-/*
-impl TextureMap {
-
-    pub fn make_map(
-
-    ) -> Result<Self, Error> {
-
-        Self {
-            texture:
-        }
-    }
-}
-
- */
