@@ -1,58 +1,69 @@
-﻿
-use std::{
+﻿use std::{
     env,
     fs,
-    io,
-    path::Path,
-    path::PathBuf,
+    io::{self, Result},
+    path::{Path, PathBuf},
 };
 
-fn main() -> io::Result<()> {
-    const RESOURCES_DIR: &str = "resources";
+const RESOURCES_DIR: &str = "resources";
 
-    // Tell Cargo to rerun if any file in resources changes
+fn main() -> Result<()> {
     let source_dir = Path::new(RESOURCES_DIR);
-    for file in walk_files(source_dir)? {
+    if !source_dir.exists() {
+        return Err(io::Error::new(
+            io::ErrorKind::NotFound,
+            format!("Resources directory not found: {}", source_dir.display()),
+        ));
+    }
+
+    // Collect all files in resources directory
+    let files = walk_files(source_dir)?;
+    for file in &files {
         println!("cargo:rerun-if-changed={}", file.display());
     }
 
-    // Get the output directory from the environment variable
+    // Get output directory
     let out_dir = env::var("OUT_DIR")
         .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
-    let out_dir_path = Path::new(&out_dir);
+    let destination_dir = Path::new(&out_dir).join(RESOURCES_DIR);
+    println!(
+        "Copying resources from {} to {}",
+        source_dir.display(),
+        destination_dir.display()
+    );
 
-    let destination_dir = out_dir_path.join(RESOURCES_DIR);
-    println!("source {}", source_dir.display());
-    println!("destination {}", destination_dir.display());
-
-    // Copy the directory recursively
+    // Perform recursive copy
     copy_directory(source_dir, &destination_dir)?;
 
     Ok(())
 }
 
-// Helper function to recursively list all files in a directory
-fn walk_files<P: AsRef<Path>>(path: P) -> io::Result<Vec<PathBuf>> {
+/// Iteratively collects all files in a directory and its subdirectories
+fn walk_files<P: AsRef<Path>>(path: P) -> Result<Vec<PathBuf>> {
     let mut files = Vec::new();
-    let path = path.as_ref();
-    if path.is_dir() {
-        for entry in fs::read_dir(path)? {
-            let entry = entry?;
-            let path = entry.path();
-            if entry.file_type()?.is_dir() {
-                files.append(&mut walk_files(&path)?);
-            } else {
-                files.push(path);
+    let mut stack = vec![path.as_ref().to_path_buf()];
+
+    while let Some(current) = stack.pop() {
+        if current.is_dir() {
+            for entry in fs::read_dir(&current)? {
+                let entry = entry?;
+                let path = entry.path();
+                if entry.file_type()?.is_dir() {
+                    stack.push(path);
+                } else {
+                    files.push(path);
+                }
             }
+        } else {
+            files.push(current);
         }
-    } else {
-        files.push(path.to_path_buf());
     }
+
     Ok(files)
 }
 
-// Recursively copies a directory and its contents to a new location
-fn copy_directory(src: &Path, dst: &Path) -> io::Result<()> {
+/// Recursively copies a directory and its contents
+fn copy_directory(src: &Path, dst: &Path) -> Result<()> {
     fs::create_dir_all(dst)?;
 
     for entry in fs::read_dir(src)? {
