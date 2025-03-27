@@ -1,83 +1,30 @@
+
+
 use std::borrow::Cow;
-use wgpu::{Device, PipelineLayout, RenderPipeline, ShaderModule, ShaderModuleDescriptor, ShaderSource, SurfaceConfiguration};
+use wgpu;
 
 use super::instances::*;
 use super::{geometry, texture};
 
 #[allow(dead_code,unused,redundant_imports,unused_results,unused_features,unused_variables,unused_mut,dead_code,unused_unsafe,unused_attributes)]
 pub struct Pipeline {
-    pub render_pipeline: RenderPipeline,
-    shader: ShaderModule, // Keep the shader alive as long as the pipeline exists
+    pub render_pipeline: wgpu::RenderPipeline,
+    shader: wgpu::ShaderModule, // Keep the shader alive as long as the pipeline exists
 }
 
 impl Pipeline {
     pub fn new(
-        device: &Device,
-        config: &SurfaceConfiguration,
-        render_pipeline_layout: &PipelineLayout,
-    ) -> Self {
-        let shader = device.create_shader_module(ShaderModuleDescriptor {
-            label: Some("Shader"),
-            source: ShaderSource::Wgsl(Cow::from(include_str!("texture_shader.wgsl"))),
-        });
-
-        let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("Render Pipeline"),
-            layout: Some(render_pipeline_layout),
-            vertex: wgpu::VertexState {
-                module: &shader,
-                entry_point: Option::from("vs_main"),
-
-                compilation_options: Default::default(),
-                buffers: &[
-                    geometry::Vertex::desc(),
-                    InstanceRaw::desc(), // Instance data buffer
-                ],
-            },
-            fragment: Some(wgpu::FragmentState {
-                module: &shader,
-                entry_point: Option::from("fs_main"),
-
-                compilation_options: Default::default(),
-                targets: &[Some(wgpu::ColorTargetState {
-                    format: config.format,
-                    blend: Some(wgpu::BlendState::REPLACE),
-                    write_mask: wgpu::ColorWrites::ALL,
-                })],
-            }),
-            primitive: wgpu::PrimitiveState {
-                topology: wgpu::PrimitiveTopology::TriangleList,
-                front_face: wgpu::FrontFace::Ccw, // Ensure this matches winding
-                cull_mode: Some(wgpu::Face::Back),
-                ..Default::default()
-            },
-            depth_stencil: Some(wgpu::DepthStencilState {
-                format: texture::Texture::DEPTH_FORMAT,
-                depth_write_enabled: true,
-                depth_compare: wgpu::CompareFunction::Less,
-                stencil: wgpu::StencilState::default(),
-                bias: wgpu::DepthBiasState::default(),
-            }),
-            multisample: wgpu::MultisampleState::default(), // Explicitly set to default for clarity
-            multiview: None,
-            cache: None,
-        });
-
-        Pipeline { render_pipeline, shader }
-    }
-    pub fn new_old(
-        device: &Device,
-        config: &SurfaceConfiguration,
-        render_pipeline_layout: &PipelineLayout,
+        device: &wgpu::Device,
+        config: &wgpu::SurfaceConfiguration,
+        render_pipeline_layout: &wgpu::PipelineLayout,
     ) -> Self {
         // Create the shader module and keep it in the struct to prevent dropping
-        let shader = device.create_shader_module(ShaderModuleDescriptor {
+        let shader: wgpu::ShaderModule = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("Shader"),
-            source: ShaderSource::Wgsl(Cow::from(
-                include_str!(r#"texture_shader.wgsl"#))),
+            source: wgpu::ShaderSource::Wgsl(Cow::from(include_str!("texture_shader.wgsl"))),
         });
 
-        let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        let render_pipeline: wgpu::RenderPipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("Render Pipeline"),
             layout: Some(render_pipeline_layout),
             vertex: wgpu::VertexState {
@@ -86,7 +33,7 @@ impl Pipeline {
                 compilation_options: Default::default(),
                 buffers: &[
                     geometry::Vertex::desc(),
-                    //geometry::TexCoord::desc(), // New buffer for texture coordinates
+                    geometry::TexCoord::desc(), // New buffer for texture coordinates
                     InstanceRaw::desc(),
                 ],
                 // compilation_options are default, so they can be omitted
@@ -129,6 +76,7 @@ impl Pipeline {
         }
     }
 }
+
 
 const BACKGROUND_COLOR: wgpu::Color = wgpu::Color
 {    r: 0.1,    g: 0.2,    b: 0.3,    a: 1.0, };
