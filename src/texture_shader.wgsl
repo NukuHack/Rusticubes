@@ -2,6 +2,7 @@
 struct CameraUniform {
     view_proj: mat4x4<f32>,
 };
+
 @group(1) @binding(0)
 var<uniform> camera: CameraUniform;
 
@@ -13,14 +14,14 @@ struct InstanceInput {
 };
 
 struct VertexInput {
-    @location(0) position: vec3<i32>, // From first vertex buffer
+    @location(0) position: vec3<f32>,
     @location(1) normal: vec3<f32>,
-    @location(2) uv: vec2<f32>,       // From second vertex buffer
+    @location(2) uv: vec2<f32>,
 };
 
 struct VertexOutput {
     @builtin(position) clip_position: vec4<f32>,
-    @location(0) uv: vec2<f32>,       // Pass UV to fragment
+    @location(0) uv: vec2<f32>,
 };
 
 @vertex

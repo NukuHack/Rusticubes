@@ -5,7 +5,7 @@ use wgpu::{util::DeviceExt};
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Pod, Zeroable, Default)]
 pub struct Vertex {
-    pub position: [i32; 3], // Changed to integer positions
+    pub position: [f32; 3],
     pub normal: [f32; 3],
 }
 
@@ -18,10 +18,10 @@ impl Vertex {
                 wgpu::VertexAttribute {
                     offset: 0,
                     shader_location: 0,
-                    format: wgpu::VertexFormat::Sint32x3, // Integer position format
+                    format: wgpu::VertexFormat::Float32x3, // Integer was "Sint32x3"
                 },
                 wgpu::VertexAttribute {
-                    offset: mem::size_of::<[i32; 3]>() as wgpu::BufferAddress,
+                    offset: mem::size_of::<[f32; 3]>() as wgpu::BufferAddress,
                     shader_location: 1,
                     format: wgpu::VertexFormat::Float32x3,
                 },
@@ -33,15 +33,15 @@ impl Vertex {
 
 pub const VERTICES: &[Vertex] = &[
     // front
-    Vertex { position: [0, 0, -1], normal: [0.0, 0.0, 1.0] },
-    Vertex { position: [0, 1, -1], normal: [0.0, 0.0, 1.0] },
-    Vertex { position: [1, 1, -1], normal: [0.0, 0.0, 1.0] },
-    Vertex { position: [1, 0, -1], normal: [0.0, 0.0, 1.0] },
+    Vertex { position: [0.0, 0.0, -1.0], normal: [0.0, 0.0, 1.0] },
+    Vertex { position: [0.0, 1.0, -1.0], normal: [0.0, 0.0, 1.0] },
+    Vertex { position: [1.0, 1.0, -1.0], normal: [0.0, 0.0, 1.0] },
+    Vertex { position: [1.0, 0.0, -1.0], normal: [0.0, 0.0, 1.0] },
     // back
-    Vertex { position: [0, 0, -2], normal: [0.0, 0.0, 1.0] },
-    Vertex { position: [0, 1, -2], normal: [0.0, 0.0, 1.0] },
-    Vertex { position: [1, 1, -2], normal: [0.0, 0.0, 1.0] },
-    Vertex { position: [1, 0, -2], normal: [0.0, 0.0, 1.0] },
+    Vertex { position: [0.0, 0.0, -2.0], normal: [0.0, 0.0, 1.0] },
+    Vertex { position: [0.0, 1.0, -2.0], normal: [0.0, 0.0, 1.0] },
+    Vertex { position: [1.0, 1.0, -2.0], normal: [0.0, 0.0, 1.0] },
+    Vertex { position: [1.0, 0.0, -2.0], normal: [0.0, 0.0, 1.0] },
 ];
 
 pub const INDICES: &[u16] = &[

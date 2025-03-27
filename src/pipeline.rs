@@ -32,7 +32,7 @@ impl Pipeline {
                 compilation_options: Default::default(),
                 buffers: &[
                     geometry::Vertex::desc(),
-                    geometry::TexCoord::desc(), // New buffer for texture coordinates
+                    geometry::TexCoord::desc(),
                     InstanceRaw::desc(),
                 ],
             },
