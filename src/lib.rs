@@ -1,4 +1,5 @@
 ﻿
+
 mod texture;
 mod camera;
 mod config;
@@ -6,7 +7,6 @@ mod geometry;
 mod pipeline;
 mod instances;
 mod cube;
-
 use std::{
     iter::Iterator,
     time::Instant,
@@ -22,12 +22,9 @@ use winit::{
     keyboard::{KeyCode, PhysicalKey},
     window::{Window, WindowBuilder},
 };
-
 use crate::pipeline::*;
 
-
-
-struct State<'a> {
+pub struct State<'a> {
     surface: wgpu::Surface<'a>,
     device: wgpu::Device,
     queue: wgpu::Queue,
@@ -43,30 +40,26 @@ struct State<'a> {
     instance_manager: instances::InstanceManager,
 }
 
-
 impl<'a> State<'a> {
     async fn new(window: &'a Window) -> Self {
-        let size = window.inner_size();
-        let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
+        let size: PhysicalSize<u32> = window.inner_size();
+        let instance: wgpu::Instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
             #[cfg(not(target_arch = "wasm32"))]
             backends: wgpu::Backends::PRIMARY,
             #[cfg(target_arch = "wasm32")]
             backends: wgpu::Backends::GL,
             ..Default::default()
         });
+        let surface: wgpu::Surface<'a> = instance.create_surface(window).unwrap();
 
-        let surface = instance.create_surface(window).unwrap();
-
-        // Find the first adapter that supports the surface
-        let adapter:Adapter = instance
+        let adapter: Adapter = instance
             .enumerate_adapters(wgpu::Backends::all())
-            .into_iter() // Convert Vec to iterator
+            .into_iter()
             .filter(|adapter| adapter.is_surface_supported(&surface))
             .next()
             .expect("No suitable GPU adapter found");
 
-
-        let (device, queue) = adapter
+        let (device, queue): (wgpu::Device, wgpu::Queue) = adapter
             .request_device(
                 &wgpu::DeviceDescriptor {
                     required_features: wgpu::Features::empty(),
@@ -82,18 +75,18 @@ impl<'a> State<'a> {
             .await
             .unwrap();
 
-        let instance_manager = instances::InstanceManager::new(&device);
+        let instance_manager: instances::InstanceManager = instances::InstanceManager::new(&device);
 
-        let surface_caps = surface.get_capabilities(&adapter);
-        let surface_format = surface_caps.formats.iter()
+        let surface_caps: wgpu::SurfaceCapabilities = surface.get_capabilities(&adapter);
+        let surface_format: wgpu::TextureFormat = surface_caps.formats.iter()
             .copied()
             .find(|f| f.is_srgb())
             .unwrap_or(surface_caps.formats[0]);
-        let present_mode = surface_caps.present_modes.iter().copied()
+        let present_mode: PresentMode = surface_caps.present_modes.iter().copied()
             .find(|mode| *mode == PresentMode::Fifo)
             .unwrap_or(surface_caps.present_modes[0]);
 
-        let config = wgpu::SurfaceConfiguration {
+        let config: wgpu::SurfaceConfiguration = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             format: surface_format,
             width: size.width,
@@ -104,7 +97,7 @@ impl<'a> State<'a> {
             desired_maximum_frame_latency: 2,
         };
 
-        let camera = camera::Camera::new(
+        let camera: camera::Camera = camera::Camera::new(
             (0.0, 1.0, 2.0).into(),
             (0.0, 0.0, 0.0).into(),
             cgmath::Vector3::unit_y(),
@@ -113,14 +106,21 @@ impl<'a> State<'a> {
             0.1,
             100.0,
         );
-        let camera_system = camera::CameraSystem::new(&device, &config, camera);
-        let camera_controller = camera::CameraController::new(2.0, 1.0);
+
+        let camera_system: camera::CameraSystem = camera::CameraSystem::new(&device, &config, camera);
+        let camera_controller: camera::CameraController = camera::CameraController::new(2.0, 1.0);
 
         surface.configure(&device, &config);
-        let texture_manager = texture::TextureManager::new(&device, &queue, &config);
-        let geometry_buffer = geometry::GeometryBuffer::new(&device, &geometry::INDICES, &geometry::VERTICES, &geometry::TEXTURE_COORDS);
 
-        let render_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+        let texture_manager: texture::TextureManager = texture::TextureManager::new(&device, &queue, &config);
+        let geometry_buffer: geometry::GeometryBuffer = geometry::GeometryBuffer::new(
+            &device,
+            &geometry::INDICES,
+            &geometry::VERTICES,
+            &geometry::TEXTURE_COORDS
+        );
+
+        let render_pipeline_layout: wgpu::PipelineLayout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("Render Pipeline Layout"),
             bind_group_layouts: &[
                 &texture_manager.bind_group_layout,
@@ -129,7 +129,7 @@ impl<'a> State<'a> {
             ..Default::default()
         });
 
-        let pipeline = pipeline::Pipeline::new(&device, &config, &render_pipeline_layout);
+        let pipeline: pipeline::Pipeline = pipeline::Pipeline::new(&device, &config, &render_pipeline_layout);
 
         Self {
             surface,
@@ -158,7 +158,11 @@ impl<'a> State<'a> {
             self.config.width = new_size.width;
             self.config.height = new_size.height;
             self.surface.configure(&self.device, &self.config);
-            self.texture_manager.depth_texture = texture::Texture::create_depth_texture(&self.device, &self.config, "depth_texture");
+            self.texture_manager.depth_texture = texture::Texture::create_depth_texture(
+                &self.device,
+                &self.config,
+                "depth_texture"
+            );
         }
     }
 
@@ -167,13 +171,11 @@ impl<'a> State<'a> {
     }
 
     pub fn update(&mut self) {
-        let current_time:Instant = Instant::now();
-        let delta_seconds:f32 = (current_time - self.previous_frame_time).as_secs_f32();
+        let current_time: Instant = Instant::now();
+        let delta_seconds: f32 = (current_time - self.previous_frame_time).as_secs_f32();
         self.previous_frame_time = current_time;
-
         self.camera_controller
             .update_camera(&mut self.camera_system.camera, delta_seconds);
-
         self.camera_system.update(&mut self.queue);
     }
 
@@ -185,10 +187,9 @@ impl<'a> State<'a> {
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen(start))]
 pub async fn run() {
     env_logger::init();
-    let event_loop = EventLoop::new().unwrap();
+    let event_loop: EventLoop<()> = EventLoop::new().unwrap();
     let config: config::AppConfig = config::AppConfig::default();
-
-    let window = WindowBuilder::new()
+    let window: Window = WindowBuilder::new()
         .with_title(&config.window_title)
         .with_inner_size(PhysicalSize::new(
             config.initial_window_size.0,
@@ -196,9 +197,7 @@ pub async fn run() {
         ))
         .build(&event_loop)
         .unwrap();
-
-    let mut state = State::new(&window).await;
-
+    let mut state: State = State::new(&window).await;
     event_loop.run(move |event, control_flow| {
         match &event {
             Event::WindowEvent { event, window_id } if *window_id == state.window().id() => {
@@ -235,5 +234,3 @@ pub async fn run() {
         }
     }).expect("Event loop error");
 }
-
-

@@ -215,31 +215,36 @@ impl CameraController {
 
 
     pub fn update_camera(&self, camera: &mut Camera, delta_time: f32) {
-        use cgmath::InnerSpace;
+        use cgmath::{InnerSpace, Matrix3, Rad};
+
         let forward = camera.target - camera.eye;
         let forward_norm = forward.normalize();
         let forward_mag = forward.magnitude();
 
-        // Forward/Backward movement with delta_time
+        // Forward/Backward movement
         if self.is_forward_pressed && forward_mag > self.speed * delta_time {
             camera.eye += forward_norm * self.speed * delta_time;
+            camera.target += forward_norm * self.speed * delta_time;
         }
         if self.is_backward_pressed {
             camera.eye -= forward_norm * self.speed * delta_time;
+            camera.target -= forward_norm * self.speed * delta_time;
         }
 
-        // Right/Left movement with delta_time
+        // Right/Left movement
         let right = forward_norm.cross(camera.up);
         if self.is_right_pressed {
             let movement = right * self.speed * delta_time;
-            camera.eye = camera.target - (forward + movement).normalize() * forward_mag;
+            camera.eye += movement;
+            camera.target += movement;
         }
         if self.is_left_pressed {
             let movement = right * self.speed * delta_time;
-            camera.eye = camera.target - (forward - movement).normalize() * forward_mag;
+            camera.eye -= movement;
+            camera.target -= movement;
         }
 
-        // Rotation with delta_time
+        // Rotation
         let mut total_rotation = 0.0;
         if self.is_rotate_left {
             total_rotation -= self.rotation_speed * delta_time;
@@ -249,7 +254,7 @@ impl CameraController {
         }
 
         if total_rotation != 0.0 {
-            let rotation = cgmath::Matrix3::from_angle_y(cgmath::Rad(total_rotation));
+            let rotation = Matrix3::from_angle_y(Rad(total_rotation));
             let new_forward = rotation * forward_norm;
             camera.target = camera.eye + new_forward * forward_mag;
         }

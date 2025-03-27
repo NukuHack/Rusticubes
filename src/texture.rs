@@ -1,9 +1,17 @@
 ﻿
-use image::*;
 use std::{
-    result::Result::Ok,
     env,
+    path::PathBuf,
+    result::Result,
+    io,
 };
+
+use image::{
+    DynamicImage,
+    ImageError,
+    RgbaImage,
+};
+use image::GenericImageView;
 
 pub struct Texture {
     #[allow(unused)]
@@ -18,26 +26,27 @@ impl Texture {
         queue: &wgpu::Queue,
         bytes: &[u8],
         label: &str,
-    ) -> Result<Self, ImageError> {
-        let img = image::load_from_memory(bytes)?;
+    ) -> Result<Self, image::ImageError> {
+        let img: image::DynamicImage = image::load_from_memory(bytes)?;
         Self::from_image(device, queue, &img, Some(label))
     }
 
     pub fn from_image(
         device: &wgpu::Device,
         queue: &wgpu::Queue,
-        img: &DynamicImage,
+        img: &image::DynamicImage,
         label: Option<&str>,
-    ) -> Result<Self, ImageError> {
-        let rgba = img.to_rgba8();
-        let dimensions = img.dimensions();
+    ) -> Result<Self, image::ImageError> {
+        let rgba: image::RgbaImage = img.to_rgba8();
+        let dimensions: (u32, u32) = img.dimensions();
 
-        let size = wgpu::Extent3d {
+        let size: wgpu::Extent3d = wgpu::Extent3d {
             width: dimensions.0,
             height: dimensions.1,
             depth_or_array_layers: 1,
         };
-        let texture = device.create_texture(&wgpu::TextureDescriptor {
+
+        let texture: wgpu::Texture = device.create_texture(&wgpu::TextureDescriptor {
             label,
             size,
             mip_level_count: 1,
@@ -49,14 +58,14 @@ impl Texture {
         });
 
         queue.write_texture(
-            wgpu::TexelCopyTextureInfo {
+            wgpu::ImageCopyTexture {
                 aspect: wgpu::TextureAspect::All,
                 texture: &texture,
                 mip_level: 0,
                 origin: wgpu::Origin3d::ZERO,
             },
             &rgba,
-            wgpu::TexelCopyBufferLayout {
+            wgpu::ImageDataLayout {
                 offset: 0,
                 bytes_per_row: Some(4 * dimensions.0),
                 rows_per_image: Some(dimensions.1),
@@ -64,8 +73,8 @@ impl Texture {
             size,
         );
 
-        let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
-        let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+        let view: wgpu::TextureView = texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let sampler: wgpu::Sampler = device.create_sampler(&wgpu::SamplerDescriptor {
             address_mode_u: wgpu::AddressMode::ClampToEdge,
             address_mode_v: wgpu::AddressMode::ClampToEdge,
             address_mode_w: wgpu::AddressMode::ClampToEdge,
@@ -89,12 +98,13 @@ impl Texture {
         config: &wgpu::SurfaceConfiguration,
         label: &str,
     ) -> Self {
-        let size = wgpu::Extent3d {
+        let size: wgpu::Extent3d = wgpu::Extent3d {
             width: config.width.max(1),
             height: config.height.max(1),
             depth_or_array_layers: 1,
         };
-        let desc = wgpu::TextureDescriptor {
+
+        let texture: wgpu::Texture = device.create_texture(&wgpu::TextureDescriptor {
             label: Some(label),
             size,
             mip_level_count: 1,
@@ -103,11 +113,10 @@ impl Texture {
             format: Self::DEPTH_FORMAT,
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
             view_formats: &[],
-        };
-        let texture = device.create_texture(&desc);
+        });
 
-        let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
-        let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+        let view: wgpu::TextureView = texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let sampler: wgpu::Sampler = device.create_sampler(&wgpu::SamplerDescriptor {
             address_mode_u: wgpu::AddressMode::ClampToEdge,
             address_mode_v: wgpu::AddressMode::ClampToEdge,
             address_mode_w: wgpu::AddressMode::ClampToEdge,
@@ -128,7 +137,6 @@ impl Texture {
     }
 }
 
-#[allow(dead_code,unused,redundant_imports,unused_results,unused_features,unused_variables,unused_mut,dead_code,unused_unsafe,unused_attributes)]
 pub struct TextureManager {
     pub texture: self::Texture,
     pub depth_texture: self::Texture,
@@ -143,60 +151,66 @@ impl TextureManager {
         queue: &wgpu::Queue,
         config: &wgpu::SurfaceConfiguration,
     ) -> Self {
-        let current_dir = env::current_dir().expect("Failed to get current directory");
+        let current_dir: PathBuf = env::current_dir().expect("Failed to get current directory");
         println!("Current directory: {:?}", current_dir);
 
-        let raw_path:&str = r"happy-tree.png";
+        let raw_path: &str = r"happy-tree.png";
 
-        let full_path = current_dir
+        let full_path: PathBuf = current_dir
             .join("resources")
             .join(raw_path);
-        let path = full_path
+        let path: &str = full_path
             .to_str()
             .expect("Path contains invalid UTF-8");
-        let bytes = Texture::load_texture_bytes(path)
+
+        let bytes: Vec<u8> = self::Texture::load_texture_bytes(path)
             .expect("Failed to load texture bytes");
-        let texture:Texture = Texture::from_bytes(device, queue, &bytes, path)
+
+        let texture: self::Texture = self::Texture::from_bytes(device, queue, &bytes, path)
             .expect("Failed to load texture");
 
-        let depth_texture = Texture::create_depth_texture(device, config, "depth_texture");
+        let depth_texture: self::Texture = self::Texture::create_depth_texture(device, config, "depth_texture");
 
-        let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            entries: &[
-                wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Texture {
-                        multisampled: false,
-                        view_dimension: wgpu::TextureViewDimension::D2,
-                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+        let bind_group_layout: wgpu::BindGroupLayout = device.create_bind_group_layout(
+            &wgpu::BindGroupLayoutDescriptor {
+                entries: &[
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Texture {
+                            multisampled: false,
+                            view_dimension: wgpu::TextureViewDimension::D2,
+                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        },
+                        count: None,
                     },
-                    count: None,
-                },
-                wgpu::BindGroupLayoutEntry {
-                    binding: 1,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                    count: None,
-                },
-            ],
-            label: Some("texture_bind_group_layout"),
-        });
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 1,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                        count: None,
+                    },
+                ],
+                label: Some("texture_bind_group_layout"),
+            },
+        );
 
-        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            layout: &bind_group_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: wgpu::BindingResource::TextureView(&texture.view),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::Sampler(&texture.sampler),
-                },
-            ],
-            label: Some("diffuse_bind_group"),
-        });
+        let bind_group: wgpu::BindGroup = device.create_bind_group(
+            &wgpu::BindGroupDescriptor {
+                layout: &bind_group_layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: wgpu::BindingResource::TextureView(&texture.view),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: wgpu::BindingResource::Sampler(&texture.sampler),
+                    },
+                ],
+                label: Some("diffuse_bind_group"),
+            },
+        );
 
         Self {
             texture,
@@ -207,4 +221,3 @@ impl TextureManager {
         }
     }
 }
-

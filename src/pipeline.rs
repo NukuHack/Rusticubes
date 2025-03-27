@@ -1,12 +1,11 @@
 
-
 use std::borrow::Cow;
 use wgpu;
 
 use super::instances::*;
 use super::{geometry, texture};
 
-#[allow(dead_code,unused,redundant_imports,unused_results,unused_features,unused_variables,unused_mut,dead_code,unused_unsafe,unused_attributes)]
+#[allow(dead_code, unused, redundant_imports, unused_results, unused_features, unused_variables, unused_mut, dead_code, unused_unsafe, unused_attributes)]
 pub struct Pipeline {
     pub render_pipeline: wgpu::RenderPipeline,
     shader: wgpu::ShaderModule, // Keep the shader alive as long as the pipeline exists
@@ -29,25 +28,23 @@ impl Pipeline {
             layout: Some(render_pipeline_layout),
             vertex: wgpu::VertexState {
                 module: &shader,
-                entry_point: Option::from("vs_main"),
+                entry_point: Some("vs_main"),
                 compilation_options: Default::default(),
                 buffers: &[
                     geometry::Vertex::desc(),
                     geometry::TexCoord::desc(), // New buffer for texture coordinates
                     InstanceRaw::desc(),
                 ],
-                // compilation_options are default, so they can be omitted
             },
             fragment: Some(wgpu::FragmentState {
                 module: &shader,
-                entry_point: Option::from("fs_main"),
+                entry_point: Some("fs_main"),
                 compilation_options: Default::default(),
                 targets: &[Some(wgpu::ColorTargetState {
                     format: config.format,
                     blend: Some(wgpu::BlendState::REPLACE),
                     write_mask: wgpu::ColorWrites::ALL,
                 })],
-                // compilation_options are default, so they can be omitted
             }),
             primitive: wgpu::PrimitiveState {
                 topology: wgpu::PrimitiveTopology::TriangleList,
@@ -65,7 +62,7 @@ impl Pipeline {
                 stencil: wgpu::StencilState::default(),
                 bias: wgpu::DepthBiasState::default(),
             }),
-            multisample: wgpu::MultisampleState::default(), // Explicitly set to default for clarity
+            multisample: wgpu::MultisampleState::default(),
             multiview: None,
             cache: None,
         });
@@ -77,9 +74,12 @@ impl Pipeline {
     }
 }
 
-
-const BACKGROUND_COLOR: wgpu::Color = wgpu::Color
-{    r: 0.1,    g: 0.2,    b: 0.3,    a: 1.0, };
+const BACKGROUND_COLOR: wgpu::Color = wgpu::Color {
+    r: 0.1,
+    g: 0.2,
+    b: 0.3,
+    a: 1.0,
+};
 
 fn begin_render_pass<'a>(
     encoder: &'a mut wgpu::CommandEncoder,
@@ -107,6 +107,7 @@ fn begin_render_pass<'a>(
         ..Default::default()
     })
 }
+
 fn draw_geometry(
     pass: &mut wgpu::RenderPass,
     pipeline: &wgpu::RenderPipeline,
@@ -118,29 +119,30 @@ fn draw_geometry(
 ) {
     pass.set_pipeline(pipeline);
     for (i, bind_group) in bind_groups.iter().enumerate() {
-        pass.set_bind_group(i as _, *bind_group, &[]); // Dereference the bind group
+        pass.set_bind_group(i as u32, *bind_group, &[]);
     }
     for (i, buffer) in vertex_buffers.iter().enumerate() {
-        pass.set_vertex_buffer(i as _, buffer.slice(..));
+        pass.set_vertex_buffer(i as u32, buffer.slice(..));
     }
     pass.set_index_buffer(index_buffer.slice(..), wgpu::IndexFormat::Uint16);
-    pass.draw_indexed(0..num_indices, 0, 0..instances as _);
+    pass.draw_indexed(0..num_indices, 0, 0..instances as u32);
 }
 
-
-
 pub fn render_all(current_state: &super::State) -> Result<(), wgpu::SurfaceError> {
-    let output = current_state.surface.get_current_texture()?;
-    let view = output.texture.create_view(&Default::default());
-    let depth_view = &current_state.texture_manager.depth_texture.view;
-    let mut encoder = current_state.device.create_command_encoder(&Default::default());
+    let output: wgpu::SurfaceTexture = current_state.surface.get_current_texture()?;
+    let view: wgpu::TextureView = output.texture.create_view(&Default::default());
+    let depth_view: &wgpu::TextureView = &current_state.texture_manager.depth_texture.view;
+    let mut encoder: wgpu::CommandEncoder = current_state.device.create_command_encoder(&Default::default());
     {
         let mut pass = begin_render_pass(&mut encoder, &view, depth_view);
 
         draw_geometry(
             &mut pass,
             &current_state.pipeline.render_pipeline,
-            &[&current_state.texture_manager.bind_group, &current_state.camera_system.bind_group], // Pass bind groups as a slice
+            &[
+                &current_state.texture_manager.bind_group,
+                &current_state.camera_system.bind_group,
+            ],
             &[
                 &current_state.geometry_buffer.vertex_buffer,
                 &current_state.geometry_buffer.texture_coord_buffer,
