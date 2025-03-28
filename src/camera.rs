@@ -1,8 +1,7 @@
 ﻿
-use winit::dpi::PhysicalPosition;
 use winit::event::*;
 use std::time::Duration;
-use cgmath::{Angle, InnerSpace, SquareMatrix};
+use cgmath::{InnerSpace, SquareMatrix};
 use wgpu::util::DeviceExt;
 use winit::keyboard::{KeyCode as Key};
 
@@ -14,7 +13,7 @@ pub struct CameraSystem {
     pub buffer: wgpu::Buffer,
     pub bind_group: wgpu::BindGroup,
     pub bind_group_layout: wgpu::BindGroupLayout,
-    previous_mouse: Option<PhysicalPosition<f64>>,
+    previous_mouse: Option<winit::dpi::PhysicalPosition<f64>>,
 }
 
 impl CameraSystem {
@@ -79,7 +78,7 @@ impl CameraSystem {
     }
 
     pub fn update(&mut self, queue: &wgpu::Queue, delta_time: Duration) {
-        self.controller.update_camera(&mut self.camera, delta_time);
+        self.controller.update_camera(&mut self.camera, &mut self.projection, delta_time);
         self.uniform.update_view_proj(&self.camera, &self.projection);
         queue.write_buffer(
             &self.buffer,
@@ -290,55 +289,52 @@ impl CameraController {
 
     pub fn process_mouse(&mut self, mouse_dx: f64, mouse_dy: f64) {
         self.rotation.horizontal = mouse_dx as f32;
-        self.rotation.vertical = mouse_dy as f32;
+        self.rotation.vertical = -mouse_dy as f32; // because this is stupidly made in the opposite way AHH
     }
 
     pub fn process_scroll(&mut self, delta: &MouseScrollDelta) {
         self.scroll = match delta {
-            MouseScrollDelta::LineDelta(_, scroll) => -scroll * 0.5,
-            MouseScrollDelta::PixelDelta(PhysicalPosition { y: scroll, .. }) => -*scroll as f32,
+            MouseScrollDelta::LineDelta(_, scroll) => scroll * 0.5,
+            MouseScrollDelta::PixelDelta(winit::dpi::PhysicalPosition { y: scroll, .. }) => *scroll as f32,
         };
     }
 
-    pub fn update_camera(&mut self, camera: &mut Camera, dt: Duration) {
+    pub fn update_camera(&mut self, camera: &mut Camera, projection: &mut Projection, dt: Duration) {
         let dt:f32 = dt.as_secs_f32();
-        let run_multiplier:f32 = if self.movement.run { self.run_multi } else { 1.0 };
+        { //this is the movement of the camera
+            let run_multiplier:f32 = if self.movement.run { self.run_multi } else { 1.0 };
+            // Move with dynamic run multiplier
+            let (yaw_sin, yaw_cos):(f32,f32) = camera.yaw.0.sin_cos();
+            let forward_dir = cgmath::Vector3::new(yaw_cos, 0.0, yaw_sin).normalize();
+            let right_dir = cgmath::Vector3::new(-yaw_sin, 0.0, yaw_cos).normalize();
 
-        // Move forward/backward and left/right with dynamic run multiplier
-        let (yaw_sin, yaw_cos):(f32,f32) = camera.yaw.0.sin_cos();
-        let forward_dir = cgmath::Vector3::new(yaw_cos, 0.0, yaw_sin).normalize();
-        let right_dir = cgmath::Vector3::new(-yaw_sin, 0.0, yaw_cos).normalize();
+            let forward_amount:f32 = (self.movement.forward - self.movement.backward) * run_multiplier;
+            let right_amount:f32 = (self.movement.right - self.movement.left) * run_multiplier;
+            let up_amount:f32 = (self.movement.up - self.movement.down) * run_multiplier;
 
-        let forward_amount:f32 = (self.movement.forward - self.movement.backward) * run_multiplier;
-        let right_amount:f32 = (self.movement.right - self.movement.left) * run_multiplier;
-        let up_amount:f32 = (self.movement.up - self.movement.down) * run_multiplier;
+            camera.position += forward_dir * forward_amount * self.speed * dt;
+            camera.position += right_dir * right_amount * self.speed * dt;
+            camera.position.y += up_amount * self.speed * dt;
+        } { //this is the scrolling of the cam
+            // Fov +/- (zoom)
+            let delta = self.scroll * self.sensitivity;
+            projection.fovy = cgmath::Rad(
+                (projection.fovy.0 - delta).clamp(0.01, 3.14)
+            );
+            self.scroll = 0.0; // null the value after using it
+        } { // this is the rotating of the cam
+            // Calculate rotation delta scaled by sensitivity and time
+            let delta = self.sensitivity * dt;
 
-        camera.position += forward_dir * forward_amount * self.speed * dt;
-        camera.position += right_dir * right_amount * self.speed * dt;
-
-        // Move up/down
-        camera.position.y += up_amount * self.speed * dt;
-
-        // Move in/out (zoom)
-        let (pitch_sin, pitch_cos):(f32,f32) = camera.pitch.0.sin_cos();
-        let scrollward = cgmath::Vector3::new(
-            pitch_cos * yaw_cos,
-            pitch_sin,
-            pitch_cos * yaw_sin,
-        ).normalize();
-        camera.position += scrollward * self.scroll * self.speed * self.sensitivity * dt;
-        self.scroll = 0.0; // null the value after using it
-
-        camera.yaw += cgmath::Rad(self.rotation.horizontal) * self.sensitivity * dt;
-        camera.pitch += cgmath::Rad(-self.rotation.vertical) * self.sensitivity * dt;
-        self.rotation.horizontal = 0.0; // null the value after using it
-        self.rotation.vertical = 0.0; // null the value after using it
-
-        // Clamp pitch not to go overbounds (might change later)
-        if camera.pitch < -cgmath::Rad(self::SAFE_FRAC_PI_2) {
-            camera.pitch = -cgmath::Rad(self::SAFE_FRAC_PI_2);
-        } else if camera.pitch > cgmath::Rad(self::SAFE_FRAC_PI_2) {
-            camera.pitch = cgmath::Rad(self::SAFE_FRAC_PI_2);
+            // Extract the f32 value, apply clamp, and re-wrap into Rad<f32> s
+            let max_pitch = cgmath::Rad(self::SAFE_FRAC_PI_2);
+            camera.yaw += cgmath::Rad(self.rotation.horizontal) * delta;
+            camera.pitch = {
+                let raw_value = camera.pitch.0 + (self.rotation.vertical * delta);
+                cgmath::Rad(raw_value.clamp(-max_pitch.0, max_pitch.0))
+            };
+            self.rotation.horizontal = 0.0; // null the value after using it
+            self.rotation.vertical = 0.0;   // null the value after using it
         }
     }
 }
