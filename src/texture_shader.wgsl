@@ -22,6 +22,7 @@ struct VertexInput {
 struct VertexOutput {
     @builtin(position) clip_position: vec4<f32>,
     @location(0) uv: vec2<f32>,
+    @location(1) color: vec4<f32>, // New: Pass color to fragment shader
 };
 
 @vertex
@@ -38,16 +39,20 @@ fn vs_main(
 
     var out: VertexOutput;
 
-    // Convert integer position to float
+    // Convert integer position to float (assumed fixed from previous code)
     let pos_f32 = vec3<f32>(model.position);
 
     out.clip_position = camera.view_proj * model_matrix * vec4<f32>(pos_f32, 1.0);
     out.uv = model.uv;
 
+    // New: Generate color from normals (for debugging face orientation)
+    let normalized_color = (model.normal + vec3<f32>(1.0)) * 0.5; // [-1,1] → [0,1]
+    out.color = vec4<f32>(normalized_color, 1.0);
+
     return out;
 }
 
-// Fragment shader (restored texture sampling)
+// Fragment shader (texture sampling + color tint)
 @group(0) @binding(0)
 var t_diffuse: texture_2d<f32>;
 @group(0) @binding(1)
@@ -55,12 +60,6 @@ var s_diffuse: sampler;
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-    return textureSample(t_diffuse, s_diffuse, in.uv);
+    let texture_color = textureSample(t_diffuse, s_diffuse, in.uv);
+    return texture_color * in.color; // Multiply texture by vertex color
 }
-/*
-fn fs_main(in: FragmentInput) -> @location(0) vec4<f32> {
-    // Sample the same texture for all faces
-    let texture = texture_2d<f32>(textureSampler);
-    let color = textureSample(texture, textureSampler, in.uv);
-    return color;
-}*/

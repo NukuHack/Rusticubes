@@ -112,29 +112,29 @@ fn begin_render_pass<'a>(
 
 // draw_geometry now uses fixed-size arrays for bind_groups and vertex_buffers
 pub fn draw_geometry(
-    pass: &mut wgpu::RenderPass,
+    rpass: &mut wgpu::RenderPass,
     pipeline: &wgpu::RenderPipeline,
-    bind_groups: [&wgpu::BindGroup; 2],
-    vertex_buffers: [&wgpu::Buffer; 3],
+    bind_groups: Box<[&wgpu::BindGroup]>,
+    vertex_buffers: Box<[&wgpu::Buffer]>,
     index_buffer: &wgpu::Buffer,
     num_indices: u32,
     instances: u32,
 ) {
-    pass.set_pipeline(pipeline);
+    rpass.set_pipeline(pipeline);
 
     // Set bind groups with explicit slot indices
     for (i, bind_group) in bind_groups.iter().enumerate() {
-        pass.set_bind_group(i as u32, *bind_group, &[]);
+        rpass.set_bind_group(i as u32, *bind_group, &[]);
     }
 
     // Set vertex buffers with explicit slot indices
     for (i, buffer) in vertex_buffers.iter().enumerate() {
-        pass.set_vertex_buffer(i as u32, buffer.slice(..));
+        rpass.set_vertex_buffer(i as u32, buffer.slice(..));
     }
 
     // Set index buffer and draw with proper instance count
-    pass.set_index_buffer(index_buffer.slice(..), wgpu::IndexFormat::Uint16);
-    pass.draw_indexed(0..num_indices, 0, 0..instances);
+    rpass.set_index_buffer(index_buffer.slice(..), wgpu::IndexFormat::Uint16);
+    rpass.draw_indexed(0..num_indices, 0, 0..instances);
 }
 
 pub fn render_all(current_state: &super::State) -> Result<(), wgpu::SurfaceError> {
@@ -144,21 +144,21 @@ pub fn render_all(current_state: &super::State) -> Result<(), wgpu::SurfaceError
     let mut encoder = current_state.device.create_command_encoder(&Default::default());
 
     {
-        let mut pass = begin_render_pass(&mut encoder, &view, depth_view);
+        let mut rpass = begin_render_pass(&mut encoder, &view, depth_view);
 
         // Draw call with type-safe parameters
         draw_geometry(
-            &mut pass,
+            &mut rpass,
             &current_state.pipeline.render_pipeline,
-            [
+            Box::from([
                 &current_state.texture_manager.bind_group,
                 &current_state.camera_system.bind_group,
-            ],
-            [
+            ]),
+            Box::from([
                 &current_state.geometry_buffer.vertex_buffer,
                 &current_state.geometry_buffer.texture_coord_buffer,
                 &current_state.instance_manager.instance_buffer,
-            ],
+            ]),
             &current_state.geometry_buffer.index_buffer,
             current_state.geometry_buffer.num_indices,
             current_state.instance_manager.instances.len() as u32,

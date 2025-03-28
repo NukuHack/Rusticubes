@@ -149,7 +149,7 @@ impl TextureManager {
         let current_dir: PathBuf = env::current_dir().expect("Failed to get current directory");
         println!("Current directory: {:?}", current_dir);
 
-        let raw_path: &str = r"happy-tree.png";
+        let raw_path: &str = r"cube-diffuse.jpg";
 
         let full_path: PathBuf = current_dir
             .join("resources")
