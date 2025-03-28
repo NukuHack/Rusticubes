@@ -6,7 +6,6 @@ mod geometry;
 mod pipeline;
 mod instances;
 
-
 use std::{
     iter::Iterator,
     time::Instant,
@@ -16,14 +15,13 @@ use wgpu::{
     Adapter,
     PresentMode,
 };
+use winit::keyboard::{KeyCode as Key};
 use winit::{
     dpi::PhysicalSize,
     event::*,
     event_loop::EventLoop,
-    keyboard::KeyCode,
     window::{Window, WindowBuilder},
 };
-use winit::keyboard::PhysicalKey;
 use crate::pipeline::*;
 
 pub struct State<'a> {
@@ -34,7 +32,7 @@ pub struct State<'a> {
     camera_system: camera::CameraSystem,
     config: wgpu::SurfaceConfiguration,
     size: PhysicalSize<u32>,
-    window: &'a Window,
+    pub window: &'a Window,
     pipeline: pipeline::Pipeline,
     geometry_buffer: geometry::GeometryBuffer,
     texture_manager: texture::TextureManager,
@@ -207,11 +205,9 @@ pub async fn run() {
                         WindowEvent::CloseRequested |
                         WindowEvent::KeyboardInput {
                             event: KeyEvent {
-                                physical_key: PhysicalKey::Code(KeyCode::Escape),
-                                state: ElementState::Pressed,
-                                ..
-                            },
-                            ..
+                                physical_key: winit::keyboard::PhysicalKey::Code(Key::Escape),
+                                state: ElementState::Pressed,..
+                            },..
                         } => control_flow.exit(),
                         WindowEvent::Resized(physical_size) => state.resize(*physical_size),
                         WindowEvent::RedrawRequested => {
@@ -225,6 +221,25 @@ pub async fn run() {
                                     control_flow.exit();
                                 },
                                 Err(wgpu::SurfaceError::Timeout) => log::warn!("Surface timeout"),
+                            }
+                        }
+                        WindowEvent::KeyboardInput {
+                            event:
+                            KeyEvent {
+                                physical_key: winit::keyboard::PhysicalKey::Code(key),..
+                            },..
+                        } =>{
+                            match key {
+                                Key::AltLeft | Key::AltRight => {
+                                    // Reset mouse to center, should make this not call the event for mousemove ...
+                                    let window = state.window;
+                                    let physical_size = window.inner_size();
+                                    let x = (physical_size.width as f64) / 2.0;
+                                    let y = (physical_size.height as f64) / 2.0;
+                                    window.set_cursor_position(winit::dpi::PhysicalPosition::new(x, y))
+                                        .expect("Set mouse cursor position");
+                                }
+                                _ => return,
                             }
                         }
                         _ => {}
