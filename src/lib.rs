@@ -117,9 +117,9 @@ impl<'a> State<'a> {
         let texture_manager: texture::TextureManager = texture::TextureManager::new(&device, &queue, &config);
         let geometry_buffer: geometry::GeometryBuffer = geometry::GeometryBuffer::new(
             &device,
-            &geometry::INDICES,
-            &geometry::VERTICES,
-            &geometry::TEXTURE_COORDS
+            &geometry::Cube::INDICES,
+            &geometry::Cube::VERTICES,
+            &geometry::Cube::TEXTURE_COORDS
         );
 
         let render_pipeline_layout: wgpu::PipelineLayout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {

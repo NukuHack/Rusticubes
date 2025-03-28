@@ -30,35 +30,6 @@ impl Vertex {
     }
 }
 
-
-pub const VERTICES: &[Vertex] = &[
-    // front
-    Vertex { position: [0.0, 0.0, -1.0], normal: [0.0, 0.0, 1.0] },
-    Vertex { position: [0.0, 1.0, -1.0], normal: [0.0, 0.0, 1.0] },
-    Vertex { position: [1.0, 1.0, -1.0], normal: [0.0, 0.0, 1.0] },
-    Vertex { position: [1.0, 0.0, -1.0], normal: [0.0, 0.0, 1.0] },
-    // back
-    Vertex { position: [0.0, 0.0, -2.0], normal: [0.0, 0.0, 1.0] },
-    Vertex { position: [0.0, 1.0, -2.0], normal: [0.0, 0.0, 1.0] },
-    Vertex { position: [1.0, 1.0, -2.0], normal: [0.0, 0.0, 1.0] },
-    Vertex { position: [1.0, 0.0, -2.0], normal: [0.0, 0.0, 1.0] },
-];
-
-pub const INDICES: &[u16] = &[
-    // front
-    1, 0, 3, 2, 1, 3,
-    // back
-    4, 5, 7, 5, 6, 7,
-    // Left side face
-    0, 4, 7, 0, 7, 3,
-    // TOP
-    5, 1, 6, 6, 1, 2,
-    // Right
-    0, 1, 5, 0, 5, 4,
-    // Bottom face
-    2, 3, 7, 2, 7, 6,
-];
-
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Pod, Zeroable)]
 pub struct TexCoord {
@@ -72,7 +43,7 @@ impl TexCoord {
             step_mode: wgpu::VertexStepMode::Vertex,
             attributes: &[wgpu::VertexAttribute {
                 offset: 0,
-                shader_location: 2, // Matches @location(2) in shader
+                shader_location: 2,
                 format: wgpu::VertexFormat::Float32x2,
             }],
         }
@@ -80,11 +51,72 @@ impl TexCoord {
 }
 
 // Update GeometryBuffer to include texture coordinate buffer
+pub struct Cube{
+
+}
+
+impl Cube {
+    // Cube vertices (8 vertices for a cube)
+    pub const VERTICES: [Vertex; 8] = [
+        // Front face
+        Vertex { position: [0.0, 0.0, 0.0], normal: [0.0, 0.0, 1.0] },
+        Vertex { position: [0.0, 1.0, 0.0], normal: [0.0, 0.0, 1.0] },
+        Vertex { position: [1.0, 1.0, 0.0], normal: [0.0, 0.0, 1.0] },
+        Vertex { position: [1.0, 0.0, 0.0], normal: [0.0, 0.0, 1.0] },
+        // Back face
+        Vertex { position: [0.0, 0.0, -1.0], normal: [0.0, 0.0, 1.0] },
+        Vertex { position: [0.0, 1.0, -1.0], normal: [0.0, 0.0, 1.0] },
+        Vertex { position: [1.0, 1.0, -1.0], normal: [0.0, 0.0, 1.0] },
+        Vertex { position: [1.0, 0.0, -1.0], normal: [0.0, 0.0, 1.0] },
+    ];
+
+    pub const INDICES: [u16; 36] = [
+        // Front face (indices 0-3)
+        1, 0, 2, // Triangle 1 (top-right)
+        2, 0, 3, // Triangle 2 (bottom-right)
+
+        // Back face (indices 4-7)
+        4, 5, 6, // Triangle 1 (top-right)
+        4, 6, 7, // Triangle 2 (bottom-right)
+
+        // Bottom face (vertices 0, 4, 7, 3)
+        0, 4, 7, // Triangle 1 (bottom)
+        0, 7, 3, // Triangle 2 (right)
+
+        // Top face (vertices 1, 5, 6, 2)
+        5, 1, 6, // Triangle 1 (top)
+        6, 1, 2, // Triangle 2 (right)
+
+        // Right face (vertices 2, 6, 7, 3)
+        6, 2, 7, // Triangle 1 (top)
+        7, 2, 3, // Triangle 2 (bottom)
+
+        // Left face (vertices 0, 4, 5, 1)
+        4, 0, 5, // Triangle 1 (left)
+        5, 0, 1, // Triangle 2 (top)
+    ];
+
+    // Texture coordinates (8 points for a cube)
+    pub const TEXTURE_COORDS: [TexCoord; 8] = [
+        // Front face vertices (indices 0-3)
+        TexCoord { uv: [1.0, 1.0] },
+        TexCoord { uv: [1.0, 0.0] },
+        TexCoord { uv: [0.0, 0.0] },
+        TexCoord { uv: [0.0, 1.0] }, // Vertex 3 (bottom-right)
+
+        // Back face vertices (indices 4-7)
+        TexCoord { uv: [1.0, 1.0] },
+        TexCoord { uv: [1.0, 0.0] },
+        TexCoord { uv: [0.0, 0.0] },
+        TexCoord { uv: [0.0, 1.0] }, // Vertex 7 (bottom-right)
+    ];
+}
+
 #[allow(dead_code,unused,redundant_imports,unused_results,unused_features,unused_variables,unused_mut,dead_code,unused_unsafe,unused_attributes)]
 pub struct GeometryBuffer {
     pub vertex_buffer: wgpu::Buffer,
-    pub texture_coord_buffer: wgpu::Buffer, // New field
     pub index_buffer: wgpu::Buffer,
+    pub texture_coord_buffer: wgpu::Buffer,
     pub num_indices: u32,
     pub num_vertices: u32,
 }
@@ -94,21 +126,21 @@ impl GeometryBuffer {
         device: &wgpu::Device,
         indices: &[u16],
         vertices: &[Vertex],
-        texture_coords: &[TexCoord], // New parameter
+        texture_coords: &[TexCoord],
     ) -> Self {
-        let vertex_buffer:wgpu::Buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Vertex Buffer"),
             contents: bytemuck::cast_slice(vertices),
             usage: wgpu::BufferUsages::VERTEX,
         });
 
-        let texture_coord_buffer:wgpu::Buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        let texture_coord_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Texture Coordinate Buffer"),
             contents: bytemuck::cast_slice(texture_coords),
             usage: wgpu::BufferUsages::VERTEX,
         });
 
-        let index_buffer:wgpu::Buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Index Buffer"),
             contents: bytemuck::cast_slice(indices),
             usage: wgpu::BufferUsages::INDEX,
@@ -116,18 +148,10 @@ impl GeometryBuffer {
 
         Self {
             vertex_buffer,
-            texture_coord_buffer,
             index_buffer,
+            texture_coord_buffer,
             num_indices: indices.len() as u32,
             num_vertices: vertices.len() as u32,
         }
     }
 }
-
-// Define texture coordinates separately
-pub const TEXTURE_COORDS: &[TexCoord] = &[
-    TexCoord { uv: [1.0, 1.0] },
-    TexCoord { uv: [1.0, 0.0] },
-    TexCoord { uv: [0.0, 0.0] },
-    TexCoord { uv: [0.0, 1.0] },
-];

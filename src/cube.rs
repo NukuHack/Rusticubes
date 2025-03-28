@@ -1,5 +1,4 @@
 ﻿
-use super::cube;
 
 /// Stores position for X, Y, Z as 4-bit fields: [X:4, Y:4, Z:4, Empty: 4]
 /// Stores rotations for X, Y, Z as 2-bit fields: [X:2, Y:2, Z:2, Empty: 2]
