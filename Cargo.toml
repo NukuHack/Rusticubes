@@ -15,9 +15,9 @@ bytemuck = { version = "1.16", features = [ "derive" ] }
 log = "^0.4"
 # pretty errors
 env_logger = "^0.10"
-#just the basic math : 3d points vectors rotation etc...
+# just the basic math : 3d points vectors rotation etc...
 cgmath = "^0.18"
-#tobj = { version = "3.2", default-features = false, features = ["async"]}
+
 
 [profile.dev]
 incremental = true

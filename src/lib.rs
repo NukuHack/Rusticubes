@@ -1,16 +1,17 @@
 ﻿
-
 mod texture;
 mod camera;
 mod config;
 mod geometry;
 mod pipeline;
 mod instances;
-mod cube;
+
+
 use std::{
     iter::Iterator,
     time::Instant,
 };
+use std::time::Duration;
 use wgpu::{
     Adapter,
     PresentMode,
@@ -19,9 +20,10 @@ use winit::{
     dpi::PhysicalSize,
     event::*,
     event_loop::EventLoop,
-    keyboard::{KeyCode, PhysicalKey},
+    keyboard::KeyCode,
     window::{Window, WindowBuilder},
 };
+use winit::keyboard::PhysicalKey;
 use crate::pipeline::*;
 
 pub struct State<'a> {
@@ -30,7 +32,6 @@ pub struct State<'a> {
     queue: wgpu::Queue,
     previous_frame_time: Instant,
     camera_system: camera::CameraSystem,
-    camera_controller: camera::CameraController,
     config: wgpu::SurfaceConfiguration,
     size: PhysicalSize<u32>,
     window: &'a Window,
@@ -97,18 +98,19 @@ impl<'a> State<'a> {
             desired_maximum_frame_latency: 2,
         };
 
-        let camera: camera::Camera = camera::Camera::new(
-            (0.0, 1.0, 2.0).into(),
-            (0.0, 0.0, 0.0).into(),
-            cgmath::Vector3::unit_y(),
-            config.width as f32 / config.height as f32,
-            45.0,
+        // Create camera system with advanced controls
+        let camera_system: camera::CameraSystem = camera::CameraSystem::new(
+            &device,
+            &config,
+            cgmath::Point3::new(0.0, 1.0, 2.0),
+            cgmath::Rad(0.0),
+            cgmath::Rad(0.0),
+            70.0,
             0.1,
             100.0,
+            4.0,
+            0.4
         );
-
-        let camera_system: camera::CameraSystem = camera::CameraSystem::new(&device, &config, camera);
-        let camera_controller: camera::CameraController = camera::CameraController::new(2.0, 1.0);
 
         surface.configure(&device, &config);
 
@@ -137,7 +139,6 @@ impl<'a> State<'a> {
             queue,
             previous_frame_time: Instant::now(),
             camera_system,
-            camera_controller,
             config,
             size,
             window,
@@ -157,6 +158,7 @@ impl<'a> State<'a> {
             self.size = new_size;
             self.config.width = new_size.width;
             self.config.height = new_size.height;
+            self.camera_system.projection.resize(new_size.width, new_size.height);
             self.surface.configure(&self.device, &self.config);
             self.texture_manager.depth_texture = texture::Texture::create_depth_texture(
                 &self.device,
@@ -167,16 +169,15 @@ impl<'a> State<'a> {
     }
 
     pub fn input(&mut self, event: &WindowEvent) -> bool {
-        self.camera_controller.process_events(event)
+        self.camera_system.process_event(event);
+        false
     }
 
     pub fn update(&mut self) {
         let current_time: Instant = Instant::now();
-        let delta_seconds: f32 = (current_time - self.previous_frame_time).as_secs_f32();
+        let delta_seconds: Duration = current_time - self.previous_frame_time;
         self.previous_frame_time = current_time;
-        self.camera_controller
-            .update_camera(&mut self.camera_system.camera, delta_seconds);
-        self.camera_system.update(&mut self.queue);
+        self.camera_system.update(&self.queue, delta_seconds);
     }
 
     pub fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
