@@ -1,57 +1,101 @@
-
-<h1><p align="center">rusTry</p></h1>
+<h1 align="center">rusTry</h1>
 <p align="center">Behold corrosion...</p>
 
 ---
 
 ### 🚀 A Rusty Experiment 🦀
-A playful repository for learning Rust while attempting to build a game (no promises on completion, but let's see how far the rust spreads!).
+A playful repository for learning Rust by building a game (no promises, but let’s see how far the rust spreads!).
 
 ---
 
 ## 🛠️ What's Inside?
-- **Learning playground**: Small Rust projects to grasp concepts
-- **Game prototype**: WIP (Work In Progress) game experiments
-- **Batch file shortcuts**: `install.bat`, `run.bat`, and `tools.bat` for seamless setup (shoutout to those scripts!)
+- **Learning playground**: Small Rust projects for mastering concepts.
+- **Game prototype**: WIP experiments with movement, visuals, and sounds.
+- **Batch scripts**: `install.bat`, `run.bat`, and `tools.bat` for easy setup.
 
 ---
 
-## 🚨 Current Status
-> **🚧 Under construction**  
-> This is a learning project. Expect bugs, half-finished features, and lots of experimentation.
+## 🔥 Quick Start Guide
+
+1. **Install Rust & Dependencies**  
+   Run `install.bat` to set up Rust and required tools.  
+   *Automatically handles PATH configurations and dependencies.*
+
+2. **Install Additional Tools (if prompted)**  
+   If you see a prompt, run `tools.bat` (may require admin privileges).  
+   *Currently not maintained; optional for advanced setups.*
+
+3. **Launch Your Rust App**  
+   Every time you want to run your project, simply execute `run.bat`.  
+   *Compiles and runs your Rust application with one click.*
+
+---
+
+## 📦 What Each Batch File Does
+
+### `install.bat`
+- Installs Rust using `rustup`.
+- Adds Rust to your system PATH.
+- Verifies installation success.
+- Checks for `tools.bat` dependencies.
+
+### `tools.bat` *(Admin Required)*
+- Installs additional tools required for your project.
+- Currently not maintained; optional.
+
+### `run.bat`
+- Compiles your Rust code with `cargo build`.
+- Runs your app with the executable.
+- Handles environment variables automatically.
+
+---
+
+## 🛠️ Troubleshooting Tips
+
+- **"Batch file not recognized"**  
+  Ensure you're running the files as Administrator when prompted.
+
+- **Installation issues**  
+  Delete the `.cargo` folder in your user directory (`C:\Users\<YourName>\.cargo`) and rerun `install.bat`.
+
+- **Compiler errors**  
+  Check if `install.bat` was successfully executed.
+
+---
+
+## 📝 Optional: Manual Setup Notes
+
+If you prefer to understand the underlying steps:
+1. Rust is installed via `rustup` in your user directory (`C:\Users\<YourName>\.cargo`).
+2. PATH variables are automatically updated by `install.bat`.
+3. `run.bat` uses your project's `Cargo.toml` configuration.
+
+---
+
+## 💡 Why Use These Batch Files?
+
+- **No manual configuration**  
+  Automatically handles PATH settings, dependencies, and environment variables.
+
+- **Cross-project compatibility**  
+  Works with most Rust projects out of the box.
+
+- **One-click workflow**  
+  Eliminates repetitive setup steps every time you want to run your app.
 
 ---
 
 ## 🏗️ Roadmap
 Here's what I'm aiming for (but no guarantees!):
-1. **Phase 1**: Rust fundamentals (variables, ownership, macros)
-2. **Phase 2**: Basic game mechanics (movement, collision)
-3. **Phase 3**: Add some "corrosion" flair (visuals, sound effects?)
+1. **Phase 1**: Rust fundamentals (variables, ownership, macros).
+2. **Phase 2**: Basic game mechanics (movement, collision).
+3. **Phase 3**: Add "corrosion" flair (visuals, sound effects).
 
 ---
 
-## 🚀 Quick Start
-### If you want to play along:
-1. **Clone the repo**:
-   ```bash
-   git clone https://github.com/NukuHack/rusTry.git
-   ```
-2. **Run the setup**:
-   ```bash
-   install.bat  # Installs Rust and dependencies
-   tools.bat    # Optional: If prompted for additional tools
-   ```
-3. **Launch the experiment**:
-   ```bash
-   run.bat      # Compiles and runs the current project
-   ```
-
----
-
-## 🤔 Why "rusTry"?
-- A pun on "Rust" + "Attempt"
-- Embraces the messy, iterative process of learning
-- Because every project starts as an experiment
+## 🚨 Current Status
+> **🚧 Under construction**  
+This is a learning project. Expect bugs, unfinished features, and lots of experimentation.
 
 ---
 
@@ -62,13 +106,13 @@ MIT License - Feel free to borrow, tinker, or get inspired!
 
 ### 🌟 Future Dreams
 ![Game_image](/resources/happy-tree.png)  
-*Maybe one day this will be a playable game...*  
+*Maybe one day this will be a playable game...*
 
 ---
 
 ### 🛠️ Tech Stack
-- **Rust**: For the memory-safe, performant chaos
-- **Game crates**: `wgpu`, `winit`, `log`, `cgmath` and others
-- **Batch files**: Because automation is life
+- **Rust**: Memory-safe, performant chaos.
+- **Game crates**: `wgpu`, `winit`, `log`, `cgmath`.
+- **Batch files**: Automation for the win.
 
 ---
