@@ -5,7 +5,6 @@ use std::{
     result::Result,
 };
 use image::GenericImageView;
-use wgpu::{BindGroup, BindGroupLayout, SamplerBindingType, ShaderStages, TextureSampleType, TextureViewDimension};
 
 pub struct Texture {
     #[allow(unused)]
@@ -135,8 +134,8 @@ impl Texture {
 pub struct TextureManager {
     pub texture: Texture,
     pub depth_texture: Texture,
-    pub bind_group: BindGroup,
-    pub bind_group_layout: BindGroupLayout,
+    pub bind_group: wgpu::BindGroup,
+    pub bind_group_layout: wgpu::BindGroupLayout,
     pub path: String,
 }
 
@@ -166,23 +165,23 @@ impl TextureManager {
 
         let depth_texture: Texture = Texture::create_depth_texture(device, config, "depth_texture");
 
-        let bind_group_layout: BindGroupLayout = device.create_bind_group_layout(
+        let bind_group_layout: wgpu::BindGroupLayout = device.create_bind_group_layout(
             &wgpu::BindGroupLayoutDescriptor {
                 entries: &[
                     wgpu::BindGroupLayoutEntry {
                         binding: 0,
-                        visibility: ShaderStages::FRAGMENT,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
                         ty: wgpu::BindingType::Texture {
                             multisampled: false,
-                            view_dimension: TextureViewDimension::D2,
-                            sample_type: TextureSampleType::Float { filterable: true },
+                            view_dimension: wgpu::TextureViewDimension::D2,
+                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
                         },
                         count: None,
                     },
                     wgpu::BindGroupLayoutEntry {
                         binding: 1,
-                        visibility: ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Sampler(SamplerBindingType::Filtering),
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
                         count: None,
                     },
                 ],
@@ -190,7 +189,7 @@ impl TextureManager {
             },
         );
 
-        let bind_group: BindGroup = device.create_bind_group(
+        let bind_group: wgpu::BindGroup = device.create_bind_group(
             &wgpu::BindGroupDescriptor {
                 layout: &bind_group_layout,
                 entries: &[
