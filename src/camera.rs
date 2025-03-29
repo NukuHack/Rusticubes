@@ -5,6 +5,7 @@ use cgmath::{InnerSpace, SquareMatrix};
 use wgpu::util::DeviceExt;
 use winit::keyboard::{KeyCode as Key};
 
+
 pub struct CameraSystem {
     pub camera: Camera,
     pub projection: Projection,
@@ -16,7 +17,6 @@ pub struct CameraSystem {
     pub previous_mouse: Option<winit::dpi::PhysicalPosition<f64>>,
     pub mouse_button_state: self::MouseButtonState,
 }
-
 impl CameraSystem {
     pub fn new(
         device: &wgpu::Device,
@@ -30,20 +30,17 @@ impl CameraSystem {
         camera_speed: f32,
         sensitivity: f32,
     ) -> Self {
-        let camera = Camera::new(position, yaw, pitch);
-        let projection = Projection::new(config.width, config.height, cgmath::Rad::from(cgmath::Deg(fovy)), znear, zfar);
-        let controller = CameraController::new(camera_speed, sensitivity);
-
-        let mut uniform = CameraUniform::new();
+        let camera: Camera = Camera::new(position, yaw, pitch);
+        let projection: Projection = Projection::new(config.width, config.height, cgmath::Rad::from(cgmath::Deg(fovy)), znear, zfar);
+        let controller: CameraController = CameraController::new(camera_speed, sensitivity);
+        let mut uniform: CameraUniform = CameraUniform::new();
         uniform.update_view_proj(&camera, &projection);
-
-        let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        let buffer: wgpu::Buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Camera Buffer"),
             contents: bytemuck::cast_slice(&[uniform]),
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         });
-
-        let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+        let bind_group_layout: wgpu::BindGroupLayout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             entries: &[wgpu::BindGroupLayoutEntry {
                 binding: 0,
                 visibility: wgpu::ShaderStages::VERTEX,
@@ -56,8 +53,7 @@ impl CameraSystem {
             }],
             label: Some("camera_bind_group_layout"),
         });
-
-        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+        let bind_group: wgpu::BindGroup = device.create_bind_group(&wgpu::BindGroupDescriptor {
             layout: &bind_group_layout,
             entries: &[wgpu::BindGroupEntry {
                 binding: 0,
@@ -65,7 +61,6 @@ impl CameraSystem {
             }],
             label: Some("camera_bind_group"),
         });
-
         Self {
             camera,
             projection,
@@ -78,7 +73,6 @@ impl CameraSystem {
             mouse_button_state: self::MouseButtonState::default(),
         }
     }
-
     pub fn update(&mut self, queue: &wgpu::Queue, delta_time: Duration) {
         self.controller.update_camera(&mut self.camera, &mut self.projection, delta_time);
         self.uniform.update_view_proj(&self.camera, &self.projection);
@@ -88,15 +82,14 @@ impl CameraSystem {
             bytemuck::cast_slice(std::slice::from_ref(&self.uniform)),
         );
     }
-
     pub fn process_event(&mut self, event: &WindowEvent) {
         match event {
-            WindowEvent::KeyboardInput {event:
+            WindowEvent::KeyboardInput { event:
                 KeyEvent {
                     physical_key: winit::keyboard::PhysicalKey::Code(key),
-                    state,..
-                },..
-            } => {self.controller.process_keyboard(*key, *state);},
+                    state, ..
+                }, ..
+            } => { self.controller.process_keyboard(*key, *state); },
             WindowEvent::MouseInput { button, state, .. } => {
                 match button {
                     MouseButton::Left => {
@@ -116,13 +109,12 @@ impl CameraSystem {
                     _ => {} // Ignore other buttons
                 }
             }
-
             // Process cursor movement only if the right mouse button is pressed
             WindowEvent::CursorMoved { position, .. } => {
                 if self.mouse_button_state.right == true {
                     if let Some(prev) = self.previous_mouse {
-                        let delta_x = position.x - prev.x;
-                        let delta_y = position.y - prev.y;
+                        let delta_x: f64 = position.x - prev.x;
+                        let delta_y: f64 = position.y - prev.y;
                         self.controller.process_mouse(delta_x, delta_y);
                     }
                 }
@@ -135,20 +127,18 @@ impl CameraSystem {
         }
     }
 }
-
 pub struct MouseButtonState {
-    pub left:bool,
-    pub right:bool,
+    pub left: bool,
+    pub right: bool,
 }
 impl MouseButtonState {
     pub fn default() -> Self {
         Self {
-            left:false,
-            right:false,
+            left: false,
+            right: false,
         }
     }
 }
-
 // Keep these structs as provided in your code
 #[rustfmt::skip]
 pub const OPENGL_TO_WGPU_MATRIX: cgmath::Matrix4<f32> = cgmath::Matrix4::new(
@@ -157,15 +147,12 @@ pub const OPENGL_TO_WGPU_MATRIX: cgmath::Matrix4<f32> = cgmath::Matrix4::new(
     0.0, 0.0, 0.5, 0.5,
     0.0, 0.0, 0.0, 1.0,
 );
-
 pub const SAFE_FRAC_PI_2: f32 = std::f32::consts::FRAC_PI_2 - 0.0001;
-
 pub struct Camera {
     pub position: cgmath::Point3<f32>,
     yaw: cgmath::Rad<f32>,
     pitch: cgmath::Rad<f32>,
 }
-
 impl Camera {
     pub fn new<V, Y, P>(position: V, yaw: Y, pitch: P) -> Self
     where
@@ -179,11 +166,9 @@ impl Camera {
             pitch: pitch.into(),
         }
     }
-
     pub fn calc_matrix(&self) -> cgmath::Matrix4<f32> {
         let (sin_pitch, cos_pitch) = self.pitch.0.sin_cos();
         let (sin_yaw, cos_yaw) = self.yaw.0.sin_cos();
-
         cgmath::Matrix4::look_to_rh(
             self.position,
             cgmath::Vector3::new(
@@ -195,14 +180,12 @@ impl Camera {
         )
     }
 }
-
 pub struct Projection {
     aspect: f32,
     fovy: cgmath::Rad<f32>,
     znear: f32,
     zfar: f32,
 }
-
 impl Projection {
     pub fn new<F: Into<cgmath::Rad<f32>> + std::fmt::Debug>(
         width: u32,
@@ -219,16 +202,13 @@ impl Projection {
             zfar,
         }
     }
-
     pub fn resize(&mut self, width: u32, height: u32) {
         self.aspect = width as f32 / height as f32;
     }
-
     pub fn calc_matrix(&self) -> cgmath::Matrix4<f32> {
         OPENGL_TO_WGPU_MATRIX * cgmath::perspective(self.fovy, self.aspect, self.znear, self.zfar)
     }
 }
-
 #[derive(Debug)]
 pub struct CameraController {
     movement: MovementInputs,
@@ -238,10 +218,9 @@ pub struct CameraController {
     speed: f32,
     sensitivity: f32,
 }
-
 #[derive(Debug, Default)]
 struct MovementInputs {
-    pub forward: f32,
+    forward: f32,
     backward: f32,
     left: f32,
     right: f32,
@@ -252,17 +231,16 @@ struct MovementInputs {
 impl MovementInputs {
     fn default() -> Self {
         Self {
-        forward: 0.0,
-        backward: 0.0,
-        left: 0.0,
-        right: 0.0,
-        up: 0.0,
-        down: 0.0,
-        run: false,
+            forward: 0.0,
+            backward: 0.0,
+            left: 0.0,
+            right: 0.0,
+            up: 0.0,
+            down: 0.0,
+            run: false,
         }
     }
 }
-
 #[derive(Debug)]
 struct RotationInputs {
     horizontal: f32,
@@ -276,7 +254,6 @@ impl RotationInputs {
         }
     }
 }
-
 impl CameraController {
     pub fn new(speed: f32, sensitivity: f32) -> Self {
         Self {
@@ -288,10 +265,9 @@ impl CameraController {
             sensitivity,
         }
     }
-
     pub fn process_keyboard(&mut self, key: Key, state: ElementState) -> bool {
-        let is_pressed = state == ElementState::Pressed;
-        let amount = if is_pressed { 1.0 } else { 0.0 };
+        let is_pressed: bool = state == ElementState::Pressed;
+        let amount: f32 = if is_pressed { 1.0 } else { 0.0 };
         match key {
             Key::KeyW | Key::ArrowUp => {
                 self.movement.forward = amount;
@@ -324,51 +300,45 @@ impl CameraController {
             _ => false,
         }
     }
-
     pub fn process_mouse(&mut self, mouse_dx: f64, mouse_dy: f64) {
         self.rotation.horizontal = mouse_dx as f32;
         self.rotation.vertical = -mouse_dy as f32; // because this is stupidly made in the opposite way AHH
     }
-
     pub fn process_scroll(&mut self, delta: &MouseScrollDelta) {
         self.scroll = match delta {
             MouseScrollDelta::LineDelta(_, scroll) => scroll * 0.5,
             MouseScrollDelta::PixelDelta(winit::dpi::PhysicalPosition { y: scroll, .. }) => *scroll as f32,
         };
     }
-
     pub fn update_camera(&mut self, camera: &mut Camera, projection: &mut Projection, dt: Duration) {
-        let dt:f32 = dt.as_secs_f32();
+        let dt: f32 = dt.as_secs_f32();
         { //this is the movement of the camera
-            let run_multiplier:f32 = if self.movement.run { self.run_multi } else { 1.0 };
+            let run_multiplier: f32 = if self.movement.run { self.run_multi } else { 1.0 };
             // Move with dynamic run multiplier
-            let (yaw_sin, yaw_cos):(f32,f32) = camera.yaw.0.sin_cos();
+            let (yaw_sin, yaw_cos): (f32, f32) = camera.yaw.0.sin_cos();
             let forward_dir = cgmath::Vector3::new(yaw_cos, 0.0, yaw_sin).normalize();
             let right_dir = cgmath::Vector3::new(-yaw_sin, 0.0, yaw_cos).normalize();
-
-            let forward_amount:f32 = (self.movement.forward - self.movement.backward) * run_multiplier;
-            let right_amount:f32 = (self.movement.right - self.movement.left) * run_multiplier;
-            let up_amount:f32 = (self.movement.up - self.movement.down) * run_multiplier;
-
+            let forward_amount: f32 = (self.movement.forward - self.movement.backward) * run_multiplier;
+            let right_amount: f32 = (self.movement.right - self.movement.left) * run_multiplier;
+            let up_amount: f32 = (self.movement.up - self.movement.down) * run_multiplier;
             camera.position += forward_dir * forward_amount * self.speed * dt;
             camera.position += right_dir * right_amount * self.speed * dt;
             camera.position.y += up_amount * self.speed * dt;
         } { //this is the scrolling of the cam
-            // Fov +/- (zoom)
-            let delta = self.scroll * self.sensitivity;
+            // Field of view +/- (zoom)
+            let delta: f32 = self.scroll * self.sensitivity;
             projection.fovy = cgmath::Rad(
                 (projection.fovy.0 - delta).clamp(0.01, 3.14)
             );
             self.scroll = 0.0; // null the value after using it
         } { // this is the rotating of the cam
             // Calculate rotation delta scaled by sensitivity and time
-            let delta = self.sensitivity * dt;
-
+            let delta: f32 = self.sensitivity * dt;
             // Extract the f32 value, apply clamp, and re-wrap into Rad<f32> s
             let max_pitch = cgmath::Rad(self::SAFE_FRAC_PI_2);
             camera.yaw += cgmath::Rad(self.rotation.horizontal) * delta;
             camera.pitch = {
-                let raw_value = camera.pitch.0 + (self.rotation.vertical * delta);
+                let raw_value: f32 = camera.pitch.0 + (self.rotation.vertical * delta);
                 cgmath::Rad(raw_value.clamp(-max_pitch.0, max_pitch.0))
             };
             self.rotation.horizontal = 0.0; // null the value after using it
@@ -376,20 +346,17 @@ impl CameraController {
         }
     }
 }
-
 #[repr(C)]
 #[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct CameraUniform {
     view_proj: [[f32; 4]; 4],
 }
-
 impl CameraUniform {
     pub fn new() -> Self {
         Self {
             view_proj: cgmath::Matrix4::identity().into(),
         }
     }
-
     pub fn update_view_proj(&mut self, camera: &Camera, projection: &Projection) {
         let view = camera.calc_matrix();
         let proj = projection.calc_matrix();

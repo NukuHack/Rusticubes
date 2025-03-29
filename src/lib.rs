@@ -6,21 +6,17 @@ mod geometry;
 mod pipeline;
 mod instances;
 
+use std::time::Instant;
+use std::time::Duration;
 use std::{
     iter::Iterator,
-    time::Instant,
 };
-use std::time::Duration;
-use wgpu::{
-    Adapter,
-    PresentMode,
-};
-use winit::keyboard::{KeyCode as Key};
 use winit::{
     dpi::PhysicalSize,
     event::*,
     event_loop::EventLoop,
-    window::Window,
+    keyboard::{KeyCode as Key},
+    window::{Window, WindowBuilder},
 };
 use crate::pipeline::*;
 
@@ -51,7 +47,7 @@ impl<'a> State<'a> {
         });
         let surface: wgpu::Surface<'a> = instance.create_surface(window).unwrap();
 
-        let adapter: Adapter = instance
+        let adapter: wgpu::Adapter = instance
             .enumerate_adapters(wgpu::Backends::all())
             .into_iter()
             .filter(|adapter| adapter.is_surface_supported(&surface))
@@ -81,8 +77,8 @@ impl<'a> State<'a> {
             .copied()
             .find(|f| f.is_srgb())
             .unwrap_or(surface_caps.formats[0]);
-        let present_mode: PresentMode = surface_caps.present_modes.iter().copied()
-            .find(|mode| *mode == PresentMode::Fifo)
+        let present_mode: wgpu::PresentMode = surface_caps.present_modes.iter().copied()
+            .find(|mode| *mode == wgpu::PresentMode::Fifo)
             .unwrap_or(surface_caps.present_modes[0]);
 
         let config: wgpu::SurfaceConfiguration = wgpu::SurfaceConfiguration {
@@ -107,14 +103,14 @@ impl<'a> State<'a> {
             0.1,
             100.0,
             4.0,
-            0.4
+            0.4,
         );
 
         surface.configure(&device, &config);
 
         let texture_manager: texture::TextureManager = texture::TextureManager::new(&device, &queue, &config);
 
-        let cube:geometry::Cube = geometry::Cube::default();
+        let cube: geometry::Cube = geometry::Cube::default();
 
         let geometry_buffer: geometry::GeometryBuffer = geometry::CubeBuffer::new(
             &device,
@@ -162,7 +158,7 @@ impl<'a> State<'a> {
             self.texture_manager.depth_texture = texture::Texture::create_depth_texture(
                 &self.device,
                 &self.config,
-                "depth_texture"
+                "depth_texture",
             );
         }
     }
@@ -184,14 +180,14 @@ impl<'a> State<'a> {
     }
 }
 
-#[cfg_attr(target_arch = "wasm32", wasm_bindgen(start))]
+//#[cfg_attr(target_arch = "wasm32", wasm_bindgen(start))]
 pub async fn run() {
     env_logger::init();
     let event_loop: EventLoop<()> = EventLoop::new().unwrap();
     let monitor = event_loop.primary_monitor().expect("No primary monitor found!");
     let monitor_size: PhysicalSize<u32> = monitor.size(); // Monitor size in physical pixels
     let config: config::AppConfig = config::AppConfig::default(monitor_size);
-    let window: winit::window::Window = winit::window::WindowBuilder::new()
+    let window: Window = WindowBuilder::new()
         .with_title(&config.window_title)
         .with_inner_size(config.initial_window_size)
         .with_position(config.initial_window_position)
@@ -203,12 +199,14 @@ pub async fn run() {
             Event::WindowEvent { event, window_id } if *window_id == state.window().id() => {
                 if !state.input(event) {
                     match event {
-                        WindowEvent::CloseRequested |
-                        WindowEvent::KeyboardInput {
+                        WindowEvent::CloseRequested
+                        | WindowEvent::KeyboardInput {
                             event: KeyEvent {
                                 physical_key: winit::keyboard::PhysicalKey::Code(Key::Escape),
-                                state: ElementState::Pressed,..
-                            },..
+                                state: ElementState::Pressed,
+                                ..
+                            },
+                            ..
                         } => control_flow.exit(),
                         WindowEvent::Resized(physical_size) => state.resize(*physical_size),
                         WindowEvent::RedrawRequested => {
@@ -220,16 +218,18 @@ pub async fn run() {
                                 Err(wgpu::SurfaceError::OutOfMemory | wgpu::SurfaceError::Other) => {
                                     log::error!("Surface error");
                                     control_flow.exit();
-                                },
+                                }
                                 Err(wgpu::SurfaceError::Timeout) => log::warn!("Surface timeout"),
                             }
                         }
                         WindowEvent::KeyboardInput {
                             event:
-                            KeyEvent {
-                                physical_key: winit::keyboard::PhysicalKey::Code(key),..
-                            },..
-                        } =>{
+                                KeyEvent {
+                                    physical_key: winit::keyboard::PhysicalKey::Code(key),
+                                    ..
+                                },
+                            ..
+                        } => {
                             match key {
                                 Key::AltLeft | Key::AltRight => {
                                     // Reset mouse to center, should make this not call the event for mousemove ...

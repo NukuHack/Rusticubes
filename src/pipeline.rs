@@ -1,7 +1,6 @@
 
-use std::borrow::Cow;
 use wgpu;
-
+use std::borrow::Cow;
 use super::instances::*;
 use super::{geometry, texture};
 
@@ -84,7 +83,7 @@ fn begin_render_pass<'a>(
     view: &wgpu::TextureView,
     depth_view: &wgpu::TextureView,
 ) -> wgpu::RenderPass<'a> {
-    let color_attachment = wgpu::RenderPassColorAttachment {
+    let color_attachment:wgpu::RenderPassColorAttachment = wgpu::RenderPassColorAttachment {
         view,
         resolve_target: None,
         ops: wgpu::Operations {
@@ -93,7 +92,7 @@ fn begin_render_pass<'a>(
         },
     };
 
-    let depth_attachment = wgpu::RenderPassDepthStencilAttachment {
+    let depth_attachment:wgpu::RenderPassDepthStencilAttachment = wgpu::RenderPassDepthStencilAttachment {
         view: depth_view,
         depth_ops: Some(wgpu::Operations {
             load: wgpu::LoadOp::Clear(1.0),

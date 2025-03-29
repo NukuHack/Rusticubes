@@ -4,8 +4,8 @@ use std::{
     path::PathBuf,
     result::Result,
 };
-
 use image::GenericImageView;
+use wgpu::{BindGroup, BindGroupLayout, SamplerBindingType, ShaderStages, TextureSampleType, TextureViewDimension};
 
 pub struct Texture {
     #[allow(unused)]
@@ -131,12 +131,12 @@ impl Texture {
     }
 }
 
-#[allow(dead_code,unused,redundant_imports,unused_results,unused_features,unused_variables,unused_mut,dead_code,unused_unsafe,unused_attributes)]
+#[allow(dead_code, unused, redundant_imports, unused_results, unused_features, unused_variables, unused_mut, dead_code, unused_unsafe, unused_attributes)]
 pub struct TextureManager {
-    pub texture: self::Texture,
-    pub depth_texture: self::Texture,
-    pub bind_group: wgpu::BindGroup,
-    pub bind_group_layout: wgpu::BindGroupLayout,
+    pub texture: Texture,
+    pub depth_texture: Texture,
+    pub bind_group: BindGroup,
+    pub bind_group_layout: BindGroupLayout,
     pub path: String,
 }
 
@@ -158,31 +158,31 @@ impl TextureManager {
             .to_str()
             .expect("Path contains invalid UTF-8");
 
-        let bytes: Vec<u8> = self::Texture::load_texture_bytes(path)
+        let bytes: Vec<u8> = Texture::load_texture_bytes(path)
             .expect("Failed to load texture bytes");
 
-        let texture: self::Texture = self::Texture::from_bytes(device, queue, &bytes, path)
+        let texture: Texture = Texture::from_bytes(device, queue, &bytes, path)
             .expect("Failed to load texture");
 
-        let depth_texture: self::Texture = self::Texture::create_depth_texture(device, config, "depth_texture");
+        let depth_texture: Texture = Texture::create_depth_texture(device, config, "depth_texture");
 
-        let bind_group_layout: wgpu::BindGroupLayout = device.create_bind_group_layout(
+        let bind_group_layout: BindGroupLayout = device.create_bind_group_layout(
             &wgpu::BindGroupLayoutDescriptor {
                 entries: &[
                     wgpu::BindGroupLayoutEntry {
                         binding: 0,
-                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        visibility: ShaderStages::FRAGMENT,
                         ty: wgpu::BindingType::Texture {
                             multisampled: false,
-                            view_dimension: wgpu::TextureViewDimension::D2,
-                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                            view_dimension: TextureViewDimension::D2,
+                            sample_type: TextureSampleType::Float { filterable: true },
                         },
                         count: None,
                     },
                     wgpu::BindGroupLayoutEntry {
                         binding: 1,
-                        visibility: wgpu::ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                        visibility: ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Sampler(SamplerBindingType::Filtering),
                         count: None,
                     },
                 ],
@@ -190,7 +190,7 @@ impl TextureManager {
             },
         );
 
-        let bind_group: wgpu::BindGroup = device.create_bind_group(
+        let bind_group: BindGroup = device.create_bind_group(
             &wgpu::BindGroupDescriptor {
                 layout: &bind_group_layout,
                 entries: &[

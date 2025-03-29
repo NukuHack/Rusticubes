@@ -1,13 +1,13 @@
 
 use cgmath::{InnerSpace, Rotation3, Zero};
-use wgpu::Buffer;
 use wgpu::util::DeviceExt;
+use super::instances;
 
-#[allow(dead_code,unused,redundant_imports,unused_results,unused_features,unused_variables,unused_mut,dead_code,unused_unsafe,unused_attributes)]
+#[allow(dead_code, unused, redundant_imports, unused_results, unused_features, unused_variables, unused_mut, dead_code, unused_unsafe, unused_attributes)]
 pub struct InstanceManager {
     pub instances: Vec<Instance>,
     pub instance_data: Vec<InstanceRaw>,
-    pub instance_buffer: Buffer,
+    pub instance_buffer: wgpu::Buffer,
 }
 
 impl InstanceManager {
@@ -15,26 +15,27 @@ impl InstanceManager {
         device: &wgpu::Device,
     ) -> Self {
         const SPACE_BETWEEN: f32 = 3.0;
-        let instances = (0..NUM_INSTANCES_PER_ROW).flat_map(|z| {
+        let instances: Vec<instances::Instance> = (0..NUM_INSTANCES_PER_ROW).flat_map(|z| {
             (0..NUM_INSTANCES_PER_ROW).map(move |x| {
-                let x = SPACE_BETWEEN * (x as f32 - NUM_INSTANCES_PER_ROW as f32 / 2.0);
-                let z = SPACE_BETWEEN * (z as f32 - NUM_INSTANCES_PER_ROW as f32 / 2.0);
+                let x: f32 = SPACE_BETWEEN * (x as f32 - NUM_INSTANCES_PER_ROW as f32 / 2.0);
+                let z: f32 = SPACE_BETWEEN * (z as f32 - NUM_INSTANCES_PER_ROW as f32 / 2.0);
 
-                let position = cgmath::Vector3 { x, y: 0.0, z };
+                let position: cgmath::Vector3<f32> = cgmath::Vector3 { x, y: 0.0, z };
 
-                let rotation = if position.is_zero() {
+                let rotation: cgmath::Quaternion<f32> = if position.is_zero() {
                     cgmath::Quaternion::from_axis_angle(cgmath::Vector3::unit_z(), cgmath::Deg(0.0))
                 } else {
                     cgmath::Quaternion::from_axis_angle(position.normalize(), cgmath::Deg(45.0))
                 };
 
-                Instance {
-                    position, rotation,
+                instances::Instance {
+                    position,
+                    rotation,
                 }
             })
-        }).collect::<Vec<_>>();
-        let instance_data: Vec<InstanceRaw> = instances.iter().map(Instance::to_raw).collect();
-        let instance_buffer = device.create_buffer_init(
+        }).collect();
+        let instance_data: Vec<instances::InstanceRaw> = instances.iter().map(instances::Instance::to_raw).collect();
+        let instance_buffer: wgpu::Buffer = device.create_buffer_init(
             &wgpu::util::BufferInitDescriptor {
                 label: Some("Instance Buffer"),
                 contents: bytemuck::cast_slice(&instance_data),
@@ -56,8 +57,8 @@ pub struct Instance {
 }
 
 impl Instance {
-    pub fn to_raw(&self) -> InstanceRaw {
-        InstanceRaw {
+    pub fn to_raw(&self) -> instances::InstanceRaw {
+        instances::InstanceRaw {
             model: (cgmath::Matrix4::from_translation(self.position) * cgmath::Matrix4::from(self.rotation)).into(),
         }
     }
@@ -73,7 +74,7 @@ impl InstanceRaw {
     pub fn desc() -> wgpu::VertexBufferLayout<'static> {
         use std::mem;
         wgpu::VertexBufferLayout {
-            array_stride: mem::size_of::<InstanceRaw>() as wgpu::BufferAddress,
+            array_stride: mem::size_of::<Self>() as wgpu::BufferAddress,
             step_mode: wgpu::VertexStepMode::Instance,
             attributes: &[
                 wgpu::VertexAttribute {

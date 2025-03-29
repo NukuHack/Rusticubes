@@ -1,7 +1,8 @@
+
 use std::mem;
 use bytemuck::{Pod, Zeroable};
-use wgpu::{util::DeviceExt};
-use crate::geometry;
+use wgpu::util::DeviceExt;
+use super::geometry;
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Pod, Zeroable, Default)]
@@ -51,33 +52,56 @@ impl TexCoord {
     }
 }
 
-#[allow(dead_code,unused,redundant_imports,unused_results,unused_features,unused_variables,unused_mut,dead_code,unused_unsafe,unused_attributes)]
+#[allow(
+    dead_code,
+    unused,
+    redundant_imports,
+    unused_results,
+    unused_features,
+    unused_variables,
+    unused_mut,
+    dead_code,
+    unused_unsafe,
+    unused_attributes
+)]
 // Update GeometryBuffer to include texture coordinate buffer
-pub struct Cube{
+pub struct Cube {
     pub position: u16,
     pub material: u16,
     pub points: u32,
     pub rotation: u8,
-    pub vertices: [self::Vertex; 8],
+    pub vertices: [geometry::Vertex; 8], // Use `Self` prefix for clarity
     pub indices: [u16; 36],
-    pub texture_coords: [self::TexCoord; 2*4],
+    pub texture_coords: [geometry::TexCoord; 8], // Use `Self` prefix for clarity
 }
 
 impl Cube {
-    #[allow(dead_code,unused,redundant_imports,unused_results,unused_features,unused_variables,unused_mut,dead_code,unused_unsafe,unused_attributes,non_upper_case_globals)]
+    #[allow(
+        dead_code,
+        unused,
+        redundant_imports,
+        unused_results,
+        unused_features,
+        unused_variables,
+        unused_mut,
+        dead_code,
+        unused_unsafe,
+        unused_attributes,
+        non_upper_case_globals
+    )]
     pub fn default() -> Self {
         // Cube vertices (8 vertices for a cube)
-        const vertices: [Vertex; 8] = [
+        const vertices: [geometry::Vertex; 8] = [
             // Front face
-            Vertex { position: [0.0, 0.0, 0.0], normal: [0.0, 0.0, 1.0] },
-            Vertex { position: [0.0, 1.0, 0.0], normal: [0.0, 0.0, 1.0] },
-            Vertex { position: [1.0, 1.0, 0.0], normal: [0.0, 0.0, 1.0] },
-            Vertex { position: [1.0, 0.0, 0.0], normal: [0.0, 0.0, 1.0] },
+            geometry::Vertex { position: [0.0, 0.0, 0.0], normal: [0.0, 0.0, 1.0] },
+            geometry::Vertex { position: [0.0, 1.0, 0.0], normal: [0.0, 0.0, 1.0] },
+            geometry::Vertex { position: [1.0, 1.0, 0.0], normal: [0.0, 0.0, 1.0] },
+            geometry::Vertex { position: [1.0, 0.0, 0.0], normal: [0.0, 0.0, 1.0] },
             // Back face
-            Vertex { position: [0.0, 0.0, -1.0], normal: [0.0, 0.0, 1.0] },
-            Vertex { position: [0.0, 1.0, -1.0], normal: [0.0, 0.0, 1.0] },
-            Vertex { position: [1.0, 1.0, -1.0], normal: [0.0, 0.0, 1.0] },
-            Vertex { position: [1.0, 0.0, -1.0], normal: [0.0, 0.0, 1.0] },
+            geometry::Vertex { position: [0.0, 0.0, -1.0], normal: [0.0, 0.0, 1.0] },
+            geometry::Vertex { position: [0.0, 1.0, -1.0], normal: [0.0, 0.0, 1.0] },
+            geometry::Vertex { position: [1.0, 1.0, -1.0], normal: [0.0, 0.0, 1.0] },
+            geometry::Vertex { position: [1.0, 0.0, -1.0], normal: [0.0, 0.0, 1.0] },
         ];
 
         const indices: [u16; 36] = [
@@ -107,20 +131,20 @@ impl Cube {
         ];
 
         // Texture coordinates (8 points for a cube)
-        const texture_coords: [TexCoord; 2*4] = [
+        const texture_coords: [geometry::TexCoord; 8] = [
             // Front face vertices (indices 0-3)
-            TexCoord { uv: [1.0, 1.0] },
-            TexCoord { uv: [1.0, 0.0] },
-            TexCoord { uv: [0.0, 0.0] },
-            TexCoord { uv: [0.0, 1.0] }, // Vertex 3 (bottom-right)
+            geometry::TexCoord { uv: [1.0, 1.0] },
+            geometry::TexCoord { uv: [1.0, 0.0] },
+            geometry::TexCoord { uv: [0.0, 0.0] },
+            geometry::TexCoord { uv: [0.0, 1.0] }, // Vertex 3 (bottom-right)
             // Back face (vertices 4-7) - reuse front's UVs for simplicity
-            TexCoord { uv: [1.0, 1.0] }, // Vertex 4
-            TexCoord { uv: [1.0, 0.0] }, // Vertex 5
-            TexCoord { uv: [0.0, 0.0] }, // Vertex 6
-            TexCoord { uv: [0.0, 1.0] }, // Vertex 7
+            geometry::TexCoord { uv: [1.0, 1.0] }, // Vertex 4
+            geometry::TexCoord { uv: [1.0, 0.0] }, // Vertex 5
+            geometry::TexCoord { uv: [0.0, 0.0] }, // Vertex 6
+            geometry::TexCoord { uv: [0.0, 1.0] }, // Vertex 7
         ];
 
-        Self{
+        Self {
             position: 0,
             material: 0,
             points: 0,
@@ -137,19 +161,29 @@ pub struct CubeBuffer;
 impl CubeBuffer {
     pub fn new(
         device: &wgpu::Device,
-        cube: &self::Cube
-    ) -> GeometryBuffer {
-        geometry::GeometryBuffer::new(
+        cube: &geometry::Cube, // Add `crate` prefix for clarity
+    ) -> geometry::GeometryBuffer { // Use `Self` prefix for clarity
+        geometry::GeometryBuffer::new( // Use `Self` prefix for clarity
             &device,
             &cube.indices,
             &cube.vertices,
-            &cube.texture_coords
+            &cube.texture_coords,
         )
     }
 }
 
-
-#[allow(dead_code,unused,redundant_imports,unused_results,unused_features,unused_variables,unused_mut,dead_code,unused_unsafe,unused_attributes)]
+#[allow(
+    dead_code,
+    unused,
+    redundant_imports,
+    unused_results,
+    unused_features,
+    unused_variables,
+    unused_mut,
+    dead_code,
+    unused_unsafe,
+    unused_attributes
+)]
 pub struct GeometryBuffer {
     pub vertex_buffer: wgpu::Buffer,
     pub index_buffer: wgpu::Buffer,
@@ -162,8 +196,8 @@ impl GeometryBuffer {
     pub fn new(
         device: &wgpu::Device,
         indices: &[u16],
-        vertices: &[Vertex],
-        texture_coords: &[TexCoord],
+        vertices: &[geometry::Vertex], // Use `Self` prefix for clarity
+        texture_coords: &[geometry::TexCoord], // Use `Self` prefix for clarity
     ) -> Self {
         let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Vertex Buffer"),
