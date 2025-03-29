@@ -20,7 +20,7 @@ use winit::{
     dpi::PhysicalSize,
     event::*,
     event_loop::EventLoop,
-    window::{Window, WindowBuilder},
+    window::Window,
 };
 use crate::pipeline::*;
 
@@ -188,13 +188,13 @@ impl<'a> State<'a> {
 pub async fn run() {
     env_logger::init();
     let event_loop: EventLoop<()> = EventLoop::new().unwrap();
-    let config: config::AppConfig = config::AppConfig::default();
-    let window: Window = WindowBuilder::new()
+    let monitor = event_loop.primary_monitor().expect("No primary monitor found!");
+    let monitor_size: PhysicalSize<u32> = monitor.size(); // Monitor size in physical pixels
+    let config: config::AppConfig = config::AppConfig::default(monitor_size);
+    let window: winit::window::Window = winit::window::WindowBuilder::new()
         .with_title(&config.window_title)
-        .with_inner_size(PhysicalSize::new(
-            config.initial_window_size.0,
-            config.initial_window_size.1,
-        ))
+        .with_inner_size(config.initial_window_size)
+        .with_position(config.initial_window_position)
         .build(&event_loop)
         .unwrap();
     let mut state: State = State::new(&window).await;
