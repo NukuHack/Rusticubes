@@ -13,7 +13,8 @@ pub struct CameraSystem {
     pub buffer: wgpu::Buffer,
     pub bind_group: wgpu::BindGroup,
     pub bind_group_layout: wgpu::BindGroupLayout,
-    previous_mouse: Option<winit::dpi::PhysicalPosition<f64>>,
+    pub previous_mouse: Option<winit::dpi::PhysicalPosition<f64>>,
+    pub mouse_button_state: self::MouseButtonState,
 }
 
 impl CameraSystem {
@@ -74,6 +75,7 @@ impl CameraSystem {
             bind_group,
             bind_group_layout,
             previous_mouse: None,
+            mouse_button_state: self::MouseButtonState::default(),
         }
     }
 
@@ -95,11 +97,34 @@ impl CameraSystem {
                     state,..
                 },..
             } => {self.controller.process_keyboard(*key, *state);},
+            WindowEvent::MouseInput { button, state, .. } => {
+                match button {
+                    MouseButton::Left => {
+                        if state == &ElementState::Pressed {
+                            self.mouse_button_state.left = true;
+                        } else {
+                            self.mouse_button_state.left = false;
+                        }
+                    }
+                    MouseButton::Right => {
+                        if state == &ElementState::Pressed {
+                            self.mouse_button_state.right = true;
+                        } else {
+                            self.mouse_button_state.right = false;
+                        }
+                    }
+                    _ => {} // Ignore other buttons
+                }
+            }
+
+            // Process cursor movement only if the right mouse button is pressed
             WindowEvent::CursorMoved { position, .. } => {
-                if let Some(prev) = self.previous_mouse {
-                    let delta_x = position.x - prev.x;
-                    let delta_y = position.y - prev.y;
-                    self.controller.process_mouse(delta_x, delta_y);
+                if self.mouse_button_state.right == true {
+                    if let Some(prev) = self.previous_mouse {
+                        let delta_x = position.x - prev.x;
+                        let delta_y = position.y - prev.y;
+                        self.controller.process_mouse(delta_x, delta_y);
+                    }
                 }
                 self.previous_mouse = Some(*position);
             }
@@ -107,6 +132,19 @@ impl CameraSystem {
                 self.controller.process_scroll(delta);
             }
             _ => (),
+        }
+    }
+}
+
+pub struct MouseButtonState {
+    pub left:bool,
+    pub right:bool,
+}
+impl MouseButtonState {
+    pub fn default() -> Self {
+        Self {
+            left:false,
+            right:false,
         }
     }
 }

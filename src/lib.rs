@@ -113,11 +113,12 @@ impl<'a> State<'a> {
         surface.configure(&device, &config);
 
         let texture_manager: texture::TextureManager = texture::TextureManager::new(&device, &queue, &config);
-        let geometry_buffer: geometry::GeometryBuffer = geometry::GeometryBuffer::new(
+
+        let cube:geometry::Cube = geometry::Cube::default();
+
+        let geometry_buffer: geometry::GeometryBuffer = geometry::CubeBuffer::new(
             &device,
-            &geometry::Cube::INDICES,
-            &geometry::Cube::VERTICES,
-            &geometry::Cube::TEXTURE_COORDS
+            &cube,
         );
 
         let render_pipeline_layout: wgpu::PipelineLayout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
