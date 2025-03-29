@@ -100,9 +100,9 @@ impl<'a> State<'a> {
         let camera_system: camera::CameraSystem = camera::CameraSystem::new(
             &device,
             &config,
-            cgmath::Point3::new(0.0, 1.0, 2.0),
-            cgmath::Rad(0.0),
-            cgmath::Rad(0.0),
+            cgmath::Point3::new(0.5, 1.0, 2.0),
+            cgmath::Rad(-std::f32::consts::FRAC_PI_2),
+            cgmath::Rad(-0.3),
             70.0,
             0.1,
             100.0,
