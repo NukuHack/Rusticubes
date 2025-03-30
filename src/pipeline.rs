@@ -178,6 +178,7 @@ pub fn render_all(current_state: &mut super::State) -> Result<(), wgpu::SurfaceE
             &current_state.ui_manager.pipeline,
             &current_state.ui_manager.vertex_buffer,
             &current_state.ui_manager.index_buffer,
+            &current_state.ui_manager.bind_group,
             current_state.ui_manager.num_indices,
         );
     }
@@ -193,10 +194,12 @@ pub fn draw_ui(
     pipeline: &wgpu::RenderPipeline,
     vertex_buffer: &wgpu::Buffer,
     index_buffer: &wgpu::Buffer,
+    bind_group: &wgpu::BindGroup,
     num_indices: u32,
 ) {
     rpass.set_pipeline(pipeline);
 
+    rpass.set_bind_group(0, bind_group, &[]);
     rpass.set_vertex_buffer(0, vertex_buffer.slice(..));
     rpass.set_index_buffer(index_buffer.slice(..), wgpu::IndexFormat::Uint32);
     rpass.draw_indexed(0..num_indices, 0, 0..1);

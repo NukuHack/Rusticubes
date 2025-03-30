@@ -34,7 +34,6 @@ pub struct State<'a> {
     geometry_buffer: geometry::GeometryBuffer,
     texture_manager: texture::TextureManager,
     instance_manager: instances::InstanceManager,
-
     ui_manager: user_interface::UIManager,
 }
 pub static mut CLOSED:bool = false;
@@ -132,10 +131,26 @@ impl<'a> State<'a> {
 
         let pipeline: pipeline::Pipeline = pipeline::Pipeline::new(&device, &config, &render_pipeline_layout);
 
-        let mut ui_manager:user_interface::UIManager = user_interface::UIManager::new(&device, &config);
-        let default_element: user_interface::UIElement = user_interface::UIElement::default();
+        let mut ui_manager:user_interface::UIManager = user_interface::UIManager::new(&device, &config, &queue);
+        let default_element: user_interface::UIElement = user_interface::UIElement::new(
+            (-0.9, -0.8),      // Centered in the viewport
+            (0.2, 0.1),            // 20% width and 10% height of the viewport
+            [0.5, 0.8, 0.1, 1.0], // 1 = fully opaque
+            None,
+            Some(Box::new(|| {
+                println!("Random button clicked!");
+            })),
+            );
         ui_manager.add_ui_element(default_element);
         ui_manager.update(&queue);
+        let text_element: user_interface::UIElement = user_interface::UIElement::new (
+            (-0.5, 0.7),
+            (0.05, 0.05),
+            [0.5, 0.6, 0.7, 1.0]as[f32; 4],
+            Some("Hello!".to_string()),
+            None,
+        );
+        ui_manager.add_ui_element(text_element);
 
         Self {
             surface,
@@ -150,7 +165,6 @@ impl<'a> State<'a> {
             geometry_buffer,
             texture_manager,
             instance_manager,
-
             ui_manager,
         }
     }
