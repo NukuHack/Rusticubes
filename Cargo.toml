@@ -17,6 +17,10 @@ log = "^0.4"
 env_logger = "^0.10"
 # just the basic math : 3d points vectors rotation etc...
 cgmath = "^0.18"
+# gui
+egui = "^0.20"
+# got to be on the winit screen
+egui-winit = "^0.20"
 
 
 [profile.dev]
