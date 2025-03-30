@@ -37,7 +37,7 @@ pub struct State<'a> {
 
     ui_manager: user_interface::UIManager,
 }
-pub static mut closed:bool = false;
+pub static mut CLOSED:bool = false;
 
 impl<'a> State<'a> {
     async fn new(window: &'a Window) -> Self {
@@ -195,9 +195,7 @@ impl<'a> State<'a> {
                     },
                 }
             },
-            WindowEvent::KeyboardInput { device_id: _, event: _, is_synthetic: _ } => {
-                self.handle_key_input(event)
-            },
+            WindowEvent::KeyboardInput { .. } => self.handle_key_input(event),
             _ => self.handle_mouse_input(event)
         }
     }
@@ -205,10 +203,8 @@ impl<'a> State<'a> {
         if let WindowEvent::KeyboardInput {
             event: KeyEvent {
                 physical_key: winit::keyboard::PhysicalKey::Code(physical_key), // Extract the KeyCode
-                state,
-                ..
-            },
-            ..
+                state,..
+            },..
         } = event
         {
             // `key_code` is of type `KeyCode` (e.g., KeyCode::W)
@@ -221,8 +217,7 @@ impl<'a> State<'a> {
                 event: KeyEvent {
                     physical_key: winit::keyboard::PhysicalKey::Code(key),
                     state: ElementState::Pressed //| ElementState::Released // had to disable released otherwise hiding does not work correctly
-                    , .. },
-                ..
+                    , .. },..
             } => {
                 match key {
                     Key::AltLeft | Key::AltRight => {
@@ -239,7 +234,7 @@ impl<'a> State<'a> {
                         close_app();
                         return true;
                     },
-                    winit::keyboard::KeyCode::F1 => {
+                    Key::F1 => {
                         self.ui_manager.visibility=!self.ui_manager.visibility;
                         return true;
                     },
@@ -253,23 +248,23 @@ impl<'a> State<'a> {
 
     pub fn handle_mouse_input(&mut self, event: &WindowEvent) -> bool {
         match event {
+            //TODO : make the ui do stuff
             WindowEvent::MouseInput { button, state, .. } => {
-                match button {
-                    MouseButton::Left => {
-                        if state == &ElementState::Pressed {
-                            self.camera_system.mouse_button_state.left = true;
-                        } else {
-                            self.camera_system.mouse_button_state.left = false;
-                        }
+                match (button, *state) {
+                    (MouseButton::Left, ElementState::Pressed) => {
+                        self.camera_system.mouse_button_state.left = true;
+                        user_interface::handle_ui_click(self);
                     }
-                    MouseButton::Right => {
-                        if state == &ElementState::Pressed {
-                            self.camera_system.mouse_button_state.right = true;
-                        } else {
-                            self.camera_system.mouse_button_state.right = false;
-                        }
+                    (MouseButton::Left, ElementState::Released) => {
+                        self.camera_system.mouse_button_state.left = false;
                     }
-                    _ => {} // Ignore other buttons
+                    (MouseButton::Right, ElementState::Pressed) => {
+                        self.camera_system.mouse_button_state.right = true;
+                    }
+                    (MouseButton::Right, ElementState::Released) => {
+                        self.camera_system.mouse_button_state.right = false;
+                    }
+                    _ => (),
                 }
             }
             WindowEvent::CursorMoved { position, .. } => {
@@ -280,33 +275,14 @@ impl<'a> State<'a> {
                         self.camera_system.controller.process_mouse(delta_x, delta_y);
                     }
                 }
+
+                user_interface::handle_ui_hover(self, position);
+
                 self.camera_system.previous_mouse = Some(*position);
             }
             WindowEvent::MouseWheel { delta, .. } => {
                 self.camera_system.controller.process_scroll(delta);
             }
-            /*
-            WindowEvent::CursorMoved { position, .. } => {
-                let (x, y) = (position.x as f32, position.y as f32);
-                let (w, h) = (self.size.width as f32, self.size.height as f32);
-                let norm_x = x / w;
-                let norm_y = y / h;
-
-                for element in &mut self.ui_manager.elements {
-                    let (pos_x, pos_y) = element.position;
-                    let (size_w, size_h) = element.size;
-                    if (norm_x >= pos_x && norm_x <= pos_x + size_w) &&
-                       (norm_y >= pos_y && norm_y <= pos_y + size_h) {
-                        element.hovered = true;
-                    } else {
-                        element.hovered = false;
-                    };
-                };
-            }
-            WindowEvent::MouseInput { state: ElementState::Pressed, button: MouseButton::Left, .. } => {
-                // Implement click handling here
-            }
-            */
             _ => (),
         };
         false
@@ -342,7 +318,7 @@ pub async fn run() {
     event_loop.run(move |event, control_flow| {
         if 
         unsafe{
-            closed
+            CLOSED
         } {
             control_flow.exit();
         }
@@ -360,9 +336,9 @@ pub async fn run() {
 
 pub fn close_app() -> bool{
     unsafe{
-        closed = true;
+        CLOSED = true;
     };
     unsafe{
-        closed
+        CLOSED
     }
 }

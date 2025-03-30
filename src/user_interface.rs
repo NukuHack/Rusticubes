@@ -27,11 +27,13 @@ pub struct UIElement {
 impl UIElement {
     pub fn default() -> Self {
         Self {
-            position: (-0.5, -0.5),      // Centered in the viewport
+            position: (-0.9, -0.8),      // Centered in the viewport
             size: (0.2, 0.1),            // 20% width and 10% height of the viewport
-            color: [0.5, 0.3, 0.8, 1.0], // Default to purple (fully opaque)
+            color: [0.5, 0.8, 0.1, 1.0], // Default to purple (fully opaque)
             hovered: false,
-            on_click: None,
+            on_click: Some(Box::new(|| {
+                println!("Button clicked!");
+            })),
         }
     }
 }
@@ -187,6 +189,48 @@ impl UIManager {
             elements: Vec::new(),
             num_indices: 0, // Initialize to 0
             visibility: true,
+        }
+    }
+}
+
+pub fn handle_ui_hover(
+    current_state: &mut super::State,
+    position: &winit::dpi::PhysicalPosition<f64>,
+) {
+    let (x, y) = (position.x as f32, position.y as f32);
+    let (w, h) = (
+        current_state.size.width as f32,
+        current_state.size.height as f32,
+    );
+
+    // Convert to UI's normalized coordinates (-1.0 to 1.0)
+    let norm_x = (2.0 * x / w) - 1.0;
+    let norm_y = (2.0 * (h - y) / h) - 1.0; // Invert Y-axis
+
+    for element in &mut current_state.ui_manager.elements {
+        let (pos_x, pos_y) = element.position;
+        let (size_w, size_h) = element.size;
+
+        // Calculate element's bounds in normalized coordinates
+        let right = pos_x + size_w;
+        let top = pos_y + size_h;
+
+        // Check if mouse is inside the element's bounds
+        if norm_x >= pos_x && norm_x <= right && norm_y >= pos_y && norm_y <= top {
+            element.hovered = true;
+            element.color[2] = 0.5; // Green tint on hover
+        } else {
+            element.hovered = false;
+            element.color[2] = 0.9; // Default color
+        }
+    }
+}
+
+pub fn handle_ui_click(current_state: &mut super::State) {
+    for element in &mut current_state.ui_manager.elements {
+        if element.hovered {
+            // run the function
+            element.on_click.as_deref_mut().unwrap()();
         }
     }
 }
