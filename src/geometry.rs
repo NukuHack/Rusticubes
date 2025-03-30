@@ -199,19 +199,19 @@ impl GeometryBuffer {
         vertices: &[geometry::Vertex], // Use `Self` prefix for clarity
         texture_coords: &[geometry::TexCoord], // Use `Self` prefix for clarity
     ) -> Self {
-        let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        let vertex_buffer: wgpu::Buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Vertex Buffer"),
             contents: bytemuck::cast_slice(vertices),
             usage: wgpu::BufferUsages::VERTEX,
         });
 
-        let texture_coord_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        let texture_coord_buffer: wgpu::Buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Texture Coordinate Buffer"),
             contents: bytemuck::cast_slice(texture_coords),
             usage: wgpu::BufferUsages::VERTEX,
         });
 
-        let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        let index_buffer: wgpu::Buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Index Buffer"),
             contents: bytemuck::cast_slice(indices),
             usage: wgpu::BufferUsages::INDEX,

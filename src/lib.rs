@@ -5,6 +5,7 @@ mod config;
 mod geometry;
 mod pipeline;
 mod instances;
+mod user_interface;
 
 use std::time::Instant;
 use std::time::Duration;
@@ -33,7 +34,10 @@ pub struct State<'a> {
     geometry_buffer: geometry::GeometryBuffer,
     texture_manager: texture::TextureManager,
     instance_manager: instances::InstanceManager,
+
+    ui_manager: user_interface::UIManager,
 }
+pub static mut closed:bool = false;
 
 impl<'a> State<'a> {
     async fn new(window: &'a Window) -> Self {
@@ -128,6 +132,11 @@ impl<'a> State<'a> {
 
         let pipeline: pipeline::Pipeline = pipeline::Pipeline::new(&device, &config, &render_pipeline_layout);
 
+        let mut ui_manager:user_interface::UIManager = user_interface::UIManager::new(&device, &config);
+        let default_element: user_interface::UIElement = user_interface::UIElement::default();
+        ui_manager.add_ui_element(default_element);
+        ui_manager.update(&queue);
+
         Self {
             surface,
             device,
@@ -141,6 +150,8 @@ impl<'a> State<'a> {
             geometry_buffer,
             texture_manager,
             instance_manager,
+
+            ui_manager,
         }
     }
 
@@ -148,7 +159,7 @@ impl<'a> State<'a> {
         self.window
     }
 
-    pub fn resize(&mut self, new_size: PhysicalSize<u32>) {
+    pub fn resize(&mut self, new_size: PhysicalSize<u32>) -> bool{
         if new_size.width > 0 && new_size.height > 0 {
             self.size = new_size;
             self.config.width = new_size.width;
@@ -160,11 +171,144 @@ impl<'a> State<'a> {
                 &self.config,
                 "depth_texture",
             );
+            ()
+        }
+        false
+    }
+    pub fn handle_events(&mut self,event: &WindowEvent) -> bool{
+        match event {
+            WindowEvent::CloseRequested => close_app(),
+            WindowEvent::Resized(physical_size) => self.resize(*physical_size),
+            WindowEvent::RedrawRequested => {
+                self.window().request_redraw();
+                self.update();
+                match self.render() {
+                    Ok(_) => true,
+                    Err(wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated) => self.resize(self.size),
+                    Err(wgpu::SurfaceError::OutOfMemory | wgpu::SurfaceError::Other) => {
+                        log::error!("Surface error");
+                        close_app()
+                    }
+                    Err(wgpu::SurfaceError::Timeout) => {
+                        log::warn!("Surface timeout");
+                        true
+                    },
+                }
+            },
+            WindowEvent::KeyboardInput { device_id: _, event: _, is_synthetic: _ } => {
+                self.handle_key_input(event)
+            },
+            _ => self.handle_mouse_input(event)
         }
     }
+    pub fn handle_key_input(&mut self, event: &WindowEvent) -> bool {
+        if let WindowEvent::KeyboardInput {
+            event: KeyEvent {
+                physical_key: winit::keyboard::PhysicalKey::Code(physical_key), // Extract the KeyCode
+                state,
+                ..
+            },
+            ..
+        } = event
+        {
+            // `key_code` is of type `KeyCode` (e.g., KeyCode::W)
+            // `state` is of type `ElementState` (Pressed or Released)
+            self.camera_system.controller.process_keyboard(&physical_key, &state);
+        }
 
-    pub fn input(&mut self, event: &WindowEvent) -> bool {
-        self.camera_system.process_event(event);
+        match event {
+            WindowEvent::KeyboardInput {
+                event: KeyEvent {
+                    physical_key: winit::keyboard::PhysicalKey::Code(key),
+                    state: ElementState::Pressed //| ElementState::Released // had to disable released otherwise hiding does not work correctly
+                    , .. },
+                ..
+            } => {
+                match key {
+                    Key::AltLeft | Key::AltRight => {
+                        // Reset mouse to center, should make this not call the event for mousemove ...
+                        let window = self.window;
+                        let physical_size = window.inner_size();
+                        let x = (physical_size.width as f64) / 2.0;
+                        let y = (physical_size.height as f64) / 2.0;
+                        window.set_cursor_position(winit::dpi::PhysicalPosition::new(x, y))
+                            .expect("Set mouse cursor position");
+                            return true;
+                    },
+                    Key::Escape => {
+                        close_app();
+                        return true;
+                    },
+                    winit::keyboard::KeyCode::F1 => {
+                        self.ui_manager.visibility=!self.ui_manager.visibility;
+                        return true;
+                    },
+                    _ => return false,
+                }
+            },
+            _ => return false
+        }
+        
+    }
+
+    pub fn handle_mouse_input(&mut self, event: &WindowEvent) -> bool {
+        match event {
+            WindowEvent::MouseInput { button, state, .. } => {
+                match button {
+                    MouseButton::Left => {
+                        if state == &ElementState::Pressed {
+                            self.camera_system.mouse_button_state.left = true;
+                        } else {
+                            self.camera_system.mouse_button_state.left = false;
+                        }
+                    }
+                    MouseButton::Right => {
+                        if state == &ElementState::Pressed {
+                            self.camera_system.mouse_button_state.right = true;
+                        } else {
+                            self.camera_system.mouse_button_state.right = false;
+                        }
+                    }
+                    _ => {} // Ignore other buttons
+                }
+            }
+            WindowEvent::CursorMoved { position, .. } => {
+                if self.camera_system.mouse_button_state.right == true {
+                    if let Some(prev) = self.camera_system.previous_mouse {
+                        let delta_x: f64 = position.x - prev.x;
+                        let delta_y: f64 = position.y - prev.y;
+                        self.camera_system.controller.process_mouse(delta_x, delta_y);
+                    }
+                }
+                self.camera_system.previous_mouse = Some(*position);
+            }
+            WindowEvent::MouseWheel { delta, .. } => {
+                self.camera_system.controller.process_scroll(delta);
+            }
+            /*
+            WindowEvent::CursorMoved { position, .. } => {
+                let (x, y) = (position.x as f32, position.y as f32);
+                let (w, h) = (self.size.width as f32, self.size.height as f32);
+                let norm_x = x / w;
+                let norm_y = y / h;
+
+                for element in &mut self.ui_manager.elements {
+                    let (pos_x, pos_y) = element.position;
+                    let (size_w, size_h) = element.size;
+                    if (norm_x >= pos_x && norm_x <= pos_x + size_w) &&
+                       (norm_y >= pos_y && norm_y <= pos_y + size_h) {
+                        element.hovered = true;
+                    } else {
+                        element.hovered = false;
+                    };
+                };
+            }
+            WindowEvent::MouseInput { state: ElementState::Pressed, button: MouseButton::Left, .. } => {
+                // Implement click handling here
+            }
+            */
+            _ => (),
+        };
         false
     }
 
@@ -173,6 +317,7 @@ impl<'a> State<'a> {
         let delta_seconds: Duration = current_time - self.previous_frame_time;
         self.previous_frame_time = current_time;
         self.camera_system.update(&self.queue, delta_seconds);
+        self.ui_manager.update(&self.queue);
     }
 
     pub fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
@@ -195,59 +340,29 @@ pub async fn run() {
         .unwrap();
     let mut state: State = State::new(&window).await;
     event_loop.run(move |event, control_flow| {
+        if 
+        unsafe{
+            closed
+        } {
+            control_flow.exit();
+        }
+
         match &event {
             Event::WindowEvent { event, window_id } if *window_id == state.window().id() => {
-                if !state.input(event) {
-                    match event {
-                        WindowEvent::CloseRequested
-                        | WindowEvent::KeyboardInput {
-                            event: KeyEvent {
-                                physical_key: winit::keyboard::PhysicalKey::Code(Key::Escape),
-                                state: ElementState::Pressed,
-                                ..
-                            },
-                            ..
-                        } => control_flow.exit(),
-                        WindowEvent::Resized(physical_size) => state.resize(*physical_size),
-                        WindowEvent::RedrawRequested => {
-                            state.window().request_redraw();
-                            state.update();
-                            match state.render() {
-                                Ok(_) => (),
-                                Err(wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated) => state.resize(state.size),
-                                Err(wgpu::SurfaceError::OutOfMemory | wgpu::SurfaceError::Other) => {
-                                    log::error!("Surface error");
-                                    control_flow.exit();
-                                }
-                                Err(wgpu::SurfaceError::Timeout) => log::warn!("Surface timeout"),
-                            }
-                        }
-                        WindowEvent::KeyboardInput {
-                            event:
-                                KeyEvent {
-                                    physical_key: winit::keyboard::PhysicalKey::Code(key),
-                                    ..
-                                },
-                            ..
-                        } => {
-                            match key {
-                                Key::AltLeft | Key::AltRight => {
-                                    // Reset mouse to center, should make this not call the event for mousemove ...
-                                    let window = state.window;
-                                    let physical_size = window.inner_size();
-                                    let x = (physical_size.width as f64) / 2.0;
-                                    let y = (physical_size.height as f64) / 2.0;
-                                    window.set_cursor_position(winit::dpi::PhysicalPosition::new(x, y))
-                                        .expect("Set mouse cursor position");
-                                }
-                                _ => return,
-                            }
-                        }
-                        _ => {}
-                    }
-                }
+                state.handle_events(event);
             }
             _ => {}
         }
     }).expect("Event loop error");
+}
+
+
+
+pub fn close_app() -> bool{
+    unsafe{
+        closed = true;
+    };
+    unsafe{
+        closed
+    }
 }

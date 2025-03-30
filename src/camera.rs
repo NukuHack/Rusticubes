@@ -82,50 +82,6 @@ impl CameraSystem {
             bytemuck::cast_slice(std::slice::from_ref(&self.uniform)),
         );
     }
-    pub fn process_event(&mut self, event: &WindowEvent) {
-        match event {
-            WindowEvent::KeyboardInput { event:
-                KeyEvent {
-                    physical_key: winit::keyboard::PhysicalKey::Code(key),
-                    state, ..
-                }, ..
-            } => { self.controller.process_keyboard(*key, *state); },
-            WindowEvent::MouseInput { button, state, .. } => {
-                match button {
-                    MouseButton::Left => {
-                        if state == &ElementState::Pressed {
-                            self.mouse_button_state.left = true;
-                        } else {
-                            self.mouse_button_state.left = false;
-                        }
-                    }
-                    MouseButton::Right => {
-                        if state == &ElementState::Pressed {
-                            self.mouse_button_state.right = true;
-                        } else {
-                            self.mouse_button_state.right = false;
-                        }
-                    }
-                    _ => {} // Ignore other buttons
-                }
-            }
-            // Process cursor movement only if the right mouse button is pressed
-            WindowEvent::CursorMoved { position, .. } => {
-                if self.mouse_button_state.right == true {
-                    if let Some(prev) = self.previous_mouse {
-                        let delta_x: f64 = position.x - prev.x;
-                        let delta_y: f64 = position.y - prev.y;
-                        self.controller.process_mouse(delta_x, delta_y);
-                    }
-                }
-                self.previous_mouse = Some(*position);
-            }
-            WindowEvent::MouseWheel { delta, .. } => {
-                self.controller.process_scroll(delta);
-            }
-            _ => (),
-        }
-    }
 }
 pub struct MouseButtonState {
     pub left: bool,
@@ -265,8 +221,8 @@ impl CameraController {
             sensitivity,
         }
     }
-    pub fn process_keyboard(&mut self, key: Key, state: ElementState) -> bool {
-        let is_pressed: bool = state == ElementState::Pressed;
+    pub fn process_keyboard(&mut self, key: &Key, state: &ElementState) -> bool {
+        let is_pressed: bool = state == &ElementState::Pressed as &ElementState;
         let amount: f32 = if is_pressed { 1.0 } else { 0.0 };
         match key {
             Key::KeyW | Key::ArrowUp => {
