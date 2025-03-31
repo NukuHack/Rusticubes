@@ -96,16 +96,20 @@ impl UIManager {
         let mut vertices = Vec::new();
         let mut indices = Vec::new();
         let mut current_index = 0;
-
+        
         for element in &self.elements {
+            // Existing rectangle processing code
+            let (x, y) = element.position;
+            let (w, h) = element.size;
+            let color = element.color;
+            let positions = [[x, y], [x + w, y], [x, y + h], [x + w, y + h]];
             if let Some(text) = &element.text {
-                let (x, y) = element.position;
-                let (char_width, char_height) = element.size;
+				let leng:f32 = text.len() as f32; // would be just an u32 but at dividing that would crash
+                let (char_width, char_height) = (w/leng,h/leng);
                 for (i, c) in text.chars().enumerate() {
                     let (u_min, v_min, u_max, v_max) = get_uv(c);
                     let char_x = x + (i as f32) * char_width;
                     let char_y = y;
-
                     let positions = [
                         [char_x, char_y],
                         [char_x + char_width, char_y],
@@ -139,12 +143,6 @@ impl UIManager {
                     current_index += 4;
                 }
             } else {
-                // Existing rectangle processing code
-                let (x, y) = element.position;
-                let (w, h) = element.size;
-                let color = element.color;
-                let positions = [[x, y], [x + w, y], [x, y + h], [x + w, y + h]];
-
                 for &pos in &positions {
                     vertices.push(Vertex {
                         position: pos,
@@ -152,27 +150,23 @@ impl UIManager {
                         color,
                     });
                 }
-
-                indices.extend_from_slice(&[
-                    current_index + 0,
-                    current_index + 1,
-                    current_index + 2,
-                    current_index + 1,
-                    current_index + 3,
-                    current_index + 2,
-                ]);
-                current_index += 4;
             }
+            indices.extend_from_slice(&[
+                current_index + 0,
+                current_index + 1,
+                current_index + 2,
+                current_index + 1,
+                current_index + 3,
+                current_index + 2,
+            ]);
+            current_index += 4;
         }
-
         // Write vertices to the GPU buffer
         let vertex_data = bytemuck::cast_slice(&vertices);
         queue.write_buffer(&self.vertex_buffer, 0, vertex_data);
-
         // Write indices to the GPU buffer
         let index_data = bytemuck::cast_slice(&indices);
         queue.write_buffer(&self.index_buffer, 0, index_data);
-
         // Update the total number of indices
         self.num_indices = indices.len() as u32;
     }
