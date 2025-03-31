@@ -17,7 +17,9 @@ use wgpu;
 )]
 pub struct Pipeline {
     pub render_pipeline: wgpu::RenderPipeline,
-    shader: wgpu::ShaderModule, // Keep the shader alive as long as the pipeline exists
+    pub inside_pipeline: wgpu::RenderPipeline,
+    shader: wgpu::ShaderModule,
+    inside_shader: wgpu::ShaderModule,
 }
 
 impl Pipeline {
@@ -53,7 +55,19 @@ impl Pipeline {
                     compilation_options: Default::default(),
                     targets: &[Some(wgpu::ColorTargetState {
                         format: config.format,
-                        blend: Some(wgpu::BlendState::REPLACE),
+                        blend: Some(wgpu::BlendState {
+                            color: wgpu::BlendComponent {
+                                src_factor: wgpu::BlendFactor::SrcAlpha,
+                                dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
+                                operation: wgpu::BlendOperation::Add,
+                            },
+                            // Fix the alpha component here:
+                            alpha: wgpu::BlendComponent {
+                                src_factor: wgpu::BlendFactor::SrcAlpha, // Changed from Zero
+                                dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha, // Changed from One
+                                operation: wgpu::BlendOperation::Add,
+                            },
+                        }),
                         write_mask: wgpu::ColorWrites::ALL,
                     })],
                 }),
@@ -69,7 +83,7 @@ impl Pipeline {
                 depth_stencil: Some(wgpu::DepthStencilState {
                     format: texture::Texture::DEPTH_FORMAT,
                     depth_write_enabled: true,
-                    depth_compare: wgpu::CompareFunction::Less,
+                    depth_compare: wgpu::CompareFunction::LessEqual,
                     stencil: wgpu::StencilState::default(),
                     bias: wgpu::DepthBiasState::default(),
                 }),
@@ -78,9 +92,129 @@ impl Pipeline {
                 cache: None,
             });
 
+        // Create inside shader (outputs a solid color)
+        let inside_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("Inside Shader"),
+            source: wgpu::ShaderSource::Wgsl(Cow::from(
+                r#"
+                    struct FragmentOut {
+                        @location(0) color: vec4<f32>,
+                    };
+
+                    // Vertex Shader
+                    struct CameraUniform {
+                        view_proj: mat4x4<f32>,
+                    };
+
+                    @group(1) @binding(0)
+                    var<uniform> camera: CameraUniform;
+
+                    // Match your existing instance data structure
+                    struct InstanceInput {
+                        @location(5) model_matrix_0: vec4<f32>,
+                        @location(6) model_matrix_1: vec4<f32>,
+                        @location(7) model_matrix_2: vec4<f32>,
+                        @location(8) model_matrix_3: vec4<f32>,
+                    };
+
+                    struct VertexInput {
+                        @location(0) position: vec3<f32>,
+                    };
+
+                    @vertex
+                    fn vs_main(
+                        vertex: VertexInput,
+                        instance: InstanceInput,
+                    ) -> @builtin(position) vec4<f32> {
+                        // Reconstruct the model matrix from instance data
+                        let model_matrix = mat4x4<f32>(
+                            instance.model_matrix_0,
+                            instance.model_matrix_1,
+                            instance.model_matrix_2 * -1,
+                            instance.model_matrix_3,
+                        );
+
+                        let world_pos = model_matrix * vec4<f32>(vertex.position, 1.0);
+                        return camera.view_proj * world_pos;
+                    }
+
+                    @fragment
+                    fn fs_main() -> FragmentOut {
+                        var out:FragmentOut;
+                        out.color = vec4<f32>(0.8, 0.8, 0.8, 0.8);
+                        return out;
+                    }
+                "#,
+            )),
+        });
+        // Inside Pipeline Configuration
+        let inside_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("Inside Pipeline"),
+            layout: Some(render_pipeline_layout), // Use the same layout as your main pipeline
+            vertex: wgpu::VertexState {
+                compilation_options: Default::default(),
+                module: &inside_shader, // Use the corrected inside shader
+                entry_point: Some("vs_main"),
+                buffers: &[
+                    // Vertex buffer layout (position only, since we don't need UVs or normals here)
+                    wgpu::VertexBufferLayout {
+                        array_stride: std::mem::size_of::<[f32; 3]>() as wgpu::BufferAddress,
+                        step_mode: wgpu::VertexStepMode::Vertex,
+                        attributes: &[wgpu::VertexAttribute {
+                            format: wgpu::VertexFormat::Float32x3,
+                            offset: 0,
+                            shader_location: 0, // Matches @location(0) in VertexInput
+                        }],
+                    },
+                    // Instance buffer layout (must match your InstanceRaw struct)
+                    InstanceRaw::desc(),
+                ],
+            },
+            fragment: Some(wgpu::FragmentState {
+                compilation_options: Default::default(),
+                module: &inside_shader,
+                entry_point: Some("fs_main"),
+                targets: &[Some(wgpu::ColorTargetState {
+                    format: config.format,
+                    blend: Some(wgpu::BlendState {
+                        color: wgpu::BlendComponent {
+                            src_factor: wgpu::BlendFactor::SrcAlpha,
+                            dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
+                            operation: wgpu::BlendOperation::Add,
+                        },
+                        // Fix the alpha component here:
+                        alpha: wgpu::BlendComponent {
+                            src_factor: wgpu::BlendFactor::SrcAlpha, // Changed from Zero
+                            dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha, // Changed from One
+                            operation: wgpu::BlendOperation::Add,
+                        },
+                    }),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+            }),
+            primitive: wgpu::PrimitiveState {
+                cull_mode: Some(wgpu::Face::Front),
+                ..Default::default()
+            },
+            depth_stencil: Some(wgpu::DepthStencilState {
+                format: texture::Texture::DEPTH_FORMAT,
+                depth_write_enabled: false,
+                // if Greater render only where fragments are BEHIND existing geometry
+                // if LessEqual only outside
+                depth_compare: wgpu::CompareFunction::Less,
+                stencil: Default::default(),
+                bias: Default::default(),
+            }),
+            multisample: Default::default(),
+            multiview: None,
+            cache: None,
+        });
+
         Pipeline {
             render_pipeline,
-            shader, // Ensure shader is stored to keep it alive
+            inside_pipeline,
+            shader,
+            inside_shader,
         }
     }
 }
@@ -139,6 +273,7 @@ pub fn render_all(current_state: &mut super::State) -> Result<(), wgpu::SurfaceE
             &current_state.texture_manager.depth_texture.view,
         );
 
+        // draw 3d objects
         draw_geometry(
             &mut rpass,
             &current_state.pipeline.render_pipeline,
@@ -150,6 +285,24 @@ pub fn render_all(current_state: &mut super::State) -> Result<(), wgpu::SurfaceE
                 &current_state.geometry_buffer.vertex_buffer,
                 &current_state.geometry_buffer.texture_coord_buffer,
                 &current_state.instance_manager.instance_buffer,
+            ]),
+            &current_state.geometry_buffer.index_buffer,
+            current_state.geometry_buffer.num_indices,
+            current_state.instance_manager.instances.len() as u32,
+        );
+
+        // Inside rendering pass (modified line)
+        draw_geometry(
+            &mut rpass,
+            &current_state.pipeline.inside_pipeline,
+            Box::from([
+                &current_state.texture_manager.bind_group,
+                &current_state.camera_system.bind_group,
+            ]),
+            Box::from([
+                // Remove texture_coord_buffer
+                &current_state.geometry_buffer.vertex_buffer, // Position buffer
+                &current_state.instance_manager.instance_buffer, // Instance buffer
             ]),
             &current_state.geometry_buffer.index_buffer,
             current_state.geometry_buffer.num_indices,

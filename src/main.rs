@@ -1,17 +1,15 @@
-
 use std::{
-    io::*,
+    env,
     future::Future,
-    task::{Context, Poll, Waker},
+    io::*,
     sync::{
         atomic::{AtomicBool, Ordering},
         Arc,
     },
-    env,
+    task::{Context, Poll, Waker},
 };
 
 use test_app::run;
-
 
 fn main() {
     initialize();
@@ -22,13 +20,13 @@ fn main() {
 
     write!(lock, "\n\nEnd code:").unwrap();
 }
-fn initialize(){
+fn initialize() {
     unsafe {
         // Disable Vulkan layers to avoid errors from missing files
         env::set_var("VK_LAYER_PATH", ""); // Ignore custom layer paths
         env::set_var("VK_INSTANCE_LAYERS", ""); // Disable all instance layers
         env::set_var("VK_DEVICE_LAYERS", ""); // Disable all device layers (optional)
-        env::set_var("VK_LAYER_DISABLE", "EOSOverlayVkLayer;bdcamvk");
+        env::set_var("VK_LAYER_DISABLE", "EOSOverlayVkLayer;");
     }
     return;
 }
@@ -49,7 +47,7 @@ impl std::task::Wake for MyWaker {
     }
 }
 
-fn run_app(){
+fn run_app() {
     // Initialize the future
     let future = run();
     let mut future = Box::pin(future);
