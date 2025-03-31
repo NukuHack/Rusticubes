@@ -96,7 +96,7 @@ impl UIManager {
         let mut vertices = Vec::new();
         let mut indices = Vec::new();
         let mut current_index = 0;
-        
+
         for element in &self.elements {
             // Existing rectangle processing code
             let (x, y) = element.position;
@@ -116,22 +116,19 @@ impl UIManager {
                         [char_x, char_y + char_height],
                         [char_x + char_width, char_y + char_height],
                     ];
-
                     let uvs = [
                         [u_min, v_min],
                         [u_max, v_min],
                         [u_min, v_max],
                         [u_max, v_max],
                     ];
-
                     for j in 0..4 {
                         vertices.push(Vertex {
                             position: positions[j],
                             uv: uvs[j],
-                            color: element.color,
+                            color,
                         });
                     }
-
                     indices.extend_from_slice(&[
                         current_index + 0,
                         current_index + 1,
