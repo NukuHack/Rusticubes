@@ -33,5 +33,5 @@ struct FragmentInput {
 @fragment
 fn fs_main(in: FragmentInput) -> @location(0) vec4<f32> {
     let sampled_color = textureSample(font_texture, font_sampler, in.uv);
-    return sampled_color * in.color;
+    return in.color;
 }

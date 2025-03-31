@@ -9,14 +9,12 @@ mod user_interface;
 
 use std::time::Instant;
 use std::time::Duration;
-use std::{
-    iter::Iterator,
-};
+use std::iter::Iterator;
 use winit::{
     dpi::PhysicalSize,
     event::*,
     event_loop::EventLoop,
-    keyboard::{KeyCode as Key},
+    keyboard::KeyCode as Key,
     window::{Window, WindowBuilder},
 };
 use crate::pipeline::*;
@@ -135,21 +133,20 @@ impl<'a> State<'a> {
         let default_element: user_interface::UIElement = user_interface::UIElement::new(
             (-0.9, -0.8),      // Centered in the viewport
             (0.2, 0.1),            // 20% width and 10% height of the viewport
-            [0.5, 0.8, 0.1, 1.0], // 1 = fully opaque
+            [0.5, 0.8, 0.1, 0.0],
             None,
             Some(Box::new(|| {
                 println!("Random button clicked!");
             })),
-            );
-        ui_manager.add_ui_element(default_element);
-        ui_manager.update(&queue);
+        );
         let text_element: user_interface::UIElement = user_interface::UIElement::new (
             (-0.5, 0.7),
-            (0.05, 0.05),
-            [0.5, 0.6, 0.7, 1.0]as[f32; 4],
+            (0.2, 0.1),
+            [0.5, 0.6, 0.7, 0.0]as[f32; 4],
             Some("Hello!".to_string()),
             None,
         );
+        ui_manager.add_ui_element(default_element);
         ui_manager.add_ui_element(text_element);
 
         Self {

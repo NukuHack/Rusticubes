@@ -104,6 +104,32 @@ impl UIManager {
             let color = element.color;
             let positions = [[x, y], [x + w, y], [x, y + h], [x + w, y + h]];
             if let Some(text) = &element.text {
+                if true {
+                    // Background rectangle vertices
+                    let positions = [
+                        [x, y],
+                        [x + w, y],
+                        [x, y + h],
+                        [x + w, y + h],
+                    ];
+                    for &pos in &positions {
+                        vertices.push(Vertex {
+                            position: pos,
+                            uv: [0.0, 0.0], // Use default UV (font texture's [0,0] is white)
+                            color: [1.0,1.0,1.0,0.8], // Background color
+                        });
+                    }
+                    // Add indices for the rectangle
+                    indices.extend_from_slice(&[
+                        current_index + 0,
+                        current_index + 1,
+                        current_index + 2,
+                        current_index + 1,
+                        current_index + 3,
+                        current_index + 2,
+                    ]);
+                    current_index += 4;
+                }
 				let leng:f32 = text.len() as f32; // would be just an u32 but at dividing that would crash
                 let (char_width, char_height) = (w/leng,h/leng);
                 for (i, c) in text.chars().enumerate() {
@@ -147,16 +173,16 @@ impl UIManager {
                         color,
                     });
                 }
+                indices.extend_from_slice(&[
+                    current_index + 0,
+                    current_index + 1,
+                    current_index + 2,
+                    current_index + 1,
+                    current_index + 3,
+                    current_index + 2,
+                ]);
+                current_index += 4;
             }
-            indices.extend_from_slice(&[
-                current_index + 0,
-                current_index + 1,
-                current_index + 2,
-                current_index + 1,
-                current_index + 3,
-                current_index + 2,
-            ]);
-            current_index += 4;
         }
         // Write vertices to the GPU buffer
         let vertex_data = bytemuck::cast_slice(&vertices);
@@ -311,18 +337,19 @@ impl UIManager {
                 entry_point: Some("fs_main"),
                 targets: &[Some(wgpu::ColorTargetState {
                     format: config.format,
-					blend: Some(wgpu::BlendState {
-						color: wgpu::BlendComponent {
-							src_factor: wgpu::BlendFactor::SrcAlpha,
-							dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
-							operation: wgpu::BlendOperation::Add,
-						},
-						alpha: wgpu::BlendComponent {
-							src_factor: wgpu::BlendFactor::Zero,
-							dst_factor: wgpu::BlendFactor::One,
-							operation: wgpu::BlendOperation::Add,
-						},
-					}),
+                    blend: Some(wgpu::BlendState {
+                        color: wgpu::BlendComponent {
+                            src_factor: wgpu::BlendFactor::SrcAlpha,
+                            dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
+                            operation: wgpu::BlendOperation::Add,
+                        },
+                        // Fix the alpha component here:
+                        alpha: wgpu::BlendComponent {
+                            src_factor: wgpu::BlendFactor::SrcAlpha, // Changed from Zero
+                            dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha, // Changed from One
+                            operation: wgpu::BlendOperation::Add,
+                        },
+                    }),
                     write_mask: wgpu::ColorWrites::ALL,
                 })],
             }),
