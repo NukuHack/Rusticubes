@@ -130,9 +130,9 @@ impl<'a> State<'a> {
 
         let mut ui_manager:user_interface::UIManager = user_interface::UIManager::new(&device, &config, &queue);
         let default_element: user_interface::UIElement = user_interface::UIElement::new_rect(
-            (-0.9, -0.8),
-            (0.2, 0.1),
-            [0.5, 0.8, 0.1, 0.0],
+            (0.0, 0.0),  // Center at (0,0)
+            (0.5, 0.5),  // 50% width/height
+            [1.0, 0.5, 0.5, 1.0],
             Some(Box::new(|| {
                 println!("Random button clicked!");
             })),
@@ -140,7 +140,7 @@ impl<'a> State<'a> {
         let text_element: user_interface::UIElement = user_interface::UIElement::new_text(
             (-0.5, 0.7),
             (0.2, 0.1),
-            [0.5, 0.6, 0.7, 0.0]as[f32; 4],
+            [1.0, 0.6, 0.7, 1.0],
             "Hello!".to_string(),
             None,
         );

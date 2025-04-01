@@ -324,10 +324,10 @@ pub fn render_all(current_state: &mut super::State) -> Result<(), wgpu::SurfaceE
             &current_state.pipeline.inside_pipeline,
             &[
                 &current_state.texture_manager.bind_group,
-                &current_state.camera_system.bind_group, // Only camera needed here
+                &current_state.camera_system.bind_group,
             ],
             &[
-                &current_state.geometry_buffer.vertex_buffer,
+                &current_state.geometry_buffer.vertex_buffer, // Textures are not needed
                 &current_state.instance_manager.instance_buffer,
             ],
             &current_state.geometry_buffer.index_buffer,

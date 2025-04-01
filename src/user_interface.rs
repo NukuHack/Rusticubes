@@ -102,8 +102,10 @@ impl UIManager {
         let (vertices, indices) = self.process_elements();
 
         // Update GPU buffers
-        self.write_vertex_buffer(queue, &vertices);
-        self.write_index_buffer(queue, &indices);
+        let vertex_data = bytemuck::cast_slice(&vertices);
+        queue.write_buffer(&self.vertex_buffer, 0, vertex_data);
+        let index_data = bytemuck::cast_slice(&indices);
+        queue.write_buffer(&self.index_buffer, 0, index_data);
         self.num_indices = indices.len() as u32;
     }
 
@@ -117,10 +119,10 @@ impl UIManager {
             match &element.r#type {
                 val if *val == String::from("text") => {
                     self.process_text_element(&element, &mut vertices, &mut indices, current_index);
-                    current_index += self.text_vertex_count(element.text.len());
+                    current_index += (element.text.len() * 4) as u32;
                 }
                 val if *val == String::from("rect") => {
-                    self.process_rectangle(&element, &mut vertices, &mut indices, current_index);
+                    self.process_rect_element(&element, &mut vertices, &mut indices, current_index);
                     current_index += 4;
                 }
                 String { .. } => println!("unimplemented ui type {:?}", element.r#type),
@@ -143,7 +145,7 @@ impl UIManager {
 
         // Background rectangle
         let background_color = [1.0, 1.0, 1.0, 0.8];
-        self.add_rectangle(vertices, current_index, x, y, w, h, background_color);
+        self.add_rectangle(vertices, element.position, element.size, background_color);
         indices.extend(self.rectangle_indices(current_index));
 
         // Text characters
@@ -176,45 +178,34 @@ impl UIManager {
                 });
             }
 
-            indices.extend(self.quad_indices(current_index + (i as u32 * 4)));
+            indices.extend(self.rectangle_indices(current_index + (i as u32 * 4)));
         }
     }
 
     // Helper methods
-    fn process_rectangle(
+    fn process_rect_element(
         &self,
         element: &UIElement,
         vertices: &mut Vec<Vertex>,
         indices: &mut Vec<u32>,
         current_index: u32,
     ) {
-        self.add_rectangle(
-            vertices,
-            current_index,
-            element.position.0,
-            element.position.1,
-            element.size.0,
-            element.size.1,
-            element.color,
-        );
+        self.add_rectangle(vertices, element.position, element.size, element.color);
         indices.extend(self.rectangle_indices(current_index));
     }
 
     fn add_rectangle(
         &self,
         vertices: &mut Vec<Vertex>,
-        _current_index: u32,
-        x: f32,
-        y: f32,
-        w: f32,
-        h: f32,
+        (x, y): (f32, f32),
+        (w, h): (f32, f32),
         color: [f32; 4],
     ) {
         let positions = [[x, y], [x + w, y], [x, y + h], [x + w, y + h]];
 
-        for &pos in &positions {
+        for &position in &positions {
             vertices.push(Vertex {
-                position: pos,
+                position,
                 uv: [0.0, 0.0],
                 color,
             });
@@ -223,25 +214,6 @@ impl UIManager {
 
     fn rectangle_indices(&self, base: u32) -> [u32; 6] {
         [base + 0, base + 1, base + 2, base + 1, base + 3, base + 2]
-    }
-
-    fn quad_indices(&self, base: u32) -> [u32; 6] {
-        self.rectangle_indices(base)
-    }
-
-    fn text_vertex_count(&self, char_count: usize) -> u32 {
-        (char_count * 4) as u32
-    }
-
-    // GPU buffer updates
-    fn write_vertex_buffer(&self, queue: &wgpu::Queue, vertices: &[Vertex]) {
-        let vertex_data = bytemuck::cast_slice(vertices);
-        queue.write_buffer(&self.vertex_buffer, 0, vertex_data);
-    }
-
-    fn write_index_buffer(&self, queue: &wgpu::Queue, indices: &[u32]) {
-        let index_data = bytemuck::cast_slice(indices);
-        queue.write_buffer(&self.index_buffer, 0, index_data);
     }
 
     pub fn add_ui_element(&mut self, element: self::UIElement) {
@@ -405,7 +377,7 @@ impl UIManager {
                         @fragment
                         fn fs_main(in: FragmentInput) -> @location(0) vec4<f32> {
                             let sampled_color = textureSample(font_texture, font_sampler, in.uv);
-                            return in.color;
+                            return in.color * sampled_color;
                         }
                     "#,
                 )),
