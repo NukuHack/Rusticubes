@@ -1,65 +1,82 @@
+use std::borrow::Cow;
+
 #[repr(C)]
 #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
 struct Vertex {
-    position: [f32; 2],
-    color: [f32; 4],
-    uv: [f32; 2],
+    position: [f32; 2], // Normalized device coordinates (-1.0 to 1.0)
+    color: [f32; 4],    // RGBA color values (0.0-1.0)
+    uv: [f32; 2],       // Texture coordinates (0.0 to 1.0)
 }
 
-#[allow(
-    dead_code,
-    unused,
-    redundant_imports,
-    unused_results,
-    unused_features,
-    unused_variables,
-    unused_mut,
-    dead_code,
-    unused_unsafe,
-    unused_attributes
-)]
+#[allow(dead_code, unused)]
 pub struct UIElement {
-    pub position: (f32, f32), // Normalized coordinates (-1.0 to 1.0)
-    pub size: (f32, f32),
-    pub color: [f32; 4],
-    pub text: Option<String>,
-    pub hovered: bool,
-    pub on_click: Option<Box<dyn FnMut()>>,
+    pub position: (f32, f32), // Center position in normalized coordinates
+    pub size: (f32, f32),     // Width and height in normalized coordinates
+    pub color: [f32; 4],      // Base color of the element
+    pub r#type: String,       // the type like : "rect" or "text"
+    pub text: String,         // Optional text content
+    pub hovered: bool,        // Hover state
+    pub on_click: Option<Box<dyn FnMut()>>, // Click callback
 }
-#[allow(
-    dead_code,
-    unused,
-    redundant_imports,
-    unused_results,
-    unused_features,
-    unused_variables,
-    unused_mut,
-    dead_code,
-    unused_unsafe,
-    unused_attributes
-)]
+#[allow(dead_code, unused)]
 impl UIElement {
     pub fn default() -> Self {
         Self {
-            position: (0.0, 0.0),
-            size: (0.2, 0.2),
-            color: [1.0, 1.0, 1.0, 1.0],
-            text: None,
+            position: (0.0, 0.0),        // Centered in the viewport
+            size: (0.2, 0.2),            // 20% width and 10% height of the viewport
+            color: [1.0, 1.0, 1.0, 1.0], // Default to purple (fully opaque
+            r#type: "rect".to_string(),
+            text: "None".to_string(),
             hovered: false,
             on_click: None,
+        }
+    }
+    pub fn new_rect(
+        position: (f32, f32),
+        size: (f32, f32),
+        color: [f32; 4],
+        on_click: Option<Box<dyn FnMut()>>,
+    ) -> Self {
+        Self {
+            position,
+            size,
+            color,
+            r#type: "rect".to_string(),
+            text: "None".to_string(),
+            hovered: false,
+            on_click,
+        }
+    }
+    pub fn new_text(
+        position: (f32, f32),
+        size: (f32, f32),
+        color: [f32; 4],
+        text: String,
+        on_click: Option<Box<dyn FnMut()>>,
+    ) -> Self {
+        Self {
+            position,
+            size,
+            color,
+            r#type: "text".to_string(),
+            text,
+            hovered: false,
+            on_click,
         }
     }
     pub fn new(
         position: (f32, f32),
         size: (f32, f32),
         color: [f32; 4],
-        text: Option<String>,
+        r#type: String,
+        text: String,
         on_click: Option<Box<dyn FnMut()>>,
     ) -> Self {
         Self {
-            position, // Centered in the viewport
-            size,     // 20% width and 10% height of the viewport
-            color,    // Default to purple (fully opaque)
+            position,
+            size,
+            color,
+            r#type,
             text,
             hovered: false,
             on_click,
@@ -67,18 +84,7 @@ impl UIElement {
     }
 }
 
-#[allow(
-    dead_code,
-    unused,
-    redundant_imports,
-    unused_results,
-    unused_features,
-    unused_variables,
-    unused_mut,
-    dead_code,
-    unused_unsafe,
-    unused_attributes
-)]
+#[allow(dead_code, unused)]
 pub struct UIManager {
     pub vertex_buffer: wgpu::Buffer,
     pub index_buffer: wgpu::Buffer,
@@ -93,105 +99,149 @@ pub struct UIManager {
 
 impl UIManager {
     pub fn update(&mut self, queue: &wgpu::Queue) {
+        let (vertices, indices) = self.process_elements();
+
+        // Update GPU buffers
+        self.write_vertex_buffer(queue, &vertices);
+        self.write_index_buffer(queue, &indices);
+        self.num_indices = indices.len() as u32;
+    }
+
+    // Helper functions for clarity
+    fn process_elements(&self) -> (Vec<Vertex>, Vec<u32>) {
         let mut vertices = Vec::new();
         let mut indices = Vec::new();
         let mut current_index = 0;
 
         for element in &self.elements {
-            // Existing rectangle processing code
-            let (x, y) = element.position;
-            let (w, h) = element.size;
-            let color = element.color;
-            let positions = [[x, y], [x + w, y], [x, y + h], [x + w, y + h]];
-            if let Some(text) = &element.text {
-                if true {
-                    // Background rectangle vertices
-                    let positions = [
-                        [x, y],
-                        [x + w, y],
-                        [x, y + h],
-                        [x + w, y + h],
-                    ];
-                    for &pos in &positions {
-                        vertices.push(Vertex {
-                            position: pos,
-                            uv: [0.0, 0.0], // Use default UV (font texture's [0,0] is white)
-                            color: [1.0,1.0,1.0,0.8], // Background color
-                        });
-                    }
-                    // Add indices for the rectangle
-                    indices.extend_from_slice(&[
-                        current_index + 0,
-                        current_index + 1,
-                        current_index + 2,
-                        current_index + 1,
-                        current_index + 3,
-                        current_index + 2,
-                    ]);
+            match &element.r#type {
+                val if *val == String::from("text") => {
+                    self.process_text_element(&element, &mut vertices, &mut indices, current_index);
+                    current_index += self.text_vertex_count(element.text.len());
+                }
+                val if *val == String::from("rect") => {
+                    self.process_rectangle(&element, &mut vertices, &mut indices, current_index);
                     current_index += 4;
                 }
-				let leng:f32 = text.len() as f32; // would be just an u32 but at dividing that would crash
-                let (char_width, char_height) = (w/leng,h/leng);
-                for (i, c) in text.chars().enumerate() {
-                    let (u_min, v_min, u_max, v_max) = get_uv(c);
-                    let char_x = x + (i as f32) * char_width;
-                    let char_y = y;
-                    let positions = [
-                        [char_x, char_y],
-                        [char_x + char_width, char_y],
-                        [char_x, char_y + char_height],
-                        [char_x + char_width, char_y + char_height],
-                    ];
-                    let uvs = [
-                        [u_min, v_min],
-                        [u_max, v_min],
-                        [u_min, v_max],
-                        [u_max, v_max],
-                    ];
-                    for j in 0..4 {
-                        vertices.push(Vertex {
-                            position: positions[j],
-                            uv: uvs[j],
-                            color,
-                        });
-                    }
-                    indices.extend_from_slice(&[
-                        current_index + 0,
-                        current_index + 1,
-                        current_index + 2,
-                        current_index + 1,
-                        current_index + 3,
-                        current_index + 2,
-                    ]);
-                    current_index += 4;
-                }
-            } else {
-                for &pos in &positions {
-                    vertices.push(Vertex {
-                        position: pos,
-                        uv: [0.0, 0.0], // Default to white
-                        color,
-                    });
-                }
-                indices.extend_from_slice(&[
-                    current_index + 0,
-                    current_index + 1,
-                    current_index + 2,
-                    current_index + 1,
-                    current_index + 3,
-                    current_index + 2,
-                ]);
-                current_index += 4;
+                String { .. } => println!("unimplemented ui type {:?}", element.r#type),
             }
         }
-        // Write vertices to the GPU buffer
-        let vertex_data = bytemuck::cast_slice(&vertices);
+
+        (vertices, indices)
+    }
+
+    fn process_text_element(
+        &self,
+        element: &UIElement,
+        vertices: &mut Vec<Vertex>,
+        indices: &mut Vec<u32>,
+        current_index: u32,
+    ) {
+        let (x, y) = element.position;
+        let (w, h) = element.size;
+        let char_count = element.text.chars().count() as f32;
+
+        // Background rectangle
+        let background_color = [1.0, 1.0, 1.0, 0.8];
+        self.add_rectangle(vertices, current_index, x, y, w, h, background_color);
+        indices.extend(self.rectangle_indices(current_index));
+
+        // Text characters
+        let (char_width, char_height) = (w / char_count, h / char_count);
+        for (i, c) in element.text.chars().enumerate() {
+            let (u_min, v_min, u_max, v_max) = get_uv(c);
+
+            let char_x = x + (i as f32) * char_width;
+            let char_y = y;
+
+            let positions = [
+                [char_x, char_y],
+                [char_x + char_width, char_y],
+                [char_x, char_y + char_height],
+                [char_x + char_width, char_y + char_height],
+            ];
+
+            let uvs = [
+                [u_min, v_min],
+                [u_max, v_min],
+                [u_min, v_max],
+                [u_max, v_max],
+            ];
+
+            for j in 0..4 {
+                vertices.push(Vertex {
+                    position: positions[j],
+                    uv: uvs[j],
+                    color: element.color,
+                });
+            }
+
+            indices.extend(self.quad_indices(current_index + (i as u32 * 4)));
+        }
+    }
+
+    // Helper methods
+    fn process_rectangle(
+        &self,
+        element: &UIElement,
+        vertices: &mut Vec<Vertex>,
+        indices: &mut Vec<u32>,
+        current_index: u32,
+    ) {
+        self.add_rectangle(
+            vertices,
+            current_index,
+            element.position.0,
+            element.position.1,
+            element.size.0,
+            element.size.1,
+            element.color,
+        );
+        indices.extend(self.rectangle_indices(current_index));
+    }
+
+    fn add_rectangle(
+        &self,
+        vertices: &mut Vec<Vertex>,
+        _current_index: u32,
+        x: f32,
+        y: f32,
+        w: f32,
+        h: f32,
+        color: [f32; 4],
+    ) {
+        let positions = [[x, y], [x + w, y], [x, y + h], [x + w, y + h]];
+
+        for &pos in &positions {
+            vertices.push(Vertex {
+                position: pos,
+                uv: [0.0, 0.0],
+                color,
+            });
+        }
+    }
+
+    fn rectangle_indices(&self, base: u32) -> [u32; 6] {
+        [base + 0, base + 1, base + 2, base + 1, base + 3, base + 2]
+    }
+
+    fn quad_indices(&self, base: u32) -> [u32; 6] {
+        self.rectangle_indices(base)
+    }
+
+    fn text_vertex_count(&self, char_count: usize) -> u32 {
+        (char_count * 4) as u32
+    }
+
+    // GPU buffer updates
+    fn write_vertex_buffer(&self, queue: &wgpu::Queue, vertices: &[Vertex]) {
+        let vertex_data = bytemuck::cast_slice(vertices);
         queue.write_buffer(&self.vertex_buffer, 0, vertex_data);
-        // Write indices to the GPU buffer
-        let index_data = bytemuck::cast_slice(&indices);
+    }
+
+    fn write_index_buffer(&self, queue: &wgpu::Queue, indices: &[u32]) {
+        let index_data = bytemuck::cast_slice(indices);
         queue.write_buffer(&self.index_buffer, 0, index_data);
-        // Update the total number of indices
-        self.num_indices = indices.len() as u32;
     }
 
     pub fn add_ui_element(&mut self, element: self::UIElement) {
@@ -319,7 +369,46 @@ impl UIManager {
         let shader: wgpu::ShaderModule =
             device.create_shader_module(wgpu::ShaderModuleDescriptor {
                 label: Some("UI Shader"),
-                source: wgpu::ShaderSource::Wgsl(include_str!("ui_shader.wgsl").into()),
+                source: wgpu::ShaderSource::Wgsl(Cow::from(
+                    r#"
+                        struct VertexInput {
+                            @location(0) position: vec2<f32>,
+                            @location(1) uv: vec2<f32>,
+                            @location(2) color: vec4<f32>,
+                        };
+
+                        struct VertexOutput {
+                            @location(0) uv: vec2<f32>,
+                            @location(1) color: vec4<f32>,
+                            // Mark the position with @builtin(position)
+                            @builtin(position) position: vec4<f32>,
+                        };
+
+                        @vertex
+                        fn vs_main(in: VertexInput) -> VertexOutput {
+                            var out: VertexOutput;
+                            out.uv = in.uv;
+                            out.color = in.color;
+                            // Assign to the position field instead of gl_Position
+                            out.position = vec4<f32>(in.position, 0.0, 1.0);
+                            return out;
+                        }
+
+                        @group(0) @binding(0) var font_sampler: sampler;
+                        @group(0) @binding(1) var font_texture: texture_2d<f32>;
+
+                        struct FragmentInput {
+                            @location(0) uv: vec2<f32>,
+                            @location(1) color: vec4<f32>,
+                        };
+
+                        @fragment
+                        fn fs_main(in: FragmentInput) -> @location(0) vec4<f32> {
+                            let sampled_color = textureSample(font_texture, font_sampler, in.uv);
+                            return in.color;
+                        }
+                    "#,
+                )),
             });
 
         let ui_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
@@ -389,62 +478,55 @@ impl UIManager {
     }
 }
 
-pub fn handle_ui_hover(
-    current_state: &mut super::State,
-    position: &winit::dpi::PhysicalPosition<f64>,
-) {
-    let (x, y) = (position.x as f32, position.y as f32);
-    let (w, h) = (
-        current_state.size.width as f32,
-        current_state.size.height as f32,
-    );
+pub fn handle_ui_hover(state: &mut super::State, mouse_pos: &winit::dpi::PhysicalPosition<f64>) {
+    let (x, y) = (mouse_pos.x as f32, mouse_pos.y as f32);
+    let (width, height) = (state.size.width as f32, state.size.height as f32);
 
-    // Convert to UI's normalized coordinates (-1.0 to 1.0)
-    let norm_x = (2.0 * x / w) - 1.0;
-    let norm_y = (2.0 * (h - y) / h) - 1.0; // Invert Y-axis
+    let norm_x = (2.0 * x / width) - 1.0;
+    let norm_y = (2.0 * (height - y) / height) - 1.0; // Invert Y-axis
 
-    for element in &mut current_state.ui_manager.elements {
+    for element in &mut state.ui_manager.elements {
         let (pos_x, pos_y) = element.position;
-        let (size_w, size_h) = element.size;
+        let (w, h) = element.size;
 
-        // Calculate element's bounds in normalized coordinates
-        let right = pos_x + size_w;
-        let top = pos_y + size_h;
-
-        // Check if mouse is inside the element's bounds
-        if norm_x >= pos_x && norm_x <= right && norm_y >= pos_y && norm_y <= top {
+        if norm_x >= pos_x && norm_x <= pos_x + w && norm_y >= pos_y && norm_y <= pos_y + h {
             element.hovered = true;
-            element.color[2] = 0.5; // Green tint on hover
+            // Apply hover color
+            element.color[2] = 0.5; // Green tint
         } else {
             element.hovered = false;
-            element.color[2] = 0.9; // Default color
+            element.color[2] = 0.9; // Default blue
         }
     }
 }
 
-pub fn handle_ui_click(current_state: &mut super::State) {
-    for element in &mut current_state.ui_manager.elements {
+// Click handling
+pub fn handle_ui_click(state: &mut super::State) {
+    for element in &mut state.ui_manager.elements {
         if element.hovered {
-            // run the function
-            if element.on_click.is_some() {
-                element.on_click.as_deref_mut().unwrap()();
+            if let Some(callback) = &mut element.on_click {
+                callback();
             }
         }
     }
 }
 
+// UV coordinate calculation
 pub fn get_uv(c: char) -> (f32, f32, f32, f32) {
     let code = c as u32;
     if code < 32 {
-        return (0.0, 0.0, 0.0, 0.0); // Skip non-printable
-    }
-    let index = (code - 32) as usize;
+        return (0.0, 0.0, 0.0, 0.0);
+    } // Non-printable characters
+
     let grid_size = 16; // 16x16 grid in 128x128 texture
-    let x = (index % grid_size) * 8;
-    let y = (index / grid_size) * 8;
-    let u_min = x as f32 / 128.0;
-    let v_min = y as f32 / 128.0;
-    let u_max = (x + 8) as f32 / 128.0;
-    let v_max = (y + 8) as f32 / 128.0;
+    let index = (code - 32) as usize;
+    let (x, y) = (index % grid_size, index / grid_size);
+    let cell_size = 8.0; // Each cell is 8x8 pixels
+
+    let u_min = (x as f32 * cell_size) / 128.0;
+    let v_min = (y as f32 * cell_size) / 128.0;
+    let u_max = (x as f32 + 1.0) * cell_size / 128.0;
+    let v_max = (y as f32 + 1.0) * cell_size / 128.0;
+
     (u_min, v_min, u_max, v_max)
 }

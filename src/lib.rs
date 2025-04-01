@@ -129,20 +129,19 @@ impl<'a> State<'a> {
         let pipeline: pipeline::Pipeline = pipeline::Pipeline::new(&device, &config, &render_pipeline_layout);
 
         let mut ui_manager:user_interface::UIManager = user_interface::UIManager::new(&device, &config, &queue);
-        let default_element: user_interface::UIElement = user_interface::UIElement::new(
+        let default_element: user_interface::UIElement = user_interface::UIElement::new_rect(
             (-0.9, -0.8),      // Centered in the viewport
             (0.2, 0.1),            // 20% width and 10% height of the viewport
             [0.5, 0.8, 0.1, 0.0],
-            None,
             Some(Box::new(|| {
                 println!("Random button clicked!");
             })),
         );
-        let text_element: user_interface::UIElement = user_interface::UIElement::new (
+        let text_element: user_interface::UIElement = user_interface::UIElement::new_text(
             (-0.5, 0.7),
             (0.2, 0.1),
             [0.5, 0.6, 0.7, 0.0]as[f32; 4],
-            Some("Hello!".to_string()),
+            "Hello!".to_string(),
             None,
         );
         ui_manager.add_ui_element(default_element);
