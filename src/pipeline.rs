@@ -1,20 +1,9 @@
-use super::instances::*;
-use super::{geometry, texture};
+
+use super::geometry;
 use std::borrow::Cow;
 use wgpu;
 
-#[allow(
-    dead_code,
-    unused,
-    redundant_imports,
-    unused_results,
-    unused_features,
-    unused_variables,
-    unused_mut,
-    dead_code,
-    unused_unsafe,
-    unused_attributes
-)]
+#[allow(dead_code,unused)]
 pub struct Pipeline {
     pub render_pipeline: wgpu::RenderPipeline,
     pub inside_pipeline: wgpu::RenderPipeline,
@@ -46,7 +35,7 @@ impl Pipeline {
                     buffers: &[
                         geometry::Vertex::desc(),
                         geometry::TexCoord::desc(),
-                        InstanceRaw::desc(),
+                        geometry::InstanceRaw::desc(),
                     ],
                 },
                 fragment: Some(wgpu::FragmentState {
@@ -81,7 +70,7 @@ impl Pipeline {
                     conservative: false,
                 },
                 depth_stencil: Some(wgpu::DepthStencilState {
-                    format: texture::Texture::DEPTH_FORMAT,
+                    format: geometry::Texture::DEPTH_FORMAT,
                     depth_write_enabled: true,
                     depth_compare: wgpu::CompareFunction::LessEqual,
                     stencil: wgpu::StencilState::default(),
@@ -93,7 +82,7 @@ impl Pipeline {
             });
 
         // Create inside shader (outputs a solid color)
-        let inside_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+        let inside_shader:wgpu::ShaderModule = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("Inside Shader"),
             source: wgpu::ShaderSource::Wgsl(Cow::from(
                 r#"
@@ -167,7 +156,7 @@ impl Pipeline {
                         }],
                     },
                     // Instance buffer layout (must match your InstanceRaw struct)
-                    InstanceRaw::desc(),
+                    geometry::InstanceRaw::desc(),
                 ],
             },
             fragment: Some(wgpu::FragmentState {
@@ -197,7 +186,7 @@ impl Pipeline {
                 ..Default::default()
             },
             depth_stencil: Some(wgpu::DepthStencilState {
-                format: texture::Texture::DEPTH_FORMAT,
+                format: geometry::Texture::DEPTH_FORMAT,
                 depth_write_enabled: false,
                 // if Greater render only where fragments are BEHIND existing geometry
                 // if LessEqual only outside

@@ -1,10 +1,9 @@
 ﻿
-mod texture;
+
 mod camera;
 mod config;
 mod geometry;
 mod pipeline;
-mod instances;
 mod user_interface;
 
 use std::time::Instant;
@@ -30,8 +29,8 @@ pub struct State<'a> {
     pub window: &'a Window,
     pipeline: pipeline::Pipeline,
     geometry_buffer: geometry::GeometryBuffer,
-    texture_manager: texture::TextureManager,
-    instance_manager: instances::InstanceManager,
+    texture_manager: geometry::TextureManager,
+    instance_manager: geometry::InstanceManager,
     ui_manager: user_interface::UIManager,
 }
 pub static mut CLOSED:bool = false;
@@ -71,7 +70,7 @@ impl<'a> State<'a> {
             .await
             .unwrap();
 
-        let instance_manager: instances::InstanceManager = instances::InstanceManager::new(&device);
+        let instance_manager: geometry::InstanceManager = geometry::InstanceManager::new(&device);
 
         let surface_caps: wgpu::SurfaceCapabilities = surface.get_capabilities(&adapter);
         let surface_format: wgpu::TextureFormat = surface_caps.formats.iter()
@@ -109,7 +108,7 @@ impl<'a> State<'a> {
 
         surface.configure(&device, &config);
 
-        let texture_manager: texture::TextureManager = texture::TextureManager::new(&device, &queue, &config);
+        let texture_manager: geometry::TextureManager = geometry::TextureManager::new(&device, &queue, &config);
 
         let cube: geometry::Cube = geometry::Cube::default();
 
@@ -177,7 +176,7 @@ impl<'a> State<'a> {
             self.config.height = new_size.height;
             self.camera_system.projection.resize(new_size.width, new_size.height);
             self.surface.configure(&self.device, &self.config);
-            self.texture_manager.depth_texture = texture::Texture::create_depth_texture(
+            self.texture_manager.depth_texture = geometry::Texture::create_depth_texture(
                 &self.device,
                 &self.config,
                 "depth_texture",
@@ -233,10 +232,10 @@ impl<'a> State<'a> {
                 match key {
                     Key::AltLeft | Key::AltRight => {
                         // Reset mouse to center, should make this not call the event for mousemove ...
-                        let window = self.window;
-                        let physical_size = window.inner_size();
-                        let x = (physical_size.width as f64) / 2.0;
-                        let y = (physical_size.height as f64) / 2.0;
+                        let window: &winit::window::Window = self.window;
+                        let physical_size: winit::dpi::PhysicalSize<u32> = window.inner_size();
+                        let x:f64 = (physical_size.width as f64) / 2.0;
+                        let y:f64 = (physical_size.height as f64) / 2.0;
                         window.set_cursor_position(winit::dpi::PhysicalPosition::new(x, y))
                             .expect("Set mouse cursor position");
                             return true;
@@ -316,8 +315,8 @@ impl<'a> State<'a> {
 pub async fn run() {
     env_logger::init();
     let event_loop: EventLoop<()> = EventLoop::new().unwrap();
-    let monitor = event_loop.primary_monitor().expect("No primary monitor found!");
-    let monitor_size: PhysicalSize<u32> = monitor.size(); // Monitor size in physical pixels
+    let monitor: winit::monitor::MonitorHandle = event_loop.primary_monitor().expect("No primary monitor found!");
+    let monitor_size: winit::dpi::PhysicalSize<u32> = monitor.size(); // Monitor size in physical pixels
     let config: config::AppConfig = config::AppConfig::default(monitor_size);
     let window: Window = WindowBuilder::new()
         .with_title(&config.window_title)

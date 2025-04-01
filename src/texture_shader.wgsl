@@ -22,7 +22,7 @@ struct VertexInput {
 struct VertexOutput {
     @builtin(position) clip_position: vec4<f32>,
     @location(0) uv: vec2<f32>,
-    @location(1) color: vec4<f32>, // New: Pass color to fragment shader
+    //@location(1) color: vec4<f32>, // New: Pass color to fragment shader
 };
 
 @vertex
@@ -46,8 +46,8 @@ fn vs_main(
     out.uv = model.uv;
 
     // New: Generate color from normals (for debugging face orientation)
-    let normalized_color = (model.normal + vec3<f32>(1.0)) * 0.5; // [-1,1] → [0,1]
-    out.color = vec4<f32>(normalized_color, 1.0);
+    //let normalized_color = (model.normal + vec3<f32>(1.0)) * 0.5; // [-1,1] → [0,1]
+    //out.color = vec4<f32>(normalized_color, 1.0);
 
     return out;
 }
@@ -61,5 +61,7 @@ var s_diffuse: sampler;
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let texture_color = textureSample(t_diffuse, s_diffuse, in.uv);
-    return texture_color * in.color; // Multiply texture by vertex color
+    return texture_color;
+    // Multiply texture by vertex color
+    // the * in.color makes it normal at the front but yellow at the back ...
 }

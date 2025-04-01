@@ -1,7 +1,9 @@
 
-use std::mem;
+use std::{env,path::PathBuf,result::Result,mem};
 use bytemuck::{Pod, Zeroable};
 use wgpu::util::DeviceExt;
+use cgmath::{InnerSpace, Rotation3, Zero};
+use image::GenericImageView;
 use super::geometry;
 
 #[repr(C)]
@@ -20,7 +22,7 @@ impl Vertex {
                 wgpu::VertexAttribute {
                     offset: 0,
                     shader_location: 0,
-                    format: wgpu::VertexFormat::Float32x3, // Integer was "Sint32x3"
+                    format: wgpu::VertexFormat::Float32x3,
                 },
                 wgpu::VertexAttribute {
                     offset: mem::size_of::<[f32; 3]>() as wgpu::BufferAddress,
@@ -52,107 +54,49 @@ impl TexCoord {
     }
 }
 
-#[allow(
-    dead_code,
-    unused,
-    redundant_imports,
-    unused_results,
-    unused_features,
-    unused_variables,
-    unused_mut,
-    dead_code,
-    unused_unsafe,
-    unused_attributes
-)]
+
+#[allow(dead_code,unused,unused_attributes)]
 // Update GeometryBuffer to include texture coordinate buffer
 pub struct Cube {
-    pub position: u16,
-    pub material: u16,
-    pub points: u32,
-    pub rotation: u8,
-    pub vertices: [geometry::Vertex; 8], // Use `Self` prefix for clarity
+    pub vertices: [Vertex; 8],
     pub indices: [u16; 36],
-    pub texture_coords: [geometry::TexCoord; 8], // Use `Self` prefix for clarity
+    pub texture_coords: [TexCoord; 8],
 }
 
 impl Cube {
-    #[allow(
-        dead_code,
-        unused,
-        redundant_imports,
-        unused_results,
-        unused_features,
-        unused_variables,
-        unused_mut,
-        dead_code,
-        unused_unsafe,
-        unused_attributes,
-        non_upper_case_globals
-    )]
     pub fn default() -> Self {
-        // Cube vertices (8 vertices for a cube)
-        const vertices: [geometry::Vertex; 8] = [
-            // Front face
-            geometry::Vertex { position: [0.0, 0.0, 0.0], normal: [0.0, 0.0, 1.0] },
-            geometry::Vertex { position: [0.0, 1.0, 0.0], normal: [0.0, 0.0, 1.0] },
-            geometry::Vertex { position: [1.0, 1.0, 0.0], normal: [0.0, 0.0, 1.0] },
-            geometry::Vertex { position: [1.0, 0.0, 0.0], normal: [0.0, 0.0, 1.0] },
-            // Back face
-            geometry::Vertex { position: [0.0, 0.0, -1.0], normal: [0.0, 0.0, 1.0] },
-            geometry::Vertex { position: [0.0, 1.0, -1.0], normal: [0.0, 0.0, 1.0] },
-            geometry::Vertex { position: [1.0, 1.0, -1.0], normal: [0.0, 0.0, 1.0] },
-            geometry::Vertex { position: [1.0, 0.0, -1.0], normal: [0.0, 0.0, 1.0] },
+        const VERTICES: [Vertex; 8] = [
+            Vertex { position: [0.0, 0.0, 0.0], normal: [0.0, 0.0, 1.0] },
+            Vertex { position: [0.0, 1.0, 0.0], normal: [0.0, 0.0, 1.0] },
+            Vertex { position: [1.0, 1.0, 0.0], normal: [0.0, 0.0, 1.0] },
+            Vertex { position: [1.0, 0.0, 0.0], normal: [0.0, 0.0, 1.0] },
+            Vertex { position: [0.0, 0.0, -1.0], normal: [0.0, 0.0, -1.0] },
+            Vertex { position: [0.0, 1.0, -1.0], normal: [0.0, 0.0, -1.0] },
+            Vertex { position: [1.0, 1.0, -1.0], normal: [0.0, 0.0, -1.0] },
+            Vertex { position: [1.0, 0.0, -1.0], normal: [0.0, 0.0, -1.0] },
         ];
 
-        const indices: [u16; 36] = [
-            // Front face (indices 0-3)
-            1, 0, 2, // Triangle 1 (top-right)
-            2, 0, 3, // Triangle 2 (bottom-right)
-
-            // Back face (indices 4-7)
-            4, 5, 6, // Triangle 1 (top-right)
-            4, 6, 7, // Triangle 2 (bottom-right)
-
-            // Bottom face (vertices 0, 4, 7, 3)
-            0, 4, 7, // Triangle 1 (bottom)
-            0, 7, 3, // Triangle 2 (right)
-
-            // Top face (vertices 1, 5, 6, 2)
-            5, 1, 6, // Triangle 1 (top)
-            6, 1, 2, // Triangle 2 (right)
-
-            // Right face (vertices 2, 6, 7, 3)
-            6, 2, 7, // Triangle 1 (top)
-            2, 3, 7, // Triangle 2 (bottom)
-
-            // Left face (vertices 0, 4, 5, 1)
-            5, 4, 0, // Triangle 1 (left)
-            5, 0, 1, // Triangle 2 (top)
+        const INDICES: [u16; 36] = [
+            1, 0, 2, 3, 2, 0, // Front face
+            4, 5, 6, 6, 7, 4, // Back face
+            0, 4, 7, 3, 0, 7, // Bottom
+            5, 1, 6, 1, 2, 6, // Top
+            6, 2, 7, 2, 3, 7, // Right
+            4, 0, 5, 0, 1, 5, // Left
         ];
 
-        // Texture coordinates (8 points for a cube)
-        const texture_coords: [geometry::TexCoord; 8] = [
-            // Front face vertices (indices 0-3)
-            geometry::TexCoord { uv: [1.0, 1.0] },
-            geometry::TexCoord { uv: [1.0, 0.0] },
-            geometry::TexCoord { uv: [0.0, 0.0] },
-            geometry::TexCoord { uv: [0.0, 1.0] }, // Vertex 3 (bottom-right)
-            // Back face (vertices 4-7) - reuse front's UVs for simplicity
-            geometry::TexCoord { uv: [1.0, 1.0] }, // Vertex 4
-            geometry::TexCoord { uv: [1.0, 0.0] }, // Vertex 5
-            geometry::TexCoord { uv: [0.0, 0.0] }, // Vertex 6
-            geometry::TexCoord { uv: [0.0, 1.0] }, // Vertex 7
+        const TEXTURE_COORDS: [TexCoord; 8] = [
+            TexCoord { uv: [0.0, 0.0] }, // Front
+            TexCoord { uv: [0.0, 1.0] },
+            TexCoord { uv: [1.0, 1.0] },
+            TexCoord { uv: [1.0, 0.0] },
+            TexCoord { uv: [0.0, 0.0] }, // Back
+            TexCoord { uv: [0.0, 1.0] },
+            TexCoord { uv: [1.0, 1.0] },
+            TexCoord { uv: [1.0, 0.0] },
         ];
 
-        Self {
-            position: 0,
-            material: 0,
-            points: 0,
-            rotation: 0,
-            vertices,
-            indices,
-            texture_coords,
-        }
+        Self { vertices: VERTICES, indices: INDICES, texture_coords: TEXTURE_COORDS }
     }
 }
 
@@ -172,18 +116,7 @@ impl CubeBuffer {
     }
 }
 
-#[allow(
-    dead_code,
-    unused,
-    redundant_imports,
-    unused_results,
-    unused_features,
-    unused_variables,
-    unused_mut,
-    dead_code,
-    unused_unsafe,
-    unused_attributes
-)]
+#[allow(dead_code,unused,unused_attributes)]
 pub struct GeometryBuffer {
     pub vertex_buffer: wgpu::Buffer,
     pub index_buffer: wgpu::Buffer,
@@ -223,6 +156,314 @@ impl GeometryBuffer {
             texture_coord_buffer,
             num_indices: indices.len() as u32,
             num_vertices: vertices.len() as u32,
+        }
+    }
+}
+
+
+#[allow(dead_code, unused)]
+pub struct InstanceManager {
+    pub instances: Vec<Instance>,
+    pub instance_data: Vec<InstanceRaw>,
+    pub instance_buffer: wgpu::Buffer,
+}
+
+impl InstanceManager {
+    pub fn new(
+        device: &wgpu::Device,
+    ) -> Self {
+        const SPACE_BETWEEN: f32 = 3.0;
+        const NUM_INSTANCES: u32 = 10;
+        let instances: Vec<geometry::Instance> = (0..NUM_INSTANCES).flat_map(|z| {
+            (0..NUM_INSTANCES).map(move |x| {
+                let position: cgmath::Vector3<f32> = cgmath::Vector3 {
+                    x: SPACE_BETWEEN * (x as f32 - NUM_INSTANCES as f32 / 2.0),
+                    y: 0.0,
+                    z: SPACE_BETWEEN * (z as f32 - NUM_INSTANCES as f32 / 2.0)
+                };
+
+                let rotation: cgmath::Quaternion<f32> = if position.is_zero() {
+                    cgmath::Quaternion::from_axis_angle(cgmath::Vector3::unit_z(), cgmath::Deg(0.0))
+                } else {
+                    cgmath::Quaternion::from_axis_angle(position.normalize(), cgmath::Deg(45.0))
+                };
+
+                geometry::Instance {
+                    position,
+                    rotation,
+                }
+            })
+        }).collect();
+        let instance_data: Vec<geometry::InstanceRaw> = instances.iter().map(geometry::Instance::to_raw).collect();
+        let instance_buffer: wgpu::Buffer = device.create_buffer_init(
+            &wgpu::util::BufferInitDescriptor {
+                label: Some("Instance Buffer"),
+                contents: bytemuck::cast_slice(&instance_data),
+                usage: wgpu::BufferUsages::VERTEX,
+            }
+        );
+
+        Self {
+            instances,
+            instance_data,
+            instance_buffer,
+        }
+    }
+}
+
+pub struct Instance {
+    pub position: cgmath::Vector3<f32>,
+    pub rotation: cgmath::Quaternion<f32>,
+}
+
+impl Instance {
+    pub fn to_raw(&self) -> InstanceRaw {
+        let matrix = cgmath::Matrix4::from_translation(self.position) * cgmath::Matrix4::from(self.rotation);
+        InstanceRaw { model: matrix.into() }
+    }
+}
+
+#[repr(C)]
+#[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct InstanceRaw {
+    pub model: [[f32; 4]; 4],
+}
+
+impl InstanceRaw {
+    pub fn desc() -> wgpu::VertexBufferLayout<'static> {
+        use std::mem;
+        wgpu::VertexBufferLayout {
+            array_stride: mem::size_of::<Self>() as wgpu::BufferAddress,
+            step_mode: wgpu::VertexStepMode::Instance,
+            attributes: &[
+                wgpu::VertexAttribute {
+                    offset: 0,
+                    shader_location: 5,
+                    format: wgpu::VertexFormat::Float32x4,
+                },
+                wgpu::VertexAttribute {
+                    offset: mem::size_of::<[f32; 4]>() as wgpu::BufferAddress,
+                    shader_location: 6,
+                    format: wgpu::VertexFormat::Float32x4,
+                },
+                wgpu::VertexAttribute {
+                    offset: mem::size_of::<[f32; 8]>() as wgpu::BufferAddress,
+                    shader_location: 7,
+                    format: wgpu::VertexFormat::Float32x4,
+                },
+                wgpu::VertexAttribute {
+                    offset: mem::size_of::<[f32; 12]>() as wgpu::BufferAddress,
+                    shader_location: 8,
+                    format: wgpu::VertexFormat::Float32x4,
+                },
+            ],
+        }
+    }
+}
+
+
+
+
+
+pub struct Texture {
+    #[allow(unused)]
+    pub texture: wgpu::Texture,
+    pub view: wgpu::TextureView,
+    pub sampler: wgpu::Sampler,
+}
+
+impl Texture {
+    pub fn from_bytes(
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        bytes: &[u8],
+        label: &str,
+    ) -> Result<Self, image::ImageError> {
+        let img: image::DynamicImage = image::load_from_memory(bytes)?;
+        Self::from_image(device, queue, &img, Some(label))
+    }
+
+    pub fn from_image(
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        img: &image::DynamicImage,
+        label: Option<&str>,
+    ) -> Result<Self, image::ImageError> {
+        let rgba: image::RgbaImage = img.to_rgba8();
+        let dimensions: (u32, u32) = img.dimensions();
+
+        let size: wgpu::Extent3d = wgpu::Extent3d {
+            width: dimensions.0,
+            height: dimensions.1,
+            depth_or_array_layers: 1,
+        };
+
+        let texture: wgpu::Texture = device.create_texture(&wgpu::TextureDescriptor {
+            label,
+            size,
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8UnormSrgb,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+            view_formats: &[],
+        });
+
+        queue.write_texture(
+            wgpu::TexelCopyTextureInfo {
+                aspect: wgpu::TextureAspect::All,
+                texture: &texture,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+            },
+            &rgba,
+            wgpu::TexelCopyBufferLayout {
+                offset: 0,
+                bytes_per_row: Some(4 * dimensions.0),
+                rows_per_image: Some(dimensions.1),
+            },
+            size,
+        );
+
+        let view: wgpu::TextureView = texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let sampler: wgpu::Sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            address_mode_u: wgpu::AddressMode::ClampToEdge,
+            address_mode_v: wgpu::AddressMode::ClampToEdge,
+            address_mode_w: wgpu::AddressMode::ClampToEdge,
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Nearest,
+            mipmap_filter: wgpu::FilterMode::Nearest,
+            ..Default::default()
+        });
+
+        Ok(Self { texture, view, sampler })
+    }
+
+    pub fn load_texture_bytes(path: &str) -> std::io::Result<Vec<u8>> {
+        std::fs::read(path)
+    }
+
+    pub const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
+
+    pub fn create_depth_texture(
+        device: &wgpu::Device,
+        config: &wgpu::SurfaceConfiguration,
+        label: &str,
+    ) -> Self {
+        let size: wgpu::Extent3d = wgpu::Extent3d {
+            width: config.width.max(1),
+            height: config.height.max(1),
+            depth_or_array_layers: 1,
+        };
+
+        let texture: wgpu::Texture = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some(label),
+            size,
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: Self::DEPTH_FORMAT,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+            view_formats: &[],
+        });
+
+        let view: wgpu::TextureView = texture.create_view(&wgpu::TextureViewDescriptor::default());
+
+        Self {
+            texture,
+            view,
+            sampler: device.create_sampler(&wgpu::SamplerDescriptor {
+                address_mode_u: wgpu::AddressMode::ClampToEdge,
+                address_mode_v: wgpu::AddressMode::ClampToEdge,
+                compare: Some(wgpu::CompareFunction::LessEqual),
+                ..Default::default()
+            }),
+        }
+    }
+}
+
+#[allow(dead_code, unused, unused_variables)]
+pub struct TextureManager {
+    pub texture: Texture,
+    pub depth_texture: Texture,
+    pub bind_group: wgpu::BindGroup,
+    pub bind_group_layout: wgpu::BindGroupLayout,
+    pub path: String,
+}
+
+impl TextureManager {
+    pub fn new(
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        config: &wgpu::SurfaceConfiguration,
+    ) -> Self {
+        let current_dir: PathBuf = env::current_dir().expect("Failed to get current directory");
+        println!("Current directory: {:?}", current_dir);
+
+        let raw_path: &str = r"cube-diffuse.jpg";
+
+        let full_path: PathBuf = current_dir
+            .join("resources")
+            .join(raw_path);
+        let path: &str = full_path
+            .to_str()
+            .expect("Path contains invalid UTF-8");
+
+        let bytes: Vec<u8> = Texture::load_texture_bytes(path)
+            .expect("Failed to load texture bytes");
+
+        let texture: Texture = Texture::from_bytes(device, queue, &bytes, path)
+            .expect("Failed to load texture");
+
+        let depth_texture: Texture = Texture::create_depth_texture(device, config, "depth_texture");
+
+        let bind_group_layout: wgpu::BindGroupLayout = device.create_bind_group_layout(
+            &wgpu::BindGroupLayoutDescriptor {
+                entries: &[
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Texture {
+                            multisampled: false,
+                            view_dimension: wgpu::TextureViewDimension::D2,
+                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        },
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 1,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                        count: None,
+                    },
+                ],
+                label: Some("texture_bind_group_layout"),
+            },
+        );
+
+        let bind_group: wgpu::BindGroup = device.create_bind_group(
+            &wgpu::BindGroupDescriptor {
+                layout: &bind_group_layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: wgpu::BindingResource::TextureView(&texture.view),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: wgpu::BindingResource::Sampler(&texture.sampler),
+                    },
+                ],
+                label: Some("diffuse_bind_group"),
+            },
+        );
+
+        Self {
+            texture,
+            depth_texture,
+            bind_group,
+            bind_group_layout,
+            path: raw_path.to_string(),
         }
     }
 }
