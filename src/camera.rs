@@ -150,7 +150,6 @@ impl Projection {
         znear: f32,
         zfar: f32,
     ) -> Self {
-        println!("Nice");
         Self {
             aspect: width as f32 / height as f32,
             fovy: fovy.into(),

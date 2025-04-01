@@ -169,18 +169,7 @@ fn create_inside_pipeline(
             compilation_options: Default::default(),
             targets: &[Some(wgpu::ColorTargetState {
                 format,
-                blend: Some(wgpu::BlendState {
-                    color: wgpu::BlendComponent {
-                        src_factor: wgpu::BlendFactor::SrcAlpha,
-                        dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
-                        operation: wgpu::BlendOperation::Add,
-                    },
-                    alpha: wgpu::BlendComponent {
-                        src_factor: wgpu::BlendFactor::SrcAlpha,
-                        dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
-                        operation: wgpu::BlendOperation::Add,
-                    },
-                }),
+                blend: Some(wgpu::BlendState::ALPHA_BLENDING),
                 write_mask: wgpu::ColorWrites::ALL,
             })],
         }),
@@ -388,7 +377,7 @@ pub fn draw_with_pipeline(
     }
 
     // Draw command
-    rpass.set_index_buffer(index_buffer.slice(..), wgpu::IndexFormat::Uint16);
+    rpass.set_index_buffer(index_buffer.slice(..), wgpu::IndexFormat::Uint32);
     rpass.draw_indexed(0..num_indices, 0, 0..instances);
 }
 

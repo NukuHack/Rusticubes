@@ -1,10 +1,9 @@
-
-use std::{env,path::PathBuf,result::Result,mem};
+use super::geometry;
 use bytemuck::{Pod, Zeroable};
-use wgpu::util::DeviceExt;
 use cgmath::{InnerSpace, Rotation3, Zero};
 use image::GenericImageView;
-use super::geometry;
+use std::{env, mem, path::PathBuf, result::Result};
+use wgpu::util::DeviceExt;
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Pod, Zeroable, Default)]
@@ -54,29 +53,52 @@ impl TexCoord {
     }
 }
 
-
-#[allow(dead_code,unused,unused_attributes)]
+#[allow(dead_code, unused, unused_attributes)]
 // Update GeometryBuffer to include texture coordinate buffer
 pub struct Cube {
     pub vertices: [Vertex; 8],
-    pub indices: [u16; 36],
+    pub indices: [u32; 36],
     pub texture_coords: [TexCoord; 8],
 }
 
 impl Cube {
     pub fn default() -> Self {
         const VERTICES: [Vertex; 8] = [
-            Vertex { position: [0.0, 0.0, 0.0], normal: [0.0, 0.0, 1.0] },
-            Vertex { position: [0.0, 1.0, 0.0], normal: [0.0, 0.0, 1.0] },
-            Vertex { position: [1.0, 1.0, 0.0], normal: [0.0, 0.0, 1.0] },
-            Vertex { position: [1.0, 0.0, 0.0], normal: [0.0, 0.0, 1.0] },
-            Vertex { position: [0.0, 0.0, -1.0], normal: [0.0, 0.0, -1.0] },
-            Vertex { position: [0.0, 1.0, -1.0], normal: [0.0, 0.0, -1.0] },
-            Vertex { position: [1.0, 1.0, -1.0], normal: [0.0, 0.0, -1.0] },
-            Vertex { position: [1.0, 0.0, -1.0], normal: [0.0, 0.0, -1.0] },
+            Vertex {
+                position: [0.0, 0.0, 0.0],
+                normal: [0.0, 0.0, 1.0],
+            },
+            Vertex {
+                position: [0.0, 1.0, 0.0],
+                normal: [0.0, 0.0, 1.0],
+            },
+            Vertex {
+                position: [1.0, 1.0, 0.0],
+                normal: [0.0, 0.0, 1.0],
+            },
+            Vertex {
+                position: [1.0, 0.0, 0.0],
+                normal: [0.0, 0.0, 1.0],
+            },
+            Vertex {
+                position: [0.0, 0.0, -1.0],
+                normal: [0.0, 0.0, -1.0],
+            },
+            Vertex {
+                position: [0.0, 1.0, -1.0],
+                normal: [0.0, 0.0, -1.0],
+            },
+            Vertex {
+                position: [1.0, 1.0, -1.0],
+                normal: [0.0, 0.0, -1.0],
+            },
+            Vertex {
+                position: [1.0, 0.0, -1.0],
+                normal: [0.0, 0.0, -1.0],
+            },
         ];
 
-        const INDICES: [u16; 36] = [
+        const INDICES: [u32; 36] = [
             1, 0, 2, 3, 2, 0, // Front face
             4, 5, 6, 6, 7, 4, // Back face
             0, 4, 7, 3, 0, 7, // Bottom
@@ -96,7 +118,11 @@ impl Cube {
             TexCoord { uv: [1.0, 0.0] },
         ];
 
-        Self { vertices: VERTICES, indices: INDICES, texture_coords: TEXTURE_COORDS }
+        Self {
+            vertices: VERTICES,
+            indices: INDICES,
+            texture_coords: TEXTURE_COORDS,
+        }
     }
 }
 
@@ -106,8 +132,10 @@ impl CubeBuffer {
     pub fn new(
         device: &wgpu::Device,
         cube: &geometry::Cube, // Add `crate` prefix for clarity
-    ) -> geometry::GeometryBuffer { // Use `Self` prefix for clarity
-        geometry::GeometryBuffer::new( // Use `Self` prefix for clarity
+    ) -> geometry::GeometryBuffer {
+        // Use `Self` prefix for clarity
+        geometry::GeometryBuffer::new(
+            // Use `Self` prefix for clarity
             &device,
             &cube.indices,
             &cube.vertices,
@@ -116,7 +144,7 @@ impl CubeBuffer {
     }
 }
 
-#[allow(dead_code,unused,unused_attributes)]
+#[allow(dead_code, unused, unused_attributes)]
 pub struct GeometryBuffer {
     pub vertex_buffer: wgpu::Buffer,
     pub index_buffer: wgpu::Buffer,
@@ -128,27 +156,30 @@ pub struct GeometryBuffer {
 impl GeometryBuffer {
     pub fn new(
         device: &wgpu::Device,
-        indices: &[u16],
+        indices: &[u32],
         vertices: &[geometry::Vertex], // Use `Self` prefix for clarity
         texture_coords: &[geometry::TexCoord], // Use `Self` prefix for clarity
     ) -> Self {
-        let vertex_buffer: wgpu::Buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Vertex Buffer"),
-            contents: bytemuck::cast_slice(vertices),
-            usage: wgpu::BufferUsages::VERTEX,
-        });
+        let vertex_buffer: wgpu::Buffer =
+            device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("Vertex Buffer"),
+                contents: bytemuck::cast_slice(vertices),
+                usage: wgpu::BufferUsages::VERTEX,
+            });
 
-        let texture_coord_buffer: wgpu::Buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Texture Coordinate Buffer"),
-            contents: bytemuck::cast_slice(texture_coords),
-            usage: wgpu::BufferUsages::VERTEX,
-        });
+        let texture_coord_buffer: wgpu::Buffer =
+            device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("Texture Coordinate Buffer"),
+                contents: bytemuck::cast_slice(texture_coords),
+                usage: wgpu::BufferUsages::VERTEX,
+            });
 
-        let index_buffer: wgpu::Buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Index Buffer"),
-            contents: bytemuck::cast_slice(indices),
-            usage: wgpu::BufferUsages::INDEX,
-        });
+        let index_buffer: wgpu::Buffer =
+            device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("Index Buffer"),
+                contents: bytemuck::cast_slice(indices),
+                usage: wgpu::BufferUsages::INDEX,
+            });
 
         Self {
             vertex_buffer,
@@ -160,7 +191,6 @@ impl GeometryBuffer {
     }
 }
 
-
 #[allow(dead_code, unused)]
 pub struct InstanceManager {
     pub instances: Vec<Instance>,
@@ -169,39 +199,39 @@ pub struct InstanceManager {
 }
 
 impl InstanceManager {
-    pub fn new(
-        device: &wgpu::Device,
-    ) -> Self {
+    pub fn new(device: &wgpu::Device) -> Self {
         const SPACE_BETWEEN: f32 = 3.0;
         const NUM_INSTANCES: u32 = 10;
-        let instances: Vec<geometry::Instance> = (0..NUM_INSTANCES).flat_map(|z| {
-            (0..NUM_INSTANCES).map(move |x| {
-                let position: cgmath::Vector3<f32> = cgmath::Vector3 {
-                    x: SPACE_BETWEEN * (x as f32 - NUM_INSTANCES as f32 / 2.0),
-                    y: 0.0,
-                    z: SPACE_BETWEEN * (z as f32 - NUM_INSTANCES as f32 / 2.0)
-                };
+        let instances: Vec<geometry::Instance> = (0..NUM_INSTANCES)
+            .flat_map(|z| {
+                (0..NUM_INSTANCES).map(move |x| {
+                    let position: cgmath::Vector3<f32> = cgmath::Vector3 {
+                        x: SPACE_BETWEEN * (x as f32 - NUM_INSTANCES as f32 / 2.0),
+                        y: 0.0,
+                        z: SPACE_BETWEEN * (z as f32 - NUM_INSTANCES as f32 / 2.0),
+                    };
 
-                let rotation: cgmath::Quaternion<f32> = if position.is_zero() {
-                    cgmath::Quaternion::from_axis_angle(cgmath::Vector3::unit_z(), cgmath::Deg(0.0))
-                } else {
-                    cgmath::Quaternion::from_axis_angle(position.normalize(), cgmath::Deg(45.0))
-                };
+                    let rotation: cgmath::Quaternion<f32> = if position.is_zero() {
+                        cgmath::Quaternion::from_axis_angle(
+                            cgmath::Vector3::unit_z(),
+                            cgmath::Deg(0.0),
+                        )
+                    } else {
+                        cgmath::Quaternion::from_axis_angle(position.normalize(), cgmath::Deg(45.0))
+                    };
 
-                geometry::Instance {
-                    position,
-                    rotation,
-                }
+                    geometry::Instance { position, rotation }
+                })
             })
-        }).collect();
-        let instance_data: Vec<geometry::InstanceRaw> = instances.iter().map(geometry::Instance::to_raw).collect();
-        let instance_buffer: wgpu::Buffer = device.create_buffer_init(
-            &wgpu::util::BufferInitDescriptor {
+            .collect();
+        let instance_data: Vec<geometry::InstanceRaw> =
+            instances.iter().map(geometry::Instance::to_raw).collect();
+        let instance_buffer: wgpu::Buffer =
+            device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: Some("Instance Buffer"),
                 contents: bytemuck::cast_slice(&instance_data),
                 usage: wgpu::BufferUsages::VERTEX,
-            }
-        );
+            });
 
         Self {
             instances,
@@ -218,8 +248,11 @@ pub struct Instance {
 
 impl Instance {
     pub fn to_raw(&self) -> InstanceRaw {
-        let matrix = cgmath::Matrix4::from_translation(self.position) * cgmath::Matrix4::from(self.rotation);
-        InstanceRaw { model: matrix.into() }
+        let matrix =
+            cgmath::Matrix4::from_translation(self.position) * cgmath::Matrix4::from(self.rotation);
+        InstanceRaw {
+            model: matrix.into(),
+        }
     }
 }
 
@@ -260,10 +293,6 @@ impl InstanceRaw {
         }
     }
 }
-
-
-
-
 
 pub struct Texture {
     #[allow(unused)]
@@ -336,7 +365,11 @@ impl Texture {
             ..Default::default()
         });
 
-        Ok(Self { texture, view, sampler })
+        Ok(Self {
+            texture,
+            view,
+            sampler,
+        })
     }
 
     pub fn load_texture_bytes(path: &str) -> std::io::Result<Vec<u8>> {
@@ -402,23 +435,19 @@ impl TextureManager {
 
         let raw_path: &str = r"cube-diffuse.jpg";
 
-        let full_path: PathBuf = current_dir
-            .join("resources")
-            .join(raw_path);
-        let path: &str = full_path
-            .to_str()
-            .expect("Path contains invalid UTF-8");
+        let full_path: PathBuf = current_dir.join("resources").join(raw_path);
+        let path: &str = full_path.to_str().expect("Path contains invalid UTF-8");
 
-        let bytes: Vec<u8> = Texture::load_texture_bytes(path)
-            .expect("Failed to load texture bytes");
+        let bytes: Vec<u8> =
+            Texture::load_texture_bytes(path).expect("Failed to load texture bytes");
 
-        let texture: Texture = Texture::from_bytes(device, queue, &bytes, path)
-            .expect("Failed to load texture");
+        let texture: Texture =
+            Texture::from_bytes(device, queue, &bytes, path).expect("Failed to load texture");
 
         let depth_texture: Texture = Texture::create_depth_texture(device, config, "depth_texture");
 
-        let bind_group_layout: wgpu::BindGroupLayout = device.create_bind_group_layout(
-            &wgpu::BindGroupLayoutDescriptor {
+        let bind_group_layout: wgpu::BindGroupLayout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                 entries: &[
                     wgpu::BindGroupLayoutEntry {
                         binding: 0,
@@ -438,25 +467,22 @@ impl TextureManager {
                     },
                 ],
                 label: Some("texture_bind_group_layout"),
-            },
-        );
+            });
 
-        let bind_group: wgpu::BindGroup = device.create_bind_group(
-            &wgpu::BindGroupDescriptor {
-                layout: &bind_group_layout,
-                entries: &[
-                    wgpu::BindGroupEntry {
-                        binding: 0,
-                        resource: wgpu::BindingResource::TextureView(&texture.view),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 1,
-                        resource: wgpu::BindingResource::Sampler(&texture.sampler),
-                    },
-                ],
-                label: Some("diffuse_bind_group"),
-            },
-        );
+        let bind_group: wgpu::BindGroup = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            layout: &bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&texture.view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Sampler(&texture.sampler),
+                },
+            ],
+            label: Some("diffuse_bind_group"),
+        });
 
         Self {
             texture,
