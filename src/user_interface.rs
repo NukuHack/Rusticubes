@@ -119,7 +119,8 @@ impl UIManager {
             match &element.r#type {
                 val if *val == String::from("text") => {
                     self.process_text_element(&element, &mut vertices, &mut indices, current_index);
-                    current_index += (element.text.len() * 4) as u32;
+                    // Add 4 (rectangle) + (text.len() *4) vertices
+                    current_index += 4 + (element.text.len() as u32 * 4);
                 }
                 val if *val == String::from("rect") => {
                     self.process_rect_element(&element, &mut vertices, &mut indices, current_index);
@@ -178,7 +179,8 @@ impl UIManager {
                 });
             }
 
-            indices.extend(self.rectangle_indices(current_index + (i as u32 * 4)));
+            let base = current_index + 4 + (i as u32 * 4); // Add 4 to skip the rectangle's vertices
+            indices.extend(self.rectangle_indices(base));
         }
     }
 
@@ -203,10 +205,11 @@ impl UIManager {
     ) {
         let positions = [[x, y], [x + w, y], [x, y + h], [x + w, y + h]];
 
-        for &position in &positions {
+        let uv = [0.0, 0.0]; // Keep this as-is (already correct)
+        for j in 0..4 {
             vertices.push(Vertex {
-                position,
-                uv: [0.0, 0.0],
+                position: positions[j],
+                uv, // All vertices use the same UV (white pixel)
                 color,
             });
         }

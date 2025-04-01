@@ -302,7 +302,10 @@ impl<'a> State<'a> {
         let delta_seconds: Duration = current_time - self.previous_frame_time;
         self.previous_frame_time = current_time;
         self.camera_system.update(&self.queue, delta_seconds);
-        self.ui_manager.update(&self.queue);
+
+        if self.ui_manager.visibility {
+            self.ui_manager.update(&self.queue);
+        }
     }
 
     pub fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
