@@ -99,6 +99,7 @@ pub struct UIManager {
 
 impl UIManager {
     pub fn update(&mut self, queue: &wgpu::Queue) {
+        println!("Processing frame");
         let (vertices, indices) = self.process_elements();
 
         // Update GPU buffers
@@ -120,16 +121,20 @@ impl UIManager {
                 val if *val == String::from("text") => {
                     self.process_text_element(&element, &mut vertices, &mut indices, current_index);
                     // Add 4 (rectangle) + (text.len() *4) vertices
+                    println!("Processing text at index: {}", current_index);
                     current_index += 4 + (element.text.len() as u32 * 4);
+                    println!("Processed text: {}", current_index);
                 }
                 val if *val == String::from("rect") => {
                     self.process_rect_element(&element, &mut vertices, &mut indices, current_index);
+                    println!("Processing rectangle at index: {}", current_index);
                     current_index += 4;
+                    println!("Processed rectangle: {}", current_index);
                 }
                 String { .. } => println!("unimplemented ui type {:?}", element.r#type),
             }
         }
-
+        
         (vertices, indices)
     }
 
@@ -178,6 +183,11 @@ impl UIManager {
                     color: element.color,
                 });
             }
+            
+            println!("text element_f");
+            for (k, vertex) in vertices.iter().enumerate() {
+                println!("Vertex {}: {:?}", k, vertex.position);
+            }
 
             let base = current_index + 4 + (i as u32 * 4); // Add 4 to skip the rectangle's vertices
             indices.extend(self.rectangle_indices(base));
@@ -194,6 +204,11 @@ impl UIManager {
     ) {
         self.add_rectangle(vertices, element.position, element.size, element.color);
         indices.extend(self.rectangle_indices(current_index));
+        
+        println!("rect element");
+        for (i, vertex) in vertices.iter().enumerate() {
+            println!("Vertex {}: {:?}", i, vertex.position);
+        }
     }
 
     fn add_rectangle(
