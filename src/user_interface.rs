@@ -4,8 +4,8 @@ use std::borrow::Cow;
 #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
 struct Vertex {
     position: [f32; 2], // Normalized device coordinates (-1.0 to 1.0)
-    color: [f32; 4],    // RGBA color values (0.0-1.0)
     uv: [f32; 2],       // Texture coordinates (0.0 to 1.0)
+    color: [f32; 4],    // RGBA color values (0.0-1.0)
 }
 
 #[allow(dead_code, unused)]
@@ -99,7 +99,6 @@ pub struct UIManager {
 
 impl UIManager {
     pub fn update(&mut self, queue: &wgpu::Queue) {
-        println!("Processing frame");
         let (vertices, indices) = self.process_elements();
 
         // Update GPU buffers
@@ -119,22 +118,27 @@ impl UIManager {
         for element in &self.elements {
             match &element.r#type {
                 val if *val == String::from("text") => {
-                    self.process_text_element(&element, &mut vertices, &mut indices, current_index);
+                    self.process_text_element(
+                        &element,
+                        &mut vertices,
+                        &mut indices,
+                        &mut current_index,
+                    );
                     // Add 4 (rectangle) + (text.len() *4) vertices
-                    println!("Processing text at index: {}", current_index);
-                    current_index += 4 + (element.text.len() as u32 * 4);
-                    println!("Processed text: {}", current_index);
+                    current_index += element.text.len() as u32 * 4;
                 }
                 val if *val == String::from("rect") => {
-                    self.process_rect_element(&element, &mut vertices, &mut indices, current_index);
-                    println!("Processing rectangle at index: {}", current_index);
-                    current_index += 4;
-                    println!("Processed rectangle: {}", current_index);
+                    self.process_rect_element(
+                        &element,
+                        &mut vertices,
+                        &mut indices,
+                        &mut current_index,
+                    );
                 }
                 String { .. } => println!("unimplemented ui type {:?}", element.r#type),
             }
         }
-        
+
         (vertices, indices)
     }
 
@@ -143,7 +147,7 @@ impl UIManager {
         element: &UIElement,
         vertices: &mut Vec<Vertex>,
         indices: &mut Vec<u32>,
-        current_index: u32,
+        current_index: &mut u32,
     ) {
         let (x, y) = element.position;
         let (w, h) = element.size;
@@ -152,9 +156,9 @@ impl UIManager {
         // Background rectangle
         let background_color = [1.0, 1.0, 1.0, 0.8];
         self.add_rectangle(vertices, element.position, element.size, background_color);
-        indices.extend(self.rectangle_indices(current_index));
-
-        // Text characters
+        indices.extend(self.rectangle_indices(*current_index));
+        *current_index += 4; // Add 4 to skip the rectangle's vertices
+                             // Text characters
         let (char_width, char_height) = (w / char_count, h / char_count);
         for (i, c) in element.text.chars().enumerate() {
             let (u_min, v_min, u_max, v_max) = get_uv(c);
@@ -183,13 +187,8 @@ impl UIManager {
                     color: element.color,
                 });
             }
-            
-            println!("text element_f");
-            for (k, vertex) in vertices.iter().enumerate() {
-                println!("Vertex {}: {:?}", k, vertex.position);
-            }
 
-            let base = current_index + 4 + (i as u32 * 4); // Add 4 to skip the rectangle's vertices
+            let base = *current_index + (i as u32 * 4);
             indices.extend(self.rectangle_indices(base));
         }
     }
@@ -200,15 +199,11 @@ impl UIManager {
         element: &UIElement,
         vertices: &mut Vec<Vertex>,
         indices: &mut Vec<u32>,
-        current_index: u32,
+        current_index: &mut u32,
     ) {
         self.add_rectangle(vertices, element.position, element.size, element.color);
-        indices.extend(self.rectangle_indices(current_index));
-        
-        println!("rect element");
-        for (i, vertex) in vertices.iter().enumerate() {
-            println!("Vertex {}: {:?}", i, vertex.position);
-        }
+        indices.extend(self.rectangle_indices(*current_index));
+        *current_index += 4;
     }
 
     fn add_rectangle(
@@ -218,13 +213,18 @@ impl UIManager {
         (w, h): (f32, f32),
         color: [f32; 4],
     ) {
-        let positions = [[x, y], [x + w, y], [x, y + h], [x + w, y + h]];
+        // Positions are relative to the bottom-left corner aka the position of the element
+        let positions = [
+            [x, y + h],     // Top-left
+            [x + w, y + h], // Top-right
+            [x, y],         // Bottom-left
+            [x + w, y],     // Bottom-right
+        ];
 
-        let uv = [0.0, 0.0]; // Keep this as-is (already correct)
         for j in 0..4 {
             vertices.push(Vertex {
                 position: positions[j],
-                uv, // All vertices use the same UV (white pixel)
+                uv: [0.0, 0.0],
                 color,
             });
         }
