@@ -11,22 +11,23 @@ A playful repo for learning Rust by building a game (no promises tho).
 ## 🛠️ What's Inside?  
 - **Learning playground**: Small Rust projects to master concepts.  
 - **Game prototype**: WIP experiments with movement, visuals, and sounds.  
-- **Batch scripts**: `install.bat`, `run.bat`, and `tools.bat` for easy setup.
+- **Batch script**: `run.bat` for easy setup.
 
 ---
 
 ## 🔥 Quick Start Guide  
 
 1. **Install Rust & Dependencies**  
-   Run `install.bat` to set up Rust and required tools.  
+   Run `run.bat` to set up Rust and required tools.  
    *Handles PATH configs and dependencies automatically.*  
 
 2. **Optional Tools**  
-   If needed, run `tools.bat` (admin privileges may be required).  
-   *Not maintained, optional.*  
+   Run `run.bat` and download rust with other paths (admin privileges may be required).  
+   *Not really maintained, optional.*  
 
 3. **Run Your Rust App**  
    Use `run.bat` to compile and launch your project with one click.
+   *If rust is correctly placed at your computer it will instantly run the file*
 
 ---
 
@@ -39,7 +40,7 @@ A playful repo for learning Rust by building a game (no promises tho).
   Delete `.cargo` in `C:\Users\<YourName>` and rerun `install.bat`.  
 
 - **Compiler errors**  
-  Double-check that `install.bat` ran successfully.
+  Double-check that `run.bat` ran successfully.
 
 ---
 
