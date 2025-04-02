@@ -84,7 +84,7 @@ fn create_inside_shader(device: &wgpu::Device) -> wgpu::ShaderModule {
                     let model_matrix = mat4x4<f32>(
                         instance.model_matrix_0,
                         instance.model_matrix_1,
-                        instance.model_matrix_2 * -1.0, // Invert Y for coordinate system
+                        instance.model_matrix_2, // Invert Y for coordinate system
                         instance.model_matrix_3,
                     );
                     let world_pos = model_matrix * vec4<f32>(vertex.position, 1.0);
@@ -155,11 +155,7 @@ fn create_inside_pipeline(
             compilation_options: Default::default(),
             buffers: &*&[
                 // Reference the const + static instance layout
-                wgpu::VertexBufferLayout {
-                    array_stride: std::mem::size_of::<[f32; 3]>() as wgpu::BufferAddress,
-                    step_mode: wgpu::VertexStepMode::Vertex,
-                    attributes: &VERTEX_ATTRIBUTES_POS,
-                },
+                geometry::Vertex::desc(),
                 geometry::InstanceRaw::desc(),
             ],
         },
@@ -186,22 +182,17 @@ fn create_inside_pipeline(
 /// Creates default primitive state configuration
 fn default_primitive_state() -> wgpu::PrimitiveState {
     wgpu::PrimitiveState {
-        topology: wgpu::PrimitiveTopology::TriangleList,
         front_face: wgpu::FrontFace::Ccw,
+        topology: wgpu::PrimitiveTopology::TriangleList,
         cull_mode: Some(wgpu::Face::Back),
         ..Default::default()
     }
 }
 
-// --- Pipeline Configuration Functions ---
-
-/// Vertex attributes for position-only buffers (now static)
-const VERTEX_ATTRIBUTES_POS: [wgpu::VertexAttribute; 1] = wgpu::vertex_attr_array![0 => Float32x3];
-
 /// Creates primitive state for inside pipeline (front face culling)
 fn inside_primitive_state() -> wgpu::PrimitiveState {
     wgpu::PrimitiveState {
-        cull_mode: Some(wgpu::Face::Front),
+        front_face: wgpu::FrontFace::Cw,
         ..default_primitive_state()
     }
 }
