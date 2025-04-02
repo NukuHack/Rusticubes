@@ -162,24 +162,20 @@ impl UIManager {
         let (char_width, char_height) = (w / char_count, h / char_count);
         for (i, c) in element.text.chars().enumerate() {
             let (u_min, v_min, u_max, v_max) = get_uv(c);
-
             let char_x = x + (i as f32) * char_width;
             let char_y = y;
-
             let positions = [
                 [char_x, char_y],
                 [char_x + char_width, char_y],
                 [char_x, char_y + char_height],
                 [char_x + char_width, char_y + char_height],
             ];
-
             let uvs = [
                 [u_min, v_min],
                 [u_max, v_min],
                 [u_min, v_max],
                 [u_max, v_max],
             ];
-
             for j in 0..4 {
                 vertices.push(Vertex {
                     position: positions[j],
@@ -187,7 +183,6 @@ impl UIManager {
                     color: element.color,
                 });
             }
-
             let base = *current_index + (i as u32 * 4);
             indices.extend(self.rectangle_indices(base));
         }
@@ -249,7 +244,6 @@ impl UIManager {
             height: 128,
             depth_or_array_layers: 1,
         };
-        let font_data = [0xFFu8; (128 * 128 * 4) as usize]; // Placeholder white texture
         let font_texture = device.create_texture(&wgpu::TextureDescriptor {
             view_formats: &[wgpu::TextureFormat::Rgba8UnormSrgb],
             label: Some("Font Texture"),
@@ -260,6 +254,22 @@ impl UIManager {
             format: wgpu::TextureFormat::Rgba8UnormSrgb,
             usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
         });
+        let font_data = [0xFFu8; (128 * 128 * 4) as usize]; //generate_font_atlas(); // Generate or load your font atlas data
+        queue.write_texture(
+            wgpu::TexelCopyTextureInfo {
+                aspect: wgpu::TextureAspect::All,
+                texture: &font_texture,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+            },
+            &font_data,
+            wgpu::TexelCopyBufferLayout {
+                offset: 0,
+                bytes_per_row: Some(512),
+                rows_per_image: None,
+            },
+            font_size,
+        );
 
         queue.write_texture(
             wgpu::TexelCopyTextureInfo {
@@ -493,18 +503,50 @@ pub fn handle_ui_click(state: &mut super::State) {
 pub fn get_uv(c: char) -> (f32, f32, f32, f32) {
     let code = c as u32;
     if code < 32 {
-        return (0.0, 0.0, 0.0, 0.0);
-    } // Non-printable characters
-
+        return (0.0, 0.0, 0.0, 0.0); // Non-printable characters
+    }
     let grid_size = 16; // 16x16 grid in 128x128 texture
     let index = (code - 32) as usize;
     let (x, y) = (index % grid_size, index / grid_size);
     let cell_size = 8.0; // Each cell is 8x8 pixels
-
     let u_min = (x as f32 * cell_size) / 128.0;
     let v_min = (y as f32 * cell_size) / 128.0;
     let u_max = (x as f32 + 1.0) * cell_size / 128.0;
     let v_max = (y as f32 + 1.0) * cell_size / 128.0;
-
     (u_min, v_min, u_max, v_max)
+}
+
+pub fn generate_font_atlas() -> Vec<u8> {
+    const FONT_WIDTH: usize = 128;
+    const FONT_HEIGHT: usize = 128;
+    const CELL_SIZE: usize = 8; // Each character cell is 8x8 pixels
+
+    let mut font_data = vec![0u8; FONT_WIDTH * FONT_HEIGHT * 4]; // RGBA buffer
+
+    // Draw test pattern for each character (ASCII 32 to 126)
+    for code in 32..=126 {
+        let index = (code - 32) as usize;
+        let x = (index % 16) * CELL_SIZE; // 16 columns in 128px width
+        let y = (index / 16) * CELL_SIZE;
+
+        // Draw a 4x4 square in the center of the cell
+        let center_x = x + (CELL_SIZE / 2 - 2);
+        let center_y = y + (CELL_SIZE / 2 - 2);
+
+        for dy in 0..4 {
+            for dx in 0..4 {
+                let px = center_x + dx;
+                let py = center_y + dy;
+
+                // Calculate pixel position (row-major order)
+                let offset = (py * FONT_WIDTH + px) * 4;
+                font_data[offset] = 255; // R
+                font_data[offset + 1] = 255; // G
+                font_data[offset + 2] = 255; // B
+                font_data[offset + 3] = 255; // A (opaque)
+            }
+        }
+    }
+
+    font_data
 }
