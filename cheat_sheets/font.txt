@@ -1,0 +1,77 @@
+
+
+
+
+Here is a list of Unicode characters from code point 32 (space) to 287 (inclusive), grouped into 16 groups of 16 characters each :
+
+Group 1 (32–47)
+! " # $ % & ' ( ) * + , - . /
+
+Group 2 (48–63)
+0 1 2 3 4 5 6 7 8 9 : ; < = > ?
+
+Group 3 (64–79)
+@ A B C D E F G H I J K L M N O
+
+Group 4 (80–95)
+P Q R S T U V W X Y Z [ \ ] ^ _
+
+Group 5 (96–111)
+` a b c d e f g h i j k l m n o
+
+Group 6 (112–127)
+p q r s t u v w x y z { | } ~ DEL
+
+Group 7 (128–143)
+These are C1 control codes (non-printable characters). They typically display as empty or replacement characters (e.g., ``).
+
+Group 8 (144–159)
+Also C1 control codes (non-printable).
+
+Group 9 (160–175)
+- ¡ ¢ £ ¤ ¥ ¦ § ¨ © ª « ¬ ­ ® ¯
+
+-: No-break space
+¡: Inverted exclamation mark
+¢: Cent sign
+£: Pound sign
+¥: Yen sign
+§: Section sign
+©: Copyright sign
+®: Registered sign
+
+Group 10 (176–191)
+° ± ² ³ ´ µ ¶ · ¸ ¹ º » ¼ ½ ¾ ¿
+
+°: Degree sign
+±: Plus-minus sign
+²: Superscript two
+³: Superscript three
+µ: Micro sign
+¶: Pilcrow (paragraph)
+¿: Inverted question mark
+
+Group 11 (192–207)
+À Á Â Ã Ä Å Æ Ç È É Ê Ë Ì Í Î Ï
+
+Uppercase accented Latin letters (e.g., À, Á, Ä, Å).
+Group 12 (208–223)
+ì í î ï ð ñ ò × ÷ ø ù ú û ü ý þ
+
+Lowercase accented letters and symbols (e.g., ð, ñ, ×, ÷).
+Group 13 (224–239)
+à á â ã ä å æ ç è é ê ë ì í î ï
+
+Lowercase accented Latin letters (e.g., à, á, ë, î).
+Group 14 (240–255)
+ð þ ù ú û ü ý ÿ Œ œ Š š Ÿ ž Ÿ ƒ
+
+Mixed lowercase/uppercase letters and symbols (e.g., ð, þ, Œ, œ).
+Group 15 (256–271)
+Ā Ă Ą Ć Ĉ Ċ Č Ď Đ Ĕ Ė Ę Ě Ĝ Ğ Ġ
+
+Latin Extended-A block (e.g., Ā, Ć, Č).
+Group 16 (272–287)
+Ģ Ĥ Ħ Ĩ Ī Ĭ Į İ Ĳ Ĵ Ķ Ĺ Ļ Ľ Ŀ Ł
+
+Latin Extended-A block (e.g., Ģ, Ħ, Ľ).
