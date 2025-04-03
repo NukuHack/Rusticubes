@@ -154,21 +154,22 @@ impl UIManager {
         let char_count = element.text.chars().count() as f32;
 
         // Background rectangle
-        let background_color = [1.0, 1.0, 1.0, 0.8];
-        self.add_rectangle(vertices, element.position, element.size, background_color);
+        self.add_rectangle(vertices, element.position, element.size, element.color);
         indices.extend(self.rectangle_indices(*current_index));
         *current_index += 4; // Add 4 to skip the rectangle's vertices
-                             // Text characters
-        let (char_width, char_height) = (w / char_count, h / char_count);
+        let padding: f32 = 1.05;
+        let (padded_w, padded_h): (f32, f32) = (w / padding, h / padding);
+        let (overhang_w, overhang_h): (f32, f32) = (w - padded_w, h - padded_h);
+        let char_size: f32 = (padded_w / char_count).min(padded_h);
         for (i, c) in element.text.chars().enumerate() {
             let (u_min, v_min, u_max, v_max) = get_uv(c);
-            let char_x = x + (i as f32) * char_width;
-            let char_y = y;
+            let char_x = x + (i as f32) * char_size + overhang_w / 2.0;
+            let char_y = y + overhang_h / 2.0; // Bottom-left corner of the character
             let positions = [
                 [char_x, char_y],
-                [char_x + char_width, char_y],
-                [char_x, char_y + char_height],
-                [char_x + char_width, char_y + char_height],
+                [char_x + char_size, char_y],
+                [char_x, char_y + char_size],
+                [char_x + char_size, char_y + char_size],
             ];
             let uvs = [
                 [u_min, v_min],
@@ -183,8 +184,8 @@ impl UIManager {
                     color: element.color,
                 });
             }
-            let base = *current_index + (i as u32 * 4);
-            indices.extend(self.rectangle_indices(base));
+            indices.extend(self.rectangle_indices(*current_index));
+            *current_index += 4;
         }
     }
 
@@ -509,44 +510,24 @@ pub fn get_uv(c: char) -> (f32, f32, f32, f32) {
     let index = (code - 32) as usize;
     let (x, y) = (index % grid_size, index / grid_size);
     let cell_size = 8.0; // Each cell is 8x8 pixels
-    let u_min = (x as f32 * cell_size) / 128.0;
-    let v_min = (y as f32 * cell_size) / 128.0;
+    let u_min = (x as f32) * cell_size / 128.0;
+    let v_min = (y as f32) * cell_size / 128.0;
     let u_max = (x as f32 + 1.0) * cell_size / 128.0;
     let v_max = (y as f32 + 1.0) * cell_size / 128.0;
-    (u_min, v_min, u_max, v_max)
+    // idk why but i had to reverse the image to be ... right ?
+    (u_min, v_max, u_max, v_min)
 }
 
-pub fn generate_font_atlas() -> Vec<u8> {
-    const FONT_WIDTH: usize = 128;
-    const FONT_HEIGHT: usize = 128;
-    const CELL_SIZE: usize = 8; // Each character cell is 8x8 pixels
+pub fn get_font_atlas() -> Vec<u8> {
+    let current_dir: std::path::PathBuf =
+        std::env::current_dir().expect("Failed to get current directory");
 
-    let mut font_data = vec![0u8; FONT_WIDTH * FONT_HEIGHT * 4]; // RGBA buffer
+    let raw_path: &str = r"font.png";
 
-    // Draw test pattern for each character (ASCII 32 to 126)
-    for code in 32..=126 {
-        let index = (code - 32) as usize;
-        let x = (index % 16) * CELL_SIZE; // 16 columns in 128px width
-        let y = (index / 16) * CELL_SIZE;
+    let full_path: std::path::PathBuf = current_dir.join("resources").join(raw_path);
+    let path: &str = full_path.to_str().expect("Path contains invalid UTF-8");
 
-        // Draw a 4x4 square in the center of the cell
-        let center_x = x + (CELL_SIZE / 2 - 2);
-        let center_y = y + (CELL_SIZE / 2 - 2);
-
-        for dy in 0..4 {
-            for dx in 0..4 {
-                let px = center_x + dx;
-                let py = center_y + dy;
-
-                // Calculate pixel position (row-major order)
-                let offset = (py * FONT_WIDTH + px) * 4;
-                font_data[offset] = 255; // R
-                font_data[offset + 1] = 255; // G
-                font_data[offset + 2] = 255; // B
-                font_data[offset + 3] = 255; // A (opaque)
-            }
-        }
-    }
-
-    font_data
+    let img = image::open(path).expect("Failed to load font atlas");
+    let rgba = img.into_rgba8();
+    rgba.into_raw()
 }
