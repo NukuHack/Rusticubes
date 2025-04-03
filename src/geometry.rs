@@ -2,7 +2,7 @@ use super::geometry;
 use bytemuck::{Pod, Zeroable};
 use cgmath::{InnerSpace, Rotation3, Zero};
 use image::GenericImageView;
-use std::{env, mem, path::PathBuf, result::Result};
+use std::{env, mem, path, result};
 use wgpu::util::DeviceExt;
 
 #[repr(C)]
@@ -307,7 +307,7 @@ impl Texture {
         queue: &wgpu::Queue,
         bytes: &[u8],
         label: &str,
-    ) -> Result<Self, image::ImageError> {
+    ) -> result::Result<Self, image::ImageError> {
         let img: image::DynamicImage = image::load_from_memory(bytes)?;
         Self::from_image(device, queue, &img, Some(label))
     }
@@ -317,7 +317,7 @@ impl Texture {
         queue: &wgpu::Queue,
         img: &image::DynamicImage,
         label: Option<&str>,
-    ) -> Result<Self, image::ImageError> {
+    ) -> result::Result<Self, image::ImageError> {
         let rgba: image::RgbaImage = img.to_rgba8();
         let dimensions: (u32, u32) = img.dimensions();
 
@@ -430,12 +430,13 @@ impl TextureManager {
         queue: &wgpu::Queue,
         config: &wgpu::SurfaceConfiguration,
     ) -> Self {
-        let current_dir: PathBuf = env::current_dir().expect("Failed to get current directory");
+        let current_dir: path::PathBuf =
+            env::current_dir().expect("Failed to get current directory");
         println!("Current directory: {:?}", current_dir);
 
         let raw_path: &str = r"cube-diffuse.jpg";
 
-        let full_path: PathBuf = current_dir.join("resources").join(raw_path);
+        let full_path: path::PathBuf = current_dir.join("resources").join(raw_path);
         let path: &str = full_path.to_str().expect("Path contains invalid UTF-8");
 
         let bytes: Vec<u8> =

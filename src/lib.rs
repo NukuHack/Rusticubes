@@ -132,16 +132,16 @@ impl<'a> State<'a> {
         let default_element: user_interface::UIElement = user_interface::UIElement::new_rect(
             (-0.5, -0.5),
             (0.2, 0.1),
-            [1.0, 0.5, 0.5, 1.0],
+            [1.0, 0.6, 0.7, 0.5],
             Some(Box::new(|| {
                 println!("Random button clicked!");
             })),
         );
         let text_element: user_interface::UIElement = user_interface::UIElement::new_text(
             (-0.5, 0.7),
-            (0.2, 0.1),
-            [1.0, 0.6, 0.7, 1.0],
-            "Hello!".to_string(),
+            (0.5, 0.2),
+            [1.0, 0.6, 0.7, 0.5],
+            "0123456789<=>?".to_string(),
             None,
         );
         ui_manager.add_ui_element(default_element);
