@@ -50,7 +50,8 @@ echo [[31mERROR[0m] Deployment failed
 echo.
 echo [[33mOPTION[0m] Would you like to:
 echo [[33m1[0m] Reinstall Rust
-echo [[33m2[0m] Exit
+echo [[33m2[0m] Re-run deploy script
+echo [[33m3[0m] Exit
 set /p OPTION=^> 
 if "%OPTION%" == "1" (
     call :install_rust && (
@@ -60,6 +61,8 @@ if "%OPTION%" == "1" (
         echo [[31mERROR[0m] Reinstallation failed
         pause >nul & exit /b 1
     )
+)else if "%OPTION%" == "2" (
+    call :main_run && goto :error
 ) else (
     echo [[31mERROR[0m] Exiting deployment
     pause >nul & exit /b 1
