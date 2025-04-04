@@ -124,8 +124,6 @@ impl UIManager {
                         &mut indices,
                         &mut current_index,
                     );
-                    // Add 4 (rectangle) + (text.len() *4) vertices
-                    current_index += element.text.len() as u32 * 4;
                 }
                 val if *val == String::from("rect") => {
                     self.process_rect_element(
@@ -255,7 +253,7 @@ impl UIManager {
             format: wgpu::TextureFormat::Rgba8UnormSrgb,
             usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
         });
-        let font_data = [0xFFu8; (128 * 128 * 4) as usize]; //generate_font_atlas(); // Generate or load your font atlas data
+        let font_data = get_font_atlas(); // Generate or load your font atlas data
         queue.write_texture(
             wgpu::TexelCopyTextureInfo {
                 aspect: wgpu::TextureAspect::All,
@@ -372,42 +370,49 @@ impl UIManager {
                 label: Some("UI Shader"),
                 source: wgpu::ShaderSource::Wgsl(Cow::from(
                     r#"
-                        struct VertexInput {
-                            @location(0) position: vec2<f32>,
-                            @location(1) uv: vec2<f32>,
-                            @location(2) color: vec4<f32>,
-                        };
+struct VertexInput {
+    @location(0) position: vec2<f32>,
+    @location(1) uv: vec2<f32>,
+    @location(2) color: vec4<f32>,
+};
 
-                        struct VertexOutput {
-                            @location(0) uv: vec2<f32>,
-                            @location(1) color: vec4<f32>,
-                            // Mark the position with @builtin(position)
-                            @builtin(position) position: vec4<f32>,
-                        };
+struct VertexOutput {
+    @location(0) uv: vec2<f32>,
+    @location(1) color: vec4<f32>,
+    // Mark the position with @builtin(position)
+    @builtin(position) position: vec4<f32>,
+};
 
-                        @vertex
-                        fn vs_main(in: VertexInput) -> VertexOutput {
-                            var out: VertexOutput;
-                            out.uv = in.uv;
-                            out.color = in.color;
-                            // Assign to the position field instead of gl_Position
-                            out.position = vec4<f32>(in.position, 0.0, 1.0);
-                            return out;
-                        }
+@vertex
+fn vs_main(in: VertexInput) -> VertexOutput {
+    var out: VertexOutput;
+    out.uv = in.uv;
+    out.color = in.color;
+    // Assign to the position field instead of gl_Position
+    out.position = vec4<f32>(in.position, 0.0, 1.0);
+    return out;
+}
+@group(0) @binding(0) var font_sampler: sampler;
+@group(0) @binding(1) var font_texture: texture_2d<f32>;
 
-                        @group(0) @binding(0) var font_sampler: sampler;
-                        @group(0) @binding(1) var font_texture: texture_2d<f32>;
+struct FragmentInput {
+    @location(0) uv: vec2<f32>,
+    @location(1) color: vec4<f32>,
+};
 
-                        struct FragmentInput {
-                            @location(0) uv: vec2<f32>,
-                            @location(1) color: vec4<f32>,
-                        };
+@fragment
+fn fs_main(in: FragmentInput) -> @location(0) vec4<f32> {
+    let uv_zero = vec2<f32>(0.0, 0.0);
+    let is_uv_zero = in.uv == uv_zero;
 
-                        @fragment
-                        fn fs_main(in: FragmentInput) -> @location(0) vec4<f32> {
-                            let sampled_color = textureSample(font_texture, font_sampler, in.uv);
-                            return in.color * sampled_color;
-                        }
+    if any(is_uv_zero) {
+        return in.color;
+    }
+
+    // sample the texture
+    let sampled_color = textureSample(font_texture, font_sampler, in.uv);
+    return in.color * sampled_color;
+}
                     "#,
                 )),
             });
