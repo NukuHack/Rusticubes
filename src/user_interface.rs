@@ -1,9 +1,4 @@
 use std::borrow::Cow;
-use std::io;
-
-use std::fs::File;
-use std::io::BufRead;
-use std::path::Path;
 
 #[repr(C)]
 #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
@@ -100,16 +95,6 @@ pub struct UIManager {
     pub bind_group: wgpu::BindGroup,
     pub font_texture: wgpu::Texture,
     pub font_sampler: wgpu::Sampler,
-    /*
-    pub font: rusttype::Font<'static>,
-    pub texture_buffer: Vec<u8>,
-    pub texture_width: u32,
-    pub texture_height: u32,
-    pub cell_size: u32,
-    pub current_cell_x: u32,
-    pub current_cell_y: u32,
-    pub glyphs: std::collections::HashMap<char, (f32, f32, f32, f32)>,
-    */
 }
 
 impl UIManager {
