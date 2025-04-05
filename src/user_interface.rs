@@ -9,6 +9,7 @@ struct Vertex {
 }
 
 #[allow(dead_code, unused)]
+#[derive(Default)]
 pub struct UIElement {
     pub position: (f32, f32), // Center position in normalized coordinates
     pub size: (f32, f32),     // Width and height in normalized coordinates
@@ -20,67 +21,61 @@ pub struct UIElement {
 }
 #[allow(dead_code, unused)]
 impl UIElement {
+    pub const DEFAULT_COLOR: [f32; 4] = [1.0, 1.0, 1.0, 0.9];
+    pub const DEFAULT_SIZE: (f32, f32) = (0.2, 0.2);
+
     pub fn default() -> Self {
         Self {
-            position: (0.0, 0.0),        // Centered in the viewport
-            size: (0.2, 0.2),            // 20% width and 10% height of the viewport
-            color: [1.0, 1.0, 1.0, 1.0], // Default to purple (fully opaque
-            r#type: "rect".to_string(),
-            text: "None".to_string(),
+            position: (0.0, 0.0),
+            size: Self::DEFAULT_SIZE,
+            color: Self::DEFAULT_COLOR,
+            r#type: "rect".into(),
+            text: "None".into(),
             hovered: false,
             on_click: None,
         }
     }
+
     pub fn new_rect(
         position: (f32, f32),
         size: (f32, f32),
-        color: [f32; 4],
+        color: [f32; 3],
         on_click: Option<Box<dyn FnMut()>>,
     ) -> Self {
         Self {
             position,
             size,
-            color,
-            r#type: "rect".to_string(),
-            text: "None".to_string(),
-            hovered: false,
+            color: [color[0], color[1], color[2], 0.9],
+            r#type: "rect".into(),
+            text: "None".into(),
             on_click,
+            ..Default::default()
         }
     }
+
     pub fn new_text(
         position: (f32, f32),
         size: (f32, f32),
-        color: [f32; 4],
+        color: [f32; 3],
         text: String,
         on_click: Option<Box<dyn FnMut()>>,
     ) -> Self {
         Self {
             position,
             size,
-            color,
-            r#type: "text".to_string(),
+            color: [color[0], color[1], color[2], 0.9],
+            r#type: "text".into(),
             text,
-            hovered: false,
             on_click,
+            ..Default::default()
         }
     }
-    pub fn new(
-        position: (f32, f32),
-        size: (f32, f32),
-        color: [f32; 4],
-        r#type: String,
-        text: String,
-        on_click: Option<Box<dyn FnMut()>>,
-    ) -> Self {
-        Self {
-            position,
-            size,
-            color,
-            r#type,
-            text,
-            hovered: false,
-            on_click,
-        }
+
+    // Helper for calculating element bounds
+    fn get_bounds(&self) -> (f32, f32, f32, f32) {
+        let (x, y) = self.position;
+        let (w, h) = self.size;
+        (x, y, x + w, y + h)
     }
 }
 
@@ -113,27 +108,17 @@ impl UIManager {
     fn process_elements(&self) -> (Vec<Vertex>, Vec<u32>) {
         let mut vertices = Vec::new();
         let mut indices = Vec::new();
-        let mut current_index = 0;
+        let mut index = 0u32;
 
         for element in &self.elements {
-            match &element.r#type {
-                val if *val == String::from("text") => {
-                    self.process_text_element(
-                        &element,
-                        &mut vertices,
-                        &mut indices,
-                        &mut current_index,
-                    );
+            match element.r#type.as_str() {
+                "rect" => {
+                    self.process_rect_element(element, &mut vertices, &mut indices, &mut index)
                 }
-                val if *val == String::from("rect") => {
-                    self.process_rect_element(
-                        &element,
-                        &mut vertices,
-                        &mut indices,
-                        &mut current_index,
-                    );
+                "text" => {
+                    self.process_text_element(element, &mut vertices, &mut indices, &mut index)
                 }
-                String { .. } => println!("unimplemented ui type {:?}", element.r#type),
+                _ => (),
             }
         }
 
@@ -396,57 +381,10 @@ impl UIManager {
             attributes: &ui_vertex_layout,
         };
         // UI Pipeline
-        let shader: wgpu::ShaderModule =
-            device.create_shader_module(wgpu::ShaderModuleDescriptor {
-                label: Some("UI Shader"),
-                source: wgpu::ShaderSource::Wgsl(Cow::from(
-                    r#"
-struct VertexInput {
-    @location(0) position: vec2<f32>,
-    @location(1) uv: vec2<f32>,
-    @location(2) color: vec4<f32>,
-};
-
-struct VertexOutput {
-    @location(0) uv: vec2<f32>,
-    @location(1) color: vec4<f32>,
-    // Mark the position with @builtin(position)
-    @builtin(position) position: vec4<f32>,
-};
-
-@vertex
-fn vs_main(in: VertexInput) -> VertexOutput {
-    var out: VertexOutput;
-    out.uv = in.uv;
-    out.color = in.color;
-    // Assign to the position field instead of gl_Position
-    out.position = vec4<f32>(in.position, 0.0, 1.0);
-    return out;
-}
-@group(0) @binding(0) var font_sampler: sampler;
-@group(0) @binding(1) var font_texture: texture_2d<f32>;
-
-struct FragmentInput {
-    @location(0) uv: vec2<f32>,
-    @location(1) color: vec4<f32>,
-};
-
-@fragment
-fn fs_main(in: FragmentInput) -> @location(0) vec4<f32> {
-    let uv_zero = vec2<f32>(0.0, 0.0);
-    let is_uv_zero = in.uv == uv_zero;
-
-    if any(is_uv_zero) {
-        return in.color;
-    }
-
-    // sample the texture
-    let sampled_color = textureSample(font_texture, font_sampler, in.uv);
-    return in.color * sampled_color;
-}
-                    "#,
-                )),
-            });
+        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("UI Shader"),
+            source: wgpu::ShaderSource::Wgsl(Cow::from(include_str!("ui_shader.wgsl"))),
+        });
 
         let ui_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("UI Pipeline"),
@@ -504,34 +442,33 @@ fn fs_main(in: FragmentInput) -> @location(0) vec4<f32> {
 }
 
 pub fn handle_ui_hover(state: &mut super::State, mouse_pos: &winit::dpi::PhysicalPosition<f64>) {
+    let (norm_x, norm_y) = convert_mouse_position(state, mouse_pos);
+
+    for element in &mut state.ui_manager.elements {
+        let (min_x, min_y, max_x, max_y) = element.get_bounds();
+        element.hovered = norm_x >= min_x && norm_x <= max_x && norm_y >= min_y && norm_y <= max_y;
+
+        element.color[3] = if element.hovered { 0.5 } else { 0.9 };
+    }
+}
+fn convert_mouse_position(
+    state: &super::State,
+    mouse_pos: &winit::dpi::PhysicalPosition<f64>,
+) -> (f32, f32) {
     let (x, y) = (mouse_pos.x as f32, mouse_pos.y as f32);
     let (width, height) = (state.size.width as f32, state.size.height as f32);
 
     let norm_x = (2.0 * x / width) - 1.0;
-    let norm_y = (2.0 * (height - y) / height) - 1.0; // Invert Y-axis
+    let norm_y = (2.0 * (height - y) / height) - 1.0;
 
-    for element in &mut state.ui_manager.elements {
-        let (pos_x, pos_y) = element.position;
-        let (w, h) = element.size;
-
-        if norm_x >= pos_x && norm_x <= pos_x + w && norm_y >= pos_y && norm_y <= pos_y + h {
-            element.hovered = true;
-            // Apply hover color
-            element.color[2] = 0.5; // Green tint
-        } else {
-            element.hovered = false;
-            element.color[2] = 0.9; // Default blue
-        }
-    }
+    (norm_x, norm_y)
 }
 
 // Click handling
 pub fn handle_ui_click(state: &mut super::State) {
     for element in &mut state.ui_manager.elements {
-        if element.hovered {
-            if let Some(callback) = &mut element.on_click {
-                callback();
-            }
+        if element.hovered && element.on_click.is_some() {
+            element.on_click.as_mut().unwrap()();
         }
     }
 }

@@ -132,7 +132,7 @@ impl<'a> State<'a> {
         let default_element: user_interface::UIElement = user_interface::UIElement::new_rect(
             (-0.5, -0.5),
             (0.2, 0.1),
-            [1.0, 0.6, 0.7, 0.5],
+            [0.3, 0.6, 0.7],
             Some(Box::new(|| {
                 println!("Random button clicked!");
             })),
@@ -140,7 +140,7 @@ impl<'a> State<'a> {
         let text_element: user_interface::UIElement = user_interface::UIElement::new_text(
             (-0.5, 0.7),
             (0.5, 0.2),
-            [1.0, 0.6, 0.7, 0.5],
+            [1.0, 0.6, 0.7],
             "0123456789<=>?".to_string(),
             None,
         );
