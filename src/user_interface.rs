@@ -1,4 +1,9 @@
 use std::borrow::Cow;
+use std::io;
+
+use std::fs::File;
+use std::io::BufRead;
+use std::path::Path;
 
 #[repr(C)]
 #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
@@ -95,6 +100,16 @@ pub struct UIManager {
     pub bind_group: wgpu::BindGroup,
     pub font_texture: wgpu::Texture,
     pub font_sampler: wgpu::Sampler,
+    /*
+    pub font: rusttype::Font<'static>,
+    pub texture_buffer: Vec<u8>,
+    pub texture_width: u32,
+    pub texture_height: u32,
+    pub cell_size: u32,
+    pub current_cell_x: u32,
+    pub current_cell_y: u32,
+    pub glyphs: std::collections::HashMap<char, (f32, f32, f32, f32)>,
+    */
 }
 
 impl UIManager {
@@ -160,7 +175,25 @@ impl UIManager {
         let (overhang_w, overhang_h): (f32, f32) = (w - padded_w, h - padded_h);
         let char_size: f32 = (padded_w / char_count).min(padded_h);
         for (i, c) in element.text.chars().enumerate() {
-            let (u_min, v_min, u_max, v_max) = get_uv(c);
+            let (u_min, v_min, u_max, v_max): (f32, f32, f32, f32) = {
+                let code = c as u32;
+                if code < 32 {
+                    // Non-printable characters return zero coordinates
+                    (0.0, 0.0, 0.0, 0.0)
+                } else {
+                    let grid_size = 16; // 16x16 grid in 128x128 texture
+                    let index = (code - 32) as usize;
+                    let (x, y) = (index % grid_size, index / grid_size);
+                    let cell_size = 8.0; // Each cell is 8x8 pixels
+                    let u_min = (x as f32) * cell_size / 128.0;
+                    let v_min = (y as f32) * cell_size / 128.0;
+                    let u_max = (x as f32 + 1.0) * cell_size / 128.0;
+                    let v_max = (y as f32 + 1.0) * cell_size / 128.0;
+                    // Texture coordinates reversed vertically (common in some frameworks)
+                    (u_min, v_max, u_max, v_min)
+                }
+            };
+
             let char_x = x + (i as f32) * char_size + overhang_w / 2.0;
             let char_y = y + overhang_h / 2.0; // Bottom-left corner of the character
             let positions = [
@@ -253,7 +286,20 @@ impl UIManager {
             format: wgpu::TextureFormat::Rgba8UnormSrgb,
             usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
         });
-        let font_data = get_font_atlas(); // Generate or load your font atlas data
+        let font_data = {
+            let current_dir: std::path::PathBuf =
+                std::env::current_dir().expect("Failed to get current directory");
+
+            let raw_path: &str = r"font.png";
+
+            let full_path: std::path::PathBuf = current_dir.join("resources").join(raw_path);
+            let path: &str = full_path.to_str().expect("Path contains invalid UTF-8");
+
+            let img = image::open(path).expect("Failed to load font atlas");
+            let rgba = img.into_rgba8();
+            rgba.into_raw()
+        };
+
         queue.write_texture(
             wgpu::TexelCopyTextureInfo {
                 aspect: wgpu::TextureAspect::All,
@@ -503,36 +549,4 @@ pub fn handle_ui_click(state: &mut super::State) {
             }
         }
     }
-}
-
-// UV coordinate calculation
-pub fn get_uv(c: char) -> (f32, f32, f32, f32) {
-    let code = c as u32;
-    if code < 32 {
-        return (0.0, 0.0, 0.0, 0.0); // Non-printable characters
-    }
-    let grid_size = 16; // 16x16 grid in 128x128 texture
-    let index = (code - 32) as usize;
-    let (x, y) = (index % grid_size, index / grid_size);
-    let cell_size = 8.0; // Each cell is 8x8 pixels
-    let u_min = (x as f32) * cell_size / 128.0;
-    let v_min = (y as f32) * cell_size / 128.0;
-    let u_max = (x as f32 + 1.0) * cell_size / 128.0;
-    let v_max = (y as f32 + 1.0) * cell_size / 128.0;
-    // idk why but i had to reverse the image to be ... right ?
-    (u_min, v_max, u_max, v_min)
-}
-
-pub fn get_font_atlas() -> Vec<u8> {
-    let current_dir: std::path::PathBuf =
-        std::env::current_dir().expect("Failed to get current directory");
-
-    let raw_path: &str = r"font.png";
-
-    let full_path: std::path::PathBuf = current_dir.join("resources").join(raw_path);
-    let path: &str = full_path.to_str().expect("Path contains invalid UTF-8");
-
-    let img = image::open(path).expect("Failed to load font atlas");
-    let rgba = img.into_rgba8();
-    rgba.into_raw()
 }
