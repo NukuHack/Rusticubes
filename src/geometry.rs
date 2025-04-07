@@ -237,8 +237,7 @@ impl InstanceManager {
             instance_buffer,
         }
     }
-	/*
-    /// Adds a custom instance with specified position and rotation.
+	
     pub fn add_custom_instance(
         &mut self,
         position: cgmath::Vector3<f32>,
@@ -248,26 +247,25 @@ impl InstanceManager {
         // Create the new instance
         let new_instance = geometry::Instance { position, rotation };
 
+        // Convert the new instance to raw data
+        let new_instance_raw = new_instance.to_raw();
+
         // Add the new instance to the list
         self.instances.push(new_instance);
-
-        // Convert the new instance to raw data
-        let new_instance_raw = geometry::Instance::to_raw(&new_instance);
 
         // Append the raw data to the instance data buffer
         self.instance_data.push(new_instance_raw);
 
-        // Update the instance buffer with the new data
+        // Create a new buffer with the updated instance data
         let new_instance_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("New Instance Buffer"),
             contents: bytemuck::cast_slice(&[new_instance_raw]),
             usage: wgpu::BufferUsages::VERTEX,
         });
 
-        // Replace the old buffer with a new one containing all instances
-        std::mem::swap(&mut self.instance_buffer, &mut new_instance_buffer);
+        // Replace the old instance buffer with the new one
+        self.instance_buffer = new_instance_buffer;
     }
-	*/
 }
 
 

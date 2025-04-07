@@ -12,10 +12,11 @@ use std::iter::Iterator;
 use winit::{
     dpi::PhysicalSize,
     event::*,
-    event_loop::EventLoop,
     keyboard::KeyCode as Key,
     window::{Window, WindowBuilder},
 };
+use cgmath::Rotation3;
+
 use crate::pipeline::*;
 
 pub struct State<'a> {
@@ -128,7 +129,9 @@ impl<'a> State<'a> {
 
         let pipeline: pipeline::Pipeline = pipeline::Pipeline::new(&device, &config, &render_pipeline_layout);
 
-        let mut ui_manager:user_interface::UIManager = user_interface::UIManager::new(&device, &config, &queue);
+        let ui_manager:user_interface::UIManager = user_interface::UIManager::new(&device, &config, &queue);
+		
+		/*
         let rect_element: user_interface::UIElement = user_interface::UIElement::new(
             (-0.5, -0.5),
             (0.2, 0.1),
@@ -143,14 +146,13 @@ impl<'a> State<'a> {
             (0.5, 0.2),
             [1.0, 0.6, 0.7],
             "0123456789<=>?".to_string(),
-            Some(Box::new(|| {
-                println!("ff");
-                //add_custom_instance();
+            Some(Box::new(|state| {
+                state.add_custom_instance();
             })),
         );
         ui_manager.add_ui_element(rect_element);
         ui_manager.add_ui_element(text_element);
-
+		*/
         Self {
             surface,
             device,
@@ -300,21 +302,39 @@ impl<'a> State<'a> {
         };
         false
     }
-	/*
-	pub fn add_custom_instance(){
-		// Add a custom instance
-		let custom_position = cgmath::Vector3 {
-			x: 5.0,
-			y: 1.0,
-			z: 10.0,
-		};
-		let custom_rotation = cgmath::Quaternion::from_axis_angle(
-			cgmath::Vector3::unit_x(),
-			cgmath::Deg(90.0),
-		);
-		geometry::instance_manager.add_custom_instance(custom_position, custom_rotation, &device);
-	}
-*/
+		
+	pub fn setup_ui(&mut self) {
+        let rect_element = user_interface::UIElement::new(
+            (-0.5, -0.5),
+            (0.2, 0.1),
+            [0.3, 0.6, 0.7],
+            String::new(),
+            Some(Box::new(|| {
+                println!("lol");
+            })),
+        );
+        self.ui_manager.add_ui_element(rect_element);
+
+        let text_element = user_interface::UIElement::new(
+            (-0.5, 0.7),
+            (0.5, 0.2),
+            [1.0, 0.6, 0.7],
+            "0123456789".to_string(),
+            Some(Box::new(|| {
+				/*
+				let custom_position = cgmath::Vector3::new(1.0, 0.5, -2.0); // Example position
+				let custom_rotation = cgmath::Quaternion::from_axis_angle(
+					cgmath::Vector3::unit_y(),
+					cgmath::Deg(90.0), // Example rotation
+				);
+				// Add a custom instance
+				self.instance_manager.add_custom_instance(custom_position, custom_rotation, &self.device);
+				*/
+			})),
+        );
+        self.ui_manager.add_ui_element(text_element);
+    }
+
     pub fn update(&mut self) {
         let current_time: Instant = Instant::now();
         let delta_seconds: Duration = current_time - self.previous_frame_time;
@@ -335,7 +355,7 @@ impl<'a> State<'a> {
 pub async fn run() {
     env_logger::init();
 	
-    let event_loop: EventLoop<()> = EventLoop::new().unwrap();
+    let event_loop: winit::event_loop::EventLoop<()> = winit::event_loop::EventLoop::new().unwrap();
     let monitor: winit::monitor::MonitorHandle = event_loop.primary_monitor().expect("No primary monitor found!");
     let monitor_size: winit::dpi::PhysicalSize<u32> = monitor.size(); // Monitor size in physical pixels
 	
@@ -350,14 +370,11 @@ pub async fn run() {
     window.has_focus();
 		
     let mut state: State = State::new(&window).await;
+    state.setup_ui(); // Add this line
     event_loop.run(move |event, control_flow| {
-        if 
-        unsafe{
-            CLOSED
-        } {
+        if unsafe{CLOSED} {
             control_flow.exit();
         }
-
         match &event {
             Event::WindowEvent { event, window_id } if *window_id == state.window().id() => {
                 state.handle_events(event);
