@@ -20,14 +20,9 @@ A playful repo for learning Rust by building a game (no promises tho).
 1. **Install Rust & Dependencies**  
    Run `run.bat` to set up Rust and required tools.  
    *Handles PATH configs and dependencies automatically.*  
-
-2. **Optional Tools**  
-   Run `run.bat` and download rust with other paths (admin privileges may be required).  
-   *Not really maintained, optional.*  
-
-3. **Run Your Rust App**  
-   Use `run.bat` to compile and launch your project with one click.
-   *If rust is correctly placed at your computer it will instantly run the file*
+   
+   Use the same file to compile and launch your project with one click.  
+   *If rust is correctly placed at your computer it will instantly run the file*  
 
 ---
 
