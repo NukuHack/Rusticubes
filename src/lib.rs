@@ -15,10 +15,7 @@ use winit::{
     keyboard::KeyCode as Key,
     window::{Window, WindowBuilder},
 };
-use std::sync::Arc;
 use cgmath::Rotation3;
-
-use crate::pipeline::*;
 
 pub struct State<'a> {
     surface: wgpu::Surface<'a>,
@@ -36,6 +33,7 @@ pub struct State<'a> {
     ui_manager: user_interface::UIManager,
 }
 pub static mut CLOSED:bool = false;
+pub static mut STATE_PTR: *mut State<'_> = std::ptr::null_mut();
 
 impl<'a> State<'a> {
     async fn new(window: &'a Window) -> Self {
@@ -289,17 +287,17 @@ impl<'a> State<'a> {
             cgmath::Deg(90.0),
         );
     
-        // Wrap `instance_manager` and `device` in Arc to share ownership
-        let instance_manager = &mut self.instance_manager;
-        let device = &self.device;
-
-        let on_click_closure = Box::new(move || {
-            instance_manager.add_custom_instance(
-                custom_position,
-                custom_rotation,
-                device,
-            );
-        });
+    let on_click_closure = Box::new(|| {
+        unsafe {
+            if let Some(state) = STATE_PTR.as_mut() {
+                state.instance_manager.add_custom_instance(
+                    custom_position,
+                    custom_rotation,
+                    &state.device,
+                );
+            }
+        }
+    });
     
         let rect_element = user_interface::UIElement::new(
             (-0.5, -0.5),
@@ -333,8 +331,15 @@ impl<'a> State<'a> {
     }
 
     pub fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
-        render_all(self)
+        pipeline::render_all(self)
     }
+/*
+    pub fn get() -> &'a mut State<'a> {
+        unsafe { 
+            &mut *STATE_PTR 
+        }
+    }
+*/
 }
 
 //#[cfg_attr(target_arch = "wasm32", wasm_bindgen(start))]
@@ -356,7 +361,9 @@ pub async fn run() {
     window.has_focus();
 		
     let mut state: State = State::new(&window).await;
-    state.setup_ui(); // Add this line
+    //unsafe { STATE_PTR = &mut state; }
+    state.setup_ui(); // Setup UI after initializing the pointer
+
     event_loop.run(move |event, control_flow| {
         if unsafe{CLOSED} {
             control_flow.exit();
