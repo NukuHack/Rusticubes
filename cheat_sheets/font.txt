@@ -31,25 +31,8 @@ Also C1 control codes (non-printable).
 Group 9 (160–175)
 - ¡ ¢ £ ¤ ¥ ¦ § ¨ © ª « ¬ ­ ® ¯
 
--: No-break space
-¡: Inverted exclamation mark
-¢: Cent sign
-£: Pound sign
-¥: Yen sign
-§: Section sign
-©: Copyright sign
-®: Registered sign
-
 Group 10 (176–191)
 ° ± ² ³ ´ µ ¶ · ¸ ¹ º » ¼ ½ ¾ ¿
-
-°: Degree sign
-±: Plus-minus sign
-²: Superscript two
-³: Superscript three
-µ: Micro sign
-¶: Pilcrow (paragraph)
-¿: Inverted question mark
 
 Group 11 (192–207)
 À Á Â Ã Ä Å Æ Ç È É Ê Ë Ì Í Î Ï

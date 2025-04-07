@@ -135,7 +135,7 @@ impl<'a> State<'a> {
             [0.3, 0.6, 0.7],
 			String::new(),
             Some(Box::new(|| {
-                println!("Random button clicked!");
+                println!("ff");
             })),
         );
         let text_element: user_interface::UIElement = user_interface::UIElement::new(
@@ -143,7 +143,10 @@ impl<'a> State<'a> {
             (0.5, 0.2),
             [1.0, 0.6, 0.7],
             "0123456789<=>?".to_string(),
-			None,
+            Some(Box::new(|| {
+                println!("ff");
+                //add_custom_instance();
+            })),
         );
         ui_manager.add_ui_element(rect_element);
         ui_manager.add_ui_element(text_element);
@@ -297,7 +300,21 @@ impl<'a> State<'a> {
         };
         false
     }
-
+	/*
+	pub fn add_custom_instance(){
+		// Add a custom instance
+		let custom_position = cgmath::Vector3 {
+			x: 5.0,
+			y: 1.0,
+			z: 10.0,
+		};
+		let custom_rotation = cgmath::Quaternion::from_axis_angle(
+			cgmath::Vector3::unit_x(),
+			cgmath::Deg(90.0),
+		);
+		geometry::instance_manager.add_custom_instance(custom_position, custom_rotation, &device);
+	}
+*/
     pub fn update(&mut self) {
         let current_time: Instant = Instant::now();
         let delta_seconds: Duration = current_time - self.previous_frame_time;
