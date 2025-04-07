@@ -15,6 +15,7 @@ use winit::{
     keyboard::KeyCode as Key,
     window::{Window, WindowBuilder},
 };
+use std::sync::Arc;
 use cgmath::Rotation3;
 
 use crate::pipeline::*;
@@ -131,28 +132,6 @@ impl<'a> State<'a> {
 
         let ui_manager:user_interface::UIManager = user_interface::UIManager::new(&device, &config, &queue);
 		
-		/*
-        let rect_element: user_interface::UIElement = user_interface::UIElement::new(
-            (-0.5, -0.5),
-            (0.2, 0.1),
-            [0.3, 0.6, 0.7],
-			String::new(),
-            Some(Box::new(|| {
-                println!("ff");
-            })),
-        );
-        let text_element: user_interface::UIElement = user_interface::UIElement::new(
-            (-0.5, 0.7),
-            (0.5, 0.2),
-            [1.0, 0.6, 0.7],
-            "0123456789<=>?".to_string(),
-            Some(Box::new(|state| {
-                state.add_custom_instance();
-            })),
-        );
-        ui_manager.add_ui_element(rect_element);
-        ui_manager.add_ui_element(text_element);
-		*/
         Self {
             surface,
             device,
@@ -303,34 +282,41 @@ impl<'a> State<'a> {
         false
     }
 		
-	pub fn setup_ui(&mut self) {
+    pub fn setup_ui(&mut self) {
+        let custom_position = cgmath::Vector3::new(1.0, 0.5, -2.0);
+        let custom_rotation = cgmath::Quaternion::from_axis_angle(
+            cgmath::Vector3::unit_y(),
+            cgmath::Deg(90.0),
+        );
+    
+        // Wrap `instance_manager` and `device` in Arc to share ownership
+        let instance_manager = &mut self.instance_manager;
+        let device = &self.device;
+
+        let on_click_closure = Box::new(move || {
+            instance_manager.add_custom_instance(
+                custom_position,
+                custom_rotation,
+                device,
+            );
+        });
+    
         let rect_element = user_interface::UIElement::new(
             (-0.5, -0.5),
             (0.2, 0.1),
             [0.3, 0.6, 0.7],
             String::new(),
-            Some(Box::new(|| {
-                println!("lol");
-            })),
+            None//Some(on_click_closure),
         );
         self.ui_manager.add_ui_element(rect_element);
-
+    
+        // Text element remains unchanged
         let text_element = user_interface::UIElement::new(
             (-0.5, 0.7),
             (0.5, 0.2),
             [1.0, 0.6, 0.7],
             "0123456789".to_string(),
-            Some(Box::new(|| {
-				/*
-				let custom_position = cgmath::Vector3::new(1.0, 0.5, -2.0); // Example position
-				let custom_rotation = cgmath::Quaternion::from_axis_angle(
-					cgmath::Vector3::unit_y(),
-					cgmath::Deg(90.0), // Example rotation
-				);
-				// Add a custom instance
-				self.instance_manager.add_custom_instance(custom_position, custom_rotation, &self.device);
-				*/
-			})),
+            None,
         );
         self.ui_manager.add_ui_element(text_element);
     }
