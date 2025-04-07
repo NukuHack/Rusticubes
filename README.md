@@ -32,7 +32,7 @@ A playful repo for learning Rust by building a game (no promises tho).
   Run files as Administrator when prompted.  
 
 - **Installation issues**  
-  Delete `.cargo` in `C:\Users\<YourName>` and rerun `install.bat`.  
+  Delete `.cargo` in `C:\Users\<YourName>` and run `run.bat`.  
 
 - **Compiler errors**  
   Double-check that `run.bat` ran successfully.
@@ -59,4 +59,4 @@ MIT License - Borrow, tinker, or get inspired!
 ### 🛠️ Tech Stack  
 - **Rust**: Chaos with memory safety.  
 - **Game crates**: `wgpu`, `winit`, `log`, `cgmath`.  
-- **Batch files**: Automation for life.
+- **Batch file**: Automation for life.
