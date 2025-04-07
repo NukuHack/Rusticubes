@@ -14,7 +14,6 @@ pub struct UIElement {
     pub position: (f32, f32), // Center position in normalized coordinates
     pub size: (f32, f32),     // Width and height in normalized coordinates
     pub color: [f32; 4],      // Base color of the element
-    pub r#type: String,       // the type like : "rect" or "text"
     pub text: String,         // Optional text content
     pub hovered: bool,        // Hover state
     pub on_click: Option<Box<dyn FnMut()>>, // Click callback
@@ -29,31 +28,14 @@ impl UIElement {
             position: (0.0, 0.0),
             size: Self::DEFAULT_SIZE,
             color: Self::DEFAULT_COLOR,
-            r#type: "rect".into(),
-            text: "None".into(),
+            text: String::new(), // Use an empty string as the default text
             hovered: false,
             on_click: None,
         }
     }
 
-    pub fn new_rect(
-        position: (f32, f32),
-        size: (f32, f32),
-        color: [f32; 3],
-        on_click: Option<Box<dyn FnMut()>>,
-    ) -> Self {
-        Self {
-            position,
-            size,
-            color: [color[0], color[1], color[2], 0.9],
-            r#type: "rect".into(),
-            text: "None".into(),
-            on_click,
-            ..Default::default()
-        }
-    }
 
-    pub fn new_text(
+    pub fn new(
         position: (f32, f32),
         size: (f32, f32),
         color: [f32; 3],
@@ -64,7 +46,6 @@ impl UIElement {
             position,
             size,
             color: [color[0], color[1], color[2], 0.9],
-            r#type: "text".into(),
             text,
             on_click,
             ..Default::default()
@@ -76,6 +57,18 @@ impl UIElement {
         let (x, y) = self.position;
         let (w, h) = self.size;
         (x, y, x + w, y + h)
+    }
+}
+impl std::fmt::Debug for UIElement {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("UIElement")
+            .field("position", &self.position)
+            .field("size", &self.size)
+            .field("color", &self.color)
+            .field("text", &self.text)
+            .field("hovered", &self.hovered)
+            .field("has_on_click", &self.on_click.is_some())
+            .finish()
     }
 }
 
@@ -106,19 +99,16 @@ impl UIManager {
 
     // Helper functions for clarity
     fn process_elements(&self) -> (Vec<Vertex>, Vec<u32>) {
-        let mut vertices = Vec::new();
-        let mut indices = Vec::new();
-        let mut index = 0u32;
+        let mut vertices:Vec<Vertex> = Vec::new();
+        let mut indices:Vec<u32> = Vec::new();
+        let mut current_index = 0u32;
+		let empty_string = String::new();
 
         for element in &self.elements {
-            match element.r#type.as_str() {
-                "rect" => {
-                    self.process_rect_element(element, &mut vertices, &mut indices, &mut index)
-                }
-                "text" => {
-                    self.process_text_element(element, &mut vertices, &mut indices, &mut index)
-                }
-                _ => (),
+            if &empty_string == &element.text {
+                self.process_rect_element(element,&mut vertices,&mut indices,&mut current_index);
+            } else {
+                self.process_text_element(element,&mut vertices,&mut indices,&mut current_index);
             }
         }
 
@@ -136,36 +126,24 @@ impl UIManager {
         let (w, h) = element.size;
         let char_count = element.text.chars().count() as f32;
 
-        // Background rectangle
+        // Add background rectangle
         self.add_rectangle(vertices, element.position, element.size, element.color);
         indices.extend(self.rectangle_indices(*current_index));
-        *current_index += 4; // Add 4 to skip the rectangle's vertices
+        *current_index += 4;
+
+        // Calculate padding and character size
         let padding: f32 = 1.05;
         let (padded_w, padded_h): (f32, f32) = (w / padding, h / padding);
         let (overhang_w, overhang_h): (f32, f32) = (w - padded_w, h - padded_h);
         let char_size: f32 = (padded_w / char_count).min(padded_h);
-        for (i, c) in element.text.chars().enumerate() {
-            let (u_min, v_min, u_max, v_max): (f32, f32, f32, f32) = {
-                let code = c as u32;
-                if code < 32 {
-                    // Non-printable characters return zero coordinates
-                    (0.0, 0.0, 0.0, 0.0)
-                } else {
-                    let grid_size = 16; // 16x16 grid in 128x128 texture
-                    let index = (code - 32) as usize;
-                    let (x, y) = (index % grid_size, index / grid_size);
-                    let cell_size = 8.0; // Each cell is 8x8 pixels
-                    let u_min = (x as f32) * cell_size / 128.0;
-                    let v_min = (y as f32) * cell_size / 128.0;
-                    let u_max = (x as f32 + 1.0) * cell_size / 128.0;
-                    let v_max = (y as f32 + 1.0) * cell_size / 128.0;
-                    // Texture coordinates reversed vertically (common in some frameworks)
-                    (u_min, v_max, u_max, v_min)
-                }
-            };
 
+        // Process each character
+        for (i, c) in element.text.chars().enumerate() {
+            let (u_min, v_min, u_max, v_max) = self.get_texture_coordinates(c);
             let char_x = x + (i as f32) * char_size + overhang_w / 2.0;
-            let char_y = y + overhang_h / 2.0; // Bottom-left corner of the character
+            let char_y = y + overhang_h / 2.0;
+
+            // Define character vertices and UVs
             let positions = [
                 [char_x, char_y],
                 [char_x + char_size, char_y],
@@ -178,6 +156,8 @@ impl UIManager {
                 [u_min, v_max],
                 [u_max, v_max],
             ];
+
+            // Add vertices for the character
             for j in 0..4 {
                 vertices.push(Vertex {
                     position: positions[j],
@@ -185,12 +165,31 @@ impl UIManager {
                     color: element.color,
                 });
             }
+
+            // Add indices for the character
             indices.extend(self.rectangle_indices(*current_index));
             *current_index += 4;
         }
     }
+	
+    fn get_texture_coordinates(&self, c: char) -> (f32, f32, f32, f32) {
+        if (c as u32) < 32 {
+            // Non-printable characters return zero coordinates
+            (0.0, 0.0, 0.0, 0.0)
+        } else {
+            let code = c as u32 - 32;
+            let grid_size = 16; // 16x16 grid in 128x128 texture
+            let cell_size = 8.0; // Each cell is 8x8 pixels
+            let (x, y) = (code % grid_size, code / grid_size);
+            let u_min = (x as f32) * cell_size / 128.0;
+            let v_min = (y as f32) * cell_size / 128.0;
+            let u_max = (x as f32 + 1.0) * cell_size / 128.0;
+            let v_max = (y as f32 + 1.0) * cell_size / 128.0;
+            // Texture coordinates reversed vertically (common in some frameworks)
+            (u_min, v_max, u_max, v_min)
+        }
+    }
 
-    // Helper methods
     fn process_rect_element(
         &self,
         element: &UIElement,
@@ -202,6 +201,7 @@ impl UIManager {
         indices.extend(self.rectangle_indices(*current_index));
         *current_index += 4;
     }
+
 
     fn add_rectangle(
         &self,

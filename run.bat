@@ -62,7 +62,7 @@ if "%OPTION%" == "1" (
         pause >nul & exit /b 1
     )
 )else if "%OPTION%" == "2" (
-    call :main_run && goto :error
+    call :main_run & goto :error
 ) else (
     echo [[31mERROR[0m] Exiting deployment
     pause >nul & exit /b 1

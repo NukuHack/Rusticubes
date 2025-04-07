@@ -129,22 +129,23 @@ impl<'a> State<'a> {
         let pipeline: pipeline::Pipeline = pipeline::Pipeline::new(&device, &config, &render_pipeline_layout);
 
         let mut ui_manager:user_interface::UIManager = user_interface::UIManager::new(&device, &config, &queue);
-        let default_element: user_interface::UIElement = user_interface::UIElement::new_rect(
+        let rect_element: user_interface::UIElement = user_interface::UIElement::new(
             (-0.5, -0.5),
             (0.2, 0.1),
             [0.3, 0.6, 0.7],
+			String::new(),
             Some(Box::new(|| {
                 println!("Random button clicked!");
             })),
         );
-        let text_element: user_interface::UIElement = user_interface::UIElement::new_text(
+        let text_element: user_interface::UIElement = user_interface::UIElement::new(
             (-0.5, 0.7),
             (0.5, 0.2),
             [1.0, 0.6, 0.7],
             "0123456789<=>?".to_string(),
-            None,
+			None,
         );
-        ui_manager.add_ui_element(default_element);
+        ui_manager.add_ui_element(rect_element);
         ui_manager.add_ui_element(text_element);
 
         Self {
@@ -316,9 +317,11 @@ impl<'a> State<'a> {
 //#[cfg_attr(target_arch = "wasm32", wasm_bindgen(start))]
 pub async fn run() {
     env_logger::init();
+	
     let event_loop: EventLoop<()> = EventLoop::new().unwrap();
     let monitor: winit::monitor::MonitorHandle = event_loop.primary_monitor().expect("No primary monitor found!");
     let monitor_size: winit::dpi::PhysicalSize<u32> = monitor.size(); // Monitor size in physical pixels
+	
     let config: config::AppConfig = config::AppConfig::default(monitor_size);
     let window: Window = WindowBuilder::new()
         .with_title(&config.window_title)
@@ -326,6 +329,9 @@ pub async fn run() {
         .with_position(config.initial_window_position)
         .build(&event_loop)
         .unwrap();
+    // Set the window to be focused immediately
+    window.has_focus();
+		
     let mut state: State = State::new(&window).await;
     event_loop.run(move |event, control_flow| {
         if 
