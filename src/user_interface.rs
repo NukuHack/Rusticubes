@@ -1,3 +1,4 @@
+use image::GenericImageView;
 use std::borrow::Cow;
 
 #[repr(C)]
@@ -84,6 +85,7 @@ pub struct UIManager {
     pub font_sampler: wgpu::Sampler,
 }
 
+#[allow(dead_code, unused)]
 impl UIManager {
     pub fn update(&mut self, queue: &wgpu::Queue) {
         let (vertices, indices) = self.process_elements();
@@ -171,8 +173,8 @@ impl UIManager {
             *current_index += 4;
         }
     }
-    /*
-    fn get_texture_coordinates2(&self, c: char) -> (f32, f32, f32, f32) {
+
+    fn get_texture_coordinates(&self, c: char) -> (f32, f32, f32, f32) {
         let code = c as u32;
         if code < 32 || (code > 127 && code < 160) || code >= 32 + 51 * 15 {
             return (0.0, 0.0, 0.0, 0.0); // Non-printable characters return zero coordinates
@@ -180,29 +182,9 @@ impl UIManager {
 
         let index: u32 = code - 32;
         // Adjust the code to start at 32
-        let grid_wid: u32 = 51;
-        let (cell_wid, cell_hei): (f32, f32) = (15.0, 16.0);
-        let (texture_wid, texture_hei): (f32, f32) = (765.0, 282.0);
-        // Calculate the column and row in the grid
-        let (x, y): (f32, f32) = ((index % grid_wid) as f32, (index / grid_wid) as f32);
-        // Compute texture coordinates
-        let u_min: f32 = (x) * cell_wid / texture_wid;
-        let v_min: f32 = (y) * cell_hei / texture_hei;
-        let u_max: f32 = (x + 1.0f32) * cell_wid / texture_wid;
-        let v_max: f32 = (y + 1.0f32) * cell_hei / texture_hei;
-        // Texture coordinates reversed vertically (common in some frameworks)
-        (u_min, v_max, u_max, v_min)
-    }*/
-    fn get_texture_coordinates(&self, c: char) -> (f32, f32, f32, f32) {
-        let code = c as u32;
-        if code < 32 || (code > 127 && code < 160) || code >= 32 + 51 * 15 {
-            return (0.0, 0.0, 0.0, 0.0); // Non-printable characters return zero coordinates
-        }
-        let index: u32 = code - 32;
-        // Adjust the code to start at 32
         let grid_wid: u32 = 16;
-        let (cell_wid, cell_hei): (f32, f32) = (8.0, 8.0);
-        let (texture_wid, texture_hei): (f32, f32) = (128.0, 128.0);
+        let (cell_wid, cell_hei): (f32, f32) = (15.0, 16.0);
+        let (texture_wid, texture_hei): (f32, f32) = (240.0, 768.0);
         // Calculate the column and row in the grid
         let (x, y): (f32, f32) = ((index % grid_wid) as f32, (index / grid_wid) as f32);
         // Compute texture coordinates
@@ -264,11 +246,27 @@ impl UIManager {
         queue: &wgpu::Queue,
     ) -> Self {
         // Font Texture Setup
+        let (font_data, width, height) = {
+            let current_dir: std::path::PathBuf =
+                std::env::current_dir().expect("Failed to get current directory");
+
+            let raw_path: &str = r"bescii-chars.png";
+
+            let full_path: std::path::PathBuf = current_dir.join("resources").join(raw_path);
+            let path: &str = full_path.to_str().expect("Path contains invalid UTF-8");
+
+            let img = image::open(path).expect("Failed to load font atlas");
+            let (w, h) = img.dimensions(); // Get dimensions before converting the image
+            let rgba = img.into_rgba8(); // Convert to RGBA8 format
+            (rgba.into_raw(), w, h) // Return raw data and dimensions
+        };
+
         let font_size = wgpu::Extent3d {
-            width: 128,
-            height: 128,
+            width: width,
+            height: height,
             depth_or_array_layers: 1,
         };
+
         let font_texture = device.create_texture(&wgpu::TextureDescriptor {
             view_formats: &[wgpu::TextureFormat::Rgba8UnormSrgb],
             label: Some("Font Texture"),
@@ -279,19 +277,6 @@ impl UIManager {
             format: wgpu::TextureFormat::Rgba8UnormSrgb,
             usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
         });
-        let font_data = {
-            let current_dir: std::path::PathBuf =
-                std::env::current_dir().expect("Failed to get current directory");
-
-            let raw_path: &str = r"font.png"; // raw : font.png ; good : bescii-chars.png
-
-            let full_path: std::path::PathBuf = current_dir.join("resources").join(raw_path);
-            let path: &str = full_path.to_str().expect("Path contains invalid UTF-8");
-
-            let img = image::open(path).expect("Failed to load font atlas");
-            let rgba = img.into_rgba8();
-            rgba.into_raw()
-        };
 
         queue.write_texture(
             wgpu::TexelCopyTextureInfo {
@@ -303,7 +288,7 @@ impl UIManager {
             &font_data,
             wgpu::TexelCopyBufferLayout {
                 offset: 0,
-                bytes_per_row: Some(128 * 4),
+                bytes_per_row: Some((width * 4) as u32),
                 rows_per_image: None,
             },
             font_size,
@@ -475,7 +460,7 @@ fn convert_mouse_position(
 pub fn handle_ui_click(state: &mut super::State) {
     for element in &mut state.ui_manager.elements {
         if element.hovered && element.on_click.is_some() {
-            element.on_click.as_mut().unwrap()();
+            element.on_click.as_mut().unwrap()(); // Error occurs here
         }
     }
 }
