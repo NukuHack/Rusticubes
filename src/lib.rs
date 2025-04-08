@@ -6,9 +6,10 @@ mod geometry;
 mod pipeline;
 mod user_interface;
 
-use std::time::Instant;
-use std::time::Duration;
-use std::iter::Iterator;
+use std::{
+    time::{Instant,Duration},
+    iter::Iterator,
+};
 use winit::{
     dpi::PhysicalSize,
     event::*,
@@ -16,6 +17,7 @@ use winit::{
     window::{Window, WindowBuilder},
 };
 use cgmath::Rotation3;
+
 
 pub struct State<'a> {
     surface: wgpu::Surface<'a>,
@@ -286,37 +288,55 @@ impl<'a> State<'a> {
             cgmath::Vector3::unit_y(),
             cgmath::Deg(90.0),
         );
-    
-    let on_click_closure = Box::new(|| {
-        unsafe {
-            if let Some(state) = STATE_PTR.as_mut() {
-                state.instance_manager.add_custom_instance(
-                    custom_position,
-                    custom_rotation,
-                    &state.device,
-                );
+        
+        let _click_new_element = Box::new(|| {
+            unsafe {
+                if let Some(state) = STATE_PTR.as_mut() {
+                    state.instance_manager.add_custom_instance(
+                        custom_position,
+                        custom_rotation,
+                        &state.device,
+                    );
+                }
             }
-        }
-    });
+        });
+        
+        let click_close = Box::new(|| {
+            close_app();
+        });
     
         let rect_element = user_interface::UIElement::new(
             (-0.5, -0.5),
             (0.2, 0.1),
             [0.3, 0.6, 0.7],
             String::new(),
-            None//Some(on_click_closure),
+            None//Some(click_new_element),
         );
-        self.ui_manager.add_ui_element(rect_element);
-    
-        // Text element remains unchanged
         let text_element = user_interface::UIElement::new(
             (-0.5, 0.7),
-            (0.5, 0.2),
+            (0.5, 0.3),
             [1.0, 0.6, 0.7],
-            "0123456789".to_string(),
+            "!\"#$%&'()*".to_string(),
             None,
         );
+        let close_element = user_interface::UIElement::new(
+            (0.5, -0.7),
+            (0.2, 0.1),
+            [1.0, 0.2, 0.1],
+            "Close".to_string(),
+            Some(click_close),
+        );
+        let char_element = user_interface::UIElement::new(
+            (0.1, -0.1),
+            (0.2, 0.1),
+            [0.5, 0.6, 0.3],
+            "11111111".to_string(),
+            None,
+        );
+        self.ui_manager.add_ui_element(char_element);
+        self.ui_manager.add_ui_element(rect_element);
         self.ui_manager.add_ui_element(text_element);
+        self.ui_manager.add_ui_element(close_element);
     }
 
     pub fn update(&mut self) {
@@ -333,13 +353,6 @@ impl<'a> State<'a> {
     pub fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
         pipeline::render_all(self)
     }
-/*
-    pub fn get() -> &'a mut State<'a> {
-        unsafe { 
-            &mut *STATE_PTR 
-        }
-    }
-*/
 }
 
 //#[cfg_attr(target_arch = "wasm32", wasm_bindgen(start))]
@@ -361,7 +374,6 @@ pub async fn run() {
     window.has_focus();
 		
     let mut state: State = State::new(&window).await;
-    //unsafe { STATE_PTR = &mut state; }
     state.setup_ui(); // Setup UI after initializing the pointer
 
     event_loop.run(move |event, control_flow| {
@@ -383,7 +395,5 @@ pub fn close_app() -> bool{
     unsafe{
         CLOSED = true;
     };
-    unsafe{
-        CLOSED
-    }
+    true
 }
