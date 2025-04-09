@@ -320,9 +320,9 @@ impl<'a> State<'a> {
             (0.2, 0.1),
             [1.0, 0.2, 0.1],
             "Close".to_string(),
-            Box::new(|| { // Can ignore state parameter
+            Some(Box::new(|| { // Can ignore state parameter
                 close_app();
-            }),
+            })),
         );
         let char_element = user_interface::UIElement::new(
             (0.1, -0.1),
