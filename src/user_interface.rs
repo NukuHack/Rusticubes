@@ -1,3 +1,4 @@
+use cgmath::Rotation3;
 use image::GenericImageView;
 use std::borrow::Cow;
 
@@ -463,4 +464,48 @@ pub fn handle_ui_click(state: &mut super::State) {
             element.on_click.as_mut().unwrap()(); // Error occurs here
         }
     }
+}
+
+pub fn setup_ui(state: &mut super::State) {
+    let custom_position = cgmath::Vector3::new(1.0, 0.5, -2.0);
+    let custom_rotation =
+        cgmath::Quaternion::from_axis_angle(cgmath::Vector3::unit_y(), cgmath::Deg(90.0));
+    /*
+    let _click_new_element = Box::new(|| unsafe {
+        if let Some(state) = super::STATE_PTR.as_mut() {
+            state.instance_manager.add_custom_instance(
+                custom_position,
+                custom_rotation,
+                &state.device,
+            );
+        }
+    });
+    */
+    let rect_element = super::user_interface::UIElement::new(
+        (-0.5, -0.5),
+        (0.2, 0.1),
+        [0.3, 0.6, 0.7],
+        String::new(),
+        None, //Some(click_new_element),
+    );
+    let text_element = super::user_interface::UIElement::new(
+        (-0.5, 0.7),
+        (0.5, 0.3),
+        [1.0, 0.6, 0.7],
+        "!\"#$%&'()*".to_string(),
+        None,
+    );
+    let close_element = super::user_interface::UIElement::new(
+        (0.5, -0.7),
+        (0.2, 0.1),
+        [1.0, 0.2, 0.1],
+        "Close".to_string(),
+        Some(Box::new(|| {
+            // Can ignore state parameter
+            super::close_app();
+        })),
+    );
+    state.ui_manager.add_ui_element(rect_element);
+    state.ui_manager.add_ui_element(text_element);
+    state.ui_manager.add_ui_element(close_element);
 }

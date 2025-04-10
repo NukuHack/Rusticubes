@@ -84,7 +84,7 @@ echo You need admin for anything except "G" option.
 echo.
 echo [[34mSELECT[0m] Target triple:
 echo [[32mD[0m] x86_64-pc-windows-msvc (default)
-echo [[32mG[0m] x86_64-pc-windows-gnu
+echo [[32mG[0m] x86_64-pc-windows-gnu (with LLD)
 echo [Custom] Enter your own target triple
 set /p TARGET_TRIPLE=^> 
 
@@ -117,8 +117,15 @@ if errorlevel 1 (
     echo [[31mERROR[0m] Installation failed
     exit /b 1
 )
+
 if "%TARGET_TRIPLE%" == "x86_64-pc-windows-msvc" (
     set "VCToolsRedistDir=%USERPROFILE%\VSBuildTools\VC\Redist"
+) else if /i "%TARGET_TRIPLE%" == "x86_64-pc-windows-gnu" (
+    echo [[34mCONFIG[0m] Setting LLD linker...
+    (
+        echo [target.x86_64-pc-windows-gnu]
+        echo linker = "lld"
+    ) >> "%USERPROFILE%\.cargo\config.toml"
 )
 
 rustup component add cargo rustc 2>nul

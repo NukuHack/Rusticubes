@@ -284,10 +284,8 @@ impl<'a> State<'a> {
 		
     pub fn setup_ui(&mut self) {
         let custom_position = cgmath::Vector3::new(1.0, 0.5, -2.0);
-        let custom_rotation = cgmath::Quaternion::from_axis_angle(
-            cgmath::Vector3::unit_y(),
-            cgmath::Deg(90.0),
-        );
+        let custom_rotation =
+            cgmath::Quaternion::from_axis_angle(cgmath::Vector3::unit_y(), cgmath::Deg(90.0));
         
         let _click_new_element = Box::new(|| {
             unsafe {
@@ -324,14 +322,6 @@ impl<'a> State<'a> {
                 close_app();
             })),
         );
-        let char_element = user_interface::UIElement::new(
-            (0.1, -0.1),
-            (0.2, 0.1),
-            [0.5, 0.6, 0.3],
-            "11111111".to_string(),
-            None,
-        );
-        self.ui_manager.add_ui_element(char_element);
         self.ui_manager.add_ui_element(rect_element);
         self.ui_manager.add_ui_element(text_element);
         self.ui_manager.add_ui_element(close_element);
