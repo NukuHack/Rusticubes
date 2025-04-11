@@ -80,23 +80,20 @@ echo ####################################################
 echo #               RUST INSTALLER SCRIPT              #
 echo ####################################################
 echo.
-echo You need admin for anything except "G" option.
-echo.
 echo [[34mSELECT[0m] Target triple:
 echo [[32mD[0m] x86_64-pc-windows-msvc (default)
-echo [[32mG[0m] x86_64-pc-windows-gnu (with LLD)
+echo [[32mG[0m] x86_64-pc-windows-gnu
 echo [Custom] Enter your own target triple
 set /p TARGET_TRIPLE=^> 
 
 set "INSTALL=0"
 if not defined TARGET_TRIPLE (
-    echo [[34mSTATUS[0m] Skipping toolchain installation
+    echo [[34mSTATUS[0m] Setting toolchain to default
+    set "TARGET_TRIPLE=x86_64-pc-windows-msvc"
 ) else if /i "%TARGET_TRIPLE%" == "D" (
-    set "TARGET_TRIPLE=x86_64-pc-windows-msvc" & set "INSTALL=1"
+    set "TARGET_TRIPLE=x86_64-pc-windows-msvc"
 ) else if /i "%TARGET_TRIPLE%" == "G" (
-    set "TARGET_TRIPLE=x86_64-pc-windows-gnu" & set "INSTALL=1"
-) else (
-    set "INSTALL=1"
+    set "TARGET_TRIPLE=x86_64-pc-windows-gnu"
 )
 
 set "RUSTUP_URL=https://win.rustup.rs/x86_64"
@@ -108,25 +105,19 @@ bitsadmin /transfer "RustInstall" /dynamic /priority high "%RUSTUP_URL%" "%TEMP%
     exit /b 1
 )
 
-if !INSTALL! == 1 (
-    "%TEMP%\rustup-init.exe" -y --default-toolchain "stable-%TARGET_TRIPLE%" -t %TARGET_TRIPLE%
-) else (
-    "%TEMP%\rustup-init.exe" -y
-)
+"%TEMP%\rustup-init.exe" -y --default-toolchain "stable-%TARGET_TRIPLE%" -t %TARGET_TRIPLE%
+
 if errorlevel 1 (
     echo [[31mERROR[0m] Installation failed
     exit /b 1
 )
 
-if "%TARGET_TRIPLE%" == "x86_64-pc-windows-msvc" (
-    set "VCToolsRedistDir=%USERPROFILE%\VSBuildTools\VC\Redist"
-) else if /i "%TARGET_TRIPLE%" == "x86_64-pc-windows-gnu" (
-    echo [[34mCONFIG[0m] Setting LLD linker...
-    (
-        echo [target.x86_64-pc-windows-gnu]
-        echo linker = "lld"
-    ) >> "%USERPROFILE%\.cargo\config.toml"
-)
+echo [[34mSTATUS[0m] It is suggested to install the default MVSC linker (stupid shit made by microsoft) ... but i hate microsoft, so i made it not needed :
+echo [[34mCONFIG[0m] Setting LLD linker...
+(
+    echo [build]
+    echo rustflags = ["-C", "linker=rust-lld"]
+) >> "%USERPROFILE%\.cargo\config.toml"
 
 rustup component add cargo rustc 2>nul
 

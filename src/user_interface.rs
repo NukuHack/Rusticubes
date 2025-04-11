@@ -467,33 +467,29 @@ pub fn handle_ui_click(state: &mut super::State) {
 }
 
 pub fn setup_ui(state: &mut super::State) {
-    let custom_position = cgmath::Vector3::new(1.0, 0.5, -2.0);
-    let custom_rotation =
-        cgmath::Quaternion::from_axis_angle(cgmath::Vector3::unit_y(), cgmath::Deg(90.0));
-    /*
-    let _click_new_element = Box::new(|| unsafe {
+    let click_new_element = Box::new(|| unsafe {
         if let Some(state) = super::STATE_PTR.as_mut() {
             state.instance_manager.add_custom_instance(
-                custom_position,
-                custom_rotation,
+                cgmath::Vector3::new(1.0, 0.5, -2.0),
+                cgmath::Quaternion::from_axis_angle(cgmath::Vector3::unit_y(), cgmath::Deg(90.0)),
                 &state.device,
             );
         }
     });
-    */
+
     let rect_element = super::user_interface::UIElement::new(
         (-0.5, -0.5),
         (0.2, 0.1),
         [0.3, 0.6, 0.7],
         String::new(),
-        None, //Some(click_new_element),
+        Some(click_new_element),
     );
     let text_element = super::user_interface::UIElement::new(
         (-0.5, 0.7),
-        (0.5, 0.3),
+        (0.5, 0.2),
         [1.0, 0.6, 0.7],
         "!\"#$%&'()*".to_string(),
-        None,
+        Some(Box::new(|| println!("text clicked"))), // None
     );
     let close_element = super::user_interface::UIElement::new(
         (0.5, -0.7),

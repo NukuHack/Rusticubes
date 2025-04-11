@@ -22,14 +22,15 @@ impl CameraSystem {
         device: &wgpu::Device,
         config: &wgpu::SurfaceConfiguration,
         position: cgmath::Point3<f32>,
-        yaw: cgmath::Rad<f32>,
-        pitch: cgmath::Rad<f32>,
-        fovy: f32,
-        znear: f32,
-        zfar: f32,
-        camera_speed: f32,
-        sensitivity: f32,
     ) -> Self {
+        let yaw: cgmath::Rad<f32>= cgmath::Rad(-std::f32::consts::FRAC_PI_2);
+        let pitch: cgmath::Rad<f32>= cgmath::Rad(-0.3);
+        let fovy: f32 = 70.0;
+        let znear: f32 = 0.01;
+        let zfar: f32 = 100.0;
+        let camera_speed: f32 = 4.0;
+        let sensitivity: f32 = 0.5;
+
         let camera: Camera = Camera::new(position, yaw, pitch);
         let projection: Projection = Projection::new(config.width, config.height, cgmath::Rad::from(cgmath::Deg(fovy)), znear, zfar);
         let controller: CameraController = CameraController::new(camera_speed, sensitivity);
