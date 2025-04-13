@@ -65,8 +65,6 @@ impl<'a> State<'a> {
             .await
             .unwrap();
 
-        let instance_manager: geometry::InstanceManager = geometry::InstanceManager::new(&device);
-
         let surface_caps: wgpu::SurfaceCapabilities = surface.get_capabilities(&adapter);
         let surface_format: wgpu::TextureFormat = surface_caps.formats.iter()
             .copied()
@@ -95,6 +93,11 @@ impl<'a> State<'a> {
         );
 
         surface.configure(&device, &config);
+
+        // Constants for geometry creation
+        const NUM_INSTANCES: u32 = 3;
+        const SPACE_BETWEEN: f32 = 1.0;
+        let instance_manager = geometry::InstanceManager::new(&device, &queue, NUM_INSTANCES, SPACE_BETWEEN, false);
 
         let texture_manager: geometry::TextureManager = geometry::TextureManager::new(&device, &queue, &config);
         let cube: geometry::Cube = geometry::Cube::default();
@@ -303,6 +306,7 @@ pub async fn run() {
     window.has_focus();
 		
     let mut state: State = State::new(&window).await; 
+    #[allow(unused_unsafe)]
     unsafe {   // Store the pointer in the static variable
         //STATE_PTR = Box::into_raw(Box::new(state));
     }
@@ -311,6 +315,13 @@ pub async fn run() {
 
     event_loop.run(move |event, control_flow| {
         if closed() {
+            unsafe {
+                if !STATE_PTR.is_null() {
+                    let _ = Box::from_raw(STATE_PTR); // Drops the State
+                    STATE_PTR = std::ptr::null_mut();
+                }
+            }
+
             control_flow.exit();
         }
         match &event {

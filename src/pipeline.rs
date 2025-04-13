@@ -26,13 +26,9 @@ impl Pipeline {
     ) -> Self {
         let main_shader = create_main_shader(device);
         let inside_shader = create_inside_shader(device);
-
-        // Removed unused 'config' parameter from create_main_pipeline
         let render_pipeline = create_main_pipeline(device, layout, &main_shader, config.format);
-
         let inside_pipeline = create_inside_pipeline(device, layout, &inside_shader, config.format);
-
-        Pipeline {
+        Self {
             render_pipeline,
             inside_pipeline,
             shader: main_shader,
@@ -55,48 +51,42 @@ fn create_inside_shader(device: &wgpu::Device) -> wgpu::ShaderModule {
         label: Some("Inside Solid Color Shader"),
         source: wgpu::ShaderSource::Wgsl(Cow::from(
             r#"
-                // Vertex Input Structure
-                struct VertexInput {
-                    @location(0) position: vec3<f32>,
-                };
-
-                // Camera Uniform Structure
-                struct CameraUniform {
-                    view_proj: mat4x4<f32>,
-                };
-                @group(1) @binding(0)
-                var<uniform> camera: CameraUniform;
-
-                // Instance Data Structure
-                struct InstanceInput {
-                    @location(5) model_matrix_0: vec4<f32>,
-                    @location(6) model_matrix_1: vec4<f32>,
-                    @location(7) model_matrix_2: vec4<f32>,
-                    @location(8) model_matrix_3: vec4<f32>,
-                };
-
-                @vertex
-                fn vs_main(
-                    vertex: VertexInput,
-                    instance: InstanceInput,
-                ) -> @builtin(position) vec4<f32> {
-                    // Reconstruct model matrix from instance data
-                    let model_matrix = mat4x4<f32>(
-                        instance.model_matrix_0,
-                        instance.model_matrix_1,
-                        instance.model_matrix_2, // Invert Y for coordinate system
-                        instance.model_matrix_3,
-                    );
-                    let world_pos = model_matrix * vec4<f32>(vertex.position, 1.0);
-                    return camera.view_proj * world_pos;
-                }
-
-                @fragment
-                fn fs_main() -> @location(0) vec4<f32> {
-                    // Solid gray color with transparency
-                    return vec4<f32>(0.8, 0.8, 0.8, 0.8);
-                }
-            "#,
+            // Vertex Input Structure
+            struct VertexInput {
+                @location(0) position: vec3<f32>,
+            };
+            // Camera Uniform Structure
+            struct CameraUniform {
+                view_proj: mat4x4<f32>,
+            };
+            @group(1) @binding(0)
+            var<uniform> camera: CameraUniform;
+            // Instance Data Structure
+            struct InstanceInput {
+                @location(5) model_matrix_0: vec4<f32>,
+                @location(6) model_matrix_1: vec4<f32>,
+                @location(7) model_matrix_2: vec4<f32>,
+                @location(8) model_matrix_3: vec4<f32>,
+            };
+            @vertex
+            fn vs_main(
+                vertex: VertexInput,
+                instance: InstanceInput,
+            ) -> @builtin(position) vec4<f32> {
+                let model_matrix = mat4x4<f32>(
+                    instance.model_matrix_0,
+                    instance.model_matrix_1,
+                    instance.model_matrix_2, // Invert Y for coordinate system
+                    instance.model_matrix_3,
+                );
+                let world_pos = model_matrix * vec4<f32>(vertex.position, 1.0);
+                return camera.view_proj * world_pos;
+            }
+            @fragment
+            fn fs_main() -> @location(0) vec4<f32> {
+                return vec4<f32>(0.8, 0.8, 0.8, 0.8);
+            }
+        "#,
         )),
     })
 }
@@ -115,11 +105,7 @@ fn create_main_pipeline(
             module: shader,
             entry_point: Some("vs_main"),
             compilation_options: Default::default(),
-            buffers: &[
-                geometry::Vertex::desc(),
-                geometry::TexCoord::desc(),
-                geometry::InstanceRaw::desc(),
-            ],
+            buffers: &[geometry::Vertex::desc(), geometry::InstanceRaw::desc()],
         },
         fragment: Some(wgpu::FragmentState {
             module: shader,
@@ -153,7 +139,7 @@ fn create_inside_pipeline(
             module: inside_shader,
             entry_point: Some("vs_main"),
             compilation_options: Default::default(),
-            buffers: &*&[
+            buffers: &[
                 // Reference the const + static instance layout
                 geometry::Vertex::desc(),
                 geometry::InstanceRaw::desc(),
@@ -291,17 +277,18 @@ pub fn render_all(current_state: &mut super::State) -> Result<(), wgpu::SurfaceE
         let depth_view = &current_state.texture_manager.depth_texture.view;
         let mut rpass = begin_3d_render_pass(&mut encoder, &view, depth_view);
 
+        // Shared bind groups for both pipelines
+        let bind_groups = &[
+            &current_state.texture_manager.bind_group,
+            &current_state.camera_system.bind_group,
+        ];
         // Draw main geometry
         draw_with_pipeline(
             &mut rpass,
             &current_state.pipeline.render_pipeline,
-            &[
-                &current_state.texture_manager.bind_group,
-                &current_state.camera_system.bind_group,
-            ],
+            bind_groups,
             &[
                 &current_state.geometry_buffer.vertex_buffer,
-                &current_state.geometry_buffer.texture_coord_buffer,
                 &current_state.instance_manager.instance_buffer,
             ],
             &current_state.geometry_buffer.index_buffer,
@@ -313,10 +300,7 @@ pub fn render_all(current_state: &mut super::State) -> Result<(), wgpu::SurfaceE
         draw_with_pipeline(
             &mut rpass,
             &current_state.pipeline.inside_pipeline,
-            &[
-                &current_state.texture_manager.bind_group,
-                &current_state.camera_system.bind_group,
-            ],
+            bind_groups,
             &[
                 &current_state.geometry_buffer.vertex_buffer, // Textures are not needed
                 &current_state.instance_manager.instance_buffer,
@@ -356,17 +340,16 @@ pub fn draw_with_pipeline(
     instances: u32,
 ) {
     rpass.set_pipeline(pipeline);
-
     // Set bind groups
-    for (i, group) in bind_groups.iter().enumerate() {
-        rpass.set_bind_group(i as u32, *group, &[]);
-    }
-
+    bind_groups
+        .iter()
+        .enumerate()
+        .for_each(|(i, g)| rpass.set_bind_group(i as u32, *g, &[]));
     // Set vertex buffers
-    for (i, buffer) in vertex_buffers.iter().enumerate() {
-        rpass.set_vertex_buffer(i as u32, buffer.slice(..));
-    }
-
+    vertex_buffers
+        .iter()
+        .enumerate()
+        .for_each(|(i, b)| rpass.set_vertex_buffer(i as u32, b.slice(..)));
     // Draw command
     rpass.set_index_buffer(index_buffer.slice(..), wgpu::IndexFormat::Uint32);
     rpass.draw_indexed(0..num_indices, 0, 0..instances);

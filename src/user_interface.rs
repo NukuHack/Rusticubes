@@ -469,26 +469,27 @@ pub fn handle_ui_click(state: &mut super::State) {
 pub fn setup_ui(state: &mut super::State) {
     let click_new_element = Box::new(|| unsafe {
         if let Some(state) = super::STATE_PTR.as_mut() {
-            state.instance_manager.add_custom_instance(
-                cgmath::Vector3::new(1.0, 0.5, -2.0),
-                cgmath::Quaternion::from_axis_angle(cgmath::Vector3::unit_y(), cgmath::Deg(90.0)),
+            state.instance_manager.add_instance(
                 &state.device,
+                &state.queue,
+                cgmath::Vector3::new(1.5, 0.5, 1.5),
+                cgmath::Quaternion::from_angle_y(cgmath::Deg(0.0)),
             );
         }
     });
 
-    let rect_element = super::user_interface::UIElement::new(
+    let add_element = super::user_interface::UIElement::new(
         (-0.5, -0.5),
-        (0.2, 0.1),
+        (0.4, 0.1),
         [0.3, 0.6, 0.7],
-        String::new(),
+        "Add new cube".to_string(),
         Some(click_new_element),
     );
     let text_element = super::user_interface::UIElement::new(
         (-0.5, 0.7),
         (0.5, 0.2),
         [1.0, 0.6, 0.7],
-        "!\"#$%&'()*".to_string(),
+        "click event".to_string(),
         Some(Box::new(|| println!("text clicked"))), // None
     );
     let close_element = super::user_interface::UIElement::new(
@@ -501,7 +502,7 @@ pub fn setup_ui(state: &mut super::State) {
             super::close_app();
         })),
     );
-    state.ui_manager.add_ui_element(rect_element);
+    state.ui_manager.add_ui_element(add_element);
     state.ui_manager.add_ui_element(text_element);
     state.ui_manager.add_ui_element(close_element);
 }
