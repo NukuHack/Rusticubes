@@ -468,14 +468,13 @@ pub fn handle_ui_click(state: &mut super::State) {
 
 pub fn setup_ui(state: &mut super::State) {
     let click_new_element = Box::new(|| unsafe {
-        if let Some(state) = super::STATE_PTR.as_mut() {
-            state.instance_manager.add_instance(
-                &state.device,
-                &state.queue,
-                cgmath::Vector3::new(1.5, 0.5, 1.5),
-                cgmath::Quaternion::from_angle_y(cgmath::Deg(0.0)),
-            );
-        }
+        let state = super::get_state();
+        state.instance_manager.add_instance(
+            &state.device,
+            &state.queue,
+            cgmath::Vector3::new(1.5, 0.5, 1.5),
+            cgmath::Quaternion::from_angle_y(cgmath::Deg(0.0)),
+        );
     });
 
     let add_element = super::user_interface::UIElement::new(

@@ -8,6 +8,8 @@ mod user_interface;
 
 use std::{
     iter::Iterator,
+    sync::{Arc, OnceLock},
+    cell::RefCell,
 };
 use winit::{
     event::*,
@@ -286,7 +288,8 @@ impl<'a> State<'a> {
     }
 }
 
-pub static mut STATE_PTR: *mut State<'static> = std::ptr::null_mut();
+pub static mut STATE_PTR: *mut State = std::ptr::null_mut();
+
 //#[cfg_attr(target_arch = "wasm32", wasm_bindgen(start))]
 pub async fn run() {
     env_logger::init();
@@ -302,16 +305,17 @@ pub async fn run() {
         .with_position(config.initial_window_position)
         .build(&event_loop)
         .unwrap();
+
     // Set the window to be focused immediately
     window.has_focus();
 		
     let mut state: State = State::new(&window).await; 
+    user_interface::setup_ui(&mut state);
+
     #[allow(unused_unsafe)]
     unsafe {   // Store the pointer in the static variable
         //STATE_PTR = Box::into_raw(Box::new(state));
     }
-    // Setup UI after initializing the pointer
-    user_interface::setup_ui(&mut state);
 
     event_loop.run(move |event, control_flow| {
         if closed() {
@@ -333,6 +337,14 @@ pub async fn run() {
     }).expect("Event loop error");
 }
 
+
+// Add this new unsafe function to retrieve the State
+pub unsafe fn get_state() -> &'static mut State<'static> { unsafe {
+    if STATE_PTR.is_null() {
+        panic!("State not initialized or already dropped");
+    }
+    &mut *STATE_PTR
+}}
 
 
 pub static mut CLOSED:bool = false;
