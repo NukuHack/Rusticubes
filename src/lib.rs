@@ -23,7 +23,7 @@ pub struct State<'a> {
     camera_system: camera::CameraSystem,
     config: wgpu::SurfaceConfiguration,
     size: winit::dpi::PhysicalSize<u32>,
-    pub window: &'a winit::window::Window,
+    window: &'a winit::window::Window,
     pipeline: pipeline::Pipeline,
     geometry_buffer: geometry::GeometryBuffer,
     texture_manager: geometry::TextureManager,

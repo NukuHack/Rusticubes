@@ -1,78 +1,93 @@
 use std::{
     env,
     future::Future,
-    io::*,
-    sync::{
-        atomic::{AtomicBool, Ordering},
-        Arc,
-    },
-    task::{Context, Poll, Waker},
+    io::{stdout, Write},
+    sync, task,
 };
 
 use test_app::run;
 
+/// Entry point of the application
 fn main() {
-    initialize();
-    let mut lock = stdout().lock();
-    write!(lock, "Begin code:\n\n\n").unwrap();
+    initialize_vulkan();
+
+    let mut output = stdout().lock();
+    print_header(&mut output);
 
     run_app();
 
-    write!(lock, "\n\nEnd code:").unwrap();
+    print_footer(&mut output);
 }
-fn initialize() {
+
+/// Disables Vulkan layers to prevent potential startup errors
+fn initialize_vulkan() {
     unsafe {
-        // Disable Vulkan layers to avoid errors from missing files
+        // Disable all Vulkan layers to avoid missing file errors
         env::set_var("VK_LAYER_PATH", ""); // Ignore custom layer paths
-        env::set_var("VK_INSTANCE_LAYERS", ""); // Disable all instance layers
-        env::set_var("VK_DEVICE_LAYERS", ""); // Disable all device layers (optional)
+        env::set_var("VK_INSTANCE_LAYERS", ""); // Disable instance layers
+        env::set_var("VK_DEVICE_LAYERS", ""); // Disable device layers
         env::set_var("VK_LAYER_DISABLE", "EOSOverlayVkLayer;");
     }
-    return;
 }
 
-// Custom Waker implementation
-struct MyWaker {
-    #[allow(unused)]
-    flag: AtomicBool,
+/// Prints application header
+fn print_header(output: &mut impl Write) {
+    writeln!(output, "\n\nBegin code:\n\n\n").unwrap();
 }
 
-impl std::task::Wake for MyWaker {
-    fn wake(self: Arc<Self>) {
-        self.flag.store(true, Ordering::Relaxed);
+/// Prints application footer
+fn print_footer(output: &mut impl Write) {
+    writeln!(output, "\n\nEnd code:\n\n").unwrap();
+}
+
+/// Custom waker implementation for manual future polling
+struct ManualWaker {
+    // Atomic flag to track if a wake signal has been received
+    wake_flag: sync::atomic::AtomicBool,
+}
+
+impl std::task::Wake for ManualWaker {
+    fn wake(self: sync::Arc<Self>) {
+        self.wake_flag.store(true, sync::atomic::Ordering::Relaxed);
     }
 
-    fn wake_by_ref(self: &Arc<Self>) {
-        self.flag.store(true, Ordering::Relaxed);
+    fn wake_by_ref(self: &sync::Arc<ManualWaker>) {
+        self.wake_flag.store(true, sync::atomic::Ordering::Relaxed);
     }
 }
 
+/// Runs the application future until completion
 fn run_app() {
-    // Initialize the future
     let future = run();
     let mut future = Box::pin(future);
 
-    // Create the custom Waker
-    let my_waker = Arc::new(MyWaker {
-        flag: AtomicBool::new(false),
-    });
-    let waker = Waker::from(my_waker.clone());
-    let mut context = Context::from_waker(&waker);
+    let waker = {
+        let waker_instance = sync::Arc::new(ManualWaker {
+            wake_flag: sync::atomic::AtomicBool::new(false),
+        });
+        let waker = task::Waker::from(waker_instance.clone());
+        (waker, waker_instance)
+    };
+
+    let mut context = task::Context::from_waker(&waker.0);
 
     loop {
-        // Check if the Waker was triggered
-        if my_waker.flag.swap(false, Ordering::Relaxed) {
-            // Poll again immediately
-            if let Poll::Ready(_) = future.as_mut().poll(&mut context) {
+        // Check if we need to poll immediately due to wake signal
+        if waker
+            .1
+            .wake_flag
+            .swap(false, sync::atomic::Ordering::Relaxed)
+        {
+            if let task::Poll::Ready(_) = future.as_mut().poll(&mut context) {
                 break;
             }
         }
 
-        // Poll the future
         match future.as_mut().poll(&mut context) {
-            Poll::Ready(()) => break,
-            Poll::Pending => {
-                // Continue to next frame
+            task::Poll::Ready(_) => break,
+            task::Poll::Pending => {
+                // Task is pending - continue processing other work
+                // In this manual loop, we just continue to the next iteration
             }
         }
     }
