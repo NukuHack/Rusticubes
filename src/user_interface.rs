@@ -14,7 +14,7 @@ pub struct UIElement {
     pub position: (f32, f32), // Center position in normalized coordinates
     pub size: (f32, f32),     // Width and height in normalized coordinates
     pub color: [f32; 4],      // Base color of the element RGBA
-    pub text: String,         // Optional text content
+    pub text: Option<String>, // Optional text content as str
     pub hovered: bool,        // Hover state
     pub on_click: Option<Box<dyn FnMut()>>, // Click callback
 }
@@ -28,7 +28,7 @@ impl UIElement {
             position: (0.0, 0.0),
             size: Self::DEFAULT_SIZE,
             color: Self::DEFAULT_COLOR,
-            text: String::new(), // Use an empty string as the default text
+            text: None, // Use null as the default text
             hovered: false,
             on_click: None,
         }
@@ -38,7 +38,7 @@ impl UIElement {
         position: (f32, f32),
         size: (f32, f32),
         color: [f32; 3],
-        text: String,
+        text: Option<String>,
         on_click: Option<Box<dyn FnMut()>>,
     ) -> Self {
         Self {
@@ -88,7 +88,6 @@ pub struct UIManager {
 impl UIManager {
     pub fn update(&mut self, queue: &wgpu::Queue) {
         let (vertices, indices) = self.process_elements();
-
         // Update GPU buffers
         let vertex_data = bytemuck::cast_slice(&vertices);
         queue.write_buffer(&self.vertex_buffer, 0, vertex_data);
@@ -105,10 +104,10 @@ impl UIManager {
         let empty_string = String::new();
 
         for element in &self.elements {
-            if &empty_string == &element.text {
-                self.process_rect_element(element, &mut vertices, &mut indices, &mut current_index);
-            } else {
+            if element.text.is_some() {
                 self.process_text_element(element, &mut vertices, &mut indices, &mut current_index);
+            } else {
+                self.process_rect_element(element, &mut vertices, &mut indices, &mut current_index);
             }
         }
 
@@ -123,7 +122,12 @@ impl UIManager {
     ) {
         let (x, y): (f32, f32) = element.position;
         let (w, h): (f32, f32) = element.size;
-        let char_count = element.text.chars().count() as f32;
+        let char_count = element
+            .text
+            .clone()
+            .unwrap_or("".to_string())
+            .chars()
+            .count() as f32;
 
         // Add background rectangle
         self.add_rectangle(vertices, element.position, element.size, element.color);
@@ -137,7 +141,13 @@ impl UIManager {
         let char_size: f32 = (padded_w / char_count).min(padded_h); // Determine the maximum possible size per character
 
         // Process each character
-        for (i, c) in element.text.chars().enumerate() {
+        for (i, c) in element
+            .text
+            .clone()
+            .unwrap_or("".to_string())
+            .chars()
+            .enumerate()
+        {
             let (u_min, v_min, u_max, v_max) = self.get_texture_coordinates(c);
 
             // Calculate horizontal position (already centered horizontally as analyzed)
@@ -467,33 +477,39 @@ pub fn handle_ui_click(state: &mut super::State) {
 }
 
 pub fn setup_ui(state: &mut super::State) {
-    let click_new_element = Box::new(|| super::geometry::add_def_cube());
-
     let add_element = super::user_interface::UIElement::new(
         (-0.5, -0.5),
         (0.4, 0.1),
         [0.3, 0.6, 0.7],
-        "Add new cube".to_string(),
-        Some(click_new_element),
+        Some("Add new cube".to_string()),
+        Some(Box::new(|| super::geometry::add_def_cube())),
+    );
+    let remove_element = super::user_interface::UIElement::new(
+        (-0.5, -0.75),
+        (0.4, 0.1),
+        [0.6, 0.3, 0.5],
+        Some("Remove last cube".to_string()),
+        Some(Box::new(|| super::geometry::rem_last_cube())),
     );
     let text_element = super::user_interface::UIElement::new(
         (-0.5, 0.7),
         (0.5, 0.2),
         [1.0, 0.6, 0.7],
-        "click event".to_string(),
+        Some("click event".to_string()),
         Some(Box::new(|| println!("text clicked"))), // None
     );
     let close_element = super::user_interface::UIElement::new(
         (0.5, -0.7),
         (0.2, 0.1),
         [1.0, 0.2, 0.1],
-        "Close".to_string(),
+        Some("Close".to_string()),
         Some(Box::new(|| {
             // Can ignore state parameter
             super::close_app();
         })),
     );
     state.ui_manager.add_ui_element(add_element);
+    state.ui_manager.add_ui_element(remove_element);
     state.ui_manager.add_ui_element(text_element);
     state.ui_manager.add_ui_element(close_element);
 }

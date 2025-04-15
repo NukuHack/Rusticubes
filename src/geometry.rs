@@ -255,6 +255,23 @@ impl InstanceManager {
             bytemuck::cast_slice(&[Instance { position, rotation }.to_raw()]),
         );
     }
+
+    pub fn remove_instance(&mut self, index: usize, queue: &wgpu::Queue) {
+        if index >= self.instances.len() {
+            return; // or handle error as needed
+        }
+
+        // Remove the instance from the vector
+        self.instances.remove(index);
+
+        // Rebuild the instance buffer with the updated data
+        let instance_data: Vec<InstanceRaw> = self.instances.iter().map(|i| i.to_raw()).collect();
+        queue.write_buffer(
+            &self.instance_buffer,
+            0,
+            bytemuck::cast_slice(&instance_data),
+        );
+    }
 }
 
 pub fn add_def_cube() {
@@ -283,6 +300,16 @@ pub fn add_def_cube() {
             ),
             combined_quaternion,
         );
+    }
+}
+pub fn rem_last_cube() {
+    unsafe {
+        let state = super::get_state();
+        let mut instance_manager = state.instance_manager().borrow_mut();
+        if !instance_manager.instances.is_empty() {
+            let index = instance_manager.instances.len() - 1;
+            instance_manager.remove_instance(index, state.queue());
+        }
     }
 }
 

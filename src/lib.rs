@@ -293,7 +293,11 @@ impl<'a> State<'a> {
                     Key::KeyF => {
                         geometry::add_def_cube();
                         return true;
-                    }
+                    },
+                    Key::KeyG => {
+                        geometry::rem_last_cube();
+                        return true;
+                    },
                     _ => return false,
                 }
             },
