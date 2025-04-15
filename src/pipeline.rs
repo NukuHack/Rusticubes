@@ -265,21 +265,21 @@ fn begin_ui_render_pass<'a>(
 
 /// Main rendering function
 pub fn render_all(current_state: &mut super::State) -> Result<(), wgpu::SurfaceError> {
-    let output = current_state.surface.get_current_texture()?;
+    let output = current_state.surface().get_current_texture()?;
     let view = output.texture.create_view(&Default::default());
 
     let mut encoder = current_state
-        .device
+        .device()
         .create_command_encoder(&Default::default());
 
     // 3D Render Pass
     {
-        let depth_view = &current_state.texture_manager.depth_texture.view;
+        let depth_view = &current_state.texture_manager().depth_texture.view;
         let mut rpass = begin_3d_render_pass(&mut encoder, &view, depth_view);
 
         // Shared bind groups for both pipelines
         let bind_groups = &[
-            &current_state.texture_manager.bind_group,
+            &current_state.texture_manager().bind_group,
             &current_state.camera_system.bind_group,
         ];
         // Draw main geometry
@@ -288,12 +288,12 @@ pub fn render_all(current_state: &mut super::State) -> Result<(), wgpu::SurfaceE
             &current_state.pipeline.render_pipeline,
             bind_groups,
             &[
-                &current_state.geometry_buffer.vertex_buffer,
-                &current_state.instance_manager.instance_buffer,
+                &current_state.geometry_buffer().vertex_buffer,
+                &current_state.instance_manager().borrow().instance_buffer,
             ],
-            &current_state.geometry_buffer.index_buffer,
-            current_state.geometry_buffer.num_indices,
-            current_state.instance_manager.instances.len() as u32,
+            &current_state.geometry_buffer().index_buffer,
+            current_state.geometry_buffer().num_indices,
+            current_state.instance_manager().borrow().instances.len() as u32,
         );
 
         // Draw inside surfaces
@@ -302,12 +302,12 @@ pub fn render_all(current_state: &mut super::State) -> Result<(), wgpu::SurfaceE
             &current_state.pipeline.inside_pipeline,
             bind_groups,
             &[
-                &current_state.geometry_buffer.vertex_buffer, // Textures are not needed
-                &current_state.instance_manager.instance_buffer,
+                &current_state.geometry_buffer().vertex_buffer, // Textures are not needed
+                &current_state.instance_manager().borrow().instance_buffer,
             ],
-            &current_state.geometry_buffer.index_buffer,
-            current_state.geometry_buffer.num_indices,
-            current_state.instance_manager.instances.len() as u32,
+            &current_state.geometry_buffer().index_buffer,
+            current_state.geometry_buffer().num_indices,
+            current_state.instance_manager().borrow().instances.len() as u32,
         );
     }
 
@@ -324,7 +324,7 @@ pub fn render_all(current_state: &mut super::State) -> Result<(), wgpu::SurfaceE
         );
     }
 
-    current_state.queue.submit(Some(encoder.finish()));
+    current_state.queue().submit(Some(encoder.finish()));
     output.present();
     Ok(())
 }

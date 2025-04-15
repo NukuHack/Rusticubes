@@ -6,31 +6,55 @@ mod geometry;
 mod pipeline;
 mod user_interface;
 
-use std::{
-    iter::Iterator,
-    sync::{Arc, OnceLock},
-    cell::RefCell,
-};
+use std::iter::Iterator;
 use winit::{
-    event::*,
+    event::{ElementState, Event, MouseButton, WindowEvent, KeyEvent},
     keyboard::KeyCode as Key,
 };
+use std::cell::RefCell;
 
 
 pub struct State<'a> {
+    window: &'a winit::window::Window,
+    render_context: RenderContext<'a>,
+    previous_frame_time: std::time::Instant,
+    camera_system: camera::CameraSystem,
+    input_system: InputSubsystem,
+    pipeline: pipeline::Pipeline,
+    data_system: DataSubsystem,
+    ui_manager: user_interface::UIManager,
+}
+pub struct RenderContext<'a> {
     surface: wgpu::Surface<'a>,
     device: wgpu::Device,
     queue: wgpu::Queue,
-    previous_frame_time: std::time::Instant,
-    camera_system: camera::CameraSystem,
     config: wgpu::SurfaceConfiguration,
     size: winit::dpi::PhysicalSize<u32>,
-    window: &'a winit::window::Window,
-    pipeline: pipeline::Pipeline,
+}
+
+pub struct InputSubsystem {
+    previous_mouse: Option<winit::dpi::PhysicalPosition<f64>>,
+    mouse_button_state: MouseButtonState,
+}
+impl InputSubsystem{
+    pub fn default() -> Self{
+        Self{
+            previous_mouse: None,
+            mouse_button_state: MouseButtonState::default(),
+        }
+    }
+}
+
+#[derive(Default)]
+pub struct MouseButtonState {
+    pub left: bool,
+    pub right: bool,
+}
+
+pub struct DataSubsystem {
     geometry_buffer: geometry::GeometryBuffer,
     texture_manager: geometry::TextureManager,
-    instance_manager: geometry::InstanceManager,
-    ui_manager: user_interface::UIManager,
+    instance_manager: RefCell<geometry::InstanceManager>, // Now wrapped in RefCell
 }
 
 impl<'a> State<'a> {
@@ -43,7 +67,7 @@ impl<'a> State<'a> {
             backends: wgpu::Backends::GL,
             ..Default::default()
         });
-        let surface: wgpu::Surface<'a> = instance.create_surface(window).unwrap();
+        let surface: wgpu::Surface = instance.create_surface(window).unwrap();
         let adapter: wgpu::Adapter = instance
             .enumerate_adapters(wgpu::Backends::all())
             .into_iter()
@@ -99,7 +123,13 @@ impl<'a> State<'a> {
         // Constants for geometry creation
         const NUM_INSTANCES: u32 = 3;
         const SPACE_BETWEEN: f32 = 1.0;
-        let instance_manager = geometry::InstanceManager::new(&device, &queue, NUM_INSTANCES, SPACE_BETWEEN, false);
+        let instance_manager = RefCell::new(geometry::InstanceManager::new(
+            &device,
+            &queue,
+            NUM_INSTANCES,
+            SPACE_BETWEEN,
+            false,
+        ));
 
         let texture_manager: geometry::TextureManager = geometry::TextureManager::new(&device, &queue, &config);
         let cube: geometry::Cube = geometry::Cube::default();
@@ -120,20 +150,28 @@ impl<'a> State<'a> {
         let pipeline: pipeline::Pipeline = pipeline::Pipeline::new(&device, &config, &render_pipeline_layout);
 
         let ui_manager:user_interface::UIManager = user_interface::UIManager::new(&device, &config, &queue);
-		
-        Self {
-            surface,
-            device,
-            queue,
-            previous_frame_time: std::time::Instant::now(),
-            camera_system,
-            config,
-            size,
-            window,
-            pipeline,
+        
+        let data_system: DataSubsystem = DataSubsystem{
             geometry_buffer,
             texture_manager,
             instance_manager,
+        };
+        let render_context: RenderContext = RenderContext{
+            surface,
+            device,
+            queue,
+            config,
+            size,
+        };
+
+        Self {
+            window,
+            render_context,
+            previous_frame_time: std::time::Instant::now(),
+            camera_system,
+            input_system: InputSubsystem::default(),
+            pipeline,
+            data_system,
             ui_manager,
         }
     }
@@ -141,17 +179,53 @@ impl<'a> State<'a> {
     pub fn window(&self) -> &winit::window::Window {
         self.window
     }
+    pub fn surface(&self) -> &wgpu::Surface<'a> {
+        &self.render_context.surface
+    }
+    pub fn device(&self) -> &wgpu::Device {
+        &self.render_context.device
+    }
+    pub fn queue(&self) -> &wgpu::Queue {
+        &self.render_context.queue
+    }
+    pub fn config(&self) -> &wgpu::SurfaceConfiguration {
+        &self.render_context.config
+    }
+    pub fn size(&self) -> &winit::dpi::PhysicalSize<u32> {
+        &self.render_context.size
+    }
+    pub fn previous_frame_time(&self) -> &std::time::Instant {
+        &self.previous_frame_time
+    }
+    pub fn camera_system(&self) -> &camera::CameraSystem {
+        &self.camera_system
+    }
+    pub fn pipeline(&self) -> &pipeline::Pipeline {
+        &self.pipeline
+    }
+    pub fn geometry_buffer(&self) -> &geometry::GeometryBuffer {
+        &self.data_system.geometry_buffer
+    }
+    pub fn texture_manager(&self) -> &geometry::TextureManager {
+        &self.data_system.texture_manager
+    }
+    pub fn instance_manager(&self) -> &RefCell<geometry::InstanceManager> {
+        &self.data_system.instance_manager
+    }
+    pub fn ui_manager(&self) -> &user_interface::UIManager {
+        &self.ui_manager
+    }
 
     pub fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) -> bool{
         if new_size.width > 0 && new_size.height > 0 {
-            self.size = new_size;
-            self.config.width = new_size.width;
-            self.config.height = new_size.height;
+            self.render_context.size = new_size;
+            self.render_context.config.width = new_size.width;
+            self.render_context.config.height = new_size.height;
             self.camera_system.projection.resize(new_size.width, new_size.height);
-            self.surface.configure(&self.device, &self.config);
-            self.texture_manager.depth_texture = geometry::Texture::create_depth_texture(
-                &self.device,
-                &self.config,
+            self.render_context.surface.configure(self.device(), self.config());
+            self.data_system.texture_manager.depth_texture = geometry::Texture::create_depth_texture(
+                self.device(),
+                self.config(),
                 "depth_texture",
             );
             return true;
@@ -168,7 +242,7 @@ impl<'a> State<'a> {
                 match self.render() {
                     Ok(_) => true,
                     Err(wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated) => {
-                        self.resize(self.size)
+                        self.resize(*self.size())
                     },
                     Err(wgpu::SurfaceError::OutOfMemory | wgpu::SurfaceError::Other) => {
                         log::error!("Surface error");
@@ -206,14 +280,8 @@ impl<'a> State<'a> {
             } => {
                 match key {
                     Key::AltLeft | Key::AltRight => {
-                        // Reset mouse to center
-                        let window: &winit::window::Window = self.window();
-                        let physical_size: winit::dpi::PhysicalSize<u32> = window.inner_size();
-                        let x:f64 = (physical_size.width as f64) / 2.0;
-                        let y:f64 = (physical_size.height as f64) / 2.0;
-                        window.set_cursor_position(winit::dpi::PhysicalPosition::new(x, y))
-                            .expect("Set mouse cursor position");
-                            return true;
+                        self.center_mouse();
+                        return true;
                     },
                     Key::Escape => {
                         close_app();
@@ -231,30 +299,42 @@ impl<'a> State<'a> {
         
     }
 
+    pub fn center_mouse(&self) {
+        // Reset mouse to center
+        let size: &winit::dpi::PhysicalSize<u32> = self.size();
+        let x:f64 = (size.width as f64) / 2.0;
+        let y:f64 = (size.height as f64) / 2.0;
+        self.window().set_cursor_position(winit::dpi::PhysicalPosition::new(x, y))
+            .expect("Set mouse cursor position");
+    }
+
     pub fn handle_mouse_input(&mut self, event: &WindowEvent) -> bool {
         match event {
-            //TODO : make the ui do stuff
             WindowEvent::MouseInput { button, state, .. } => {
                 match (button, *state) {
                     (MouseButton::Left, ElementState::Pressed) => {
-                        self.camera_system.mouse_button_state.left = true;
+                        self.input_system.mouse_button_state.left = true;
                         user_interface::handle_ui_click(self);
+                        return true;
                     }
                     (MouseButton::Left, ElementState::Released) => {
-                        self.camera_system.mouse_button_state.left = false;
+                        self.input_system.mouse_button_state.left = false;
+                        return true;
                     }
                     (MouseButton::Right, ElementState::Pressed) => {
-                        self.camera_system.mouse_button_state.right = true;
+                        self.input_system.mouse_button_state.right = true;
+                        return true;
                     }
                     (MouseButton::Right, ElementState::Released) => {
-                        self.camera_system.mouse_button_state.right = false;
+                        self.input_system.mouse_button_state.right = false;
+                        return true;
                     }
                     _ => (),
                 }
             }
             WindowEvent::CursorMoved { position, .. } => {
-                if self.camera_system.mouse_button_state.right == true {
-                    if let Some(prev) = self.camera_system.previous_mouse {
+                if self.input_system.mouse_button_state.right == true {
+                    if let Some(prev) = self.input_system.previous_mouse {
                         let delta_x: f64 = position.x - prev.x;
                         let delta_y: f64 = position.y - prev.y;
                         self.camera_system.controller.process_mouse(delta_x, delta_y);
@@ -262,10 +342,12 @@ impl<'a> State<'a> {
                 }
 
                 user_interface::handle_ui_hover(self, position);
-                self.camera_system.previous_mouse = Some(*position);
+                self.input_system.previous_mouse = Some(*position);
+                return true;
             }
             WindowEvent::MouseWheel { delta, .. } => {
                 self.camera_system.controller.process_scroll(delta);
+                return true;
             }
             _ => (),
         };
@@ -276,10 +358,10 @@ impl<'a> State<'a> {
         let current_time: std::time::Instant = std::time::Instant::now();
         let delta_seconds: std::time::Duration = current_time - self.previous_frame_time;
         self.previous_frame_time = current_time;
-        self.camera_system.update(&self.queue, delta_seconds);
+        self.camera_system.update(&self.render_context.queue, delta_seconds);
 
         if self.ui_manager.visibility {
-            self.ui_manager.update(&self.queue);
+            self.ui_manager.update(&self.render_context.queue);
         }
     }
 
@@ -288,18 +370,19 @@ impl<'a> State<'a> {
     }
 }
 
+static mut WINDOW_PTR: *mut winit::window::Window = std::ptr::null_mut();
 pub static mut STATE_PTR: *mut State = std::ptr::null_mut();
 
 //#[cfg_attr(target_arch = "wasm32", wasm_bindgen(start))]
 pub async fn run() {
     env_logger::init();
-	
+    
     let event_loop: winit::event_loop::EventLoop<()> = winit::event_loop::EventLoop::new().unwrap();
     let monitor: winit::monitor::MonitorHandle = event_loop.primary_monitor().expect("No primary monitor found!");
     let monitor_size: winit::dpi::PhysicalSize<u32> = monitor.size(); // Monitor size in physical pixels
-	
+    
     let config: config::AppConfig = config::AppConfig::default(monitor_size);
-    let window: winit::window::Window = winit::window::WindowBuilder::new()
+    let window_raw: winit::window::Window = winit::window::WindowBuilder::new()
         .with_title(&config.window_title)
         .with_inner_size(config.initial_window_size)
         .with_position(config.initial_window_position)
@@ -307,15 +390,21 @@ pub async fn run() {
         .unwrap();
 
     // Set the window to be focused immediately
-    window.has_focus();
-		
-    let mut state: State = State::new(&window).await; 
-    user_interface::setup_ui(&mut state);
+    window_raw.has_focus();
+    unsafe {
+        WINDOW_PTR = Box::into_raw(Box::new(window_raw));
+    }
+    let window: &mut winit::window::Window = unsafe { &mut *WINDOW_PTR };
+        
+    let mut state_raw: State = State::new(window).await;
+    user_interface::setup_ui(&mut state_raw);
 
     #[allow(unused_unsafe)]
     unsafe {   // Store the pointer in the static variable
-        //STATE_PTR = Box::into_raw(Box::new(state));
+        STATE_PTR = Box::into_raw(Box::new(state_raw));
     }
+
+    let state = unsafe{get_state()};
 
     event_loop.run(move |event, control_flow| {
         if closed() {
@@ -325,8 +414,8 @@ pub async fn run() {
                     STATE_PTR = std::ptr::null_mut();
                 }
             }
-
             control_flow.exit();
+            return;
         }
         match &event {
             Event::WindowEvent { event, window_id } if *window_id == state.window().id() => {

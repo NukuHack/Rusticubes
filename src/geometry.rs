@@ -1,11 +1,7 @@
 use super::geometry;
 use bytemuck::{Pod, Zeroable};
-use cgmath::Deg;
 use cgmath::InnerSpace;
-use cgmath::Matrix4;
-use cgmath::Quaternion;
 use cgmath::Rotation3;
-use cgmath::Vector3;
 use image::GenericImageView;
 use std::{mem, result};
 use wgpu::util::DeviceExt;
@@ -173,16 +169,19 @@ impl InstanceManager {
                 .flat_map(|z| {
                     (0..count).flat_map(move |y| {
                         (0..count).map(move |x| {
-                            let position = Vector3::new(
+                            let position = cgmath::Vector3::new(
                                 space_between * (x as f32 - num_instances as f32 / 2.0),
                                 space_between * (y as f32 - num_instances as f32 / 2.0),
                                 space_between * (z as f32 - num_instances as f32 / 2.0),
                             );
 
                             let rotation = if position.magnitude() == 0.0 {
-                                Quaternion::from_angle_y(Deg(0.0))
+                                cgmath::Quaternion::from_angle_y(cgmath::Deg(0.0))
                             } else {
-                                Quaternion::from_axis_angle(position.normalize(), Deg(45.0))
+                                cgmath::Quaternion::from_axis_angle(
+                                    position.normalize(),
+                                    cgmath::Deg(45.0),
+                                )
                             };
 
                             Instance { position, rotation }
@@ -220,8 +219,8 @@ impl InstanceManager {
         &mut self,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
-        position: Vector3<f32>,
-        rotation: Quaternion<f32>,
+        position: cgmath::Vector3<f32>,
+        rotation: cgmath::Quaternion<f32>,
     ) {
         if self.instances.len() >= self.capacity {
             self.capacity *= 2;
@@ -260,13 +259,14 @@ impl InstanceManager {
 // --- Instance Struct ---
 #[repr(C)]
 pub struct Instance {
-    pub position: Vector3<f32>,
-    pub rotation: Quaternion<f32>,
+    pub position: cgmath::Vector3<f32>,
+    pub rotation: cgmath::Quaternion<f32>,
 }
 
 impl Instance {
     pub fn to_raw(&self) -> InstanceRaw {
-        let matrix = Matrix4::from_translation(self.position) * Matrix4::from(self.rotation);
+        let matrix =
+            cgmath::Matrix4::from_translation(self.position) * cgmath::Matrix4::from(self.rotation);
         InstanceRaw {
             model: matrix.into(),
         }
@@ -276,8 +276,8 @@ impl Instance {
 impl Default for Instance {
     fn default() -> Self {
         Instance {
-            position: Vector3::new(0.0, 0.0, 0.0),
-            rotation: Quaternion::from_angle_y(Deg(0.0)),
+            position: cgmath::Vector3::new(0.0, 0.0, 0.0),
+            rotation: cgmath::Quaternion::from_angle_y(cgmath::Deg(0.0)),
         }
     }
 }

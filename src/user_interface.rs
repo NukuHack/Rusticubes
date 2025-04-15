@@ -1,6 +1,5 @@
 use cgmath::Rotation3;
 use image::GenericImageView;
-use std::borrow::Cow;
 
 #[repr(C)]
 #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
@@ -376,7 +375,9 @@ impl UIManager {
         // UI Pipeline
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("UI Shader"),
-            source: wgpu::ShaderSource::Wgsl(Cow::from(include_str!("ui_shader.wgsl"))),
+            source: wgpu::ShaderSource::Wgsl(std::borrow::Cow::from(include_str!(
+                "ui_shader.wgsl"
+            ))),
         });
 
         let ui_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
@@ -449,7 +450,7 @@ fn convert_mouse_position(
     mouse_pos: &winit::dpi::PhysicalPosition<f64>,
 ) -> (f32, f32) {
     let (x, y) = (mouse_pos.x as f32, mouse_pos.y as f32);
-    let (width, height) = (state.size.width as f32, state.size.height as f32);
+    let (width, height) = (state.size().width as f32, state.size().height as f32);
 
     let norm_x = (2.0 * x / width) - 1.0;
     let norm_y = (2.0 * (height - y) / height) - 1.0;
@@ -469,10 +470,15 @@ pub fn handle_ui_click(state: &mut super::State) {
 pub fn setup_ui(state: &mut super::State) {
     let click_new_element = Box::new(|| unsafe {
         let state = super::get_state();
-        state.instance_manager.add_instance(
-            &state.device,
-            &state.queue,
-            cgmath::Vector3::new(1.5, 0.5, 1.5),
+        let mut instance_manager = state.instance_manager().borrow_mut();
+        instance_manager.add_instance(
+            state.device(),
+            state.queue(),
+            cgmath::Vector3::new(
+                state.camera_system.camera.position.x - 0.5,
+                state.camera_system.camera.position.y - 2.0,
+                state.camera_system.camera.position.z + 0.5,
+            ),
             cgmath::Quaternion::from_angle_y(cgmath::Deg(0.0)),
         );
     });

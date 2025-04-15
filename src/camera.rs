@@ -1,6 +1,5 @@
 ﻿
 use winit::event::*;
-use std::time::Duration;
 use cgmath::{InnerSpace, SquareMatrix};
 use wgpu::util::DeviceExt;
 use winit::keyboard::{KeyCode as Key};
@@ -14,8 +13,6 @@ pub struct CameraSystem {
     pub buffer: wgpu::Buffer,
     pub bind_group: wgpu::BindGroup,
     pub bind_group_layout: wgpu::BindGroupLayout,
-    pub previous_mouse: Option<winit::dpi::PhysicalPosition<f64>>,
-    pub mouse_button_state: self::MouseButtonState,
 }
 impl CameraSystem {
     pub fn new(
@@ -70,11 +67,9 @@ impl CameraSystem {
             buffer,
             bind_group,
             bind_group_layout,
-            previous_mouse: None,
-            mouse_button_state: self::MouseButtonState::default(),
         }
     }
-    pub fn update(&mut self, queue: &wgpu::Queue, delta_time: Duration) {
+    pub fn update(&mut self, queue: &wgpu::Queue, delta_time: std::time::Duration) {
         self.controller.update_camera(&mut self.camera, &mut self.projection, delta_time);
         self.uniform.update_view_proj(&self.camera, &self.projection);
         queue.write_buffer(
@@ -84,18 +79,7 @@ impl CameraSystem {
         );
     }
 }
-pub struct MouseButtonState {
-    pub left: bool,
-    pub right: bool,
-}
-impl MouseButtonState {
-    pub fn default() -> Self {
-        Self {
-            left: false,
-            right: false,
-        }
-    }
-}
+
 // Keep these structs as provided in your code
 #[rustfmt::skip]
 pub const OPENGL_TO_WGPU_MATRIX: cgmath::Matrix4<f32> = cgmath::Matrix4::new(
@@ -266,7 +250,7 @@ impl CameraController {
             MouseScrollDelta::PixelDelta(winit::dpi::PhysicalPosition { y: scroll, .. }) => *scroll as f32,
         };
     }
-    pub fn update_camera(&mut self, camera: &mut Camera, projection: &mut Projection, dt: Duration) {
+    pub fn update_camera(&mut self, camera: &mut Camera, projection: &mut Projection, dt: std::time::Duration) {
         let dt: f32 = dt.as_secs_f32();
         { //this is the movement of the camera
             let run_multiplier: f32 = if self.movement.run { self.run_multi } else { 1.0 };
