@@ -91,8 +91,8 @@ pub const OPENGL_TO_WGPU_MATRIX: cgmath::Matrix4<f32> = cgmath::Matrix4::new(
 pub const SAFE_FRAC_PI_2: f32 = std::f32::consts::FRAC_PI_2 - 0.0001;
 pub struct Camera {
     pub position: cgmath::Point3<f32>,
-    yaw: cgmath::Rad<f32>,
-    pitch: cgmath::Rad<f32>,
+    pub yaw: cgmath::Rad<f32>,
+    pub pitch: cgmath::Rad<f32>,
 }
 impl Camera {
     pub fn new<V, Y, P>(position: V, yaw: Y, pitch: P) -> Self

@@ -11,7 +11,6 @@ use winit::{
     event::{ElementState, Event, MouseButton, WindowEvent, KeyEvent},
     keyboard::KeyCode as Key,
 };
-use std::cell::RefCell;
 
 
 pub struct State<'a> {
@@ -54,7 +53,7 @@ pub struct MouseButtonState {
 pub struct DataSubsystem {
     geometry_buffer: geometry::GeometryBuffer,
     texture_manager: geometry::TextureManager,
-    instance_manager: RefCell<geometry::InstanceManager>, // Now wrapped in RefCell
+    instance_manager: std::cell::RefCell<geometry::InstanceManager>, // Now wrapped in RefCell
 }
 
 impl<'a> State<'a> {
@@ -123,7 +122,7 @@ impl<'a> State<'a> {
         // Constants for geometry creation
         const NUM_INSTANCES: u32 = 3;
         const SPACE_BETWEEN: f32 = 1.0;
-        let instance_manager = RefCell::new(geometry::InstanceManager::new(
+        let instance_manager = std::cell::RefCell::new(geometry::InstanceManager::new(
             &device,
             &queue,
             NUM_INSTANCES,
@@ -209,7 +208,7 @@ impl<'a> State<'a> {
     pub fn texture_manager(&self) -> &geometry::TextureManager {
         &self.data_system.texture_manager
     }
-    pub fn instance_manager(&self) -> &RefCell<geometry::InstanceManager> {
+    pub fn instance_manager(&self) -> &std::cell::RefCell<geometry::InstanceManager> {
         &self.data_system.instance_manager
     }
     pub fn ui_manager(&self) -> &user_interface::UIManager {
@@ -291,6 +290,10 @@ impl<'a> State<'a> {
                         self.ui_manager.visibility=!self.ui_manager.visibility;
                         return true;
                     },
+                    Key::KeyF => {
+                        geometry::add_def_cube();
+                        return true;
+                    }
                     _ => return false,
                 }
             },

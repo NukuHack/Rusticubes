@@ -1,4 +1,3 @@
-use cgmath::Rotation3;
 use image::GenericImageView;
 
 #[repr(C)]
@@ -14,7 +13,7 @@ struct Vertex {
 pub struct UIElement {
     pub position: (f32, f32), // Center position in normalized coordinates
     pub size: (f32, f32),     // Width and height in normalized coordinates
-    pub color: [f32; 4],      // Base color of the element
+    pub color: [f32; 4],      // Base color of the element RGBA
     pub text: String,         // Optional text content
     pub hovered: bool,        // Hover state
     pub on_click: Option<Box<dyn FnMut()>>, // Click callback
@@ -468,20 +467,7 @@ pub fn handle_ui_click(state: &mut super::State) {
 }
 
 pub fn setup_ui(state: &mut super::State) {
-    let click_new_element = Box::new(|| unsafe {
-        let state = super::get_state();
-        let mut instance_manager = state.instance_manager().borrow_mut();
-        instance_manager.add_instance(
-            state.device(),
-            state.queue(),
-            cgmath::Vector3::new(
-                state.camera_system.camera.position.x - 0.5,
-                state.camera_system.camera.position.y - 2.0,
-                state.camera_system.camera.position.z + 0.5,
-            ),
-            cgmath::Quaternion::from_angle_y(cgmath::Deg(0.0)),
-        );
-    });
+    let click_new_element = Box::new(|| super::geometry::add_def_cube());
 
     let add_element = super::user_interface::UIElement::new(
         (-0.5, -0.5),

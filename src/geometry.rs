@@ -1,14 +1,12 @@
-use super::geometry;
-use bytemuck::{Pod, Zeroable};
 use cgmath::InnerSpace;
 use cgmath::Rotation3;
 use image::GenericImageView;
-use std::{mem, result};
+use std::mem;
 use wgpu::util::DeviceExt;
 
 // --- Vertex & Buffer Layouts ---
 #[repr(C)]
-#[derive(Copy, Clone, Debug, Pod, Zeroable, Default)]
+#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable, Default)]
 pub struct Vertex {
     pub position: [f32; 3],
     pub normal: [f32; 3],
@@ -112,8 +110,11 @@ impl Cube {
 pub struct CubeBuffer;
 
 impl CubeBuffer {
-    pub fn new(device: &wgpu::Device, cube: &geometry::Cube) -> geometry::GeometryBuffer {
-        geometry::GeometryBuffer::new(&device, &cube.indices, &cube.vertices)
+    pub fn new(
+        device: &wgpu::Device,
+        cube: &super::geometry::Cube,
+    ) -> super::geometry::GeometryBuffer {
+        super::geometry::GeometryBuffer::new(&device, &cube.indices, &cube.vertices)
     }
 }
 
@@ -175,7 +176,7 @@ impl InstanceManager {
                                 space_between * (z as f32 - num_instances as f32 / 2.0),
                             );
 
-                            let rotation = if position.magnitude() == 0.0 {
+                            let rotation: cgmath::Quaternion<f32> = if position.magnitude() == 0.0 {
                                 cgmath::Quaternion::from_angle_y(cgmath::Deg(0.0))
                             } else {
                                 cgmath::Quaternion::from_axis_angle(
@@ -256,6 +257,35 @@ impl InstanceManager {
     }
 }
 
+pub fn add_def_cube() {
+    unsafe {
+        let state = super::get_state();
+        let mut instance_manager = state.instance_manager().borrow_mut();
+
+        // Create quaternions for each axis
+        let q_x: cgmath::Quaternion<f32> =
+            cgmath::Quaternion::from_angle_x(-state.camera_system.camera.pitch); // Rotation around X-axis
+        let q_y: cgmath::Quaternion<f32> = cgmath::Quaternion::from_angle_y(
+            state.camera_system.camera.yaw - cgmath::Rad(std::f32::consts::FRAC_PI_2),
+        ); // Rotation around Y-axis
+        let q_z: cgmath::Quaternion<f32> = cgmath::Quaternion::from_angle_z(cgmath::Deg(0.0)); // Rotation around Z-axis
+
+        // Combine rotations (order matters: Z * Y * X)
+        let combined_quaternion: cgmath::Quaternion<f32> = q_z * q_y * q_x;
+
+        instance_manager.add_instance(
+            state.device(),
+            state.queue(),
+            cgmath::Vector3::new(
+                state.camera_system.camera.position.x + 0.5,
+                state.camera_system.camera.position.y - 2.0,
+                state.camera_system.camera.position.z + 0.5,
+            ),
+            combined_quaternion,
+        );
+    }
+}
+
 // --- Instance Struct ---
 #[repr(C)]
 pub struct Instance {
@@ -284,7 +314,7 @@ impl Default for Instance {
 
 // --- InstanceRaw ---
 #[repr(C)]
-#[derive(Copy, Clone, Pod, Zeroable)]
+#[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct InstanceRaw {
     pub model: [[f32; 4]; 4],
 }
@@ -334,7 +364,7 @@ impl Texture {
         queue: &wgpu::Queue,
         bytes: &[u8],
         label: &str,
-    ) -> result::Result<Self, image::ImageError> {
+    ) -> std::result::Result<Self, image::ImageError> {
         let img: image::DynamicImage = image::load_from_memory(bytes)?;
         Self::from_image(device, queue, &img, Some(label))
     }
@@ -344,7 +374,7 @@ impl Texture {
         queue: &wgpu::Queue,
         img: &image::DynamicImage,
         label: Option<&str>,
-    ) -> result::Result<Self, image::ImageError> {
+    ) -> std::result::Result<Self, image::ImageError> {
         let rgba: image::RgbaImage = img.to_rgba8();
         let dimensions: (u32, u32) = img.dimensions();
 

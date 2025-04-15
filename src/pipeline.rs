@@ -1,14 +1,4 @@
-use super::geometry;
-use std::borrow::Cow;
-use wgpu;
-#[allow(
-    dead_code,
-    unused,
-    redundant_imports,
-    unused_results,
-    unused_features,
-    unused_variables
-)]
+#[allow(dead_code, unused)]
 /// Struct holding both render pipelines and their associated shaders
 pub struct Pipeline {
     pub render_pipeline: wgpu::RenderPipeline,
@@ -41,7 +31,9 @@ impl Pipeline {
 fn create_main_shader(device: &wgpu::Device) -> wgpu::ShaderModule {
     device.create_shader_module(wgpu::ShaderModuleDescriptor {
         label: Some("Main Texture Shader"),
-        source: wgpu::ShaderSource::Wgsl(Cow::from(include_str!("texture_shader.wgsl"))),
+        source: wgpu::ShaderSource::Wgsl(std::borrow::Cow::from(include_str!(
+            "texture_shader.wgsl"
+        ))),
     })
 }
 
@@ -49,7 +41,7 @@ fn create_main_shader(device: &wgpu::Device) -> wgpu::ShaderModule {
 fn create_inside_shader(device: &wgpu::Device) -> wgpu::ShaderModule {
     device.create_shader_module(wgpu::ShaderModuleDescriptor {
         label: Some("Inside Solid Color Shader"),
-        source: wgpu::ShaderSource::Wgsl(Cow::from(
+        source: wgpu::ShaderSource::Wgsl(std::borrow::Cow::from(
             r#"
             // Vertex Input Structure
             struct VertexInput {
@@ -84,7 +76,7 @@ fn create_inside_shader(device: &wgpu::Device) -> wgpu::ShaderModule {
             }
             @fragment
             fn fs_main() -> @location(0) vec4<f32> {
-                return vec4<f32>(0.8, 0.8, 0.8, 0.8);
+                return vec4<f32>(0.4, 0.4, 0.4, 0.8);
             }
         "#,
         )),
@@ -105,7 +97,10 @@ fn create_main_pipeline(
             module: shader,
             entry_point: Some("vs_main"),
             compilation_options: Default::default(),
-            buffers: &[geometry::Vertex::desc(), geometry::InstanceRaw::desc()],
+            buffers: &[
+                super::geometry::Vertex::desc(),
+                super::geometry::InstanceRaw::desc(),
+            ],
         },
         fragment: Some(wgpu::FragmentState {
             module: shader,
@@ -141,8 +136,8 @@ fn create_inside_pipeline(
             compilation_options: Default::default(),
             buffers: &[
                 // Reference the const + static instance layout
-                geometry::Vertex::desc(),
-                geometry::InstanceRaw::desc(),
+                super::geometry::Vertex::desc(),
+                super::geometry::InstanceRaw::desc(),
             ],
         },
         fragment: Some(wgpu::FragmentState {
@@ -186,7 +181,7 @@ fn inside_primitive_state() -> wgpu::PrimitiveState {
 /// Creates depth state for main pipeline
 fn depth_stencil_state(write_enabled: bool) -> wgpu::DepthStencilState {
     wgpu::DepthStencilState {
-        format: geometry::Texture::DEPTH_FORMAT,
+        format: super::geometry::Texture::DEPTH_FORMAT,
         depth_write_enabled: write_enabled,
         depth_compare: wgpu::CompareFunction::LessEqual,
         stencil: Default::default(),
