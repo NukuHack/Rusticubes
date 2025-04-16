@@ -253,8 +253,14 @@ impl<'a> State<'a> {
                     },
                 }
             },
-            WindowEvent::KeyboardInput { .. } => self.handle_key_input(event),
-            _ => self.handle_mouse_input(event)
+            WindowEvent::KeyboardInput { .. } => {
+                self.handle_key_input(event);
+                true
+            }
+            _ => {
+                self.handle_mouse_input(event);
+                true
+            }
         }
     }
     pub fn handle_key_input(&mut self, event: &WindowEvent) -> bool {
@@ -265,6 +271,12 @@ impl<'a> State<'a> {
                     state // ElementState::Released or ElementState::Pressed
                     , .. },..
             } => {
+                if let Some(focused_idx) = self.ui_manager.focused_element {
+                    if *state == ElementState::Pressed{
+                        self.ui_manager.process_input_ui(focused_idx, *key);
+                    }
+                    return true
+                }
                 // `key` is of type `KeyCode` (e.g., KeyCode::W)
                 // `state` is of type `ElementState` (Pressed or Released)
                 self.camera_system.controller.process_keyboard(&key, &state);
@@ -312,7 +324,6 @@ impl<'a> State<'a> {
             },
             _ => false
         }
-        
     }
 
     pub fn center_mouse(&self) {
