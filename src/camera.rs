@@ -187,23 +187,23 @@ pub struct CameraController {
 }
 #[derive(Debug, Default)]
 struct MovementInputs {
-    forward: f32,
-    backward: f32,
-    left: f32,
-    right: f32,
-    up: f32,
-    down: f32,
+    forward: bool,
+    backward: bool,
+    left: bool,
+    right: bool,
+    up: bool,
+    down: bool,
     run: bool,
 }
 impl MovementInputs {
     fn default() -> Self {
         Self {
-            forward: 0.0,
-            backward: 0.0,
-            left: 0.0,
-            right: 0.0,
-            up: 0.0,
-            down: 0.0,
+            forward: false,
+            backward: false,
+            left: false,
+            right: false,
+            up: false,
+            down: false,
             run: false,
         }
     }
@@ -233,27 +233,26 @@ impl CameraController {
         }
     }
     pub fn process_keyboard(&mut self, key: &Key, state: &ElementState) -> bool {
-        let is_pressed: bool = state == &ElementState::Pressed as &ElementState;
-        let amount: f32 = if is_pressed { 1.0 } else { 0.0 };
+        let is_pressed: bool = state == &ElementState::Pressed;
         match key {
             Key::KeyW | Key::ArrowUp => {
-                self.movement.forward = amount;
+                self.movement.forward = is_pressed;
                 true
             }
             Key::KeyS | Key::ArrowDown => {
-                self.movement.backward = amount;
+                self.movement.backward = is_pressed;
                 true
             }
             Key::KeyA | Key::ArrowLeft => {
-                self.movement.left = amount;
+                self.movement.left = is_pressed;
                 true
             }
             Key::KeyD | Key::ArrowRight => {
-                self.movement.right = amount;
+                self.movement.right = is_pressed;
                 true
             }
             Key::Space => {
-                self.movement.up = amount;
+                self.movement.up = is_pressed;
                 true
             }
             Key::ShiftLeft => {
@@ -261,7 +260,7 @@ impl CameraController {
                 true
             }
             Key::ControlLeft => {
-                self.movement.down = amount;
+                self.movement.down = is_pressed;
                 true
             }
             _ => false,
@@ -285,9 +284,9 @@ impl CameraController {
             let forward_dir = cgmath::Vector3::new(yaw_cos, 0.0, yaw_sin).normalize();
             let right_dir = cgmath::Vector3::new(-yaw_sin, 0.0, yaw_cos).normalize();
             // Move with dynamic run multiplier
-            let forward_amount: f32 = (self.movement.forward - self.movement.backward) * run_multiplier;
-            let right_amount: f32 = (self.movement.right - self.movement.left) * run_multiplier;
-            let up_amount: f32 = (self.movement.up - self.movement.down) * run_multiplier;
+            let forward_amount: f32 = ((self.movement.forward as i8 - self.movement.backward as i8) as f32) * run_multiplier;
+            let right_amount: f32 = ((self.movement.right as i8 - self.movement.left as i8) as f32) * run_multiplier;
+            let up_amount: f32 = ((self.movement.up as i8 - self.movement.down as i8) as f32) * run_multiplier;
             // Setting the position to the desired point
             camera.position += forward_dir * forward_amount * self.speed * delta_time;
             camera.position += right_dir * right_amount * self.speed * delta_time;

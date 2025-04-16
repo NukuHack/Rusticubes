@@ -458,11 +458,11 @@ fn convert_mouse_position(
     state: &super::State,
     mouse_pos: &winit::dpi::PhysicalPosition<f64>,
 ) -> (f32, f32) {
-    let (x, y) = (mouse_pos.x as f32, mouse_pos.y as f32);
-    let (width, height) = (state.size().width as f32, state.size().height as f32);
+    let (x, y): (f32, f32) = (mouse_pos.x as f32, mouse_pos.y as f32);
+    let (width, height): (f32, f32) = (state.size().width as f32, state.size().height as f32);
 
-    let norm_x = (2.0 * x / width) - 1.0;
-    let norm_y = (2.0 * (height - y) / height) - 1.0;
+    let norm_x: f32 = (2.0 * x / width) - 1.0;
+    let norm_y: f32 = (2.0 * (height - y) / height) - 1.0;
 
     (norm_x, norm_y)
 }
@@ -478,21 +478,21 @@ pub fn handle_ui_click(state: &mut super::State) {
 
 pub fn setup_ui(state: &mut super::State) {
     let add_element = super::user_interface::UIElement::new(
-        (-0.5, -0.55),
+        (-0.7, -0.55),
         (0.4, 0.1),
         [0.3, 0.6, 0.7],
         Some("Add new cube".to_string()),
         Some(Box::new(|| super::geometry::add_def_cube())),
     );
     let remove_element = super::user_interface::UIElement::new(
-        (-0.5, -0.75),
+        (-0.7, -0.75),
         (0.4, 0.1),
         [0.6, 0.3, 0.5],
         Some("Remove last cube".to_string()),
         Some(Box::new(|| super::geometry::rem_last_cube())),
     );
     let close_element = super::user_interface::UIElement::new(
-        (0.5, -0.7),
+        (0.6, -0.7),
         (0.2, 0.1),
         [1.0, 0.2, 0.1],
         Some("Close".to_string()),

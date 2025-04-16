@@ -227,7 +227,7 @@ impl<'a> State<'a> {
                 self.config(),
                 "depth_texture",
             );
-            return true;
+            return true
         }
         false
     }
@@ -258,56 +258,59 @@ impl<'a> State<'a> {
         }
     }
     pub fn handle_key_input(&mut self, event: &WindowEvent) -> bool {
-        if let WindowEvent::KeyboardInput {
-            event: KeyEvent {
-                physical_key: winit::keyboard::PhysicalKey::Code(physical_key), // Extract the KeyCode
-                state,..
-            },..
-        } = event
-        {
-            // `key_code` is of type `KeyCode` (e.g., KeyCode::W)
-            // `state` is of type `ElementState` (Pressed or Released)
-            self.camera_system.controller.process_keyboard(&physical_key, &state);
-        }
-
         match event {
             WindowEvent::KeyboardInput {
                 event: KeyEvent {
                     physical_key: winit::keyboard::PhysicalKey::Code(key),
-                    state: ElementState::Pressed // ElementState::Released // had to disable released otherwise hiding does not work correctly
+                    state // ElementState::Released or ElementState::Pressed
                     , .. },..
             } => {
+                // `key` is of type `KeyCode` (e.g., KeyCode::W)
+                // `state` is of type `ElementState` (Pressed or Released)
+                self.camera_system.controller.process_keyboard(&key, &state);
                 match key {
                     Key::AltLeft | Key::AltRight => {
                         self.center_mouse();
-                        return true;
+                        true
                     },
                     Key::Escape => {
                         close_app();
-                        return true;
+                        true
                     },
                     Key::F1 => {
-                        self.ui_manager.visibility=!self.ui_manager.visibility;
-                        return true;
+                        if *state == ElementState::Pressed {
+                            self.ui_manager.visibility=!self.ui_manager.visibility;
+                            return true
+                        }
+                        false
                     },
                     Key::KeyR => {
-                        if let Some(prev) = self.input_system.previous_mouse {
-                            geometry::rem_raycasted_cube(prev);
-                        };
-                        return true;
+                        if *state == ElementState::Pressed {
+                            if let Some(prev) = self.input_system.previous_mouse {
+                                geometry::rem_raycasted_cube(prev);
+                                return true
+                            }
+                        }
+                        false
                     },
                     Key::KeyF => {
-                        geometry::add_def_cube();
-                        return true;
+                        if *state == ElementState::Pressed {
+                            geometry::add_def_cube();
+                            return true
+                        }
+                        false
                     },
                     Key::KeyG => {
-                        geometry::rem_last_cube();
-                        return true;
+                        if *state == ElementState::Pressed {
+                            geometry::rem_last_cube();
+                            return true
+                        }
+                        false
                     },
-                    _ => return false,
+                    _ => false,
                 }
             },
-            _ => return false
+            _ => false
         }
         
     }
@@ -327,22 +330,24 @@ impl<'a> State<'a> {
                 match (button, *state) {
                     (MouseButton::Left, ElementState::Pressed) => {
                         self.input_system.mouse_button_state.left = true;
-                        user_interface::handle_ui_click(self);
-                        return true;
+                        if self.ui_manager.visibility!=false{
+                            user_interface::handle_ui_click(self);
+                        }
+                        true
                     }
                     (MouseButton::Left, ElementState::Released) => {
                         self.input_system.mouse_button_state.left = false;
-                        return true;
+                        true
                     }
                     (MouseButton::Right, ElementState::Pressed) => {
                         self.input_system.mouse_button_state.right = true;
-                        return true;
+                        true
                     }
                     (MouseButton::Right, ElementState::Released) => {
                         self.input_system.mouse_button_state.right = false;
-                        return true;
+                        true
                     }
-                    _ => (),
+                    _ => false,
                 }
             }
             WindowEvent::CursorMoved { position, .. } => {
@@ -354,15 +359,18 @@ impl<'a> State<'a> {
                     }
                 }
 
-                user_interface::handle_ui_hover(self, position);
+                //if self.ui_manager.visibility!=false{
+                // decided to comment it out -> if the user re-enables the ui while hovering it, it will still be colored correctly
+                    user_interface::handle_ui_hover(self, position);
+                //}
                 self.input_system.previous_mouse = Some(*position);
-                return true;
+                true
             }
             WindowEvent::MouseWheel { delta, .. } => {
                 self.camera_system.controller.process_scroll(delta);
-                return true;
+                true
             }
-            _ => (),
+            _ => false,
         };
         false
     }
