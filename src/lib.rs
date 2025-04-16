@@ -290,6 +290,12 @@ impl<'a> State<'a> {
                         self.ui_manager.visibility=!self.ui_manager.visibility;
                         return true;
                     },
+                    Key::KeyR => {
+                        if let Some(prev) = self.input_system.previous_mouse {
+                            geometry::rem_raycasted_cube(prev);
+                        };
+                        return true;
+                    },
                     Key::KeyF => {
                         geometry::add_def_cube();
                         return true;
@@ -342,8 +348,8 @@ impl<'a> State<'a> {
             WindowEvent::CursorMoved { position, .. } => {
                 if self.input_system.mouse_button_state.right == true {
                     if let Some(prev) = self.input_system.previous_mouse {
-                        let delta_x: f64 = position.x - prev.x;
-                        let delta_y: f64 = position.y - prev.y;
+                        let delta_x: f32 = (position.x - prev.x) as f32;
+                        let delta_y: f32 = (position.y - prev.y) as f32;
                         self.camera_system.controller.process_mouse(delta_x, delta_y);
                     }
                 }

@@ -478,7 +478,7 @@ pub fn handle_ui_click(state: &mut super::State) {
 
 pub fn setup_ui(state: &mut super::State) {
     let add_element = super::user_interface::UIElement::new(
-        (-0.5, -0.5),
+        (-0.5, -0.55),
         (0.4, 0.1),
         [0.3, 0.6, 0.7],
         Some("Add new cube".to_string()),
@@ -490,13 +490,6 @@ pub fn setup_ui(state: &mut super::State) {
         [0.6, 0.3, 0.5],
         Some("Remove last cube".to_string()),
         Some(Box::new(|| super::geometry::rem_last_cube())),
-    );
-    let text_element = super::user_interface::UIElement::new(
-        (-0.5, 0.7),
-        (0.5, 0.2),
-        [1.0, 0.6, 0.7],
-        Some("click event".to_string()),
-        Some(Box::new(|| println!("text clicked"))), // None
     );
     let close_element = super::user_interface::UIElement::new(
         (0.5, -0.7),
@@ -510,6 +503,5 @@ pub fn setup_ui(state: &mut super::State) {
     );
     state.ui_manager.add_ui_element(add_element);
     state.ui_manager.add_ui_element(remove_element);
-    state.ui_manager.add_ui_element(text_element);
     state.ui_manager.add_ui_element(close_element);
 }

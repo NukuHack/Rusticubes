@@ -1,5 +1,4 @@
-use cgmath::InnerSpace;
-use cgmath::Rotation3;
+use cgmath::{InnerSpace, Rotation3, SquareMatrix, Transform, Vector3};
 use image::GenericImageView;
 use std::mem;
 use wgpu::util::DeviceExt;
@@ -272,6 +271,24 @@ impl InstanceManager {
             bytemuck::cast_slice(&instance_data),
         );
     }
+    pub fn remove_instance_by_position(
+        &mut self,
+        position: cgmath::Vector3<f32>,
+        threshold: f32,
+        queue: &wgpu::Queue,
+    ) -> bool {
+        let index = self
+            .instances
+            .iter()
+            .position(|i| (i.position - position).magnitude() < threshold);
+
+        if let Some(idx) = index {
+            self.remove_instance(idx, queue);
+            true
+        } else {
+            false
+        }
+    }
 }
 
 pub fn add_def_cube() {
@@ -308,6 +325,100 @@ pub fn rem_last_cube() {
         let mut instance_manager = state.instance_manager().borrow_mut();
         if !instance_manager.instances.is_empty() {
             let index = instance_manager.instances.len() - 1;
+            instance_manager.remove_instance(index, state.queue());
+        }
+    }
+}
+
+pub fn cast_ray_and_select_cube(
+    camera: &super::camera::Camera,
+    size: &winit::dpi::PhysicalSize<u32>,
+    mouse_x: f32,
+    mouse_y: f32,
+    instances: &[Instance],
+    max_distance: f32,
+) -> Option<usize> {
+    // Get window dimensions from the state
+    let (width, height): (f32, f32) =
+        <winit::dpi::PhysicalSize<u32> as Into<(f32, f32)>>::into(*size);
+    // Normalize mouse coordinates to [-1.0, 1.0]
+    let mouse_direction = cgmath::Vector3::new(mouse_x, mouse_y, -1.0).normalize();
+
+    // Combine mouse direction with camera forward
+    let ray_dir = (camera.forward() + mouse_direction * 0.1).normalize();
+
+    let ray_origin = camera.position;
+
+    let mut closest_t = max_distance;
+    let mut selected_index = None;
+
+    for (index, instance) in instances.iter().enumerate() {
+        let cube_center = instance.position;
+        let half_extents = cgmath::Vector3::new(0.5, 0.5, 0.5);
+
+        let aabb_min = cube_center - half_extents;
+        let aabb_max = cube_center + half_extents;
+
+        if let Some(t) = ray_aabb_intersect(ray_origin, ray_dir, aabb_min, aabb_max) {
+            if t > 0.0 && t < closest_t {
+                closest_t = t;
+                selected_index = Some(index);
+                //println!("{}", selected_index.unwrap());
+            }
+        }
+    }
+    selected_index
+}
+
+fn ray_aabb_intersect(
+    ray_origin: cgmath::Point3<f32>,
+    ray_dir: Vector3<f32>,
+    aabb_min: Vector3<f32>,
+    aabb_max: Vector3<f32>,
+) -> Option<f32> {
+    let mut t_min = -f32::INFINITY;
+    let mut t_max = f32::INFINITY;
+
+    for i in 0..3 {
+        let inv_dir = 1.0 / ray_dir[i];
+        let mut t1 = (aabb_min[i] - ray_origin[i]) * inv_dir;
+        let mut t2 = (aabb_max[i] - ray_origin[i]) * inv_dir;
+
+        if inv_dir < 0.0 {
+            std::mem::swap(&mut t1, &mut t2);
+        }
+
+        t_min = t_min.max(t1);
+        t_max = t_max.min(t2);
+
+        if t_max < t_min {
+            return None;
+        }
+    }
+
+    if t_min > 0.0 {
+        Some(t_min)
+    } else if t_max > 0.0 {
+        Some(t_max)
+    } else {
+        None
+    }
+}
+
+// Function to remove the raycasted cube
+pub fn rem_raycasted_cube(mouse_pos: winit::dpi::PhysicalPosition<f64>) {
+    unsafe {
+        let state = super::get_state();
+        let instance_manager = &mut *state.instance_manager().borrow_mut();
+
+        if let Some(index) = cast_ray_and_select_cube(
+            &state.camera_system.camera,
+            state.size(),
+            mouse_pos.x as f32,
+            mouse_pos.y as f32,
+            &instance_manager.instances,
+            100.0,
+        ) {
             instance_manager.remove_instance(index, state.queue());
         }
     }

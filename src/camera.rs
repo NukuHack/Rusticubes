@@ -120,6 +120,26 @@ impl Camera {
             cgmath::Vector3::unit_y(),
         )
     }
+    /// Get the forward vector
+    pub fn forward(&self) -> cgmath::Vector3<f32> {
+        let yaw_rad: cgmath::Rad<f32> = self.yaw.into(); // Convert to radians
+        let pitch_rad: cgmath::Rad<f32> = self.pitch.into(); // Convert to radians
+
+        let forward_x = yaw_rad.0.cos() * pitch_rad.0.cos();
+        let forward_y = pitch_rad.0.sin();
+        let forward_z = yaw_rad.0.sin() * pitch_rad.0.cos();
+
+        cgmath::Vector3::new(forward_x, forward_y, forward_z).normalize()
+    }
+    /// Get the right vector (perpendicular to forward)
+    pub fn right(&self) -> cgmath::Vector3<f32> {
+        self.forward().cross(cgmath::Vector3::unit_y()).normalize()
+    }
+
+    /// Get the up vector (perpendicular to both forward and right)
+    pub fn up(&self) -> cgmath::Vector3<f32> {
+        self.right().cross(self.forward())
+    }
 }
 pub struct Projection {
     aspect: f32,
@@ -240,9 +260,9 @@ impl CameraController {
             _ => false,
         }
     }
-    pub fn process_mouse(&mut self, mouse_dx: f64, mouse_dy: f64) {
-        self.rotation.horizontal = mouse_dx as f32;
-        self.rotation.vertical = -mouse_dy as f32; // because this is stupidly made in the opposite way AHH
+    pub fn process_mouse(&mut self, delta_x: f32, delta_y: f32) {
+        self.rotation.horizontal = delta_x as f32;
+        self.rotation.vertical = -delta_y as f32; // because this is stupidly made in the opposite way AHH
     }
     pub fn process_scroll(&mut self, delta: &MouseScrollDelta) {
         self.scroll = match delta {
