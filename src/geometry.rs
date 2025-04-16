@@ -1,4 +1,4 @@
-use cgmath::{InnerSpace, Rotation3, SquareMatrix, Transform, Vector3};
+use cgmath::{InnerSpace, Rotation3, Vector3};
 use image::GenericImageView;
 use std::mem;
 use wgpu::util::DeviceExt;
@@ -300,7 +300,7 @@ pub fn add_def_cube() {
         let q_x: cgmath::Quaternion<f32> =
             cgmath::Quaternion::from_angle_x(-state.camera_system.camera.pitch); // Rotation around X-axis
         let q_y: cgmath::Quaternion<f32> = cgmath::Quaternion::from_angle_y(
-            state.camera_system.camera.yaw - cgmath::Rad(std::f32::consts::FRAC_PI_2),
+            (-state.camera_system.camera.yaw) + cgmath::Rad(std::f32::consts::FRAC_PI_2),
         ); // Rotation around Y-axis
         let q_z: cgmath::Quaternion<f32> = cgmath::Quaternion::from_angle_z(cgmath::Deg(0.0)); // Rotation around Z-axis
 

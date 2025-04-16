@@ -17,21 +17,19 @@ pub struct CameraSystem {
 impl CameraSystem {
     pub fn new(
         device: &wgpu::Device,
-        config: &wgpu::SurfaceConfiguration,
+        size: &winit::dpi::PhysicalSize<u32>,
         position: cgmath::Point3<f32>,
     ) -> Self {
-        let yaw: cgmath::Rad<f32>= cgmath::Rad(-std::f32::consts::FRAC_PI_2);
-        let pitch: cgmath::Rad<f32>= cgmath::Rad(-0.3);
-        let fovy: f32 = 70.0;
-        let znear: f32 = 0.01;
-        let zfar: f32 = 100.0;
-        let camera_speed: f32 = 4.0;
-        let sensitivity: f32 = 0.5;
+        let yaw: cgmath::Rad<f32>= cgmath::Rad::from(cgmath::Deg(-90.0)); // left-right (- is left; + is right) by default the camera faces left (90°)
+        let pitch: cgmath::Rad<f32>= cgmath::Rad(0.0); // up-down (- is down; + is up) by default it is 0
+        let fovy: cgmath::Rad<f32> = cgmath::Rad::from(cgmath::Deg(90.0)); // by default you can see the 1/4 of the world
+        let (znear, zfar):(f32,f32) = (0.01, 100.0); // idk what these are actually
+        let (camera_speed,sensitivity):(f32,f32) = (4.0,0.5); // speed (will put this into the player class) and sensitivity for mouse movement
 
         let camera: Camera = Camera::new(position, yaw, pitch);
-        let projection: Projection = Projection::new(config.width, config.height, cgmath::Rad::from(cgmath::Deg(fovy)), znear, zfar);
+        let projection: Projection = Projection::new(*size, fovy, znear, zfar);
         let controller: CameraController = CameraController::new(camera_speed, sensitivity);
-        let mut uniform: CameraUniform = CameraUniform::new();
+        let mut uniform = CameraUniform::default();
         uniform.update_view_proj(&camera, &projection);
         let buffer: wgpu::Buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Camera Buffer"),
@@ -69,7 +67,7 @@ impl CameraSystem {
             bind_group_layout,
         }
     }
-    pub fn update(&mut self, queue: &wgpu::Queue, delta_time: std::time::Duration) {
+    pub fn update(&mut self, queue: &wgpu::Queue, delta_time: f32) {
         self.controller.update_camera(&mut self.camera, &mut self.projection, delta_time);
         self.uniform.update_view_proj(&self.camera, &self.projection);
         queue.write_buffer(
@@ -80,14 +78,26 @@ impl CameraSystem {
     }
 }
 
-// Keep these structs as provided in your code
-#[rustfmt::skip]
-pub const OPENGL_TO_WGPU_MATRIX: cgmath::Matrix4<f32> = cgmath::Matrix4::new(
-    1.0, 0.0, 0.0, 0.0,
-    0.0, 1.0, 0.0, 0.0,
-    0.0, 0.0, 0.5, 0.5,
-    0.0, 0.0, 0.0, 1.0,
-);
+#[repr(C)]
+#[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct CameraUniform {
+    view_proj: [[f32; 4]; 4],
+}
+impl Default for CameraUniform {
+    fn default() -> Self {
+        Self { view_proj: cgmath::Matrix4::identity().into() }
+    }
+}
+
+impl CameraUniform {
+    pub fn update_view_proj(&mut self, camera: &Camera, projection: &Projection) {
+        let view = camera.calc_matrix();
+        let proj = projection.calc_matrix();
+        self.view_proj = (proj * view).into();
+    }
+}
+
+
 pub const SAFE_FRAC_PI_2: f32 = std::f32::consts::FRAC_PI_2 - 0.0001;
 pub struct Camera {
     pub position: cgmath::Point3<f32>,
@@ -95,16 +105,11 @@ pub struct Camera {
     pub pitch: cgmath::Rad<f32>,
 }
 impl Camera {
-    pub fn new<V, Y, P>(position: V, yaw: Y, pitch: P) -> Self
-    where
-        V: Into<cgmath::Point3<f32>>,
-        Y: Into<cgmath::Rad<f32>>,
-        P: Into<cgmath::Rad<f32>>,
-    {
+    pub fn new(position: cgmath::Point3<f32>, yaw: cgmath::Rad<f32>, pitch: cgmath::Rad<f32>) -> Self{
         Self {
-            position: position.into(),
-            yaw: yaw.into(),
-            pitch: pitch.into(),
+            position,
+            yaw,
+            pitch,
         }
     }
     pub fn calc_matrix(&self) -> cgmath::Matrix4<f32> {
@@ -122,14 +127,10 @@ impl Camera {
     }
     /// Get the forward vector
     pub fn forward(&self) -> cgmath::Vector3<f32> {
-        let yaw_rad: cgmath::Rad<f32> = self.yaw.into(); // Convert to radians
-        let pitch_rad: cgmath::Rad<f32> = self.pitch.into(); // Convert to radians
-
-        let forward_x = yaw_rad.0.cos() * pitch_rad.0.cos();
-        let forward_y = pitch_rad.0.sin();
-        let forward_z = yaw_rad.0.sin() * pitch_rad.0.cos();
-
-        cgmath::Vector3::new(forward_x, forward_y, forward_z).normalize()
+        let (sin_p, cos_p) = self.pitch.0.sin_cos(); // Convert to radians
+        let (sin_y, cos_y) = self.yaw.0.sin_cos(); // Convert to radians
+        
+        cgmath::Vector3::new(cos_p * cos_y, sin_p, cos_p * sin_y).normalize()
     }
     /// Get the right vector (perpendicular to forward)
     pub fn right(&self) -> cgmath::Vector3<f32> {
@@ -148,16 +149,15 @@ pub struct Projection {
     zfar: f32,
 }
 impl Projection {
-    pub fn new<F: Into<cgmath::Rad<f32>> + std::fmt::Debug>(
-        width: u32,
-        height: u32,
-        fovy: F,
+    pub fn new(
+        size: winit::dpi::PhysicalSize<u32>,
+        fovy: cgmath::Rad<f32>,
         znear: f32,
         zfar: f32,
     ) -> Self {
         Self {
-            aspect: width as f32 / height as f32,
-            fovy: fovy.into(),
+            aspect: size.height as f32 / size.width as f32,
+            fovy,
             znear,
             zfar,
         }
@@ -166,8 +166,15 @@ impl Projection {
         self.aspect = width as f32 / height as f32;
     }
     pub fn calc_matrix(&self) -> cgmath::Matrix4<f32> {
-        OPENGL_TO_WGPU_MATRIX * cgmath::perspective(self.fovy, self.aspect, self.znear, self.zfar)
+        Self::OPENGL_TO_WGPU_MATRIX * cgmath::perspective(self.fovy, self.aspect, self.znear, self.zfar)
     }
+    
+    pub const OPENGL_TO_WGPU_MATRIX: cgmath::Matrix4<f32> = cgmath::Matrix4::new(
+        1.0, 0.0, 0.0, 0.0,
+        0.0, 1.0, 0.0, 0.0,
+        0.0, 0.0, 0.5, 0.5,
+        0.0, 0.0, 0.0, 1.0,
+    );
 }
 #[derive(Debug)]
 pub struct CameraController {
@@ -266,60 +273,41 @@ impl CameraController {
     }
     pub fn process_scroll(&mut self, delta: &MouseScrollDelta) {
         self.scroll = match delta {
-            MouseScrollDelta::LineDelta(_, scroll) => scroll * 0.5,
-            MouseScrollDelta::PixelDelta(winit::dpi::PhysicalPosition { y: scroll, .. }) => *scroll as f32,
+            MouseScrollDelta::LineDelta(_, y) => y * 0.5,
+            MouseScrollDelta::PixelDelta(pos) => pos.y as f32,
         };
     }
-    pub fn update_camera(&mut self, camera: &mut Camera, projection: &mut Projection, dt: std::time::Duration) {
-        let dt: f32 = dt.as_secs_f32();
+    pub fn update_camera(&mut self, camera: &mut Camera, projection: &mut Projection, delta_time: f32) {
         { //this is the movement of the camera
             let run_multiplier: f32 = if self.movement.run { self.run_multi } else { 1.0 };
-            // Move with dynamic run multiplier
+            // Calculating the actual angle to move towards
             let (yaw_sin, yaw_cos): (f32, f32) = camera.yaw.0.sin_cos();
             let forward_dir = cgmath::Vector3::new(yaw_cos, 0.0, yaw_sin).normalize();
             let right_dir = cgmath::Vector3::new(-yaw_sin, 0.0, yaw_cos).normalize();
+            // Move with dynamic run multiplier
             let forward_amount: f32 = (self.movement.forward - self.movement.backward) * run_multiplier;
             let right_amount: f32 = (self.movement.right - self.movement.left) * run_multiplier;
             let up_amount: f32 = (self.movement.up - self.movement.down) * run_multiplier;
-            camera.position += forward_dir * forward_amount * self.speed * dt;
-            camera.position += right_dir * right_amount * self.speed * dt;
-            camera.position.y += up_amount * self.speed * dt;
+            // Setting the position to the desired point
+            camera.position += forward_dir * forward_amount * self.speed * delta_time;
+            camera.position += right_dir * right_amount * self.speed * delta_time;
+            camera.position.y += up_amount * self.speed * delta_time;
         } { //this is the scrolling of the cam
             // Field of view +/- (zoom)
             let delta: f32 = self.scroll * self.sensitivity;
             projection.fovy = cgmath::Rad(
-                (projection.fovy.0 - delta).clamp(0.01, 3.14)
+                (projection.fovy.0 - delta).clamp(0.001, 3.14) // pi = 3.1415926535 so leaving 0.001 for floating point inaccuracies is fine
             );
             self.scroll = 0.0; // null the value after using it
         } { // this is the rotating of the cam
             // Calculate rotation delta scaled by sensitivity and time
-            let delta: f32 = self.sensitivity * dt;
-            // Extract the f32 value, apply clamp, and re-wrap into Rad<f32> s
-            let max_pitch = cgmath::Rad(self::SAFE_FRAC_PI_2);
+            let delta: f32 = self.sensitivity * delta_time;
             camera.yaw += cgmath::Rad(self.rotation.horizontal) * delta;
-            camera.pitch = {
-                let raw_value: f32 = camera.pitch.0 + (self.rotation.vertical * delta);
-                cgmath::Rad(raw_value.clamp(-max_pitch.0, max_pitch.0))
-            };
+            let pitch = (camera.pitch.0 + self.rotation.vertical * delta)
+                .clamp(-SAFE_FRAC_PI_2, SAFE_FRAC_PI_2);
+            camera.pitch = cgmath::Rad(pitch);
             self.rotation.horizontal = 0.0; // null the value after using it
             self.rotation.vertical = 0.0;   // null the value after using it
         }
-    }
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
-pub struct CameraUniform {
-    view_proj: [[f32; 4]; 4],
-}
-impl CameraUniform {
-    pub fn new() -> Self {
-        Self {
-            view_proj: cgmath::Matrix4::identity().into(),
-        }
-    }
-    pub fn update_view_proj(&mut self, camera: &Camera, projection: &Projection) {
-        let view = camera.calc_matrix();
-        let proj = projection.calc_matrix();
-        self.view_proj = (proj * view).into();
     }
 }

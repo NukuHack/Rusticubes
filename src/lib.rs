@@ -113,8 +113,8 @@ impl<'a> State<'a> {
         // Create camera system with advanced controls
         let camera_system: camera::CameraSystem = camera::CameraSystem::new(
             &device,
-            &config,
-            cgmath::Point3::new(0.5, 1.0, 2.0),
+            &size,
+            cgmath::Point3::new(0.5, 1.8, 2.0), // by default the camera is 1.8 meters tall
         );
 
         surface.configure(&device, &config);
@@ -369,7 +369,7 @@ impl<'a> State<'a> {
 
     pub fn update(&mut self) {
         let current_time: std::time::Instant = std::time::Instant::now();
-        let delta_seconds: std::time::Duration = current_time - self.previous_frame_time;
+        let delta_seconds: f32 = (current_time - self.previous_frame_time).as_secs_f32();
         self.previous_frame_time = current_time;
         self.camera_system.update(&self.render_context.queue, delta_seconds);
 
