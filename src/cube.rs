@@ -348,9 +348,30 @@ impl Chunk {
 
     /// Creates a new empty chunk at the specified position
     pub fn new(position: cgmath::Vector3<f32>) -> Self {
+        // Initialize the cubes array by explicitly constructing each element
+        let mut cubes: [Cube; Self::CUBES_PER_CHUNK] = {
+            let mut array = [(); Self::CUBES_PER_CHUNK].map(|_| Cube::default());
+            for x in 0..Self::CHUNK_SIZE {
+                for y in 0..Self::CHUNK_SIZE {
+                    for z in 0..Self::CHUNK_SIZE {
+                        let cube_pos: cgmath::Vector3<f32> = cgmath::Vector3::new(
+                            position.x + x as f32,
+                            position.y + y as f32,
+                            position.z + z as f32,
+                        );
+                        let index = x * Self::CHUNK_SIZE * Self::CHUNK_SIZE
+                                    + y * Self::CHUNK_SIZE
+                                    + z;
+                        array[index] = Cube::new(vector_to_position(cube_pos));
+                    }
+                }
+            }
+            array
+        };
+
         Chunk {
             position,
-            cubes: [Cube::default(); Self::CUBES_PER_CHUNK],
+            cubes,
         }
     }
 

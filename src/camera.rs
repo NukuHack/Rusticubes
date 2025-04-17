@@ -309,7 +309,7 @@ impl CameraController {
             self.scroll = 0.0; // null the value after using it
         } { // this is the rotating of the cam
             // Calculate rotation delta scaled by sensitivity and time
-            let delta: f32 = self.sensitivity * 0.05; // * delta_time
+            let delta: f32 = self.sensitivity * 0.05; // * delta_time // decided to remove delta-time 'cus it was bad for this thing
             camera.yaw += cgmath::Rad(self.rotation.horizontal) * delta;
             let pitch = (camera.pitch.0 + self.rotation.vertical * delta)
                 .clamp(-SAFE_FRAC_PI_2, SAFE_FRAC_PI_2);
