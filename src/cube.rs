@@ -1,18 +1,19 @@
 ﻿
 use crate::geometry::Vertex;
-use cgmath::{Rotation3, Rad};
+use cgmath::Rotation3;
 
 /// Stores position for X, Y, Z as 4-bit fields: [X:4, Y:4, Z:4, Empty:4]
 /// Stores rotations for X, Y, Z as 5-bit fields: [X:5, Y:5, Z:5, Empty:1]
 /// Stores 3x3x3 points as a 32-bit "array" [Points: 27, Empty: 5]
 #[allow(dead_code, unused)]
-#[derive(Debug, Clone)]
+#[derive(Clone,Copy)]
 pub struct Cube {
     /// in case someone needs it (i do i'm stupid) 4 bits is 0-15 ; 5 bits is 0-32; this goes forever (i think u256 is the current max)
     pub position: u16,    // [X:4, Y:4, Z:4, Empty:4]
     pub material: u16,    // Material info (unused in current implementation)
     pub points: u32,      // 3x3x3 points (27 bits used)
     pub rotation: u16,    // [X:5, Y:5, Z:5, Empty:1]
+    pub is_empty: bool,
     pub vertices: [Vertex; 8],
     pub indices: [u32; 36],
 }
@@ -25,9 +26,22 @@ impl Default for Cube {
             material: 1,
             points: 0,
             rotation: 0,
+            is_empty: true,
             vertices: Self::VERTICES,
             indices: Self::INDICES,
         }
+    }
+}
+impl std::fmt::Debug for Cube {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Cube")
+            .field("position", &format_args!("{:?}", self.position))
+            .field("material", &format_args!("{:?}", self.material))
+            .field("points", &format_args!("{:?}", self.points))
+            .field("rotation", &format_args!("{:?}", self.rotation))
+            //.field("vertices", &self.vertices) // constant so i decided not to log it
+            //.field("indices", &self.indices) // constant so i decided not to log it
+            .finish()
     }
 }
 #[allow(dead_code, unused)]
@@ -36,6 +50,7 @@ impl Cube {
     pub fn new(position: u16) -> Self {
         Self {
             position,
+            is_empty: false,
             ..Self::default()
         }
     }
@@ -45,6 +60,7 @@ impl Cube {
         Self {
             position,
             rotation,
+            is_empty: false,
             ..Self::default()
         }
     }
@@ -70,43 +86,39 @@ impl Cube {
     }
     /// Extract individual rotation components (0-3)
     pub fn get_x_rotation(&self) -> u16 {
-        (self.rotation & Self::ROT_MASK_X) >> Self::ROT_SHIFT_X % 4
+        (self.rotation & Self::ROT_MASK_X) >> Self::ROT_SHIFT_X
     }
 
     pub fn get_y_rotation(&self) -> u16 {
-        (self.rotation & Self::ROT_MASK_Y) >> Self::ROT_SHIFT_Y % 4
+        (self.rotation & Self::ROT_MASK_Y) >> Self::ROT_SHIFT_Y
     }
 
     pub fn get_z_rotation(&self) -> u16 {
-        (self.rotation & Self::ROT_MASK_Z) >> Self::ROT_SHIFT_Z % 4
+        (self.rotation & Self::ROT_MASK_Z) >> Self::ROT_SHIFT_Z
     }
     /// Rotation snapping and conversion to quaternion
     pub fn rotation_to_quaternion(&self) -> cgmath::Quaternion<f32> {
-        let x_rot = self.get_x_rotation() as f32 * 90.0;
-        let y_rot = self.get_y_rotation() as f32 * 90.0;
-        let z_rot = self.get_z_rotation() as f32 * 90.0;
+        let x_rot = self.get_x_rotation() as f32 * (360.0 / 32.0);
+        let y_rot = self.get_y_rotation() as f32 * (360.0 / 32.0);
+        let z_rot = self.get_z_rotation() as f32 * (360.0 / 32.0);
 
-        // Apply rotations in XYZ order
         let x_q = cgmath::Quaternion::from_angle_x(cgmath::Deg(x_rot));
         let y_q = cgmath::Quaternion::from_angle_y(cgmath::Deg(y_rot));
         let z_q = cgmath::Quaternion::from_angle_z(cgmath::Deg(z_rot));
 
-        z_q * y_q * x_q // Combined rotation order
+        z_q * y_q * x_q // Apply rotations in XYZ order
     }
 
     pub fn rotate(&mut self, axis: char, steps: u16) {
         let current = self.get_axis_rotation(axis);
-        let new_rot = (current + steps) % 4; // Keep modulo 4 for compatibility
-
+        let new_rot = (current + steps) % 32; // 5 bits → 0-31
         let (mask, shift) = match axis {
             'x' => (Self::ROT_MASK_X, Self::ROT_SHIFT_X),
             'y' => (Self::ROT_MASK_Y, Self::ROT_SHIFT_Y),
             'z' => (Self::ROT_MASK_Z, Self::ROT_SHIFT_Z),
             _ => unreachable!(),
         };
-
         self.rotation = (self.rotation & !mask) | ((new_rot as u16) << shift);
-
         if new_rot == 0 {
             self.reset_points();
         }
@@ -147,23 +159,29 @@ impl Cube {
 
     /// Computes the rotated positions for all 27 points based on the current rotation.
     fn compute_rotated_positions(&self) -> [[u8; 3]; 27] {
+        let x_rot = self.get_x_rotation() as f32 * (std::f32::consts::PI * 2.0 / 32.0);
+        let y_rot = self.get_y_rotation() as f32 * (std::f32::consts::PI * 2.0 / 32.0);
+        let z_rot = self.get_z_rotation() as f32 * (std::f32::consts::PI * 2.0 / 32.0);
+
+        let rotation_x = cgmath::Quaternion::from_axis_angle(cgmath::Vector3::unit_x(), cgmath::Rad(x_rot));
+        let rotation_y = cgmath::Quaternion::from_axis_angle(cgmath::Vector3::unit_y(), cgmath::Rad(y_rot));
+        let rotation_z = cgmath::Quaternion::from_axis_angle(cgmath::Vector3::unit_z(), cgmath::Rad(z_rot));
+
+        let total_rotation = rotation_z * rotation_y * rotation_x; // Apply rotations in XYZ order
+
         let mut rotated_positions = DOT_ARRAY.to_vec();
-
-        let x_rot = self.get_axis_rotation('x');
-        for _ in 0..x_rot {
-            self.rotate_x(&mut rotated_positions);
+        for point in rotated_positions.iter_mut() {
+            let vec = cgmath::Vector3::new(
+                point[0] as f32 - 1.0, // Center the point (since DOT_ARRAY is offset)
+                point[1] as f32 - 1.0,
+                point[2] as f32 - 1.0,
+            );
+            let rotated = total_rotation * vec;
+            // Convert back to u8 and clamp to 0-2 range
+            point[0] = ((rotated.x + 1.0).clamp(0.0, 2.0) * 3.0).round() as u8 % 3;
+            point[1] = ((rotated.y + 1.0).clamp(0.0, 2.0) * 3.0).round() as u8 % 3;
+            point[2] = ((rotated.z + 1.0).clamp(0.0, 2.0) * 3.0).round() as u8 % 3;
         }
-
-        let y_rot = self.get_axis_rotation('y');
-        for _ in 0..y_rot {
-            self.rotate_y(&mut rotated_positions);
-        }
-
-        let z_rot = self.get_axis_rotation('z');
-        for _ in 0..z_rot {
-            self.rotate_z(&mut rotated_positions);
-        }
-
         rotated_positions.try_into().unwrap()
     }
 
@@ -236,8 +254,6 @@ impl Cube {
         }
         config
     }
-
-
 
     // Full conversion to Instance
     pub fn to_instance(&self) -> super::geometry::Instance {
@@ -313,48 +329,45 @@ impl Cube {
 }
 
 /// Convert a quaternion to the packed u16 rotation format
-// Convert quaternion to Euler angles (pitch, yaw, roll)
 pub fn quaternion_to_rotation(rotation: cgmath::Quaternion<f32>) -> u16 {
-    let pitch:cgmath::Rad<f32> = cgmath::Rad(rotation.v.x);
-    let yaw:cgmath::Rad<f32> = cgmath::Rad(rotation.v.y);
-    let roll:cgmath::Rad<f32> = cgmath::Rad(rotation.v.z);
-    // Normalize angles to [0, 2π) range
-    let normalize_angle = |angle: Rad<f32>| -> Rad<f32> {
-        let angle = angle.0.rem_euclid(2.0 * std::f32::consts::PI);
-        Rad(angle)
-    };
+    // Extract components of the quaternion (assuming it's already normalized)
+    let w:f32 = rotation.s;
+    let x:f32 = rotation.v.x;
+    let y:f32 = rotation.v.y;
+    let z:f32 = rotation.v.z;
 
-    let pitch = normalize_angle(pitch);
-    let yaw = normalize_angle(yaw);
-    let roll = normalize_angle(roll);
+    // Precompute common terms using fused multiply-add where possible
+    let xx:f32 = x * x;
+    let yy:f32 = y * y;
+    let xy:f32 = x * y;
+    let yz:f32 = y * z;
+    let zx:f32 = z * x;
+    
+    // Compute angles directly using atan2 and asin
+    let pitch:f32 = (2.0 * (w * x + yz)).atan2(1.0 - 2.0 * (xx + yy));
+    let yaw:f32 = (2.0 * (w * y - zx)).asin();
+    let roll:f32 = (2.0 * (w * z + xy)).atan2(1.0 - 2.0 * (yy + z * z));
 
-    // Quantize each angle into 5-bit values (0-31)
-    let quantize = |angle: Rad<f32>| -> u32 {
-        let normalized = angle.0 / (2.0 * std::f32::consts::PI);
-        let quantized = (normalized * 31.0).round() as u32;
-        quantized.clamp(0, 31)
-    };
-
-    let pitch_bits = quantize(pitch);
-    let yaw_bits = quantize(yaw);
-    let roll_bits = quantize(roll);
+    // Normalize and quantize angles in one step using bit operations
+    const SCALE: f32 = 31.0 / (2.0 * std::f32::consts::PI);
+    
+    // Use rem_euclid for normalization and scale directly
+    let pitch_bits = ((pitch.rem_euclid(2.0 * std::f32::consts::PI) * SCALE).round() as u16) & 0x1F;
+    let yaw_bits = ((yaw.rem_euclid(2.0 * std::f32::consts::PI) * SCALE).round() as u16) & 0x1F;
+    let roll_bits = ((roll.rem_euclid(2.0 * std::f32::consts::PI) * SCALE).round() as u16) & 0x1F;
 
     // Pack into u16: [X:5][Y:5][Z:5][Empty:1]
-    let packed = 
-        (pitch_bits as u16)        // X: bits 0-4
-        | ((yaw_bits as u16) << 5) // Y: bits 5-9
-        | ((roll_bits as u16) << 10); // Z: bits 10-14
-
-    packed
+    pitch_bits | (yaw_bits << 5) | (roll_bits << 10)
 }
 // Convert world coordinates to packed u16 position
 pub fn vector_to_position(position: cgmath::Vector3<f32>) -> u16 {
-    let x = (position.x.clamp(0.0, 15.0) as u16) & 0xF; // Clamp and mask to 4 bits
-    let y = (position.y.clamp(0.0, 15.0) as u16) & 0xF; // Clamp and mask to 4 bits
-    let z = (position.z.clamp(0.0, 15.0) as u16) & 0xF; // Clamp and mask to 4 bits
+    let x:u16 = (position.x.clamp(0.0, 15.0) as u16) & 0xF; // Clamp and mask to 4 bits
+    let y:u16 = (position.y.clamp(0.0, 15.0) as u16) & 0xF; // Clamp and mask to 4 bits
+    let z:u16 = (position.z.clamp(0.0, 15.0) as u16) & 0xF; // Clamp and mask to 4 bits
 
     (z | (y << 4) | (x << 8)) as u16
 }
+
 
 pub const DOT_ARRAY: [[u8; 3]; 27] = [
     [2, 0, 0], [2, 0, 1], [2, 0, 2],
@@ -374,30 +387,85 @@ pub const MARCHING_CUBES_TABLE: [[u8; 1]; 0] = [
     /* ... */ // Fill in the full table here
 ];
 
+
 #[derive(Debug, Clone)]
 pub struct Chunk {
-    blocks: Vec<Option<Cube>>, // `None` represents air blocks
+    pub position: cgmath::Vector3<f32>,  // World coordinates of chunk (e.g., chunk (x,y,z))
+    pub cubes: [Cube; Self::CUBES_PER_CHUNK],  // Array of cubes in the chunk
 }
 
 #[allow(dead_code, unused)]
 impl Chunk {
-    pub fn new() -> Self {
+    pub const CHUNK_SIZE: usize = 16;
+    pub const CHUNK_SIZE_F: f32 = Self::CHUNK_SIZE as f32;
+    pub const CUBES_PER_CHUNK: usize = Self::CHUNK_SIZE.pow(3);
+
+    /// Creates a new empty chunk at the specified position
+    pub fn new(position: cgmath::Vector3<f32>) -> Self {
         Chunk {
-            blocks: vec![None; Self::CHUNK_SIZE * Self::CHUNK_SIZE * Self::CHUNK_SIZE],
+            position,
+            cubes: [Cube::default(); Self::CUBES_PER_CHUNK],
         }
     }
 
-    pub fn get(&self, x: usize, y: usize, z: usize) -> Option<&Cube> {
-        self.blocks[z * Self::CHUNK_SIZE * Self::CHUNK_SIZE + y * Self::CHUNK_SIZE + x].as_ref()
+    /// Get cube data at local coordinates (returns None for empty cubes)
+    pub fn get(&self, local: cgmath::Vector3<f32>) -> Option<&Cube> {
+        let idx = Self::local_to_index(local);
+        let cube = &self.cubes[idx];
+        if cube.is_empty {
+            None
+        } else {
+            Some(cube)
+        }
     }
 
-    pub fn set(&mut self, x: usize, y: usize, z: usize, block: Cube) {
-        self.blocks[z * Self::CHUNK_SIZE * Self::CHUNK_SIZE + y * Self::CHUNK_SIZE + x] = Some(block);
+    /// Get mutable cube data at local coordinates
+    pub fn get_mut(&mut self, local: cgmath::Vector3<f32>) -> Option<&mut Cube> {
+        let idx = Self::local_to_index(local);
+        let cube = &mut self.cubes[idx];
+        if cube.is_empty {
+            None
+        } else {
+            Some(cube)
+        }
     }
-}
 
-impl Chunk {
-    const CHUNK_SIZE: usize = 16;
+    /// Set cube data at local coordinates
+    pub fn set(&mut self, local: cgmath::Vector3<f32>, cube: Cube) {
+        let idx = Self::local_to_index(local);
+        self.cubes[idx] = cube;
+    }
+
+    /// Convert local chunk coordinates to world position
+    pub fn world_position(&self, local: cgmath::Vector3<f32>) -> cgmath::Vector3<f32> {
+        cgmath::Vector3::new(
+            self.position.x * Self::CHUNK_SIZE_F + local.x,
+            self.position.y * Self::CHUNK_SIZE_F + local.y,
+            self.position.z * Self::CHUNK_SIZE_F + local.z,
+        )
+    }
+
+    /// Convert local coordinates to array index
+    #[inline]
+    fn local_to_index(local: cgmath::Vector3<f32>) -> usize {
+        let x = local.x.floor() as usize % Self::CHUNK_SIZE;
+        let y = local.y.floor() as usize % Self::CHUNK_SIZE;
+        let z = local.z.floor() as usize % Self::CHUNK_SIZE;
+        
+        (z * Self::CHUNK_SIZE * Self::CHUNK_SIZE) + 
+        (y * Self::CHUNK_SIZE) + 
+        x
+    }
+
+    /// Convert array index to local coordinates
+    #[inline]
+    pub fn index_to_local(index: usize) -> cgmath::Vector3<f32> {
+        cgmath::Vector3::new(
+            (index % Self::CHUNK_SIZE) as f32,
+            ((index / Self::CHUNK_SIZE) % Self::CHUNK_SIZE) as f32,
+            (index / (Self::CHUNK_SIZE * Self::CHUNK_SIZE)) as f32,
+        )
+    }
 }
 
 pub struct CubeBuffer;

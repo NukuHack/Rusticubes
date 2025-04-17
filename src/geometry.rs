@@ -1,4 +1,4 @@
-use cgmath::{InnerSpace, Rotation3, Vector3};
+use cgmath::{InnerSpace, Rotation3};
 use image::GenericImageView;
 use std::mem;
 use wgpu::util::DeviceExt;
@@ -279,16 +279,12 @@ pub fn add_def_cube() {
             state.camera_system.camera.position.z + 0.5,
         );
         let cube: super::cube::Cube = super::cube::Cube::new_rot_raw(position, combined_quaternion);
-        // parsing works and is correct but sadly it makes the rotation and position too "minecrat-y" so i decided to fix it later
+        // parsing works and is correct but sadly it makes the rotation and position too "minecrat-y" TODO: fix it
 
         instance_manager.add_instance(
             state.device(),
             state.queue(),
-            //cube.to_instance()
-            Instance {
-                position,
-                rotation: combined_quaternion,
-            },
+            cube.to_instance(), //Instance {position,rotation: combined_quaternion,},
         );
     }
 }
@@ -362,9 +358,9 @@ pub fn cast_ray_and_select_cube(
 
 fn ray_aabb_intersect(
     ray_origin: cgmath::Point3<f32>,
-    ray_dir: Vector3<f32>,
-    aabb_min: Vector3<f32>,
-    aabb_max: Vector3<f32>,
+    ray_dir: cgmath::Vector3<f32>,
+    aabb_min: cgmath::Vector3<f32>,
+    aabb_max: cgmath::Vector3<f32>,
 ) -> Option<f32> {
     let mut t_min = -f32::INFINITY;
     let mut t_max = f32::INFINITY;

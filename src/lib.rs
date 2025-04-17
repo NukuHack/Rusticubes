@@ -35,12 +35,14 @@ pub struct RenderContext<'a> {
 pub struct InputSubsystem {
     previous_mouse: Option<winit::dpi::PhysicalPosition<f64>>,
     mouse_button_state: MouseButtonState,
+    modifier_keys_state: ModifyKeyPressed,
 }
 impl Default for InputSubsystem{
      fn default() -> Self{
         Self{
             previous_mouse: None,
             mouse_button_state: MouseButtonState::default(),
+            modifier_keys_state: ModifyKeyPressed::default(),
         }
     }
 }
@@ -49,6 +51,14 @@ impl Default for InputSubsystem{
 pub struct MouseButtonState {
     pub left: bool,
     pub right: bool,
+}
+#[derive(Default)]
+pub struct ModifyKeyPressed {
+    pub sift: bool,
+    pub alt: bool,
+    pub ctr: bool,
+    pub altgr: bool,
+    pub caps: bool,
 }
 
 pub struct DataSubsystem {
@@ -194,6 +204,12 @@ impl<'a> State<'a> {
     pub fn size(&self) -> &winit::dpi::PhysicalSize<u32> {
         &self.render_context.size
     }
+    pub fn key_states(&self) -> &ModifyKeyPressed {
+        &self.input_system.modifier_keys_state
+    }
+    pub fn mouse_states(&self) -> &MouseButtonState {
+        &self.input_system.mouse_button_state
+    }
     pub fn previous_frame_time(&self) -> &std::time::Instant {
         &self.previous_frame_time
     }
@@ -272,13 +288,40 @@ impl<'a> State<'a> {
                     state // ElementState::Released or ElementState::Pressed
                     , .. },..
             } => {
+                // allways handle the modifier keys
+                self.set_modify_kes(*key,*state);
+
+                // Handle UI input first if there's a focused element
                 if let Some(focused_idx) = self.ui_manager.focused_element {
-                    self.camera_system.controller.reset_keyboard(); // just a hotfix for now to make the typing stop the playermovement
-                    if *state == ElementState::Pressed{
-                        self.ui_manager.process_input_ui(focused_idx, *key);
+                    self.camera_system.controller.reset_keyboard(); // Temporary workaround
+                    
+                    if *state == ElementState::Pressed {
+                        // Handle special keys for UI
+                        match key {
+                            Key::Backspace => {
+                                self.ui_manager.handle_backspace(focused_idx);
+                                return true;
+                            }
+                            Key::Enter => {
+                                self.ui_manager.handle_enter(focused_idx);
+                                return true;
+                            }
+                            Key::Escape => {
+                                self.ui_manager.blur_current_element();
+                                return true;
+                            }
+                            _ => {
+                                if let Some(c) = user_interface::key_to_char(*key, self.key_states().sift) {
+                                    self.ui_manager.process_text_input(focused_idx, c);
+                                    return true;
+                                }
+                            }
+                        }
                     }
-                    return true
+                    return true;
                 }
+
+                // Handle game controls if no UI element is focused
                 // `key` is of type `KeyCode` (e.g., KeyCode::W)
                 // `state` is of type `ElementState` (Pressed or Released)
                 self.camera_system.controller.process_keyboard(&key, &state);
@@ -293,7 +336,7 @@ impl<'a> State<'a> {
                     },
                     Key::F1 => {
                         if *state == ElementState::Pressed {
-                            self.ui_manager.visibility=!self.ui_manager.visibility;
+                            self.ui_manager.toggle_visibility();
                             return true
                         }
                         false
@@ -325,6 +368,48 @@ impl<'a> State<'a> {
                 }
             },
             _ => false
+        }
+    }
+
+    pub fn set_modify_kes(&mut self,key : winit::keyboard::KeyCode, state: ElementState){
+        if state == ElementState::Pressed {
+            match key {
+                Key::AltLeft => {
+                    self.input_system.modifier_keys_state.alt = true;
+                },
+                Key::ShiftLeft | Key::ShiftRight => {
+                    self.input_system.modifier_keys_state.sift = true;
+                },
+                Key::AltRight => {
+                    self.input_system.modifier_keys_state.altgr = true;
+                },
+                Key::CapsLock => {
+                    self.input_system.modifier_keys_state.caps = true;
+                },
+                Key::ControlLeft | Key::ControlRight => {
+                    self.input_system.modifier_keys_state.ctr = true;
+                }
+                _ => {}
+            }
+        } else {
+            match key {
+                Key::AltLeft => {
+                    self.input_system.modifier_keys_state.alt = false;
+                },
+                Key::ShiftLeft | Key::ShiftRight => {
+                    self.input_system.modifier_keys_state.sift = false;
+                },
+                Key::AltRight => {
+                    self.input_system.modifier_keys_state.altgr = false;
+                },
+                Key::CapsLock => {
+                    self.input_system.modifier_keys_state.caps = false;
+                },
+                Key::ControlLeft | Key::ControlRight => {
+                    self.input_system.modifier_keys_state.ctr = false;
+                }
+                _ => {}
+            }
         }
     }
 

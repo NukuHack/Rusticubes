@@ -465,55 +465,100 @@ impl UIManager {
         }
     }
 
-    pub fn process_input_ui(&mut self, focused_idx: usize, key: winit::keyboard::KeyCode) -> bool {
-        let c: char = physical_key_to_char(key).unwrap_or(' ');
+    pub fn process_text_input(&mut self, focused_idx: usize, c: char) {
         if let Some(element) = self.elements.get_mut(focused_idx) {
-            if element.is_input {
-                if let Some(input_text) = &mut element.text {
-                    if input_text.len() > 120 {
-                        // idk the exact limit but it's less than 200 so i made it less than 128 thinking that might be it ...
-                        return false;
-                    }
+            if !element.is_input {
+                return;
+            }
+
+            if let Some(input_text) = &mut element.text {
+                if input_text.len() >= 120 {
+                    return;
+                }
+
+                // Filter out control characters
+                if !c.is_control() {
                     input_text.push(c);
                 }
             }
         }
-        return true;
+    }
+
+    pub fn handle_backspace(&mut self, focused_idx: usize) {
+        if let Some(element) = self.elements.get_mut(focused_idx) {
+            if element.is_input {
+                if let Some(input_text) = &mut element.text {
+                    input_text.pop();
+                }
+            }
+        }
+    }
+
+    pub fn handle_enter(&mut self, focused_idx: usize) {
+        // Could trigger form submission or move to next field
+        // For now, just blur the current element
+        self.focused_element = None;
+    }
+
+    pub fn blur_current_element(&mut self) {
+        self.focused_element = None;
+    }
+
+    pub fn toggle_visibility(&mut self) {
+        self.visibility = !self.visibility;
     }
 }
-fn physical_key_to_char(key: winit::keyboard::KeyCode) -> Option<char> {
-    match winit::keyboard::PhysicalKey::Code(key) {
-        winit::keyboard::PhysicalKey::Code(code) => match code {
-            Key::KeyA => Some('a'),
-            Key::KeyB => Some('b'),
-            Key::KeyC => Some('c'),
-            Key::KeyD => Some('d'),
-            Key::KeyE => Some('e'),
-            Key::KeyF => Some('f'),
-            Key::KeyG => Some('g'),
-            Key::KeyH => Some('h'),
-            Key::KeyI => Some('i'),
-            Key::KeyJ => Some('j'),
-            Key::KeyK => Some('k'),
-            Key::KeyL => Some('l'),
-            Key::KeyM => Some('m'),
-            Key::KeyN => Some('n'),
-            Key::KeyO => Some('o'),
-            Key::KeyP => Some('p'),
-            Key::KeyQ => Some('q'),
-            Key::KeyR => Some('r'),
-            Key::KeyS => Some('s'),
-            Key::KeyT => Some('t'),
-            Key::KeyU => Some('u'),
-            Key::KeyV => Some('v'),
-            Key::KeyW => Some('w'),
-            Key::KeyX => Some('x'),
-            Key::KeyY => Some('y'),
-            Key::KeyZ => Some('z'),
-            // Add more mappings as needed
-            _ => None,
-        },
-        winit::keyboard::PhysicalKey::Unidentified(_) => None,
+// Improved key to char conversion
+pub fn key_to_char(key: Key, shift: bool) -> Option<char> {
+    match key {
+        Key::KeyA => Some(if shift { 'A' } else { 'a' }),
+        Key::KeyB => Some(if shift { 'B' } else { 'b' }),
+        Key::KeyC => Some(if shift { 'C' } else { 'c' }),
+        Key::KeyD => Some(if shift { 'D' } else { 'd' }),
+        Key::KeyE => Some(if shift { 'E' } else { 'e' }),
+        Key::KeyF => Some(if shift { 'F' } else { 'f' }),
+        Key::KeyG => Some(if shift { 'G' } else { 'g' }),
+        Key::KeyH => Some(if shift { 'H' } else { 'h' }),
+        Key::KeyI => Some(if shift { 'I' } else { 'i' }),
+        Key::KeyJ => Some(if shift { 'J' } else { 'j' }),
+        Key::KeyK => Some(if shift { 'K' } else { 'k' }),
+        Key::KeyL => Some(if shift { 'L' } else { 'l' }),
+        Key::KeyM => Some(if shift { 'M' } else { 'm' }),
+        Key::KeyN => Some(if shift { 'N' } else { 'n' }),
+        Key::KeyO => Some(if shift { 'O' } else { 'o' }),
+        Key::KeyP => Some(if shift { 'P' } else { 'p' }),
+        Key::KeyQ => Some(if shift { 'Q' } else { 'q' }),
+        Key::KeyR => Some(if shift { 'R' } else { 'r' }),
+        Key::KeyS => Some(if shift { 'S' } else { 's' }),
+        Key::KeyT => Some(if shift { 'T' } else { 't' }),
+        Key::KeyU => Some(if shift { 'U' } else { 'u' }),
+        Key::KeyV => Some(if shift { 'V' } else { 'v' }),
+        Key::KeyW => Some(if shift { 'W' } else { 'w' }),
+        Key::KeyX => Some(if shift { 'X' } else { 'x' }),
+        Key::KeyY => Some(if shift { 'Y' } else { 'y' }),
+        Key::KeyZ => Some(if shift { 'Z' } else { 'z' }),
+        Key::Digit0 => Some(if shift { ')' } else { '0' }),
+        Key::Digit1 => Some(if shift { '!' } else { '1' }),
+        Key::Digit2 => Some(if shift { '@' } else { '2' }),
+        Key::Digit3 => Some(if shift { '#' } else { '3' }),
+        Key::Digit4 => Some(if shift { '$' } else { '4' }),
+        Key::Digit5 => Some(if shift { '%' } else { '5' }),
+        Key::Digit6 => Some(if shift { '^' } else { '6' }),
+        Key::Digit7 => Some(if shift { '&' } else { '7' }),
+        Key::Digit8 => Some(if shift { '*' } else { '8' }),
+        Key::Digit9 => Some(if shift { '(' } else { '9' }),
+        Key::Space => Some(' '),
+        Key::Minus => Some(if shift { '_' } else { '-' }),
+        Key::Equal => Some(if shift { '+' } else { '=' }),
+        Key::BracketLeft => Some(if shift { '{' } else { '[' }),
+        Key::BracketRight => Some(if shift { '}' } else { ']' }),
+        Key::Backslash => Some(if shift { '|' } else { '\\' }),
+        Key::Semicolon => Some(if shift { ':' } else { ';' }),
+        Key::Quote => Some(if shift { '"' } else { '\'' }),
+        Key::Comma => Some(if shift { '<' } else { ',' }),
+        Key::Period => Some(if shift { '>' } else { '.' }),
+        Key::Slash => Some(if shift { '?' } else { '/' }),
+        _ => None,
     }
 }
 

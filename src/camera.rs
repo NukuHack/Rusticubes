@@ -256,7 +256,7 @@ impl CameraController {
                 true
             }
             Key::ShiftLeft => {
-                self.movement.run = is_pressed;
+                self.movement.run = is_pressed; // would be able to load this from the modifier keys but i don't really see a reason to actually do it
                 true
             }
             Key::ControlLeft => {
