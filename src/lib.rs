@@ -142,10 +142,8 @@ impl<'a> State<'a> {
         ));
 
         let texture_manager: geometry::TextureManager = geometry::TextureManager::new(&device, &queue, &config);
-        let cube: cube::Cube = cube::Cube::default();
         let geometry_buffer: geometry::GeometryBuffer = cube::CubeBuffer::new(
             &device,
-            &cube,
         );
 
         let render_pipeline_layout: wgpu::PipelineLayout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {

@@ -618,11 +618,18 @@ pub fn setup_ui(state: &mut super::State) {
         Some(Box::new(|| super::geometry::rem_last_cube())),
     );
     let input_element = super::user_interface::UIElement::new_input(
-        (-0.7, 0.2),
+        (-0.9, 0.2),
         (0.4, 0.2),
         [0.6, 0.3, 0.5],
         Some("type".to_string()),
         None,
+    );
+    let chunk_add_element = super::user_interface::UIElement::new(
+        (0.5, 0.2),
+        (0.4, 0.2),
+        [0.6, 0.3, 0.5],
+        Some("Add chunk".to_string()),
+        Some(Box::new(|| super::geometry::add_def_chunk())),
     );
     let close_element = super::user_interface::UIElement::new(
         (0.6, -0.7),
@@ -637,5 +644,6 @@ pub fn setup_ui(state: &mut super::State) {
     state.ui_manager.add_ui_element(add_element);
     state.ui_manager.add_ui_element(remove_element);
     state.ui_manager.add_ui_element(input_element);
+    state.ui_manager.add_ui_element(chunk_add_element);
     state.ui_manager.add_ui_element(close_element);
 }

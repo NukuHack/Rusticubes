@@ -1,5 +1,5 @@
 ﻿
-use crate::geometry::Vertex;
+use super::geometry::Vertex;
 use cgmath::Rotation3;
 
 /// Stores position for X, Y, Z as 4-bit fields: [X:4, Y:4, Z:4, Empty:4]
@@ -13,9 +13,6 @@ pub struct Cube {
     pub material: u16,    // Material info (unused in current implementation)
     pub points: u32,      // 3x3x3 points (27 bits used)
     pub rotation: u16,    // [X:5, Y:5, Z:5, Empty:1]
-    pub is_empty: bool,
-    pub vertices: [Vertex; 8],
-    pub indices: [u32; 36],
 }
 
 impl Default for Cube {
@@ -26,9 +23,6 @@ impl Default for Cube {
             material: 1,
             points: 0,
             rotation: 0,
-            is_empty: true,
-            vertices: Self::VERTICES,
-            indices: Self::INDICES,
         }
     }
 }
@@ -50,7 +44,6 @@ impl Cube {
     pub fn new(position: u16) -> Self {
         Self {
             position,
-            is_empty: false,
             ..Self::default()
         }
     }
@@ -60,7 +53,6 @@ impl Cube {
         Self {
             position,
             rotation,
-            is_empty: false,
             ..Self::default()
         }
     }
@@ -255,6 +247,12 @@ impl Cube {
         config
     }
 
+    pub fn is_empty(&self) -> bool {
+        if self.material == 0 {
+            true
+        } else { false }
+    }
+
     // Full conversion to Instance
     pub fn to_instance(&self) -> super::geometry::Instance {
         let position = self.get_position();
@@ -274,58 +272,6 @@ impl Cube {
 
     const ROT_MASK_Z: u16 = 0b11111 << 10; // 5 bits for Z, shifted left by 10
     const ROT_SHIFT_Z: u32 = 10;
-
-    const VERTICES: [Vertex; 8] = [
-        Vertex {
-            position: [0.0, 0.0, 0.0],
-            normal: [0.0, 0.0, 1.0],
-            uv: [0.0, 0.0],
-        },
-        Vertex {
-            position: [0.0, 1.0, 0.0],
-            normal: [0.0, 0.0, 1.0],
-            uv: [0.0, 1.0],
-        },
-        Vertex {
-            position: [1.0, 1.0, 0.0],
-            normal: [0.0, 0.0, 1.0],
-            uv: [1.0, 1.0],
-        },
-        Vertex {
-            position: [1.0, 0.0, 0.0],
-            normal: [0.0, 0.0, 1.0],
-            uv: [1.0, 0.0],
-        },
-        Vertex {
-            position: [0.0, 0.0, -1.0],
-            normal: [0.0, 0.0, -1.0],
-            uv: [0.0, 0.0],
-        },
-        Vertex {
-            position: [0.0, 1.0, -1.0],
-            normal: [0.0, 0.0, -1.0],
-            uv: [0.0, 1.0],
-        },
-        Vertex {
-            position: [1.0, 1.0, -1.0],
-            normal: [0.0, 0.0, -1.0],
-            uv: [1.0, 1.0],
-        },
-        Vertex {
-            position: [1.0, 0.0, -1.0],
-            normal: [0.0, 0.0, -1.0],
-            uv: [1.0, 0.0],
-        },
-    ];
-
-    const INDICES: [u32; 36] = [
-        1, 0, 2, 3, 2, 0, // Front face (z=0)
-        4, 5, 6, 6, 7, 4, // Back face (z=-1)
-        0, 4, 7, 3, 0, 7, // Bottom (y=0)
-        5, 1, 6, 1, 2, 6, // Top (y=1)
-        6, 2, 7, 2, 3, 7, // Right (x=1)
-        4, 0, 5, 0, 1, 5, // Left (x=0)
-    ];
 }
 
 /// Convert a quaternion to the packed u16 rotation format
@@ -412,7 +358,7 @@ impl Chunk {
     pub fn get(&self, local: cgmath::Vector3<f32>) -> Option<&Cube> {
         let idx = Self::local_to_index(local);
         let cube = &self.cubes[idx];
-        if cube.is_empty {
+        if cube.is_empty() {
             None
         } else {
             Some(cube)
@@ -423,7 +369,7 @@ impl Chunk {
     pub fn get_mut(&mut self, local: cgmath::Vector3<f32>) -> Option<&mut Cube> {
         let idx = Self::local_to_index(local);
         let cube = &mut self.cubes[idx];
-        if cube.is_empty {
+        if cube.is_empty() {
             None
         } else {
             Some(cube)
@@ -466,12 +412,79 @@ impl Chunk {
             (index / (Self::CHUNK_SIZE * Self::CHUNK_SIZE)) as f32,
         )
     }
+
+    /// Check if a position is within the chunk bounds
+    pub fn contains(&self, pos: cgmath::Vector3<f32>) -> bool {
+        let local = pos - self.position;
+        local.x >= 0.0 && local.x < Self::CHUNK_SIZE_F &&
+        local.y >= 0.0 && local.y < Self::CHUNK_SIZE_F &&
+        local.z >= 0.0 && local.z < Self::CHUNK_SIZE_F
+    }
+
+    /// Load a chunk dynamically (placeholder for actual implementation)
+    pub fn load_chunk(position: cgmath::Vector3<f32>) -> Option<Self> {
+        // Placeholder logic to fetch chunk data from storage or generate it
+        Some(Chunk::new(position))
+    }
 }
 
 pub struct CubeBuffer;
 
 impl CubeBuffer {
-    pub fn new(device: &wgpu::Device, cube: &super::cube::Cube) -> super::geometry::GeometryBuffer {
-        super::geometry::GeometryBuffer::new(device, &cube.indices, &cube.vertices)
+    pub fn new(device: &wgpu::Device) -> super::geometry::GeometryBuffer {
+        super::geometry::GeometryBuffer::new(device, &INDICES, &VERTICES)
     }
 }
+
+
+const VERTICES: [Vertex; 8] = [
+    Vertex {
+        position: [0.0, 0.0, 0.0],
+        normal: [0.0, 0.0, 1.0],
+        uv: [0.0, 0.0],
+    },
+    Vertex {
+        position: [0.0, 1.0, 0.0],
+        normal: [0.0, 0.0, 1.0],
+        uv: [0.0, 1.0],
+    },
+    Vertex {
+        position: [1.0, 1.0, 0.0],
+        normal: [0.0, 0.0, 1.0],
+        uv: [1.0, 1.0],
+    },
+    Vertex {
+        position: [1.0, 0.0, 0.0],
+        normal: [0.0, 0.0, 1.0],
+        uv: [1.0, 0.0],
+    },
+    Vertex {
+        position: [0.0, 0.0, -1.0],
+        normal: [0.0, 0.0, -1.0],
+        uv: [0.0, 0.0],
+    },
+    Vertex {
+        position: [0.0, 1.0, -1.0],
+        normal: [0.0, 0.0, -1.0],
+        uv: [0.0, 1.0],
+    },
+    Vertex {
+        position: [1.0, 1.0, -1.0],
+        normal: [0.0, 0.0, -1.0],
+        uv: [1.0, 1.0],
+    },
+    Vertex {
+        position: [1.0, 0.0, -1.0],
+        normal: [0.0, 0.0, -1.0],
+        uv: [1.0, 0.0],
+    },
+];
+
+const INDICES: [u32; 36] = [
+    1, 0, 2, 3, 2, 0, // Front face (z=0)
+    4, 5, 6, 6, 7, 4, // Back face (z=-1)
+    0, 4, 7, 3, 0, 7, // Bottom (y=0)
+    5, 1, 6, 1, 2, 6, // Top (y=1)
+    6, 2, 7, 2, 3, 7, // Right (x=1)
+    4, 0, 5, 0, 1, 5, // Left (x=0)
+];

@@ -191,6 +191,8 @@ impl InstanceManager {
             bytemuck::cast_slice(&instance_data),
         );
     }
+}
+impl InstanceManager {
     // Add multiple instances at once
     pub fn add_instances(
         &mut self,
@@ -230,16 +232,6 @@ impl InstanceManager {
             bytemuck::cast_slice(&instance_data),
         );
     }
-    // Add Cube to instance manager
-    pub fn add_cube(
-        &mut self,
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
-        cube: &super::cube::Cube,
-    ) {
-        let instance = cube.to_instance();
-        self.add_instance(device, queue, instance);
-    }
 
     // Remove a range of instances
     pub fn remove_instances(&mut self, start: usize, end: usize, queue: &wgpu::Queue) {
@@ -255,6 +247,39 @@ impl InstanceManager {
         );
     }
 }
+impl InstanceManager {
+    /// Add cubes from a chunk to the instance manager
+    pub fn add_chunk(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        chunk: &super::cube::Chunk,
+    ) {
+        for cube in chunk.cubes.iter() {
+            if !cube.is_empty() {
+                self.add_instance(device, queue, cube.to_instance());
+            }
+        }
+    }
+
+    /// Remove cubes from a chunk from the instance manager
+    pub fn remove_chunk(&mut self, queue: &wgpu::Queue, chunk: &super::cube::Chunk) {
+        for cube in chunk.cubes.iter() {
+            if !cube.is_empty() {
+                let index = self
+                    .instances
+                    .iter()
+                    .position(|i| {
+                        let cube_pos = cube.get_position();
+                        let instance_pos = i.position;
+                        (cube_pos - instance_pos).magnitude() < 0.01 // Threshold for matching positions
+                    })
+                    .unwrap_or_else(|| panic!("Failed to find instance"));
+                self.remove_instance(index, queue);
+            }
+        }
+    }
+}
 
 #[allow(dead_code, unused)]
 pub fn add_def_cube() {
@@ -262,23 +287,22 @@ pub fn add_def_cube() {
         let state = super::get_state();
         let mut instance_manager = state.instance_manager().borrow_mut();
 
-        // Create quaternions for each axis
-        let q_x: cgmath::Quaternion<f32> =
-            cgmath::Quaternion::from_angle_x(-state.camera_system.camera.pitch); // Rotation around X-axis
-        let q_y: cgmath::Quaternion<f32> = cgmath::Quaternion::from_angle_y(
-            (-state.camera_system.camera.yaw) + cgmath::Rad(std::f32::consts::FRAC_PI_2),
-        ); // Rotation around Y-axis
-        let q_z: cgmath::Quaternion<f32> = cgmath::Quaternion::from_angle_z(cgmath::Deg(0.0)); // Rotation around Z-axis
+        // Calculate adjusted yaw (including the FRAC_PI_2 offset)
+        let q_yaw: cgmath::Quaternion<f32> = cgmath::Quaternion::from_angle_y(
+            -state.camera_system.camera.yaw + cgmath::Rad(std::f32::consts::FRAC_PI_2),
+        );
+        let q_pitch: cgmath::Quaternion<f32> =
+            cgmath::Quaternion::from_angle_x(state.camera_system.camera.pitch);
 
-        // Combine rotations (order matters: Z * Y * X)
-        let combined_quaternion: cgmath::Quaternion<f32> = q_z * q_y * q_x;
+        // Combine rotations: first yaw (around Y-axis), then pitch (around X-axis)
+        let rotation: cgmath::Quaternion<f32> = q_pitch * q_yaw;
 
         let position: cgmath::Vector3<f32> = cgmath::Vector3::new(
             state.camera_system.camera.position.x + 0.5,
             state.camera_system.camera.position.y - 2.0,
             state.camera_system.camera.position.z + 0.5,
         );
-        let cube: super::cube::Cube = super::cube::Cube::new_rot_raw(position, combined_quaternion);
+        let cube: super::cube::Cube = super::cube::Cube::new_rot_raw(position, rotation);
         // parsing works and is correct but sadly it makes the rotation and position too "minecrat-y" TODO: fix it
 
         instance_manager.add_instance(
@@ -298,7 +322,27 @@ pub fn rem_last_cube() {
         }
     }
 }
+pub fn add_def_chunk() {
+    unsafe {
+        let state = super::get_state();
+        let mut instance_manager = state.instance_manager().borrow_mut();
+        let camera_position = state.camera_system.camera.position;
+        let chunk_position = cgmath::Vector3::new(
+            camera_position.x + 8.5,
+            camera_position.y - 10.0,
+            camera_position.z + 8.5,
+        );
 
+        println!("Loading chunk at {:?}", chunk_position); // Track chunk loading
+
+        if let Some(chunk) = super::cube::Chunk::load_chunk(chunk_position) {
+            println!("Chunk contains {} cubes", chunk.cubes.len());
+            instance_manager.add_chunk(state.device(), state.queue(), &chunk);
+        } else {
+            eprintln!("Failed to load chunk at {:?}", chunk_position);
+        }
+    }
+}
 #[allow(dead_code, unused)]
 pub fn rem_pos_cube(position: cgmath::Vector3<f32>, threshold: f32) {
     unsafe {
