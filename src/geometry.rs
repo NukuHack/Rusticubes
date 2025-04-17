@@ -75,7 +75,6 @@ pub struct InstanceManager {
     pub instance_buffer: wgpu::Buffer,
     pub capacity: usize,
 }
-
 impl InstanceManager {
     pub fn new(
         device: &wgpu::Device,
@@ -95,7 +94,7 @@ impl InstanceManager {
                                 space_between * (y as f32 - num_instances as f32 / 2.0),
                                 space_between * (z as f32 - num_instances as f32 / 2.0),
                             );
-                            let rotation: cgmath::Quaternion<f32> = if position.magnitude() == 0.0 {
+                            let rotation = if position.magnitude() == 0.0 {
                                 cgmath::Quaternion::from_angle_y(cgmath::Deg(0.0))
                             } else {
                                 cgmath::Quaternion::from_axis_angle(
@@ -103,14 +102,22 @@ impl InstanceManager {
                                     cgmath::Deg(45.0),
                                 )
                             };
-                            Instance { position, rotation }
+
+                            // Create Cube and convert to instance
+                            super::cube::Cube::new_rot(
+                                super::cube::vector_to_position(position),
+                                super::cube::quaternion_to_rotation(rotation),
+                            )
+                            .to_instance()
                         })
                     })
                 })
                 .collect()
         } else {
-            vec![Instance::default()]
+            vec![super::cube::Cube::default().to_instance()]
         };
+
+        // Rest remains the same - buffer creation and initialization
         let capacity = instances.len() * 2;
         let buffer_size = (capacity * mem::size_of::<InstanceRaw>()) as u64;
         let instance_buffer = device.create_buffer(&wgpu::BufferDescriptor {
@@ -119,25 +126,22 @@ impl InstanceManager {
             usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
+
         queue.write_buffer(
             &instance_buffer,
             0,
             bytemuck::cast_slice(&instances.iter().map(|i| i.to_raw()).collect::<Vec<_>>()),
         );
+
         Self {
             instances,
             instance_buffer,
             capacity,
         }
     }
-
-    pub fn add_instance(
-        &mut self,
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
-        position: cgmath::Vector3<f32>,
-        rotation: cgmath::Quaternion<f32>,
-    ) {
+}
+impl InstanceManager {
+    pub fn add_instance(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, instance: Instance) {
         if self.instances.len() >= self.capacity {
             self.capacity *= 2;
             let new_buffer = device.create_buffer(&wgpu::BufferDescriptor {
@@ -162,12 +166,12 @@ impl InstanceManager {
             self.instance_buffer = new_buffer;
         }
 
-        self.instances.push(Instance { position, rotation });
+        self.instances.push(instance.clone());
         let offset = self.instances.len() - 1;
         queue.write_buffer(
             &self.instance_buffer,
             (offset * mem::size_of::<InstanceRaw>()) as u64,
-            bytemuck::cast_slice(&[Instance { position, rotation }.to_raw()]),
+            bytemuck::cast_slice(&[instance.to_raw()]),
         );
     }
 
@@ -226,6 +230,16 @@ impl InstanceManager {
             bytemuck::cast_slice(&instance_data),
         );
     }
+    // Add Cube to instance manager
+    pub fn add_cube(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        cube: &super::cube::Cube,
+    ) {
+        let instance = cube.to_instance();
+        self.add_instance(device, queue, instance);
+    }
 
     // Remove a range of instances
     pub fn remove_instances(&mut self, start: usize, end: usize, queue: &wgpu::Queue) {
@@ -242,6 +256,7 @@ impl InstanceManager {
     }
 }
 
+#[allow(dead_code, unused)]
 pub fn add_def_cube() {
     unsafe {
         let state = super::get_state();
@@ -258,15 +273,22 @@ pub fn add_def_cube() {
         // Combine rotations (order matters: Z * Y * X)
         let combined_quaternion: cgmath::Quaternion<f32> = q_z * q_y * q_x;
 
+        let position: cgmath::Vector3<f32> = cgmath::Vector3::new(
+            state.camera_system.camera.position.x + 0.5,
+            state.camera_system.camera.position.y - 2.0,
+            state.camera_system.camera.position.z + 0.5,
+        );
+        let cube: super::cube::Cube = super::cube::Cube::new_rot_raw(position, combined_quaternion);
+        // parsing works and is correct but sadly it makes the rotation and position too "minecrat-y" so i decided to fix it later
+
         instance_manager.add_instance(
             state.device(),
             state.queue(),
-            cgmath::Vector3::new(
-                state.camera_system.camera.position.x + 0.5,
-                state.camera_system.camera.position.y - 2.0,
-                state.camera_system.camera.position.z + 0.5,
-            ),
-            combined_quaternion,
+            //cube.to_instance()
+            Instance {
+                position,
+                rotation: combined_quaternion,
+            },
         );
     }
 }
@@ -408,10 +430,13 @@ impl Instance {
             model: matrix.into(),
         }
     }
+    pub fn to_cube(&self) -> super::cube::Cube {
+        super::cube::Cube::new_rot_raw(self.position, self.rotation)
+    }
 }
-
 impl Default for Instance {
     fn default() -> Self {
+        //super::cube::default().to_instance()
         Instance {
             position: cgmath::Vector3::new(0.0, 0.0, 0.0),
             rotation: cgmath::Quaternion::from_angle_y(cgmath::Deg(0.0)),

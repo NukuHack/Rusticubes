@@ -1,4 +1,6 @@
-﻿use crate::geometry::Vertex;
+﻿
+use crate::geometry::Vertex;
+use cgmath::{Rotation3, Rad};
 
 /// Stores position for X, Y, Z as 4-bit fields: [X:4, Y:4, Z:4, Empty:4]
 /// Stores rotations for X, Y, Z as 5-bit fields: [X:5, Y:5, Z:5, Empty:1]
@@ -15,10 +17,9 @@ pub struct Cube {
     pub indices: [u32; 36],
 }
 
-#[allow(dead_code, unused)]
-impl Cube {
+impl Default for Cube {
     /// Creates a new default cube.
-    pub fn default() -> Self {
+     fn default() -> Self {
         Self {
             position: 0,
             material: 1,
@@ -28,7 +29,9 @@ impl Cube {
             indices: Self::INDICES,
         }
     }
-
+}
+#[allow(dead_code, unused)]
+impl Cube {
     /// Creates a new cube with a specified position.
     pub fn new(position: u16) -> Self {
         Self {
@@ -46,6 +49,17 @@ impl Cube {
         }
     }
 
+    pub fn new_rot_raw(
+        position: cgmath::Vector3<f32>,
+        rotation: cgmath::Quaternion<f32>,
+    ) -> Self {
+        Self {
+            position:vector_to_position(position),
+            rotation:quaternion_to_rotation(rotation),
+            ..Self::default()
+        }
+    }
+
     fn get_axis_rotation(&self, axis: char) -> u16 {
         match axis {
             'x' => (self.rotation & Self::ROT_MASK_X) >> Self::ROT_SHIFT_X,
@@ -53,6 +67,31 @@ impl Cube {
             'z' => (self.rotation & Self::ROT_MASK_Z) >> Self::ROT_SHIFT_Z,
             _ => panic!("Invalid axis"),
         }
+    }
+    /// Extract individual rotation components (0-3)
+    pub fn get_x_rotation(&self) -> u16 {
+        (self.rotation & Self::ROT_MASK_X) >> Self::ROT_SHIFT_X % 4
+    }
+
+    pub fn get_y_rotation(&self) -> u16 {
+        (self.rotation & Self::ROT_MASK_Y) >> Self::ROT_SHIFT_Y % 4
+    }
+
+    pub fn get_z_rotation(&self) -> u16 {
+        (self.rotation & Self::ROT_MASK_Z) >> Self::ROT_SHIFT_Z % 4
+    }
+    /// Rotation snapping and conversion to quaternion
+    pub fn rotation_to_quaternion(&self) -> cgmath::Quaternion<f32> {
+        let x_rot = self.get_x_rotation() as f32 * 90.0;
+        let y_rot = self.get_y_rotation() as f32 * 90.0;
+        let z_rot = self.get_z_rotation() as f32 * 90.0;
+
+        // Apply rotations in XYZ order
+        let x_q = cgmath::Quaternion::from_angle_x(cgmath::Deg(x_rot));
+        let y_q = cgmath::Quaternion::from_angle_y(cgmath::Deg(y_rot));
+        let z_q = cgmath::Quaternion::from_angle_z(cgmath::Deg(z_rot));
+
+        z_q * y_q * x_q // Combined rotation order
     }
 
     pub fn rotate(&mut self, axis: char, steps: u16) {
@@ -76,6 +115,13 @@ impl Cube {
     /// Sets the position of the cube in 3D space.
     pub fn set_position(&mut self, x: u16, y: u16, z: u16) {
         self.position = z | (y << 4) | (x << 8);
+    }
+    /// Convert packed position to world coordinates
+    pub fn get_position(&self) -> cgmath::Vector3<f32> {
+        let x = ((self.position >> 8) & 0xF) as f32;
+        let y = ((self.position >> 4) & 0xF) as f32;
+        let z = (self.position & 0xF) as f32;
+        cgmath::Vector3::new(x, y, z)
     }
 
     /// Resets the points of the cube when rotation resets.
@@ -190,6 +236,16 @@ impl Cube {
         }
         config
     }
+
+
+
+    // Full conversion to Instance
+    pub fn to_instance(&self) -> super::geometry::Instance {
+        let position = self.get_position();
+        let rotation = self.rotation_to_quaternion();
+        
+        super::geometry::Instance { position, rotation }
+    }
 }
 
 impl Cube {
@@ -254,6 +310,50 @@ impl Cube {
         6, 2, 7, 2, 3, 7, // Right (x=1)
         4, 0, 5, 0, 1, 5, // Left (x=0)
     ];
+}
+
+/// Convert a quaternion to the packed u16 rotation format
+// Convert quaternion to Euler angles (pitch, yaw, roll)
+pub fn quaternion_to_rotation(rotation: cgmath::Quaternion<f32>) -> u16 {
+    let pitch:cgmath::Rad<f32> = cgmath::Rad(rotation.v.x);
+    let yaw:cgmath::Rad<f32> = cgmath::Rad(rotation.v.y);
+    let roll:cgmath::Rad<f32> = cgmath::Rad(rotation.v.z);
+    // Normalize angles to [0, 2π) range
+    let normalize_angle = |angle: Rad<f32>| -> Rad<f32> {
+        let angle = angle.0.rem_euclid(2.0 * std::f32::consts::PI);
+        Rad(angle)
+    };
+
+    let pitch = normalize_angle(pitch);
+    let yaw = normalize_angle(yaw);
+    let roll = normalize_angle(roll);
+
+    // Quantize each angle into 5-bit values (0-31)
+    let quantize = |angle: Rad<f32>| -> u32 {
+        let normalized = angle.0 / (2.0 * std::f32::consts::PI);
+        let quantized = (normalized * 31.0).round() as u32;
+        quantized.clamp(0, 31)
+    };
+
+    let pitch_bits = quantize(pitch);
+    let yaw_bits = quantize(yaw);
+    let roll_bits = quantize(roll);
+
+    // Pack into u16: [X:5][Y:5][Z:5][Empty:1]
+    let packed = 
+        (pitch_bits as u16)        // X: bits 0-4
+        | ((yaw_bits as u16) << 5) // Y: bits 5-9
+        | ((roll_bits as u16) << 10); // Z: bits 10-14
+
+    packed
+}
+// Convert world coordinates to packed u16 position
+pub fn vector_to_position(position: cgmath::Vector3<f32>) -> u16 {
+    let x = (position.x.clamp(0.0, 15.0) as u16) & 0xF; // Clamp and mask to 4 bits
+    let y = (position.y.clamp(0.0, 15.0) as u16) & 0xF; // Clamp and mask to 4 bits
+    let z = (position.z.clamp(0.0, 15.0) as u16) & 0xF; // Clamp and mask to 4 bits
+
+    (z | (y << 4) | (x << 8)) as u16
 }
 
 pub const DOT_ARRAY: [[u8; 3]; 27] = [

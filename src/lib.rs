@@ -36,8 +36,8 @@ pub struct InputSubsystem {
     previous_mouse: Option<winit::dpi::PhysicalPosition<f64>>,
     mouse_button_state: MouseButtonState,
 }
-impl InputSubsystem{
-    pub fn default() -> Self{
+impl Default for InputSubsystem{
+     fn default() -> Self{
         Self{
             previous_mouse: None,
             mouse_button_state: MouseButtonState::default(),
@@ -273,6 +273,7 @@ impl<'a> State<'a> {
                     , .. },..
             } => {
                 if let Some(focused_idx) = self.ui_manager.focused_element {
+                    self.camera_system.controller.reset_keyboard(); // just a hotfix for now to make the typing stop the playermovement
                     if *state == ElementState::Pressed{
                         self.ui_manager.process_input_ui(focused_idx, *key);
                     }
@@ -414,7 +415,7 @@ pub async fn run() {
     let monitor: winit::monitor::MonitorHandle = event_loop.primary_monitor().expect("No primary monitor found!");
     let monitor_size: winit::dpi::PhysicalSize<u32> = monitor.size(); // Monitor size in physical pixels
     
-    let config: config::AppConfig = config::AppConfig::default(monitor_size);
+    let config: config::AppConfig = config::AppConfig::new(monitor_size);
     let window_raw: winit::window::Window = winit::window::WindowBuilder::new()
         .with_title(&config.window_title)
         .with_inner_size(config.initial_window_size)

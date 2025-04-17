@@ -6,8 +6,17 @@ pub struct AppConfig {
     pub initial_window_position: winit::dpi::PhysicalPosition<f32>,
 }
 
+impl Default for AppConfig {
+     fn default() -> Self {
+        Self {
+            window_title: "WGPU App".into(),
+            initial_window_size: winit::dpi::PhysicalSize::new(1280.0, 720.0),
+            initial_window_position: winit::dpi::PhysicalPosition::new(100.0,100.0),
+        }
+    }
+}
 impl AppConfig {
-    pub fn default(size: winit::dpi::PhysicalSize<u32>) -> Self {
+    pub fn new(size: winit::dpi::PhysicalSize<u32>) -> Self {
         let width:f32 = 1280.0; let height:f32 = 720.0;
         let x:f32 = (size.width as f32 - width) / 2.0;
         let y:f32 = (size.height as f32 - height) / 2.0;

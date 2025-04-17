@@ -213,7 +213,7 @@ struct RotationInputs {
     horizontal: f32,
     vertical: f32,
 }
-impl RotationInputs {
+impl Default for RotationInputs {
     fn default() -> Self {
         Self {
             horizontal: 0.0,
@@ -265,6 +265,15 @@ impl CameraController {
             }
             _ => false,
         }
+    }
+    pub fn reset_keyboard(&mut self) {
+        self.movement.forward = false;
+        self.movement.backward = false;
+        self.movement.left = false;
+        self.movement.right = false;
+        self.movement.up = false;
+        self.movement.run = false;
+        self.movement.down = false;
     }
     pub fn process_mouse(&mut self, delta_x: f32, delta_y: f32) {
         self.rotation.horizontal = delta_x as f32;
