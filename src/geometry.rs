@@ -39,85 +39,6 @@ impl Vertex {
 }
 
 #[allow(dead_code, unused, unused_attributes)]
-// --- Cube Geometry ---
-pub struct Cube {
-    pub vertices: [Vertex; 8],
-    pub indices: [u32; 36],
-}
-
-impl Cube {
-    pub fn default() -> Self {
-        const VERTICES: [Vertex; 8] = [
-            Vertex {
-                position: [0.0, 0.0, 0.0],
-                normal: [0.0, 0.0, 1.0],
-                uv: [0.0, 0.0],
-            },
-            Vertex {
-                position: [0.0, 1.0, 0.0],
-                normal: [0.0, 0.0, 1.0],
-                uv: [0.0, 1.0],
-            },
-            Vertex {
-                position: [1.0, 1.0, 0.0],
-                normal: [0.0, 0.0, 1.0],
-                uv: [1.0, 1.0],
-            },
-            Vertex {
-                position: [1.0, 0.0, 0.0],
-                normal: [0.0, 0.0, 1.0],
-                uv: [1.0, 0.0],
-            },
-            Vertex {
-                position: [0.0, 0.0, -1.0],
-                normal: [0.0, 0.0, -1.0],
-                uv: [0.0, 0.0],
-            },
-            Vertex {
-                position: [0.0, 1.0, -1.0],
-                normal: [0.0, 0.0, -1.0],
-                uv: [0.0, 1.0],
-            },
-            Vertex {
-                position: [1.0, 1.0, -1.0],
-                normal: [0.0, 0.0, -1.0],
-                uv: [1.0, 1.0],
-            },
-            Vertex {
-                position: [1.0, 0.0, -1.0],
-                normal: [0.0, 0.0, -1.0],
-                uv: [1.0, 0.0],
-            },
-        ];
-
-        const INDICES: [u32; 36] = [
-            1, 0, 2, 3, 2, 0, // Front face (z=0)
-            4, 5, 6, 6, 7, 4, // Back face (z=-1)
-            0, 4, 7, 3, 0, 7, // Bottom (y=0)
-            5, 1, 6, 1, 2, 6, // Top (y=1)
-            6, 2, 7, 2, 3, 7, // Right (x=1)
-            4, 0, 5, 0, 1, 5, // Left (x=0)
-        ];
-
-        Self {
-            vertices: VERTICES,
-            indices: INDICES,
-        }
-    }
-}
-
-pub struct CubeBuffer;
-
-impl CubeBuffer {
-    pub fn new(
-        device: &wgpu::Device,
-        cube: &super::geometry::Cube,
-    ) -> super::geometry::GeometryBuffer {
-        super::geometry::GeometryBuffer::new(&device, &cube.indices, &cube.vertices)
-    }
-}
-
-#[allow(dead_code, unused, unused_attributes)]
 // --- Geometry Buffer ---
 pub struct GeometryBuffer {
     pub vertex_buffer: wgpu::Buffer,
@@ -174,7 +95,6 @@ impl InstanceManager {
                                 space_between * (y as f32 - num_instances as f32 / 2.0),
                                 space_between * (z as f32 - num_instances as f32 / 2.0),
                             );
-
                             let rotation: cgmath::Quaternion<f32> = if position.magnitude() == 0.0 {
                                 cgmath::Quaternion::from_angle_y(cgmath::Deg(0.0))
                             } else {
@@ -183,7 +103,6 @@ impl InstanceManager {
                                     cgmath::Deg(45.0),
                                 )
                             };
-
                             Instance { position, rotation }
                         })
                     })
@@ -192,7 +111,6 @@ impl InstanceManager {
         } else {
             vec![Instance::default()]
         };
-
         let capacity = instances.len() * 2;
         let buffer_size = (capacity * mem::size_of::<InstanceRaw>()) as u64;
         let instance_buffer = device.create_buffer(&wgpu::BufferDescriptor {
@@ -201,13 +119,11 @@ impl InstanceManager {
             usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
-
         queue.write_buffer(
             &instance_buffer,
             0,
             bytemuck::cast_slice(&instances.iter().map(|i| i.to_raw()).collect::<Vec<_>>()),
         );
-
         Self {
             instances,
             instance_buffer,
@@ -271,23 +187,58 @@ impl InstanceManager {
             bytemuck::cast_slice(&instance_data),
         );
     }
-    pub fn remove_instance_by_position(
+    // Add multiple instances at once
+    pub fn add_instances(
         &mut self,
-        position: cgmath::Vector3<f32>,
-        threshold: f32,
+        device: &wgpu::Device,
         queue: &wgpu::Queue,
-    ) -> bool {
-        let index = self
-            .instances
-            .iter()
-            .position(|i| (i.position - position).magnitude() < threshold);
-
-        if let Some(idx) = index {
-            self.remove_instance(idx, queue);
-            true
-        } else {
-            false
+        instances: &[Instance],
+    ) {
+        let required_capacity = self.instances.len() + instances.len();
+        if required_capacity > self.capacity {
+            self.capacity = required_capacity * 2;
+            let new_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("Instance Buffer"),
+                size: (self.capacity * mem::size_of::<InstanceRaw>()) as u64,
+                usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            });
+            queue.write_buffer(
+                &new_buffer,
+                0,
+                bytemuck::cast_slice(
+                    &self
+                        .instances
+                        .iter()
+                        .map(|i| i.to_raw())
+                        .collect::<Vec<_>>(),
+                ),
+            );
+            self.instance_buffer = new_buffer;
         }
+
+        let offset = self.instances.len();
+        self.instances.extend_from_slice(instances);
+        let instance_data: Vec<_> = instances.iter().map(|i| i.to_raw()).collect();
+        queue.write_buffer(
+            &self.instance_buffer,
+            (offset * mem::size_of::<InstanceRaw>()) as u64,
+            bytemuck::cast_slice(&instance_data),
+        );
+    }
+
+    // Remove a range of instances
+    pub fn remove_instances(&mut self, start: usize, end: usize, queue: &wgpu::Queue) {
+        if start >= end || end > self.instances.len() {
+            return;
+        }
+        self.instances.drain(start..end);
+        let instance_data: Vec<_> = self.instances.iter().map(|i| i.to_raw()).collect();
+        queue.write_buffer(
+            &self.instance_buffer,
+            0,
+            bytemuck::cast_slice(&instance_data),
+        );
     }
 }
 
@@ -330,6 +281,23 @@ pub fn rem_last_cube() {
     }
 }
 
+#[allow(dead_code, unused)]
+pub fn rem_pos_cube(position: cgmath::Vector3<f32>, threshold: f32) {
+    unsafe {
+        let state = super::get_state();
+        let mut instance_manager = state.instance_manager().borrow_mut();
+        let index = instance_manager
+            .instances
+            .iter()
+            .position(|i| (i.position - position).magnitude() < threshold);
+
+        if let Some(idx) = index {
+            instance_manager.remove_instance(idx, state.queue());
+        }
+    }
+}
+
+#[allow(dead_code, unused)]
 pub fn cast_ray_and_select_cube(
     camera: &super::camera::Camera,
     size: &winit::dpi::PhysicalSize<u32>,
@@ -345,7 +313,7 @@ pub fn cast_ray_and_select_cube(
     let mouse_direction = cgmath::Vector3::new(mouse_x, mouse_y, -1.0).normalize();
 
     // Combine mouse direction with camera forward
-    let ray_dir = (camera.forward() + mouse_direction * 0.1).normalize();
+    let ray_dir = (camera.forward()/* + mouse_direction */).normalize();
 
     let ray_origin = camera.position;
 
@@ -426,6 +394,7 @@ pub fn rem_raycasted_cube(mouse_pos: winit::dpi::PhysicalPosition<f64>) {
 
 // --- Instance Struct ---
 #[repr(C)]
+#[derive(Clone)]
 pub struct Instance {
     pub position: cgmath::Vector3<f32>,
     pub rotation: cgmath::Quaternion<f32>,

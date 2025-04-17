@@ -1,69 +1,81 @@
-﻿
+﻿use crate::geometry::Vertex;
 
-/// Stores position for X, Y, Z as 4-bit fields: [X:4, Y:4, Z:4, Empty: 4]
-/// Stores rotations for X, Y, Z as 2-bit fields: [X:2, Y:2, Z:2, Empty: 2]
-/// Stores 3*3*3 points as a 32 bit "array" [Points: 3*3*3->27, Empty: 5]
-#[allow(dead_code)]
+/// Stores position for X, Y, Z as 4-bit fields: [X:4, Y:4, Z:4, Empty:4]
+/// Stores rotations for X, Y, Z as 5-bit fields: [X:5, Y:5, Z:5, Empty:1]
+/// Stores 3x3x3 points as a 32-bit "array" [Points: 27, Empty: 5]
+#[allow(dead_code, unused)]
+#[derive(Debug, Clone)]
 pub struct Cube {
-    pub position: u16,
-    pub material: u16,
-    pub points: u32,
-    pub rotation: u8,
+    /// in case someone needs it (i do i'm stupid) 4 bits is 0-15 ; 5 bits is 0-32; this goes forever (i think u256 is the current max)
+    pub position: u16,    // [X:4, Y:4, Z:4, Empty:4]
+    pub material: u16,    // Material info (unused in current implementation)
+    pub points: u32,      // 3x3x3 points (27 bits used)
+    pub rotation: u16,    // [X:5, Y:5, Z:5, Empty:1]
+    pub vertices: [Vertex; 8],
+    pub indices: [u32; 36],
 }
 
-#[allow(dead_code,unused,redundant_imports,unused_results,unused_features,unused_variables,unused_mut,dead_code,unused_unsafe,unused_attributes)]
+#[allow(dead_code, unused)]
 impl Cube {
-    /// Returns whether the cube is "nice" (placeholder for future functionality).
-    fn nice() -> bool {
-        true
-    }
-
     /// Creates a new default cube.
     pub fn default() -> Self {
         Self {
             position: 0,
             material: 1,
             points: 0,
-            rotation: 0, // All rotations initialized to 0
+            rotation: 0,
+            vertices: Self::VERTICES,
+            indices: Self::INDICES,
         }
     }
 
-
-    /// Gets the current rotation for a specific axis.
-    fn get_axis_rotation(&self, axis: char) -> u8 {
-        match axis {
-            'x' => (self.rotation >> 6) & 0b11,
-            'y' => (self.rotation >> 4) & 0b11,
-            'z' => (self.rotation >> 2) & 0b11,
-            _ => panic!("Invalid axis: {}", axis),
+    /// Creates a new cube with a specified position.
+    pub fn new(position: u16) -> Self {
+        Self {
+            position,
+            ..Self::default()
         }
     }
 
-    pub fn rotate(&mut self, axis: char, steps: u8) {
-        let current_rotation = self.get_axis_rotation(axis);
-        let new_rotation = (current_rotation + steps) % 4;
-
-        match axis {
-            'x' => {
-                self.rotation = (new_rotation << 6) | (self.rotation & 0x3F);
-            },
-            'y' => {
-                self.rotation = (new_rotation << 4) | (self.rotation & 0xCF);
-            },
-            'z' => {
-                self.rotation = (new_rotation << 2) | (self.rotation & 0xF3);
-            },
-            _ => panic!("Invalid axis: {}", axis),
+    /// Creates a new cube with a specified position and rotation.
+    pub fn new_rot(position: u16, rotation: u16) -> Self {
+        Self {
+            position,
+            rotation,
+            ..Self::default()
         }
+    }
 
-        if new_rotation == 0 {
+    fn get_axis_rotation(&self, axis: char) -> u16 {
+        match axis {
+            'x' => (self.rotation & Self::ROT_MASK_X) >> Self::ROT_SHIFT_X,
+            'y' => (self.rotation & Self::ROT_MASK_Y) >> Self::ROT_SHIFT_Y,
+            'z' => (self.rotation & Self::ROT_MASK_Z) >> Self::ROT_SHIFT_Z,
+            _ => panic!("Invalid axis"),
+        }
+    }
+
+    pub fn rotate(&mut self, axis: char, steps: u16) {
+        let current = self.get_axis_rotation(axis);
+        let new_rot = (current + steps) % 4; // Keep modulo 4 for compatibility
+
+        let (mask, shift) = match axis {
+            'x' => (Self::ROT_MASK_X, Self::ROT_SHIFT_X),
+            'y' => (Self::ROT_MASK_Y, Self::ROT_SHIFT_Y),
+            'z' => (Self::ROT_MASK_Z, Self::ROT_SHIFT_Z),
+            _ => unreachable!(),
+        };
+
+        self.rotation = (self.rotation & !mask) | ((new_rot as u16) << shift);
+
+        if new_rot == 0 {
             self.reset_points();
         }
     }
 
     /// Sets the position of the cube in 3D space.
-    pub fn set_position(&mut self, x: u8, y: u8, z: u8) {
-        self.position = (z as u16) | ((y as u16) << 4) | ((x as u16) << 8);
+    pub fn set_position(&mut self, x: u16, y: u16, z: u16) {
+        self.position = z | (y << 4) | (x << 8);
     }
 
     /// Resets the points of the cube when rotation resets.
@@ -71,13 +83,9 @@ impl Cube {
         self.points = 0;
     }
 
-
     /// Generates the mesh points of the cube based on its current state.
     pub fn get_mesh(&self) -> Vec<[u8; 3]> {
-        // Precomputed rotated positions for all 27 points
         let rotated_positions = self.compute_rotated_positions();
-
-        // Collect only the points that are "full" (1)
         rotated_positions
             .into_iter()
             .enumerate()
@@ -117,7 +125,7 @@ impl Cube {
     fn rotate_x(&self, positions: &mut [[u8; 3]]) {
         for point in positions.iter_mut() {
             point.swap(2, 1);
-            point[1] = 2 - &point[1];
+            point[1] = 2 - point[1];
         }
     }
 
@@ -142,7 +150,6 @@ impl Cube {
         let mut mesh = Vec::new();
         let positions = self.compute_rotated_positions();
 
-        // Extract 8 corners
         let corners_indices = [0, 2, 6, 8, 18, 20, 24, 26];
         let vertices: [[u8; 3]; 8] = corners_indices
             .iter()
@@ -184,7 +191,71 @@ impl Cube {
         config
     }
 }
-#[allow(dead_code)]
+
+impl Cube {
+    /// Rotation masks and shifts for X, Y, Z axes
+    const ROT_MASK_X: u16 = 0b11111; // 5 bits for X
+    const ROT_SHIFT_X: u32 = 0;
+
+    const ROT_MASK_Y: u16 = 0b11111 << 5; // 5 bits for Y, shifted left by 5
+    const ROT_SHIFT_Y: u32 = 5;
+
+    const ROT_MASK_Z: u16 = 0b11111 << 10; // 5 bits for Z, shifted left by 10
+    const ROT_SHIFT_Z: u32 = 10;
+
+    const VERTICES: [Vertex; 8] = [
+        Vertex {
+            position: [0.0, 0.0, 0.0],
+            normal: [0.0, 0.0, 1.0],
+            uv: [0.0, 0.0],
+        },
+        Vertex {
+            position: [0.0, 1.0, 0.0],
+            normal: [0.0, 0.0, 1.0],
+            uv: [0.0, 1.0],
+        },
+        Vertex {
+            position: [1.0, 1.0, 0.0],
+            normal: [0.0, 0.0, 1.0],
+            uv: [1.0, 1.0],
+        },
+        Vertex {
+            position: [1.0, 0.0, 0.0],
+            normal: [0.0, 0.0, 1.0],
+            uv: [1.0, 0.0],
+        },
+        Vertex {
+            position: [0.0, 0.0, -1.0],
+            normal: [0.0, 0.0, -1.0],
+            uv: [0.0, 0.0],
+        },
+        Vertex {
+            position: [0.0, 1.0, -1.0],
+            normal: [0.0, 0.0, -1.0],
+            uv: [0.0, 1.0],
+        },
+        Vertex {
+            position: [1.0, 1.0, -1.0],
+            normal: [0.0, 0.0, -1.0],
+            uv: [1.0, 1.0],
+        },
+        Vertex {
+            position: [1.0, 0.0, -1.0],
+            normal: [0.0, 0.0, -1.0],
+            uv: [1.0, 0.0],
+        },
+    ];
+
+    const INDICES: [u32; 36] = [
+        1, 0, 2, 3, 2, 0, // Front face (z=0)
+        4, 5, 6, 6, 7, 4, // Back face (z=-1)
+        0, 4, 7, 3, 0, 7, // Bottom (y=0)
+        5, 1, 6, 1, 2, 6, // Top (y=1)
+        6, 2, 7, 2, 3, 7, // Right (x=1)
+        4, 0, 5, 0, 1, 5, // Left (x=0)
+    ];
+}
+
 pub const DOT_ARRAY: [[u8; 3]; 27] = [
     [2, 0, 0], [2, 0, 1], [2, 0, 2],
     [2, 1, 0], [2, 1, 1], [2, 1, 2],
@@ -199,9 +270,40 @@ pub const DOT_ARRAY: [[u8; 3]; 27] = [
     [0, 2, 0], [0, 2, 1], [0, 2, 2],
 ];
 
-
-// Define the Marching Cubes lookup table
-#[allow(dead_code)]
-pub const MARCHING_CUBES_TABLE: [[u8; 1];0] = [
+pub const MARCHING_CUBES_TABLE: [[u8; 1]; 0] = [
     /* ... */ // Fill in the full table here
 ];
+
+#[derive(Debug, Clone)]
+pub struct Chunk {
+    blocks: Vec<Option<Cube>>, // `None` represents air blocks
+}
+
+#[allow(dead_code, unused)]
+impl Chunk {
+    pub fn new() -> Self {
+        Chunk {
+            blocks: vec![None; Self::CHUNK_SIZE * Self::CHUNK_SIZE * Self::CHUNK_SIZE],
+        }
+    }
+
+    pub fn get(&self, x: usize, y: usize, z: usize) -> Option<&Cube> {
+        self.blocks[z * Self::CHUNK_SIZE * Self::CHUNK_SIZE + y * Self::CHUNK_SIZE + x].as_ref()
+    }
+
+    pub fn set(&mut self, x: usize, y: usize, z: usize, block: Cube) {
+        self.blocks[z * Self::CHUNK_SIZE * Self::CHUNK_SIZE + y * Self::CHUNK_SIZE + x] = Some(block);
+    }
+}
+
+impl Chunk {
+    const CHUNK_SIZE: usize = 16;
+}
+
+pub struct CubeBuffer;
+
+impl CubeBuffer {
+    pub fn new(device: &wgpu::Device, cube: &super::cube::Cube) -> super::geometry::GeometryBuffer {
+        super::geometry::GeometryBuffer::new(device, &cube.indices, &cube.vertices)
+    }
+}

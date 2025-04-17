@@ -1,6 +1,7 @@
 ﻿
 
 mod camera;
+mod cube;
 mod config;
 mod geometry;
 mod pipeline;
@@ -131,8 +132,8 @@ impl<'a> State<'a> {
         ));
 
         let texture_manager: geometry::TextureManager = geometry::TextureManager::new(&device, &queue, &config);
-        let cube: geometry::Cube = geometry::Cube::default();
-        let geometry_buffer: geometry::GeometryBuffer = geometry::CubeBuffer::new(
+        let cube: cube::Cube = cube::Cube::default();
+        let geometry_buffer: geometry::GeometryBuffer = cube::CubeBuffer::new(
             &device,
             &cube,
         );

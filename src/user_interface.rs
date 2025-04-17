@@ -466,7 +466,7 @@ impl UIManager {
     }
 
     pub fn process_input_ui(&mut self, focused_idx: usize, key: winit::keyboard::KeyCode) -> bool {
-        let c: char = physical_key_to_char(key).unwrap_or('\0');
+        let c: char = physical_key_to_char(key).unwrap_or(' ');
         if let Some(element) = self.elements.get_mut(focused_idx) {
             if element.is_input {
                 if let Some(input_text) = &mut element.text {
