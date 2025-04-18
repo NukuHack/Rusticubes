@@ -1,41 +1,33 @@
 use image::GenericImageView;
 use winit::keyboard::KeyCode as Key;
 
+// Constants for common values
+const DEFAULT_ALPHA: f32 = 0.9;
+const HOVER_ALPHA: f32 = 0.5;
+const MAX_INPUT_LENGTH: usize = 120;
+
 #[repr(C)]
 #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
 struct Vertex {
-    position: [f32; 2], // Normalized device coordinates (-1.0 to 1.0)
-    uv: [f32; 2],       // Texture coordinates (0.0 to 1.0)
-    color: [f32; 4],    // RGBA color values (0.0-1.0)
+    position: [f32; 2],
+    uv: [f32; 2],
+    color: [f32; 4],
 }
 
-#[allow(dead_code, unused)]
 #[derive(Default)]
 pub struct UIElement {
-    pub position: (f32, f32), // Center position in normalized coordinates
-    pub size: (f32, f32),     // Width and height in normalized coordinates
-    pub color: [f32; 4],      // Base color of the element RGBA
-    pub text: Option<String>, // Optional text content as str
-    pub hovered: bool,        // Hover state
-    pub is_input: bool,       // What you would expect
-    pub on_click: Option<Box<dyn FnMut()>>, // Click callback
+    pub position: (f32, f32),
+    pub size: (f32, f32),
+    pub color: [f32; 4],
+    pub text: Option<String>,
+    pub hovered: bool,
+    pub is_input: bool,
+    pub on_click: Option<Box<dyn FnMut()>>,
 }
-#[allow(dead_code, unused)]
-impl UIElement {
-    pub const DEFAULT_COLOR: [f32; 4] = [1.0, 1.0, 1.0, 0.9];
-    pub const DEFAULT_SIZE: (f32, f32) = (0.2, 0.2);
 
-    pub fn default() -> Self {
-        Self {
-            position: (0.0, 0.0),
-            size: Self::DEFAULT_SIZE,
-            color: Self::DEFAULT_COLOR,
-            text: None, // Use null as the default text
-            hovered: false,
-            is_input: false,
-            on_click: None,
-        }
-    }
+impl UIElement {
+    pub const DEFAULT_COLOR: [f32; 4] = [1.0, 1.0, 1.0, DEFAULT_ALPHA];
+    pub const DEFAULT_SIZE: (f32, f32) = (0.2, 0.2);
 
     pub fn new(
         position: (f32, f32),
@@ -47,12 +39,13 @@ impl UIElement {
         Self {
             position,
             size,
-            color: [color[0], color[1], color[2], 0.9],
+            color: [color[0], color[1], color[2], DEFAULT_ALPHA],
             text,
             on_click,
             ..Default::default()
         }
     }
+
     pub fn new_input(
         position: (f32, f32),
         size: (f32, f32),
@@ -61,23 +54,18 @@ impl UIElement {
         on_click: Option<Box<dyn FnMut()>>,
     ) -> Self {
         Self {
-            position,
-            size,
-            color: [color[0], color[1], color[2], 0.9],
-            text,
-            on_click,
             is_input: true,
-            ..Default::default()
+            ..Self::new(position, size, color, text, on_click)
         }
     }
 
-    // Helper for calculating element bounds
     fn get_bounds(&self) -> (f32, f32, f32, f32) {
         let (x, y) = self.position;
         let (w, h) = self.size;
         (x, y, x + w, y + h)
     }
 }
+
 impl std::fmt::Debug for UIElement {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("UIElement")
@@ -91,38 +79,34 @@ impl std::fmt::Debug for UIElement {
     }
 }
 
-#[allow(dead_code, unused)]
 pub struct UIManager {
     pub vertex_buffer: wgpu::Buffer,
     pub index_buffer: wgpu::Buffer,
     pub pipeline: wgpu::RenderPipeline,
     pub elements: Vec<UIElement>,
-    pub focused_element: Option<usize>, // Track focused element by index
-    pub num_indices: u32,               // Total number of indices across all UI elements
+    pub focused_element: Option<usize>,
+    pub num_indices: u32,
     pub visibility: bool,
     pub bind_group: wgpu::BindGroup,
     pub font_texture: wgpu::Texture,
     pub font_sampler: wgpu::Sampler,
 }
 
-#[allow(dead_code, unused)]
 impl UIManager {
     pub fn update(&mut self, queue: &wgpu::Queue) {
         let (vertices, indices) = self.process_elements();
-        // Update GPU buffers
-        let vertex_data = bytemuck::cast_slice(&vertices);
-        queue.write_buffer(&self.vertex_buffer, 0, vertex_data);
-        let index_data = bytemuck::cast_slice(&indices);
-        queue.write_buffer(&self.index_buffer, 0, index_data);
+
+        queue.write_buffer(&self.vertex_buffer, 0, bytemuck::cast_slice(&vertices));
+
+        queue.write_buffer(&self.index_buffer, 0, bytemuck::cast_slice(&indices));
+
         self.num_indices = indices.len() as u32;
     }
 
-    // Helper functions for clarity
     fn process_elements(&self) -> (Vec<Vertex>, Vec<u32>) {
-        let mut vertices: Vec<Vertex> = Vec::new();
-        let mut indices: Vec<u32> = Vec::new();
+        let mut vertices = Vec::with_capacity(self.elements.len() * 4);
+        let mut indices = Vec::with_capacity(self.elements.len() * 6);
         let mut current_index = 0u32;
-        let empty_string = String::new();
 
         for element in &self.elements {
             if element.text.is_some() {
@@ -134,6 +118,7 @@ impl UIManager {
 
         (vertices, indices)
     }
+
     fn process_text_element(
         &self,
         element: &UIElement,
@@ -141,89 +126,75 @@ impl UIManager {
         indices: &mut Vec<u32>,
         current_index: &mut u32,
     ) {
-        let (x, y): (f32, f32) = element.position;
-        let (w, h): (f32, f32) = element.size;
-        let char_count = element
-            .text
-            .clone()
-            .unwrap_or("".to_string())
-            .chars()
-            .count() as f32;
-
         // Add background rectangle
         self.add_rectangle(vertices, element.position, element.size, element.color);
         indices.extend(self.rectangle_indices(*current_index));
         *current_index += 4;
 
-        // Calculate padding and character size
-        let padding: f32 = 0.95;
-        let (padded_w, padded_h): (f32, f32) = (w * padding, h * padding);
-        let (overhang_w, overhang_h): (f32, f32) = (w - padded_w, h - padded_h);
-        let char_size: f32 = (padded_w / char_count).min(padded_h); // Determine the maximum possible size per character
+        // Process text if present
+        if let Some(text) = &element.text {
+            let (x, y) = element.position;
+            let (w, h) = element.size;
+            let char_count = text.chars().count() as f32;
+            let padding = 0.95;
 
-        // Process each character
-        for (i, c) in element
-            .text
-            .clone()
-            .unwrap_or("".to_string())
-            .chars()
-            .enumerate()
-        {
-            let (u_min, v_min, u_max, v_max) = self.get_texture_coordinates(c);
+            let (padded_w, padded_h) = (w * padding, h * padding);
+            let (overhang_w, overhang_h) = (w - padded_w, h - padded_h);
+            let char_size = (padded_w / char_count).min(padded_h);
 
-            // Calculate horizontal position (already centered horizontally as analyzed)
-            let char_x = x + overhang_w / 2.0 + (i as f32) * char_size;
+            for (i, c) in text.chars().enumerate() {
+                let (u_min, v_min, u_max, v_max) = self.get_texture_coordinates(c);
+                let char_x = x + overhang_w / 2.0 + (i as f32) * char_size;
+                let char_y = y + overhang_h / 2.0 + (padded_h - char_size) / 2.0;
 
-            // Calculate vertical position to center vertically within the padded area
-            let char_y = y + overhang_h / 2.0 + (padded_h - char_size) / 2.0;
+                let positions = [
+                    [char_x, char_y],
+                    [char_x + char_size, char_y],
+                    [char_x, char_y + char_size],
+                    [char_x + char_size, char_y + char_size],
+                ];
 
-            // Define character vertices and UVs with correct height
-            let positions = [
-                [char_x, char_y],                         // Top-left
-                [char_x + char_size, char_y],             // Top-right
-                [char_x, char_y + char_size],             // Bottom-left
-                [char_x + char_size, char_y + char_size], // Bottom-right
-            ];
-            let uvs = [
-                [u_min, v_min],
-                [u_max, v_min],
-                [u_min, v_max],
-                [u_max, v_max],
-            ];
+                let uvs = [
+                    [u_min, v_min],
+                    [u_max, v_min],
+                    [u_min, v_max],
+                    [u_max, v_max],
+                ];
 
-            // Add vertices and indices as before
-            for j in 0..4 {
-                vertices.push(Vertex {
-                    position: positions[j],
-                    uv: uvs[j],
-                    color: element.color,
-                });
+                for j in 0..4 {
+                    vertices.push(Vertex {
+                        position: positions[j],
+                        uv: uvs[j],
+                        color: element.color,
+                    });
+                }
+
+                indices.extend(self.rectangle_indices(*current_index));
+                *current_index += 4;
             }
-            indices.extend(self.rectangle_indices(*current_index));
-            *current_index += 4;
         }
     }
 
     fn get_texture_coordinates(&self, c: char) -> (f32, f32, f32, f32) {
         let code = c as u32;
         if code < 32 || (code > 127 && code < 160) || code >= 32 + 51 * 15 {
-            return (0.0, 0.0, 0.0, 0.0); // Non-printable characters return zero coordinates
+            return (0.0, 0.0, 0.0, 0.0);
         }
 
-        let index: u32 = code - 32;
-        // Adjust the code to start at 32
-        let grid_wid: u32 = 16;
-        let (cell_wid, cell_hei): (f32, f32) = (15.0, 16.0);
-        let (texture_wid, texture_hei): (f32, f32) = (240.0, 768.0);
-        // Calculate the column and row in the grid
-        let (x, y): (f32, f32) = ((index % grid_wid) as f32, (index / grid_wid) as f32);
-        // Compute texture coordinates
-        let u_min: f32 = (x) * cell_wid / texture_wid;
-        let v_min: f32 = (y) * cell_hei / texture_hei;
-        let u_max: f32 = (x + 1.0f32) * cell_wid / texture_wid;
-        let v_max: f32 = (y + 1.0f32) * cell_hei / texture_hei;
-        // Texture coordinates reversed vertically (common in some frameworks)
-        (u_min, v_max, u_max, v_min)
+        let index = code - 32;
+        let grid_wid = 16;
+        let (cell_wid, cell_hei) = (15.0, 16.0);
+        let (texture_wid, texture_hei) = (240.0, 768.0);
+
+        let x = (index % grid_wid) as f32;
+        let y = (index / grid_wid) as f32;
+
+        (
+            x * cell_wid / texture_wid,
+            (y + 1.0) * cell_hei / texture_hei,
+            (x + 1.0) * cell_wid / texture_wid,
+            y * cell_hei / texture_hei,
+        )
     }
 
     fn process_rect_element(
@@ -245,28 +216,35 @@ impl UIManager {
         (w, h): (f32, f32),
         color: [f32; 4],
     ) {
-        // Positions are relative to the bottom-left corner aka the position of the element
-        let positions = [
-            [x, y + h],     // Top-left
-            [x + w, y + h], // Top-right
-            [x, y],         // Bottom-left
-            [x + w, y],     // Bottom-right
-        ];
-
-        for j in 0..4 {
-            vertices.push(Vertex {
-                position: positions[j],
+        vertices.extend([
+            Vertex {
+                position: [x, y + h],
                 uv: [0.0, 0.0],
                 color,
-            });
-        }
+            },
+            Vertex {
+                position: [x + w, y + h],
+                uv: [0.0, 0.0],
+                color,
+            },
+            Vertex {
+                position: [x, y],
+                uv: [0.0, 0.0],
+                color,
+            },
+            Vertex {
+                position: [x + w, y],
+                uv: [0.0, 0.0],
+                color,
+            },
+        ]);
     }
 
     fn rectangle_indices(&self, base: u32) -> [u32; 6] {
-        [base + 0, base + 1, base + 2, base + 1, base + 3, base + 2]
+        [base, base + 1, base + 2, base + 1, base + 3, base + 2]
     }
 
-    pub fn add_ui_element(&mut self, element: self::UIElement) {
+    pub fn add_ui_element(&mut self, element: UIElement) {
         self.elements.push(element);
     }
 
@@ -275,28 +253,14 @@ impl UIManager {
         config: &wgpu::SurfaceConfiguration,
         queue: &wgpu::Queue,
     ) -> Self {
-        // Font Texture Setup
-        let (font_data, width, height) = {
-            let current_dir: std::path::PathBuf =
-                std::env::current_dir().expect("Failed to get current directory");
-
-            let raw_path: &str = r"bescii-chars.png";
-
-            let full_path: std::path::PathBuf = current_dir.join("resources").join(raw_path);
-            let path: &str = full_path.to_str().expect("Path contains invalid UTF-8");
-
-            let img = image::open(path).expect("Failed to load font atlas");
-            let (w, h) = img.dimensions(); // Get dimensions before converting the image
-            let rgba = img.into_rgba8(); // Convert to RGBA8 format
-            (rgba.into_raw(), w, h) // Return raw data and dimensions
-        };
+        // Load font texture
+        let (font_data, width, height) = Self::load_font_texture("resources/bescii-chars.png");
 
         let font_size = wgpu::Extent3d {
-            width: width,
-            height: height,
+            width,
+            height,
             depth_or_array_layers: 1,
         };
-
         let font_texture = device.create_texture(&wgpu::TextureDescriptor {
             view_formats: &[wgpu::TextureFormat::Rgba8UnormSrgb],
             label: Some("Font Texture"),
@@ -318,7 +282,7 @@ impl UIManager {
             &font_data,
             wgpu::TexelCopyBufferLayout {
                 offset: 0,
-                bytes_per_row: Some((width * 4) as u32),
+                bytes_per_row: Some(width * 4),
                 rows_per_image: None,
             },
             font_size,
@@ -332,7 +296,6 @@ impl UIManager {
             ..Default::default()
         });
 
-        // Bind Group Layout
         let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             entries: &[
                 wgpu::BindGroupLayoutEntry {
@@ -371,38 +334,11 @@ impl UIManager {
             label: Some("font_bind_group"),
         });
 
-        // Pipeline Layout Update
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             bind_group_layouts: &[&bind_group_layout],
             ..Default::default()
         });
-        let ui_vertex_layout = vec![
-            // Position attribute (location 0)
-            wgpu::VertexAttribute {
-                offset: 0,
-                shader_location: 0,
-                format: wgpu::VertexFormat::Float32x2,
-            },
-            // UV attribute (location 1)
-            wgpu::VertexAttribute {
-                offset: 8,
-                shader_location: 1,
-                format: wgpu::VertexFormat::Float32x2,
-            },
-            // Color attribute (location 2)
-            wgpu::VertexAttribute {
-                offset: 16,
-                shader_location: 2,
-                format: wgpu::VertexFormat::Float32x4,
-            },
-        ];
 
-        let ui_vertex_buffer_layout = wgpu::VertexBufferLayout {
-            array_stride: std::mem::size_of::<Vertex>() as wgpu::BufferAddress,
-            step_mode: wgpu::VertexStepMode::Vertex,
-            attributes: &ui_vertex_layout,
-        };
-        // UI Pipeline
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("UI Shader"),
             source: wgpu::ShaderSource::Wgsl(std::borrow::Cow::from(include_str!(
@@ -412,39 +348,58 @@ impl UIManager {
 
         let ui_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("UI Pipeline"),
-            layout: Some(&pipeline_layout), // Must include the texture bind group layout
+            layout: Some(&pipeline_layout),
             vertex: wgpu::VertexState {
                 module: &shader,
-                compilation_options: Default::default(),
                 entry_point: Some("vs_main"),
-                buffers: &[ui_vertex_buffer_layout], // Use the corrected layout
+                buffers: &[wgpu::VertexBufferLayout {
+                    array_stride: std::mem::size_of::<Vertex>() as wgpu::BufferAddress,
+                    step_mode: wgpu::VertexStepMode::Vertex,
+                    attributes: &[
+                        wgpu::VertexAttribute {
+                            offset: 0,
+                            shader_location: 0,
+                            format: wgpu::VertexFormat::Float32x2,
+                        },
+                        wgpu::VertexAttribute {
+                            offset: 8,
+                            shader_location: 1,
+                            format: wgpu::VertexFormat::Float32x2,
+                        },
+                        wgpu::VertexAttribute {
+                            offset: 16,
+                            shader_location: 2,
+                            format: wgpu::VertexFormat::Float32x4,
+                        },
+                    ],
+                }],
+                compilation_options: Default::default(),
             },
             fragment: Some(wgpu::FragmentState {
                 module: &shader,
-                compilation_options: Default::default(),
                 entry_point: Some("fs_main"),
                 targets: &[Some(wgpu::ColorTargetState {
                     format: config.format,
                     blend: Some(wgpu::BlendState::ALPHA_BLENDING),
                     write_mask: wgpu::ColorWrites::ALL,
                 })],
+                compilation_options: Default::default(),
             }),
             primitive: wgpu::PrimitiveState::default(),
-            depth_stencil: None, // UI doesn't need depth
+            depth_stencil: None,
             multisample: wgpu::MultisampleState::default(),
             multiview: None,
             cache: None,
         });
 
-        // UI Buffers
-        let vertex_buffer: wgpu::Buffer = device.create_buffer(&wgpu::BufferDescriptor {
+        let vertex_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("UI Vertex Buffer"),
             size: 1024 * std::mem::size_of::<Vertex>() as wgpu::BufferAddress,
             usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
 
-        let index_buffer: wgpu::Buffer = device.create_buffer(&wgpu::BufferDescriptor {
+        let index_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("UI Index Buffer"),
             size: 1024 * std::mem::size_of::<u32>() as wgpu::BufferAddress,
             usage: wgpu::BufferUsages::INDEX | wgpu::BufferUsages::COPY_DST,
@@ -457,12 +412,19 @@ impl UIManager {
             pipeline: ui_pipeline,
             elements: Vec::new(),
             focused_element: None,
-            num_indices: 0, // Initialize to 0
+            num_indices: 0,
             visibility: true,
             bind_group,
             font_texture,
             font_sampler,
         }
+    }
+
+    fn load_font_texture(path: &str) -> (Vec<u8>, u32, u32) {
+        let img = image::open(path).expect("Failed to load font atlas");
+        let (width, height) = img.dimensions();
+        let rgba = img.into_rgba8();
+        (rgba.into_raw(), width, height)
     }
 
     pub fn process_text_input(&mut self, focused_idx: usize, c: char) {
@@ -472,14 +434,10 @@ impl UIManager {
             }
 
             if let Some(input_text) = &mut element.text {
-                if input_text.len() >= 120 {
+                if input_text.len() >= MAX_INPUT_LENGTH || c.is_control() {
                     return;
                 }
-
-                // Filter out control characters
-                if !c.is_control() {
-                    input_text.push(c);
-                }
+                input_text.push(c);
             }
         }
     }
@@ -487,16 +445,12 @@ impl UIManager {
     pub fn handle_backspace(&mut self, focused_idx: usize) {
         if let Some(element) = self.elements.get_mut(focused_idx) {
             if element.is_input {
-                if let Some(input_text) = &mut element.text {
-                    input_text.pop();
-                }
+                element.text.as_mut().map(|text| text.pop());
             }
         }
     }
 
-    pub fn handle_enter(&mut self, focused_idx: usize) {
-        // Could trigger form submission or move to next field
-        // For now, just blur the current element
+    pub fn handle_enter(&mut self, _focused_idx: usize) {
         self.focused_element = None;
     }
 
@@ -508,7 +462,7 @@ impl UIManager {
         self.visibility = !self.visibility;
     }
 }
-// Improved key to char conversion
+
 pub fn key_to_char(key: Key, shift: bool) -> Option<char> {
     match key {
         Key::KeyA => Some(if shift { 'A' } else { 'a' }),
@@ -566,84 +520,85 @@ pub fn handle_ui_hover(state: &mut super::State, mouse_pos: &winit::dpi::Physica
     let (norm_x, norm_y) = convert_mouse_position(state, mouse_pos);
 
     for element in &mut state.ui_manager.elements {
-        let (min_x, min_y, max_x, max_y) = element.get_bounds();
-        element.hovered = norm_x >= min_x && norm_x <= max_x && norm_y >= min_y && norm_y <= max_y;
-
-        element.color[3] = if element.hovered { 0.5 } else { 0.9 };
+        if element.on_click.is_some() || element.text.is_some() {
+            let (min_x, min_y, max_x, max_y) = element.get_bounds();
+            element.hovered =
+                norm_x >= min_x && norm_x <= max_x && norm_y >= min_y && norm_y <= max_y;
+            element.color[3] = if element.hovered {
+                HOVER_ALPHA
+            } else {
+                DEFAULT_ALPHA
+            };
+        }
     }
 }
+
 fn convert_mouse_position(
     state: &super::State,
     mouse_pos: &winit::dpi::PhysicalPosition<f64>,
 ) -> (f32, f32) {
-    let (x, y): (f32, f32) = (mouse_pos.x as f32, mouse_pos.y as f32);
-    let (width, height): (f32, f32) = (state.size().width as f32, state.size().height as f32);
+    let x = mouse_pos.x as f32;
+    let y = mouse_pos.y as f32;
+    let width = state.size().width as f32;
+    let height = state.size().height as f32;
 
-    let norm_x: f32 = (2.0 * x / width) - 1.0;
-    let norm_y: f32 = (2.0 * (height - y) / height) - 1.0;
-
-    (norm_x, norm_y)
+    ((2.0 * x / width) - 1.0, (2.0 * (height - y) / height) - 1.0)
 }
 
-// Click handling
 pub fn handle_ui_click(state: &mut super::State) {
-    state.ui_manager.focused_element = None; // Clear focus first
+    state.ui_manager.focused_element = None;
 
     for (index, element) in state.ui_manager.elements.iter_mut().enumerate() {
         if element.hovered {
             if element.is_input {
-                // Focus this input
                 state.ui_manager.focused_element = Some(index);
-            } else if element.on_click.is_some() {
-                // Execute regular button clicks
-                element.on_click.as_mut().unwrap()();
+            } else if let Some(callback) = &mut element.on_click {
+                callback();
             }
         }
     }
 }
 
 pub fn setup_ui(state: &mut super::State) {
-    let add_element = super::user_interface::UIElement::new(
-        (-0.7, -0.55),
-        (0.4, 0.1),
-        [0.3, 0.6, 0.7],
-        Some("Add new cube".to_string()),
-        Some(Box::new(|| super::geometry::add_def_cube())),
-    );
-    let remove_element = super::user_interface::UIElement::new(
-        (-0.7, -0.75),
-        (0.4, 0.1),
-        [0.6, 0.3, 0.5],
-        Some("Remove last cube".to_string()),
-        Some(Box::new(|| super::geometry::rem_last_cube())),
-    );
-    let input_element = super::user_interface::UIElement::new_input(
-        (-0.9, 0.2),
-        (0.4, 0.2),
-        [0.6, 0.3, 0.5],
-        Some("type".to_string()),
-        None,
-    );
-    let chunk_add_element = super::user_interface::UIElement::new(
-        (0.5, 0.2),
-        (0.4, 0.2),
-        [0.6, 0.3, 0.5],
-        Some("Add chunk".to_string()),
-        Some(Box::new(|| super::geometry::add_def_chunk())),
-    );
-    let close_element = super::user_interface::UIElement::new(
-        (0.6, -0.7),
-        (0.2, 0.1),
-        [1.0, 0.2, 0.1],
-        Some("Close".to_string()),
-        Some(Box::new(|| {
-            // Can ignore state parameter
-            super::close_app();
-        })),
-    );
-    state.ui_manager.add_ui_element(add_element);
-    state.ui_manager.add_ui_element(remove_element);
-    state.ui_manager.add_ui_element(input_element);
-    state.ui_manager.add_ui_element(chunk_add_element);
-    state.ui_manager.add_ui_element(close_element);
+    let elements = vec![
+        UIElement::new(
+            (-0.7, -0.55),
+            (0.4, 0.1),
+            [0.3, 0.6, 0.7],
+            Some("Add new cube".to_string()),
+            Some(Box::new(|| super::geometry::add_def_cube())),
+        ),
+        UIElement::new(
+            (-0.7, -0.75),
+            (0.4, 0.1),
+            [0.6, 0.3, 0.5],
+            Some("Remove last cube".to_string()),
+            Some(Box::new(|| super::geometry::rem_last_cube())),
+        ),
+        UIElement::new_input(
+            (-0.9, 0.2),
+            (0.4, 0.2),
+            [0.3, 0.3, 0.3],
+            Some("type".to_string()),
+            None,
+        ),
+        UIElement::new(
+            (0.5, 0.2),
+            (0.4, 0.2),
+            [0.9, 0.3, 0.3],
+            Some("Add chunk".to_string()),
+            Some(Box::new(|| super::geometry::add_def_chunk())),
+        ),
+        UIElement::new(
+            (0.6, -0.7),
+            (0.2, 0.1),
+            [1.0, 0.2, 0.1],
+            Some("Close".to_string()),
+            Some(Box::new(|| super::close_app())),
+        ),
+        UIElement::new((0.0, -0.02), (0.02, 0.06), [0.1, 0.1, 0.1], None, None),
+        UIElement::new((-0.02, 0.0), (0.06, 0.02), [0.1, 0.1, 0.1], None, None),
+    ];
+
+    state.ui_manager.elements = elements;
 }

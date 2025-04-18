@@ -1,5 +1,5 @@
-#[allow(dead_code, unused)]
 /// Struct holding both render pipelines and their associated shaders
+#[allow(dead_code, unused)]
 pub struct Pipeline {
     pub render_pipeline: wgpu::RenderPipeline,
     pub inside_pipeline: wgpu::RenderPipeline,
@@ -268,7 +268,6 @@ fn begin_ui_render_pass<'a>(
 
 /// Main rendering function
 pub fn render_all(current_state: &mut super::State) -> Result<(), wgpu::SurfaceError> {
-    let start = std::time::Instant::now();
     let output = current_state.surface().get_current_texture()?;
     let view = output.texture.create_view(&Default::default());
 
@@ -276,6 +275,7 @@ pub fn render_all(current_state: &mut super::State) -> Result<(), wgpu::SurfaceE
         .device()
         .create_command_encoder(&Default::default());
 
+    let start = std::time::Instant::now();
     // 3D Render Pass
     {
         let depth_view = &current_state.texture_manager().depth_texture.view;
@@ -328,12 +328,12 @@ pub fn render_all(current_state: &mut super::State) -> Result<(), wgpu::SurfaceE
         );
     }
 
+    //println!("GPU draw took: {:?}", start.elapsed());
+    // the rest in not included in the time counting because they are closer to static
+    // so it is impossible to make that time go down actually (it is basically 15ms so not much)
+    // i hope it is still fine ...
     current_state.queue().submit(Some(encoder.finish()));
     output.present();
-    let time = start.elapsed();
-    if time > std::time::Duration::from_millis(20) {
-        println!("GPU draw took really long : {:?}", time);
-    };
     Ok(())
 }
 

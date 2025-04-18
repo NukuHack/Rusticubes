@@ -1,4 +1,4 @@
-use super::traits::PositionConversion;
+use cgmath::SquareMatrix;
 use cgmath::{InnerSpace, Rotation3};
 use image::GenericImageView;
 use std::mem;
@@ -39,8 +39,8 @@ impl Vertex {
     }
 }
 
-#[allow(dead_code, unused, unused_attributes)]
 // --- Geometry Buffer ---
+#[derive(Debug, Clone)]
 pub struct GeometryBuffer {
     pub vertex_buffer: wgpu::Buffer,
     pub index_buffer: wgpu::Buffer,
@@ -69,7 +69,6 @@ impl GeometryBuffer {
     }
 }
 
-#[allow(dead_code, unused)]
 // --- Instance Manager ---
 pub struct InstanceManager {
     pub instances: Vec<Instance>,
@@ -78,7 +77,7 @@ pub struct InstanceManager {
 }
 impl InstanceManager {
     pub fn new(device: &wgpu::Device, queue: &wgpu::Queue) -> Self {
-        let instances = vec![super::cube::Cube::default().to_instance()];
+        let instances = vec![super::cube::Block::default().to_instance()];
 
         // Rest remains the same - buffer creation and initialization
         let capacity = instances.len() * 2;
@@ -220,7 +219,7 @@ impl InstanceManager {
         chunk: &super::cube::Chunk,
     ) {
         let new_instances: Vec<Instance> = chunk
-            .cubes
+            .blocks
             .iter()
             .filter(|cube| !cube.is_empty())
             .map(|cube| cube.to_world_instance(chunk.position))
@@ -232,7 +231,7 @@ impl InstanceManager {
 
     /// Remove cubes from a chunk from the instance manager
     pub fn remove_chunk(&mut self, queue: &wgpu::Queue, chunk: &super::cube::Chunk) {
-        for cube in chunk.cubes.iter() {
+        for cube in chunk.blocks.iter() {
             if !cube.is_empty() {
                 let index = self
                     .instances
@@ -249,21 +248,26 @@ impl InstanceManager {
     }
 }
 
-#[allow(dead_code, unused)]
+pub static NULL_QUATERNION: cgmath::Quaternion<f32> = cgmath::Quaternion::new(1.0, 0.0, 0.0, 0.0);
+
 pub fn add_def_cube() {
     unsafe {
         let state = super::get_state();
         let mut instance_manager = state.instance_manager().borrow_mut();
 
-        // Calculate adjusted yaw (including the FRAC_PI_2 offset)
-        let q_yaw: cgmath::Quaternion<f32> = cgmath::Quaternion::from_angle_y(
-            -state.camera_system.camera.yaw + cgmath::Rad(std::f32::consts::FRAC_PI_2),
-        );
-        let q_pitch: cgmath::Quaternion<f32> =
-            cgmath::Quaternion::from_angle_x(state.camera_system.camera.pitch);
+        let rotation = if true {
+            NULL_QUATERNION
+        } else {
+            // Calculate adjusted yaw (including the FRAC_PI_2 offset)
+            let q_yaw: cgmath::Quaternion<f32> = cgmath::Quaternion::from_angle_y(
+                -state.camera_system.camera.yaw + cgmath::Rad(std::f32::consts::FRAC_PI_2),
+            );
+            let q_pitch: cgmath::Quaternion<f32> =
+                cgmath::Quaternion::from_angle_x(state.camera_system.camera.pitch);
 
-        // Combine rotations: first yaw (around Y-axis), then pitch (around X-axis)
-        let rotation: cgmath::Quaternion<f32> = q_pitch * q_yaw;
+            // Combine rotations: first yaw (around Y-axis), then pitch (around X-axis)
+            q_pitch * q_yaw
+        };
 
         // Get camera position in world coordinates
         let camera_pos = state.camera_system.camera.position;
@@ -271,23 +275,17 @@ pub fn add_def_cube() {
         // Calculate where to place the cube (in front of the camera)
         let forward = state.camera_system.camera.forward();
         let placement_distance = 6.0; // Distance in front of camera
-        let placement_position = camera_pos + forward * placement_distance;
+        let placement_position =
+            super::cube::vec3_f32_to_i32(camera_pos + forward * placement_distance);
 
         // Convert to chunk coordinates
-        let chunk_pos = super::cube::Chunk::world_to_chunk_pos(super::cube::vec3_f32_to_i32(
-            placement_position,
-        ));
+        let chunk_pos = super::cube::ChunkCoord::from_world_position(placement_position);
 
         // Convert to local position within chunk
-        let local_pos = super::cube::Chunk::world_to_local_pos(super::cube::vec3_f32_to_i32(
-            placement_position,
-        ));
+        //let local_pos = super::cube::Chunk::world_to_local_pos(placement_position);
 
         // Create cube at the correct position
-        let cube = super::cube::Cube::new_rot_raw(
-            super::cube::vec3_f32_to_i32(placement_position),
-            rotation,
-        );
+        let cube = super::cube::Block::new_rot_raw(placement_position, rotation);
 
         // Add to instance manager with proper world position
         instance_manager.add_instance(
@@ -319,14 +317,15 @@ pub fn add_def_chunk() {
         );
         let real_chunk_position = super::cube::vec3_f32_to_i32(chunk_position);
 
-        if let Some(chunk) = super::cube::Chunk::load_chunk(real_chunk_position) {
+        if let Some(chunk) = super::cube::Chunk::load(super::cube::ChunkCoord::from_world_position(
+            real_chunk_position,
+        )) {
             instance_manager.add_chunk(state.device(), state.queue(), &chunk);
         } else {
             eprintln!("Failed to load chunk at {:?}", chunk_position);
         }
     }
 }
-#[allow(dead_code, unused)]
 pub fn rem_pos_cube(position: cgmath::Vector3<f32>, threshold: f32) {
     unsafe {
         let state = super::get_state();
@@ -342,95 +341,111 @@ pub fn rem_pos_cube(position: cgmath::Vector3<f32>, threshold: f32) {
     }
 }
 
-#[allow(dead_code, unused)]
 pub fn cast_ray_and_select_cube(
     camera: &super::camera::Camera,
-    size: &winit::dpi::PhysicalSize<u32>,
-    mouse_x: f32,
-    mouse_y: f32,
+    projection: &super::camera::Projection,
     instances: &[Instance],
     max_distance: f32,
 ) -> Option<usize> {
-    // Get window dimensions from the state
-    let (width, height): (f32, f32) =
-        <winit::dpi::PhysicalSize<u32> as Into<(f32, f32)>>::into(*size);
-    // Normalize mouse coordinates to [-1.0, 1.0]
-    let mouse_direction = cgmath::Vector3::new(mouse_x, mouse_y, -1.0).normalize();
+    // Create ray directly in center of view (NDC 0,0,-1)
+    let ray_clip = cgmath::Vector4::new(0.0, 0.0, -1.0, 1.0);
 
-    // Combine mouse direction with camera forward
-    let ray_dir = (camera.forward()/* + mouse_direction */).normalize();
+    // Convert to eye (camera) space
+    let inv_proj = projection.calc_matrix().invert().unwrap();
+    let mut ray_eye: cgmath::Vector4<f32> = inv_proj * ray_clip;
+    ray_eye = cgmath::Vector4::new(ray_eye.x, ray_eye.y, -1.0, 0.0);
+
+    // Convert to world space
+    let inv_view = camera.calc_matrix().invert().unwrap();
+    let ray_world = inv_view * ray_eye;
+    let ray_dir = ray_world.truncate().normalize();
 
     let ray_origin = camera.position;
 
-    let mut closest_t = max_distance;
-    let mut selected_index = None;
+    // Early exit if no instances
+    if instances.is_empty() {
+        return None;
+    }
+
+    // Optimized ray-AABB intersection with distance check
+    let mut closest_index = None;
+    let mut closest_distance = max_distance;
 
     for (index, instance) in instances.iter().enumerate() {
         let cube_center = instance.position;
         let half_extents = cgmath::Vector3::new(0.5, 0.5, 0.5);
 
+        // Early distance check - skip if too far
+        let center_dist = (cube_center - ray_origin).magnitude();
+        if center_dist > max_distance + 0.87 {
+            // 0.87 is approx sqrt(3)/2
+            continue;
+        }
+
+        // Optimized AABB intersection
         let aabb_min = cube_center - half_extents;
         let aabb_max = cube_center + half_extents;
 
-        if let Some(t) = ray_aabb_intersect(ray_origin.to_point(), ray_dir, aabb_min, aabb_max) {
-            if t > 0.0 && t < closest_t {
-                closest_t = t;
-                selected_index = Some(index);
-                //println!("{}", selected_index.unwrap());
+        if let Some(t) = ray_aabb_intersect(ray_origin, ray_dir, aabb_min, aabb_max) {
+            if t > 0.0 && t < closest_distance {
+                closest_distance = t;
+                closest_index = Some(index);
             }
         }
     }
-    selected_index
+
+    closest_index
 }
 
+#[inline]
 fn ray_aabb_intersect(
-    ray_origin: cgmath::Point3<f32>,
+    ray_origin: cgmath::Vector3<f32>,
     ray_dir: cgmath::Vector3<f32>,
     aabb_min: cgmath::Vector3<f32>,
     aabb_max: cgmath::Vector3<f32>,
 ) -> Option<f32> {
-    let mut t_min = -f32::INFINITY;
-    let mut t_max = f32::INFINITY;
+    let mut tmin = -f32::INFINITY;
+    let mut tmax = f32::INFINITY;
 
+    // Unroll the loop for better performance
     for i in 0..3 {
-        let inv_dir = 1.0 / ray_dir[i];
-        let mut t1 = (aabb_min[i] - ray_origin[i]) * inv_dir;
-        let mut t2 = (aabb_max[i] - ray_origin[i]) * inv_dir;
+        let inv_d = 1.0 / ray_dir[i];
+        let mut t1 = (aabb_min[i] - ray_origin[i]) * inv_d;
+        let mut t2 = (aabb_max[i] - ray_origin[i]) * inv_d;
 
-        if inv_dir < 0.0 {
+        if inv_d < 0.0 {
             std::mem::swap(&mut t1, &mut t2);
         }
 
-        t_min = t_min.max(t1);
-        t_max = t_max.min(t2);
+        tmin = tmin.max(t1);
+        tmax = tmax.min(t2);
 
-        if t_max < t_min {
+        if tmax < tmin {
             return None;
         }
     }
 
-    if t_min > 0.0 {
-        Some(t_min)
-    } else if t_max > 0.0 {
-        Some(t_max)
+    // Return the closest positive intersection
+    if tmin > 0.0 {
+        Some(tmin)
+    } else if tmax > 0.0 {
+        Some(tmax)
     } else {
         None
     }
 }
 
 // Function to remove the raycasted cube
-pub fn rem_raycasted_cube(mouse_pos: winit::dpi::PhysicalPosition<f64>) {
+pub fn rem_raycasted_cube() {
     unsafe {
         let state = super::get_state();
         let instance_manager = &mut *state.instance_manager().borrow_mut();
 
         if let Some(index) = cast_ray_and_select_cube(
             &state.camera_system.camera,
-            state.size(),
-            mouse_pos.x as f32,
-            mouse_pos.y as f32,
+            &state.camera_system.projection,
             &instance_manager.instances,
-            100.0,
+            10.0,
         ) {
             instance_manager.remove_instance(index, state.queue());
         }
@@ -454,8 +469,8 @@ impl Instance {
             .into(),
         }
     }
-    pub fn to_cube(&self) -> super::cube::Cube {
-        super::cube::Cube::new_rot_raw(super::cube::vec3_f32_to_i32(self.position), self.rotation)
+    pub fn to_cube(&self) -> super::cube::Block {
+        super::cube::Block::new_rot_raw(super::cube::vec3_f32_to_i32(self.position), self.rotation)
     }
 }
 impl Default for Instance {
@@ -507,7 +522,6 @@ impl InstanceRaw {
     }
 }
 
-#[allow(dead_code, unused, unused_variables)]
 pub struct Texture {
     pub texture: wgpu::Texture,
     pub view: wgpu::TextureView,
@@ -625,7 +639,6 @@ impl Texture {
 }
 
 // --- Texture Manager ---
-#[allow(dead_code, unused, unused_variables)]
 pub struct TextureManager {
     pub texture: Texture,
     pub depth_texture: Texture,

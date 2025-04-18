@@ -66,6 +66,7 @@ pub struct DataSubsystem {
     geometry_buffer: geometry::GeometryBuffer,
     texture_manager: geometry::TextureManager,
     instance_manager: std::cell::RefCell<geometry::InstanceManager>, // Now wrapped in RefCell
+    //world: cube::World;
 }
 
 impl<'a> State<'a> {
@@ -137,7 +138,7 @@ impl<'a> State<'a> {
         ));
 
         let texture_manager: geometry::TextureManager = geometry::TextureManager::new(&device, &queue, &config);
-        let geometry_buffer: geometry::GeometryBuffer = cube::CubeBuffer::new(
+        let geometry_buffer: geometry::GeometryBuffer = cube::BlockBuffer::new(
             &device,
         );
 
@@ -243,7 +244,7 @@ impl<'a> State<'a> {
     }
     pub fn handle_events(&mut self,event: &WindowEvent) -> bool{
         match event {
-            WindowEvent::CloseRequested => close_app(),
+            WindowEvent::CloseRequested => {close_app(); true},
             WindowEvent::Resized(physical_size) => self.resize(*physical_size),
             WindowEvent::RedrawRequested => {
                 self.window().request_redraw();
@@ -255,7 +256,7 @@ impl<'a> State<'a> {
                     },
                     Err(wgpu::SurfaceError::OutOfMemory | wgpu::SurfaceError::Other) => {
                         log::error!("Surface error");
-                        close_app()
+                        close_app(); true
                     }
                     Err(wgpu::SurfaceError::Timeout) => {
                         log::warn!("Surface timeout");
@@ -336,10 +337,7 @@ impl<'a> State<'a> {
                     },
                     Key::KeyR => {
                         if *state == ElementState::Pressed {
-                            if let Some(prev) = self.input_system.previous_mouse {
-                                geometry::rem_raycasted_cube(prev);
-                                return true
-                            }
+                            geometry::rem_raycasted_cube();
                         }
                         false
                     },
@@ -511,7 +509,6 @@ pub async fn run() {
     let mut state_raw: State = State::new(window).await;
     user_interface::setup_ui(&mut state_raw);
 
-    #[allow(unused_unsafe)]
     unsafe {   // Store the pointer in the static variable
         STATE_PTR = Box::into_raw(Box::new(state_raw));
     }
@@ -549,9 +546,8 @@ pub unsafe fn get_state() -> &'static mut State<'static> { unsafe {
 
 
 pub static mut CLOSED:bool = false;
-pub fn close_app() -> bool{
+pub fn close_app() {
     unsafe{CLOSED = true;};
-    true
 }
 pub fn closed() -> bool{
     unsafe{CLOSED}
