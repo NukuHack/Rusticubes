@@ -6,6 +6,7 @@ mod config;
 mod geometry;
 mod pipeline;
 mod user_interface;
+mod traits;
 
 use std::iter::Iterator;
 use winit::{
@@ -125,20 +126,14 @@ impl<'a> State<'a> {
         let camera_system: camera::CameraSystem = camera::CameraSystem::new(
             &device,
             &size,
-            cgmath::Point3::new(0.5, 1.8, 2.0), // by default the camera is 1.8 meters tall
+            cgmath::Vector3::new(0.5, 1.8, 2.0), // by default the camera is 1.8 meters tall
         );
 
         surface.configure(&device, &config);
 
-        // Constants for geometry creation
-        const NUM_INSTANCES: u32 = 3;
-        const SPACE_BETWEEN: f32 = 1.0;
         let instance_manager = std::cell::RefCell::new(geometry::InstanceManager::new(
             &device,
             &queue,
-            NUM_INSTANCES,
-            SPACE_BETWEEN,
-            false,
         ));
 
         let texture_manager: geometry::TextureManager = geometry::TextureManager::new(&device, &queue, &config);

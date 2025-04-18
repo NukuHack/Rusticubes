@@ -47,6 +47,14 @@ impl Cube {
             ..Self::default()
         }
     }
+    pub fn null()-> Self{
+        Self{
+            position: 0,
+            material: 0,
+            points: 0,
+            rotation: 0,
+        }
+    }
 
     /// Creates a new cube with a specified position and rotation.
     pub fn new_rot(position: u16, rotation: u16) -> Self {
@@ -58,7 +66,7 @@ impl Cube {
     }
 
     pub fn new_rot_raw(
-        position: cgmath::Vector3<f32>,
+        position: cgmath::Vector3<i32>,
         rotation: cgmath::Quaternion<f32>,
     ) -> Self {
         Self {
@@ -121,12 +129,20 @@ impl Cube {
         self.position = z | (y << 4) | (x << 8);
     }
     /// Convert packed position to world coordinates
-    pub fn get_position(&self) -> cgmath::Vector3<f32> {
-        let x = ((self.position >> 8) & 0xF) as f32;
-        let y = ((self.position >> 4) & 0xF) as f32;
-        let z = (self.position & 0xF) as f32;
+    pub fn get_position(&self) -> cgmath::Vector3<i32> {
+        let x = ((self.position >> 8) & 0xF) as i32;
+        let y = ((self.position >> 4) & 0xF) as i32;
+        let z = (self.position & 0xF) as i32;
         cgmath::Vector3::new(x, y, z)
     }
+    /// Convert packed position to world coordinates float
+    pub fn get_position_f(&self) -> cgmath::Vector3<f32> {
+        let x = ((self.position >> 8) & 0xF) as i32;
+        let y = ((self.position >> 4) & 0xF) as i32;
+        let z = (self.position & 0xF) as i32;
+        vec3_i32_to_f32(cgmath::Vector3::new(x, y, z))
+    }
+
 
     /// Resets the points of the cube when rotation resets.
     fn reset_points(&mut self) {
@@ -255,10 +271,18 @@ impl Cube {
 
     // Full conversion to Instance
     pub fn to_instance(&self) -> super::geometry::Instance {
-        let position = self.get_position();
+        let position = self.get_position_f();
         let rotation = self.rotation_to_quaternion();
         
         super::geometry::Instance { position, rotation }
+    }
+    // Full conversion to Instance
+    pub fn to_world_instance(&self, chunk_pos: cgmath::Vector3<i32>) -> super::geometry::Instance {
+        let local_position = self.get_position_f();
+        let chunk_position = vec3_i32_to_f32(get_chunk_pos(chunk_pos));
+        let rotation = self.rotation_to_quaternion();
+        
+        super::geometry::Instance { position: local_position+chunk_position, rotation }
     }
 }
 
@@ -306,13 +330,37 @@ pub fn quaternion_to_rotation(rotation: cgmath::Quaternion<f32>) -> u16 {
     pitch_bits | (yaw_bits << 5) | (roll_bits << 10)
 }
 // Convert world coordinates to packed u16 position
-pub fn vector_to_position(position: cgmath::Vector3<f32>) -> u16 {
-    let x:u16 = (position.x.clamp(0.0, 15.0) as u16) & 0xF; // Clamp and mask to 4 bits
-    let y:u16 = (position.y.clamp(0.0, 15.0) as u16) & 0xF; // Clamp and mask to 4 bits
-    let z:u16 = (position.z.clamp(0.0, 15.0) as u16) & 0xF; // Clamp and mask to 4 bits
-
-    (z | (y << 4) | (x << 8)) as u16
+#[inline]
+pub fn vector_to_position(position: cgmath::Vector3<i32>) -> u16 {
+    ((position.x as u16 & 0xF) << 8) | 
+    ((position.y as u16 & 0xF) << 4) | 
+    (position.z as u16 & 0xF)
 }
+// Utility functions for vector type conversion
+#[allow(dead_code, unused)]
+pub fn vec3_f32_to_u32(v: cgmath::Vector3<f32>) -> cgmath::Vector3<u32> {
+    cgmath::Vector3::new(v.x as u32, v.y as u32, v.z as u32)
+}
+
+pub fn vec3_f32_to_i32(v: cgmath::Vector3<f32>) -> cgmath::Vector3<i32> {
+    cgmath::Vector3::new(v.x as i32, v.y as i32, v.z as i32)
+}
+
+#[allow(dead_code, unused)]
+pub fn vec3_u32_to_i32(v: cgmath::Vector3<u32>) -> cgmath::Vector3<i32> {
+    cgmath::Vector3::new(v.x as i32, v.y as i32, v.z as i32)
+}
+
+#[allow(dead_code, unused)]
+pub fn vec3_i32_to_f32(v: cgmath::Vector3<i32>) -> cgmath::Vector3<f32> {
+    cgmath::Vector3::new(v.x as f32, v.y as f32, v.z as f32)
+}
+
+#[allow(dead_code, unused)]
+pub fn vec3_i32_to_u32(v: cgmath::Vector3<i32>) -> cgmath::Vector3<u32> {
+    cgmath::Vector3::new(v.x as u32, v.y as u32, v.z as u32)
+}
+
 
 
 pub const DOT_ARRAY: [[u8; 3]; 27] = [
@@ -336,49 +384,68 @@ pub const MARCHING_CUBES_TABLE: [[u8; 1]; 0] = [
 
 #[derive(Debug, Clone)]
 pub struct Chunk {
-    pub position: cgmath::Vector3<f32>,  // World coordinates of chunk (e.g., chunk (x,y,z))
+    pub position: cgmath::Vector3<i32>,  // World coordinates of chunk (e.g., chunk (x,y,z))
     pub cubes: [Cube; Self::CUBES_PER_CHUNK],  // Array of cubes in the chunk
 }
 
 #[allow(dead_code, unused)]
 impl Chunk {
     pub const CHUNK_SIZE: usize = 16;
-    pub const CHUNK_SIZE_F: f32 = Self::CHUNK_SIZE as f32;
+    pub const CHUNK_SIZE_U: u32 = Self::CHUNK_SIZE as u32;
+    pub const CHUNK_SIZE_I: i32 = Self::CHUNK_SIZE as i32;
     pub const CUBES_PER_CHUNK: usize = Self::CHUNK_SIZE.pow(3);
 
-    /// Creates a new empty chunk at the specified position
-    pub fn new(position: cgmath::Vector3<f32>) -> Self {
-        // Initialize the cubes array by explicitly constructing each element
-        let mut cubes: [Cube; Self::CUBES_PER_CHUNK] = {
-            let mut array = [(); Self::CUBES_PER_CHUNK].map(|_| Cube::default());
-            for x in 0..Self::CHUNK_SIZE {
-                for y in 0..Self::CHUNK_SIZE {
-                    for z in 0..Self::CHUNK_SIZE {
-                        let cube_pos: cgmath::Vector3<f32> = cgmath::Vector3::new(
-                            position.x + x as f32,
-                            position.y + y as f32,
-                            position.z + z as f32,
-                        );
-                        let index = x * Self::CHUNK_SIZE * Self::CHUNK_SIZE
-                                    + y * Self::CHUNK_SIZE
-                                    + z;
-                        array[index] = Cube::new(vector_to_position(cube_pos));
-                    }
+    /// Creates a new empty chunk at the specified chunk coordinates
+    pub fn null(world_pos: cgmath::Vector3<i32>) -> Self {
+        let start = std::time::Instant::now();
+        let chunk_pos = Self::world_to_chunk_pos(world_pos);
+        // Initialize all cubes as empty
+        let cubes = [Cube::null(); Self::CUBES_PER_CHUNK];
+        
+        //println!("Chunk is being initialized at {:?} - re-corrected chunk pos: {:?}",chunk_pos,chunk_pos);
+        println!("null Chunk init took: {:?}", start.elapsed());
+        Chunk { 
+            position: chunk_pos, 
+            cubes 
+        }
+    }
+    /// Creates a new filled chunk at the specified position
+    pub fn new(world_pos: cgmath::Vector3<i32>) -> Self {
+        let start = std::time::Instant::now();
+        let chunk_pos = Self::world_to_chunk_pos(world_pos);
+        // Precompute all possible packed positions for this chunk
+        let mut precomputed_positions = [[[0u16; Self::CHUNK_SIZE]; Self::CHUNK_SIZE]; Self::CHUNK_SIZE];
+        
+        for x in 0..Self::CHUNK_SIZE {
+            for y in 0..Self::CHUNK_SIZE {
+                for z in 0..Self::CHUNK_SIZE {
+                    precomputed_positions[x][y][z] = ((x as u16) << 8) | ((y as u16) << 4) | z as u16;
                 }
             }
-            array
-        };
+        }
 
-        Chunk {
-            position,
-            cubes,
+        // Initialize cubes using precomputed positions
+        let cubes = std::array::from_fn(|i| {
+            let (x, y, z) = (
+                (i / (Self::CHUNK_SIZE * Self::CHUNK_SIZE)) % Self::CHUNK_SIZE,
+                (i / Self::CHUNK_SIZE) % Self::CHUNK_SIZE,
+                i % Self::CHUNK_SIZE
+            );
+            Cube::new(precomputed_positions[x][y][z])
+        });
+
+        //println!("Chunk is being initialized at {:?} - re-corrected chunk pos: {:?}",chunk_pos,chunk_pos);
+        println!("basic Chunk init took: {:?}", start.elapsed());
+        Chunk { 
+            position: chunk_pos,
+            cubes
         }
     }
 
     /// Get cube data at local coordinates (returns None for empty cubes)
-    pub fn get(&self, local: cgmath::Vector3<f32>) -> Option<&Cube> {
+    pub fn get(&self, local: cgmath::Vector3<u32>) -> Option<&Cube> {
         let idx = Self::local_to_index(local);
-        let cube = &self.cubes[idx];
+        let cube = &self.cubes[idx as usize];
         if cube.is_empty() {
             None
         } else {
@@ -387,9 +454,9 @@ impl Chunk {
     }
 
     /// Get mutable cube data at local coordinates
-    pub fn get_mut(&mut self, local: cgmath::Vector3<f32>) -> Option<&mut Cube> {
+    pub fn get_mut(&mut self, local: cgmath::Vector3<u32>) -> Option<&mut Cube> {
         let idx = Self::local_to_index(local);
-        let cube = &mut self.cubes[idx];
+        let cube = &mut self.cubes[idx as usize];
         if cube.is_empty() {
             None
         } else {
@@ -398,55 +465,82 @@ impl Chunk {
     }
 
     /// Set cube data at local coordinates
-    pub fn set(&mut self, local: cgmath::Vector3<f32>, cube: Cube) {
+    pub fn set(&mut self, local: cgmath::Vector3<u32>, cube: Cube) {
         let idx = Self::local_to_index(local);
-        self.cubes[idx] = cube;
+        self.cubes[idx as usize] = cube;
+    }
+
+    /// Convert world position to chunk coordinates
+    pub fn world_to_chunk_pos(world_pos: cgmath::Vector3<i32>) -> cgmath::Vector3<i32> {
+        cgmath::Vector3::new(
+            world_pos.x.div_euclid(Self::CHUNK_SIZE_I),
+            world_pos.y.div_euclid(Self::CHUNK_SIZE_I),
+            world_pos.z.div_euclid(Self::CHUNK_SIZE_I),
+        )
+    }
+
+    /// Convert world position to local chunk coordinates
+    pub fn world_to_local_pos(world_pos: cgmath::Vector3<i32>) -> cgmath::Vector3<u32> {
+        cgmath::Vector3::new(
+            world_pos.x.rem_euclid(Self::CHUNK_SIZE_I) as u32,
+            world_pos.y.rem_euclid(Self::CHUNK_SIZE_I) as u32,
+            world_pos.z.rem_euclid(Self::CHUNK_SIZE_I) as u32,
+        )
     }
 
     /// Convert local chunk coordinates to world position
-    pub fn world_position(&self, local: cgmath::Vector3<f32>) -> cgmath::Vector3<f32> {
+    pub fn local_to_world_pos(chunk: Self, local: cgmath::Vector3<u32>) -> cgmath::Vector3<i32> {
         cgmath::Vector3::new(
-            self.position.x * Self::CHUNK_SIZE_F + local.x,
-            self.position.y * Self::CHUNK_SIZE_F + local.y,
-            self.position.z * Self::CHUNK_SIZE_F + local.z,
+            chunk.position.x * Self::CHUNK_SIZE_I + local.x as i32,
+            chunk.position.y * Self::CHUNK_SIZE_I + local.y as i32,
+            chunk.position.z * Self::CHUNK_SIZE_I + local.z as i32,
         )
     }
 
     /// Convert local coordinates to array index
     #[inline]
-    fn local_to_index(local: cgmath::Vector3<f32>) -> usize {
-        let x = local.x.floor() as usize % Self::CHUNK_SIZE;
-        let y = local.y.floor() as usize % Self::CHUNK_SIZE;
-        let z = local.z.floor() as usize % Self::CHUNK_SIZE;
+    pub fn local_to_index(local: cgmath::Vector3<u32>) -> u32 {
+        debug_assert!(local.x < Self::CHUNK_SIZE_U, "Local x coordinate out of bounds");
+        debug_assert!(local.y < Self::CHUNK_SIZE_U, "Local y coordinate out of bounds");
+        debug_assert!(local.z < Self::CHUNK_SIZE_U, "Local z coordinate out of bounds");
         
-        (z * Self::CHUNK_SIZE * Self::CHUNK_SIZE) + 
-        (y * Self::CHUNK_SIZE) + 
-        x
+        (local.z * Self::CHUNK_SIZE_U * Self::CHUNK_SIZE_U) + 
+        (local.y * Self::CHUNK_SIZE_U) + 
+        local.x
     }
 
     /// Convert array index to local coordinates
     #[inline]
-    pub fn index_to_local(index: usize) -> cgmath::Vector3<f32> {
+    pub fn index_to_local(index: u32) -> cgmath::Vector3<u32> {
+        debug_assert!(index < Self::CUBES_PER_CHUNK as u32, "Index out of bounds");
+        
         cgmath::Vector3::new(
-            (index % Self::CHUNK_SIZE) as f32,
-            ((index / Self::CHUNK_SIZE) % Self::CHUNK_SIZE) as f32,
-            (index / (Self::CHUNK_SIZE * Self::CHUNK_SIZE)) as f32,
+            index % Self::CHUNK_SIZE_U,
+            (index / Self::CHUNK_SIZE_U) % Self::CHUNK_SIZE_U,
+            index / (Self::CHUNK_SIZE_U * Self::CHUNK_SIZE_U),
         )
     }
 
-    /// Check if a position is within the chunk bounds
-    pub fn contains(&self, pos: cgmath::Vector3<f32>) -> bool {
-        let local = pos - self.position;
-        local.x >= 0.0 && local.x < Self::CHUNK_SIZE_F &&
-        local.y >= 0.0 && local.y < Self::CHUNK_SIZE_F &&
-        local.z >= 0.0 && local.z < Self::CHUNK_SIZE_F
+    /// Check if a world position is within this chunk
+    pub fn contains_world_pos(&self, world_pos: cgmath::Vector3<i32>) -> bool {
+        let chunk_pos = Self::world_to_chunk_pos(world_pos);
+        chunk_pos == self.position
     }
 
-    /// Load a chunk dynamically (placeholder for actual implementation)
-    pub fn load_chunk(position: cgmath::Vector3<f32>) -> Option<Self> {
-        // Placeholder logic to fetch chunk data from storage or generate it
-        Some(Chunk::new(position))
+    /// Load a chunk at specific chunk coordinates
+    pub fn load_chunk(chunk_pos: cgmath::Vector3<i32>) -> Option<Self> {
+        Some(Chunk::new(chunk_pos))
     }
+}
+
+
+/// Convert local chunk coordinates to world position
+pub fn get_chunk_pos(chunk_pos: cgmath::Vector3<i32>) -> cgmath::Vector3<i32> {
+    cgmath::Vector3::new(
+        chunk_pos.x * Chunk::CHUNK_SIZE_I,
+        chunk_pos.y * Chunk::CHUNK_SIZE_I,
+        chunk_pos.z * Chunk::CHUNK_SIZE_I,
+    )
 }
 
 pub struct CubeBuffer;

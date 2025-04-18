@@ -1,4 +1,5 @@
 ﻿
+use super::traits::PositionConversion;
 use winit::event::*;
 use cgmath::{InnerSpace, SquareMatrix};
 use wgpu::util::DeviceExt;
@@ -18,7 +19,7 @@ impl CameraSystem {
     pub fn new(
         device: &wgpu::Device,
         size: &winit::dpi::PhysicalSize<u32>,
-        position: cgmath::Point3<f32>,
+        position: cgmath::Vector3<f32>,
     ) -> Self {
         let yaw: cgmath::Rad<f32>= cgmath::Rad::from(cgmath::Deg(-90.0)); // left-right (- is left; + is right) by default the camera faces left (90°)
         let pitch: cgmath::Rad<f32>= cgmath::Rad(0.0); // up-down (- is down; + is up) by default it is 0
@@ -100,12 +101,12 @@ impl CameraUniform {
 
 pub const SAFE_FRAC_PI_2: f32 = std::f32::consts::FRAC_PI_2 - 0.0001;
 pub struct Camera {
-    pub position: cgmath::Point3<f32>,
+    pub position: cgmath::Vector3<f32>,
     pub yaw: cgmath::Rad<f32>,
     pub pitch: cgmath::Rad<f32>,
 }
 impl Camera {
-    pub fn new(position: cgmath::Point3<f32>, yaw: cgmath::Rad<f32>, pitch: cgmath::Rad<f32>) -> Self{
+    pub fn new(position: cgmath::Vector3<f32>, yaw: cgmath::Rad<f32>, pitch: cgmath::Rad<f32>) -> Self{
         Self {
             position,
             yaw,
@@ -116,7 +117,7 @@ impl Camera {
         let (sin_pitch, cos_pitch) = self.pitch.0.sin_cos();
         let (sin_yaw, cos_yaw) = self.yaw.0.sin_cos();
         cgmath::Matrix4::look_to_rh(
-            self.position,
+            self.position.to_point(),
             cgmath::Vector3::new(
                 cos_pitch * cos_yaw,
                 sin_pitch,

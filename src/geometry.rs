@@ -1,3 +1,4 @@
+use super::traits::PositionConversion;
 use cgmath::{InnerSpace, Rotation3};
 use image::GenericImageView;
 use std::mem;
@@ -76,52 +77,14 @@ pub struct InstanceManager {
     pub capacity: usize,
 }
 impl InstanceManager {
-    pub fn new(
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
-        num_instances: u32,
-        space_between: f32,
-        do_default: bool,
-    ) -> Self {
-        let instances = if do_default {
-            let count = num_instances as usize;
-            (0..count)
-                .flat_map(|z| {
-                    (0..count).flat_map(move |y| {
-                        (0..count).map(move |x| {
-                            let position = cgmath::Vector3::new(
-                                space_between * (x as f32 - num_instances as f32 / 2.0),
-                                space_between * (y as f32 - num_instances as f32 / 2.0),
-                                space_between * (z as f32 - num_instances as f32 / 2.0),
-                            );
-                            let rotation = if position.magnitude() == 0.0 {
-                                cgmath::Quaternion::from_angle_y(cgmath::Deg(0.0))
-                            } else {
-                                cgmath::Quaternion::from_axis_angle(
-                                    position.normalize(),
-                                    cgmath::Deg(45.0),
-                                )
-                            };
-
-                            // Create Cube and convert to instance
-                            super::cube::Cube::new_rot(
-                                super::cube::vector_to_position(position),
-                                super::cube::quaternion_to_rotation(rotation),
-                            )
-                            .to_instance()
-                        })
-                    })
-                })
-                .collect()
-        } else {
-            vec![super::cube::Cube::default().to_instance()]
-        };
+    pub fn new(device: &wgpu::Device, queue: &wgpu::Queue) -> Self {
+        let instances = vec![super::cube::Cube::default().to_instance()];
 
         // Rest remains the same - buffer creation and initialization
         let capacity = instances.len() * 2;
         let buffer_size = (capacity * mem::size_of::<InstanceRaw>()) as u64;
         let instance_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("Instance Buffer"),
+            label: None,
             size: buffer_size,
             usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
@@ -209,28 +172,29 @@ impl InstanceManager {
                 usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
                 mapped_at_creation: false,
             });
-            queue.write_buffer(
-                &new_buffer,
-                0,
-                bytemuck::cast_slice(
-                    &self
-                        .instances
-                        .iter()
-                        .map(|i| i.to_raw())
-                        .collect::<Vec<_>>(),
-                ),
-            );
+
+            // Upload all existing + new instances
+            let all_instances = self
+                .instances
+                .iter()
+                .chain(instances.iter())
+                .map(|i| i.to_raw())
+                .collect::<Vec<_>>();
+
+            queue.write_buffer(&new_buffer, 0, bytemuck::cast_slice(&all_instances));
             self.instance_buffer = new_buffer;
+        } else {
+            // Only upload new instances
+            let offset = self.instances.len();
+            let new_raw: Vec<_> = instances.iter().map(|i| i.to_raw()).collect();
+            queue.write_buffer(
+                &self.instance_buffer,
+                (offset * mem::size_of::<InstanceRaw>()) as u64,
+                bytemuck::cast_slice(&new_raw),
+            );
         }
 
-        let offset = self.instances.len();
         self.instances.extend_from_slice(instances);
-        let instance_data: Vec<_> = instances.iter().map(|i| i.to_raw()).collect();
-        queue.write_buffer(
-            &self.instance_buffer,
-            (offset * mem::size_of::<InstanceRaw>()) as u64,
-            bytemuck::cast_slice(&instance_data),
-        );
     }
 
     // Remove a range of instances
@@ -255,11 +219,15 @@ impl InstanceManager {
         queue: &wgpu::Queue,
         chunk: &super::cube::Chunk,
     ) {
-        for cube in chunk.cubes.iter() {
-            if !cube.is_empty() {
-                self.add_instance(device, queue, cube.to_instance());
-            }
-        }
+        let new_instances: Vec<Instance> = chunk
+            .cubes
+            .iter()
+            .filter(|cube| !cube.is_empty())
+            .map(|cube| cube.to_world_instance(chunk.position))
+            .collect();
+
+        // Batch upload all instances at once
+        self.add_instances(device, queue, &new_instances);
     }
 
     /// Remove cubes from a chunk from the instance manager
@@ -270,7 +238,7 @@ impl InstanceManager {
                     .instances
                     .iter()
                     .position(|i| {
-                        let cube_pos = cube.get_position();
+                        let cube_pos = cube.get_position_f();
                         let instance_pos = i.position;
                         (cube_pos - instance_pos).magnitude() < 0.01 // Threshold for matching positions
                     })
@@ -297,18 +265,35 @@ pub fn add_def_cube() {
         // Combine rotations: first yaw (around Y-axis), then pitch (around X-axis)
         let rotation: cgmath::Quaternion<f32> = q_pitch * q_yaw;
 
-        let position: cgmath::Vector3<f32> = cgmath::Vector3::new(
-            state.camera_system.camera.position.x + 0.5,
-            state.camera_system.camera.position.y - 2.0,
-            state.camera_system.camera.position.z + 0.5,
-        );
-        let cube: super::cube::Cube = super::cube::Cube::new_rot_raw(position, rotation);
-        // parsing works and is correct but sadly it makes the rotation and position too "minecrat-y" TODO: fix it
+        // Get camera position in world coordinates
+        let camera_pos = state.camera_system.camera.position;
 
+        // Calculate where to place the cube (in front of the camera)
+        let forward = state.camera_system.camera.forward();
+        let placement_distance = 6.0; // Distance in front of camera
+        let placement_position = camera_pos + forward * placement_distance;
+
+        // Convert to chunk coordinates
+        let chunk_pos = super::cube::Chunk::world_to_chunk_pos(super::cube::vec3_f32_to_i32(
+            placement_position,
+        ));
+
+        // Convert to local position within chunk
+        let local_pos = super::cube::Chunk::world_to_local_pos(super::cube::vec3_f32_to_i32(
+            placement_position,
+        ));
+
+        // Create cube at the correct position
+        let cube = super::cube::Cube::new_rot_raw(
+            super::cube::vec3_f32_to_i32(placement_position),
+            rotation,
+        );
+
+        // Add to instance manager with proper world position
         instance_manager.add_instance(
             state.device(),
             state.queue(),
-            cube.to_instance(), //Instance {position,rotation: combined_quaternion,},
+            cube.to_world_instance(chunk_pos),
         );
     }
 }
@@ -329,14 +314,12 @@ pub fn add_def_chunk() {
         let camera_position = state.camera_system.camera.position;
         let chunk_position = cgmath::Vector3::new(
             camera_position.x + 8.5,
-            camera_position.y - 10.0,
+            camera_position.y + 8.0,
             camera_position.z + 8.5,
         );
+        let real_chunk_position = super::cube::vec3_f32_to_i32(chunk_position);
 
-        println!("Loading chunk at {:?}", chunk_position); // Track chunk loading
-
-        if let Some(chunk) = super::cube::Chunk::load_chunk(chunk_position) {
-            println!("Chunk contains {} cubes", chunk.cubes.len());
+        if let Some(chunk) = super::cube::Chunk::load_chunk(real_chunk_position) {
             instance_manager.add_chunk(state.device(), state.queue(), &chunk);
         } else {
             eprintln!("Failed to load chunk at {:?}", chunk_position);
@@ -389,7 +372,7 @@ pub fn cast_ray_and_select_cube(
         let aabb_min = cube_center - half_extents;
         let aabb_max = cube_center + half_extents;
 
-        if let Some(t) = ray_aabb_intersect(ray_origin, ray_dir, aabb_min, aabb_max) {
+        if let Some(t) = ray_aabb_intersect(ray_origin.to_point(), ray_dir, aabb_min, aabb_max) {
             if t > 0.0 && t < closest_t {
                 closest_t = t;
                 selected_index = Some(index);
@@ -463,15 +446,16 @@ pub struct Instance {
 }
 
 impl Instance {
+    #[inline] // ← Critical for performance
     pub fn to_raw(&self) -> InstanceRaw {
-        let matrix =
-            cgmath::Matrix4::from_translation(self.position) * cgmath::Matrix4::from(self.rotation);
         InstanceRaw {
-            model: matrix.into(),
+            model: (cgmath::Matrix4::from_translation(self.position)
+                * cgmath::Matrix4::from(self.rotation))
+            .into(),
         }
     }
     pub fn to_cube(&self) -> super::cube::Cube {
-        super::cube::Cube::new_rot_raw(self.position, self.rotation)
+        super::cube::Cube::new_rot_raw(super::cube::vec3_f32_to_i32(self.position), self.rotation)
     }
 }
 impl Default for Instance {

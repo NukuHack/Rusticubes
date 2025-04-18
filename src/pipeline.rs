@@ -163,9 +163,13 @@ fn create_inside_pipeline(
 /// Creates default primitive state configuration
 fn default_primitive_state() -> wgpu::PrimitiveState {
     wgpu::PrimitiveState {
-        front_face: wgpu::FrontFace::Ccw,
-        topology: wgpu::PrimitiveTopology::TriangleList,
+        // Use strip topology if possible (reduces vertex processing)
+        topology: wgpu::PrimitiveTopology::TriangleList, // Keep if indexed geometry needs it
+        // Conservative culling - verify your mesh winding
         cull_mode: Some(wgpu::Face::Back),
+        // Enable conservative rasterization if supported
+        conservative: false,
+        // Keep other defaults
         ..Default::default()
     }
 }
@@ -182,10 +186,14 @@ fn inside_primitive_state() -> wgpu::PrimitiveState {
 fn depth_stencil_state(write_enabled: bool) -> wgpu::DepthStencilState {
     wgpu::DepthStencilState {
         format: super::geometry::Texture::DEPTH_FORMAT,
+        // Disable depth write for opaque objects after first pass
         depth_write_enabled: write_enabled,
+        // Use LessEqual for early depth test
         depth_compare: wgpu::CompareFunction::LessEqual,
-        stencil: Default::default(),
-        bias: Default::default(),
+        // Disable stencil if unused
+        stencil: wgpu::StencilState::default(),
+        // Disable depth bias
+        bias: wgpu::DepthBiasState::default(),
     }
 }
 
@@ -213,29 +221,29 @@ fn begin_3d_render_pass<'a>(
     color_view: &'a wgpu::TextureView,
     depth_view: &'a wgpu::TextureView,
 ) -> wgpu::RenderPass<'a> {
-    let color_attachment = wgpu::RenderPassColorAttachment {
-        view: color_view,
-        resolve_target: None,
-        ops: wgpu::Operations {
-            load: wgpu::LoadOp::Clear(BACKGROUND_COLOR),
-            store: wgpu::StoreOp::Store,
-        },
-    };
-
-    let depth_attachment = wgpu::RenderPassDepthStencilAttachment {
-        view: depth_view,
-        depth_ops: Some(wgpu::Operations {
-            load: wgpu::LoadOp::Clear(1.0),
-            store: wgpu::StoreOp::Store,
-        }),
-        stencil_ops: None,
-    };
-
     encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
         label: Some("3D Render Pass"),
-        color_attachments: &[Some(color_attachment)],
-        depth_stencil_attachment: Some(depth_attachment),
-        ..Default::default()
+        // Use StoreOp::Discard if depth isn't reused
+        depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+            view: depth_view,
+            depth_ops: Some(wgpu::Operations {
+                load: wgpu::LoadOp::Clear(1.0),
+                store: wgpu::StoreOp::Store, // Change to Discard if not needed later
+            }),
+            stencil_ops: None,
+        }),
+        // Reduce color attachment clears if possible
+        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+            view: color_view,
+            resolve_target: None,
+            ops: wgpu::Operations {
+                load: wgpu::LoadOp::Clear(BACKGROUND_COLOR),
+                store: wgpu::StoreOp::Store,
+            },
+        })],
+        // Enable occlusion culling if available
+        occlusion_query_set: None,
+        timestamp_writes: None,
     })
 }
 
@@ -260,6 +268,7 @@ fn begin_ui_render_pass<'a>(
 
 /// Main rendering function
 pub fn render_all(current_state: &mut super::State) -> Result<(), wgpu::SurfaceError> {
+    let start = std::time::Instant::now();
     let output = current_state.surface().get_current_texture()?;
     let view = output.texture.create_view(&Default::default());
 
@@ -297,7 +306,7 @@ pub fn render_all(current_state: &mut super::State) -> Result<(), wgpu::SurfaceE
             &current_state.pipeline.inside_pipeline,
             bind_groups,
             &[
-                &current_state.geometry_buffer().vertex_buffer, // Textures are not needed
+                &current_state.geometry_buffer().vertex_buffer, // Textures are not needed ... really ?
                 &current_state.instance_manager().borrow().instance_buffer,
             ],
             &current_state.geometry_buffer().index_buffer,
@@ -321,6 +330,10 @@ pub fn render_all(current_state: &mut super::State) -> Result<(), wgpu::SurfaceE
 
     current_state.queue().submit(Some(encoder.finish()));
     output.present();
+    let time = start.elapsed();
+    if time > std::time::Duration::from_millis(20) {
+        println!("GPU draw took really long : {:?}", time);
+    };
     Ok(())
 }
 
@@ -340,14 +353,13 @@ pub fn draw_with_pipeline(
         .iter()
         .enumerate()
         .for_each(|(i, g)| rpass.set_bind_group(i as u32, *g, &[]));
-    // Set vertex buffers
-    vertex_buffers
-        .iter()
-        .enumerate()
-        .for_each(|(i, b)| rpass.set_vertex_buffer(i as u32, b.slice(..)));
-    // Draw command
+    // Batch vertex buffer assignments
+    for (i, buffer) in vertex_buffers.iter().enumerate() {
+        rpass.set_vertex_buffer(i as u32, buffer.slice(..));
+    }
+    // Single draw call with instancing
     rpass.set_index_buffer(index_buffer.slice(..), wgpu::IndexFormat::Uint32);
-    rpass.draw_indexed(0..num_indices, 0, 0..instances);
+    rpass.draw_indexed(0..num_indices, 0, 0..instances); // Keep instanced draw
 }
 
 /// Draws UI elements
