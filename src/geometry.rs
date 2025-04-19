@@ -101,8 +101,7 @@ impl InstanceManager {
             capacity,
         }
     }
-}
-impl InstanceManager {
+
     pub fn add_instance(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, instance: Instance) {
         if self.instances.len() >= self.capacity {
             self.capacity *= 2;
@@ -153,8 +152,7 @@ impl InstanceManager {
             bytemuck::cast_slice(&instance_data),
         );
     }
-}
-impl InstanceManager {
+
     // Add multiple instances at once
     pub fn add_instances(
         &mut self,
@@ -196,21 +194,6 @@ impl InstanceManager {
         self.instances.extend_from_slice(instances);
     }
 
-    // Remove a range of instances
-    pub fn remove_instances(&mut self, start: usize, end: usize, queue: &wgpu::Queue) {
-        if start >= end || end > self.instances.len() {
-            return;
-        }
-        self.instances.drain(start..end);
-        let instance_data: Vec<_> = self.instances.iter().map(|i| i.to_raw()).collect();
-        queue.write_buffer(
-            &self.instance_buffer,
-            0,
-            bytemuck::cast_slice(&instance_data),
-        );
-    }
-}
-impl InstanceManager {
     /// Add cubes from a chunk to the instance manager
     pub fn add_chunk(
         &mut self,
@@ -228,55 +211,18 @@ impl InstanceManager {
         // Batch upload all instances at once
         self.add_instances(device, queue, &new_instances);
     }
-
-    /// Remove cubes from a chunk from the instance manager
-    pub fn remove_chunk(&mut self, queue: &wgpu::Queue, chunk: &super::cube::Chunk) {
-        for cube in chunk.blocks.iter() {
-            if !cube.is_empty() {
-                let index = self
-                    .instances
-                    .iter()
-                    .position(|i| {
-                        let cube_pos = super::cube::vec3_i32_to_f32(cube.get_pos());
-                        let instance_pos = i.position;
-                        (cube_pos - instance_pos).magnitude() < 0.01 // Threshold for matching positions
-                    })
-                    .unwrap_or_else(|| panic!("Failed to find instance"));
-                self.remove_instance(index, queue);
-            }
-        }
-    }
 }
-
-pub static NULL_QUATERNION: cgmath::Quaternion<f32> = cgmath::Quaternion::new(1.0, 0.0, 0.0, 0.0);
 
 pub fn add_def_cube() {
     unsafe {
         let state = super::get_state();
-        let mut instance_manager = state.instance_manager().borrow_mut();
-
-        let rotation = if true {
-            NULL_QUATERNION
-        } else {
-            // Calculate adjusted yaw (including the FRAC_PI_2 offset)
-            let q_yaw: cgmath::Quaternion<f32> = cgmath::Quaternion::from_angle_y(
-                -state.camera_system.camera.yaw + cgmath::Rad(std::f32::consts::FRAC_PI_2),
-            );
-            let q_pitch: cgmath::Quaternion<f32> =
-                cgmath::Quaternion::from_angle_x(state.camera_system.camera.pitch);
-
-            // Combine rotations: first yaw (around Y-axis), then pitch (around X-axis)
-            q_pitch * q_yaw
-        };
-
-        // Get camera position in world coordinates
-        let camera_pos = state.camera_system.camera.position;
 
         // Calculate where to place the cube (in front of the camera)
-        let forward = state.camera_system.camera.forward();
         let placement_distance = 6.0; // Distance in front of camera
-        let placement_position =
-            super::cube::vec3_f32_to_i32(camera_pos + forward * placement_distance);
+        let placement_position = super::cube::vec3_f32_to_i32(
+            state.camera_system.camera.position
+                + state.camera_system.camera.forward() * placement_distance,
+        );
 
         // Convert to chunk coordinates
         let chunk_pos = super::cube::ChunkCoord::from_world_pos(placement_position);
@@ -285,24 +231,16 @@ pub fn add_def_cube() {
         //let local_pos = super::cube::Chunk::world_to_local_pos(placement_position);
 
         // Create cube at the correct position
-        let cube = super::cube::Block::new_rot_raw(placement_position, rotation);
+        let cube = super::cube::Block::new_raw(placement_position);
+
+        state.data_system.world.set_block(placement_position, cube);
 
         // Add to instance manager with proper world position
-        instance_manager.add_instance(
+        state.instance_manager().borrow_mut().add_instance(
             state.device(),
             state.queue(),
             cube.to_world_instance(chunk_pos),
         );
-    }
-}
-pub fn rem_last_cube() {
-    unsafe {
-        let state = super::get_state();
-        let mut instance_manager = state.instance_manager().borrow_mut();
-        if !instance_manager.instances.is_empty() {
-            let index = instance_manager.instances.len() - 1;
-            instance_manager.remove_instance(index, state.queue());
-        }
     }
 }
 pub fn add_def_chunk() {
@@ -310,6 +248,11 @@ pub fn add_def_chunk() {
         let state = super::get_state();
         let chunk_pos = super::cube::vec3_f32_to_i32(state.camera_system.camera.position);
         let chunk_pos_c_c = super::cube::ChunkCoord::from_world_pos(chunk_pos);
+
+        if state.data_system.world.chunks.contains_key(&chunk_pos_c_c) {
+            return;
+            // why would you try to load a chunk what already exist ?
+        }
 
         if state.data_system.world.load_chunk(chunk_pos_c_c) {
             //super::cube::Chunk::load(super::cube::ChunkCoord::from_world_pos(chunk_pos));
@@ -323,22 +266,19 @@ pub fn add_def_chunk() {
                 .borrow_mut()
                 .add_chunk(state.device(), state.queue(), &chunk);
         } else {
-            //eprintln!("Failed to load chunk at {:?}", chunk_pos);
+            eprintln!(
+                "Chunk can not be loaded : something bad happened at chunk parsing error at: {:?}",
+                chunk_pos_c_c
+            );
         }
     }
 }
-pub fn rem_pos_cube(position: cgmath::Vector3<f32>, threshold: f32) {
+pub fn add_full_world() {
     unsafe {
         let state = super::get_state();
-        let mut instance_manager = state.instance_manager().borrow_mut();
-        let index = instance_manager
-            .instances
-            .iter()
-            .position(|i| (i.position - position).magnitude() < threshold);
+        let chunk_pos = super::cube::vec3_f32_to_i32(state.camera_system.camera.position);
 
-        if let Some(idx) = index {
-            instance_manager.remove_instance(idx, state.queue());
-        }
+        state.data_system.world.update_loaded_chunks(chunk_pos, 10);
     }
 }
 
@@ -347,7 +287,7 @@ pub fn cast_ray_and_select_cube(
     projection: &super::camera::Projection,
     instances: &[Instance],
     max_distance: f32,
-) -> Option<usize> {
+) -> (Option<usize>, Option<cgmath::Vector3<f32>>) {
     // Create ray directly in center of view (NDC 0,0,-1)
     let ray_clip = cgmath::Vector4::new(0.0, 0.0, -1.0, 1.0);
 
@@ -365,11 +305,12 @@ pub fn cast_ray_and_select_cube(
 
     // Early exit if no instances
     if instances.is_empty() {
-        return None;
+        return (None, None);
     }
 
     // Optimized ray-AABB intersection with distance check
     let mut closest_index = None;
+    let mut closest_instance_pos = None;
     let mut closest_distance = max_distance;
 
     for (index, instance) in instances.iter().enumerate() {
@@ -390,12 +331,13 @@ pub fn cast_ray_and_select_cube(
         if let Some(t) = ray_aabb_intersect(ray_origin, ray_dir, aabb_min, aabb_max) {
             if t > 0.0 && t < closest_distance {
                 closest_distance = t;
+                closest_instance_pos = Some(cube_center);
                 closest_index = Some(index);
             }
         }
     }
 
-    closest_index
+    (closest_index, closest_instance_pos)
 }
 
 #[inline]
@@ -442,12 +384,17 @@ pub fn rem_raycasted_cube() {
         let state = super::get_state();
         let instance_manager = &mut *state.instance_manager().borrow_mut();
 
-        if let Some(index) = cast_ray_and_select_cube(
+        if let (Some(index), Some(pos)) = cast_ray_and_select_cube(
             &state.camera_system.camera,
             &state.camera_system.projection,
             &instance_manager.instances,
             10.0,
         ) {
+            let state = super::get_state();
+            state.data_system.world.set_block(
+                super::cube::vec3_f32_to_i32(pos),
+                super::cube::Block::default(),
+            ); // default is air
             instance_manager.remove_instance(index, state.queue());
         }
     }

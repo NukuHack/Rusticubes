@@ -561,20 +561,6 @@ pub fn handle_ui_click(state: &mut super::State) {
 
 pub fn setup_ui(state: &mut super::State) {
     let elements = vec![
-        UIElement::new(
-            (-0.7, -0.55),
-            (0.4, 0.1),
-            [0.3, 0.6, 0.7],
-            Some("Add new cube".to_string()),
-            Some(Box::new(|| super::geometry::add_def_cube())),
-        ),
-        UIElement::new(
-            (-0.7, -0.75),
-            (0.4, 0.1),
-            [0.6, 0.3, 0.5],
-            Some("Remove last cube".to_string()),
-            Some(Box::new(|| super::geometry::rem_last_cube())),
-        ),
         UIElement::new_input(
             (-0.9, 0.2),
             (0.4, 0.2),
@@ -585,9 +571,16 @@ pub fn setup_ui(state: &mut super::State) {
         UIElement::new(
             (0.5, 0.2),
             (0.4, 0.2),
-            [0.9, 0.3, 0.3],
+            [0.7, 0.3, 0.3],
             Some("Add chunk".to_string()),
             Some(Box::new(|| super::geometry::add_def_chunk())),
+        ),
+        UIElement::new(
+            (0.5, 0.0),
+            (0.3, 0.1),
+            [0.7, 0.3, 0.3],
+            Some("crash w chunks".to_string()),
+            Some(Box::new(|| super::geometry::add_full_world())),
         ),
         UIElement::new(
             (0.6, -0.7),

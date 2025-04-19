@@ -1,7 +1,7 @@
 ﻿
 use super::geometry::Vertex;
 use cgmath::{Rotation3, Vector3};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 /// Stores position for X, Y, Z as 4-bit fields: [X:4, Y:4, Z:4, Empty:4]
 /// Stores rotations for X, Y, Z as 5-bit fields: [X:5, Y:5, Z:5, Empty:1]
@@ -26,6 +26,13 @@ impl std::fmt::Debug for Block {
     }
 }
 impl Block {
+    pub const POS_MASK_X: u16 = 0xF << 8;
+    pub const POS_SHIFT_X: u32 = 8;
+    pub const POS_MASK_Y: u16 = 0xF << 4;
+    pub const POS_SHIFT_Y: u32 = 4;
+    pub const POS_MASK_Z: u16 = 0xF;
+    pub const POS_SHIFT_Z: u32 = 0;
+
     pub const ROT_MASK_X: u16 = 0b11111;
     pub const ROT_SHIFT_X: u32 = 0;
     pub const ROT_MASK_Y: u16 = 0b11111 << 5;
@@ -54,6 +61,15 @@ impl Block {
         }
     }
 
+    pub fn new_raw(
+        position: cgmath::Vector3<i32>,
+    ) -> Self {
+        Self {
+            position:vector_to_position(position),
+            material: 1,
+            ..Self::default()
+        }
+    }
     pub fn new_rot_raw(
         position: cgmath::Vector3<i32>,
         rotation: cgmath::Quaternion<f32>,
@@ -84,10 +100,11 @@ impl Block {
         cgmath::Quaternion::from_angle_x(angles[0])
     }
 
+
     /// Sets the position of the cube in 3D space.
     #[inline]
     pub fn set_pos(&mut self, x: u16, y: u16, z: u16) {
-        self.position = z | (y << 4) | (x << 8);
+        self.position = (x << 8) | (y << 4) | z;
     }
     /// Convert packed position to world coordinates
     pub fn get_pos(&self) -> cgmath::Vector3<i32> {
@@ -126,6 +143,12 @@ impl Block {
         
         let new_rot = (current + steps) % 32;
         self.rotation = (self.rotation & !mask) | (new_rot << shift);
+    }
+    // More type-safe rotation
+    pub fn set_rotation(&mut self, x: u16, y: u16, z: u16) {
+        self.rotation = (x & 0x1F) 
+            | ((y & 0x1F) << 5) 
+            | ((z & 0x1F) << 10);
     }
 }
 
@@ -199,8 +222,8 @@ impl ChunkCoord {
 pub struct Chunk {
     pub position: ChunkCoord,  // World coordinates of chunk
     pub blocks: [Block; 4096],  // Array of blocks in the chunk basically 16*16*16
-    dirty: bool,  // For mesh regeneration
-    mesh: Option<super::geometry::GeometryBuffer>,
+    pub dirty: bool,  // For mesh regeneration
+    pub mesh: Option<super::geometry::GeometryBuffer>,
 }
 impl Chunk {
     pub const CHUNK_SIZE: usize = 16;
@@ -220,7 +243,6 @@ impl Chunk {
 
     /// Creates a new filled chunk at the specified chunk coordinates
     pub fn new(chunk_coord: ChunkCoord) -> Self {
-        let start = std::time::Instant::now();
         // Precompute all possible packed positions for this chunk
         let mut precomputed_positions = [[[0u16; Self::CHUNK_SIZE]; Self::CHUNK_SIZE]; Self::CHUNK_SIZE];
         
@@ -232,7 +254,6 @@ impl Chunk {
             }
         }
 
-        println!("basic Chunk init took: {:?}", start.elapsed());
         Chunk { 
             position: chunk_coord,
             blocks: std::array::from_fn(|i| {
@@ -248,8 +269,21 @@ impl Chunk {
         }
     }
 
+    #[inline]
     pub fn load(chunk_coord: ChunkCoord) -> core::option::Option<Self> {
         Some(Self::new(chunk_coord))
+    }
+
+    // Add chunk neighbors awareness
+    pub fn get_adjacent_chunk_coords(&self) -> [ChunkCoord; 6] {
+        [
+            ChunkCoord::new(self.position.x - 1, self.position.y, self.position.z),
+            ChunkCoord::new(self.position.x + 1, self.position.y, self.position.z),
+            ChunkCoord::new(self.position.x, self.position.y - 1, self.position.z),
+            ChunkCoord::new(self.position.x, self.position.y + 1, self.position.z),
+            ChunkCoord::new(self.position.x, self.position.y, self.position.z - 1),
+            ChunkCoord::new(self.position.x, self.position.y, self.position.z + 1),
+        ]
     }
 
     pub fn get_block(&self, local_pos: Vector3<u32>) -> Option<&Block> {
@@ -339,26 +373,41 @@ impl BlockBuffer {
 }
 
 
+#[derive(Debug, Clone)]
 pub struct World {
-    chunks: HashMap<ChunkCoord, Chunk>,  // Position is now solely in the key
-}
-impl Default for World {
-    fn default() -> Self {
-        Self::empty()
-    }
+    pub chunks: HashMap<ChunkCoord, Chunk>,  // Position is now solely in the key
+    
+    // Spatial indexing system
+    spatial_grid: HashMap<(i32, i32, i32), HashSet<ChunkCoord>>,
+    grid_cell_size: i32,
 }
 #[allow(dead_code, unused)]
 impl World {
     /// Create an empty world with no chunks
+    #[inline]
     pub fn empty() -> Self {
         Self {
             chunks: HashMap::new(),
+
+            spatial_grid: HashMap::new(),
+            grid_cell_size: 1.max(1),
         }
     }
+    // Helper to get grid cell coordinates for a chunk
+    #[inline]
+    fn get_grid_cell(&self, coord: &ChunkCoord) -> (i32, i32, i32) {
+        (
+            coord.x.div_euclid(self.grid_cell_size),
+            coord.y.div_euclid(self.grid_cell_size),
+            coord.z.div_euclid(self.grid_cell_size),
+        )
+    }
+    #[inline]
     pub fn get_chunk(&self, coord: ChunkCoord) -> Option<&Chunk> {
         self.chunks.get(&coord)
     }
 
+    #[inline]
     pub fn get_chunk_mut(&mut self, coord: ChunkCoord) -> Option<&mut Chunk> {
         self.chunks.get_mut(&coord)
     }
@@ -377,18 +426,23 @@ impl World {
             })
     }
 
-    pub fn set_chunk(&mut self, chunk: Chunk) {
-        let chunk_coord = chunk.position;
+    #[inline]
+    pub fn set_chunk(&mut self, chunk_coord: ChunkCoord, chunk: Chunk) {
+        let grid_cell = self.get_grid_cell(&chunk_coord);
         
-        if !self.chunks.contains_key(&chunk_coord) {
-            self.chunks.insert(chunk_coord, chunk.clone());
-        }
+        // Update spatial index
+        self.spatial_grid.entry(grid_cell)
+            .or_default()
+            .insert(chunk_coord);
+        
+        // Store chunk
+        self.chunks.insert(chunk_coord, chunk);
     }
     pub fn set_block(&mut self, world_pos: Vector3<i32>, block: Block) {
         let chunk_coord = ChunkCoord::from_world_pos(world_pos);
         
         if !self.chunks.contains_key(&chunk_coord) {
-            self.chunks.insert(chunk_coord, Chunk::empty(chunk_coord));
+            self.set_chunk(chunk_coord, Chunk::empty(chunk_coord));
         }
         
         if let Some(chunk) = self.chunks.get_mut(&chunk_coord) {
@@ -397,32 +451,156 @@ impl World {
         }
     }
 
+    #[inline]
     pub fn load_chunk(&mut self, chunk_coord: ChunkCoord) -> bool {
-        if self.chunks.contains_key(&chunk_coord) {
-            eprintln!("Chunk can not be loaded : is already loaded");
-            return false;
-        }
-        let chunk: Option<Chunk> = Chunk::load(chunk_coord);
+        let chunk: Option<Chunk> = Chunk::load(chunk_coord); // currently just makes a full chunk - will change this to an actual load/generate function later
         if chunk.is_some() {
-            self.set_chunk(chunk.unwrap());
+            self.set_chunk(chunk_coord, chunk.unwrap());
         } else {
-            eprintln!("Chunk can not be loaded : something bad happened at chunk parsing");
             return false;
         };
 
         true
     }
 
+    #[inline]
     pub fn unload_chunk(&mut self, chunk_coord: ChunkCoord) {
+        if let Some(grid_cell) = self.chunks.get(&chunk_coord)
+            .map(|_| self.get_grid_cell(&chunk_coord))
+        {
+            if let Some(cell_set) = self.spatial_grid.get_mut(&grid_cell) {
+                cell_set.remove(&chunk_coord);
+                if cell_set.is_empty() {
+                    self.spatial_grid.remove(&grid_cell);
+                }
+            }
+        }
         self.chunks.remove(&chunk_coord);
     }
 
-    pub fn world_pos_to_local_pos(world_pos: Vector3<i32>) -> Vector3<usize> {
-        Vector3::new(
-            world_pos.x.rem_euclid(Chunk::CHUNK_SIZE_I) as usize,
-            world_pos.y.rem_euclid(Chunk::CHUNK_SIZE_I) as usize,
-            world_pos.z.rem_euclid(Chunk::CHUNK_SIZE_I) as usize,
-        )
+
+    // Add chunk loading/unloading strategies
+    pub fn update_loaded_chunks(&mut self, center: Vector3<i32>, radius: u32) {
+        let radius_i32 = radius as i32;
+        let radius_sq = (radius * radius) as i32;
+
+        // Precompute the bounds of the sphere in chunk coordinates
+        let min_x = center.x - radius_i32;
+        let max_x = center.x + radius_i32;
+        let min_y = center.y - radius_i32;
+        let max_y = center.y + radius_i32;
+        let min_z = center.z - radius_i32;
+        let max_z = center.z + radius_i32;
+
+        // Track chunks we want to keep
+        let mut chunks_to_keep = HashSet::with_capacity((radius * radius * radius * 4) as usize);
+
+        // OPTIMIZATION 1: Precompute grid cell ranges and only check cells that could contain chunks in range
+        let min_cell_x = min_x.div_euclid(self.grid_cell_size);
+        let max_cell_x = max_x.div_euclid(self.grid_cell_size);
+        let min_cell_y = min_y.div_euclid(self.grid_cell_size);
+        let max_cell_y = max_y.div_euclid(self.grid_cell_size);
+        let min_cell_z = min_z.div_euclid(self.grid_cell_size);
+        let max_cell_z = max_z.div_euclid(self.grid_cell_size);
+
+        // ^^^ this part took around 8 micro seconds so it's basically nothing
+        //let start = std::time::Instant::now();
+
+        // OPTIMIZATION 2: Use a single loop with early continues for better branch prediction
+        for cell_x in min_cell_x..=max_cell_x {
+            let cell_x_world = cell_x * self.grid_cell_size;
+            let cell_min_x = cell_x_world;
+            let cell_max_x = cell_x_world + self.grid_cell_size - 1;
+            
+            // Skip if this cell is completely outside the X bounds
+            if cell_max_x < min_x || cell_min_x > max_x {
+                continue;
+            }
+
+            for cell_y in min_cell_y..=max_cell_y {
+                let cell_y_world = cell_y * self.grid_cell_size;
+                let cell_min_y = cell_y_world;
+                let cell_max_y = cell_y_world + self.grid_cell_size - 1;
+                
+                // Skip if this cell is completely outside the Y bounds
+                if cell_max_y < min_y || cell_min_y > max_y {
+                    continue;
+                }
+
+                for cell_z in min_cell_z..=max_cell_z {
+                    let cell_z_world = cell_z * self.grid_cell_size;
+                    let cell_min_z = cell_z_world;
+                    let cell_max_z = cell_z_world + self.grid_cell_size - 1;
+                    
+                    // Skip if this cell is completely outside the Z bounds
+                    if cell_max_z < min_z || cell_min_z > max_z {
+                        continue;
+                    }
+
+                    // Only proceed if this cell could potentially contain chunks in range
+                    if let Some(cell_chunks) = self.spatial_grid.get(&(cell_x, cell_y, cell_z)) {
+                        for &coord in cell_chunks {
+                            // Check if chunk is within the sphere
+                            let dx = coord.x - center.x;
+                            let dy = coord.y - center.y;
+                            let dz = coord.z - center.z;
+                            
+                            if dx * dx + dy * dy + dz * dz <= radius_sq {
+                                chunks_to_keep.insert(coord);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        //println!("Chunk checking (3d loops) took: {:?}", start.elapsed()); // this is soo slow takes around 7 millisec (while empty it takes 200 micro)
+        //let start = std::time::Instant::now();
+
+        // OPTIMIZATION 3: Batch unload operations
+        let to_unload: Vec<ChunkCoord> = self.chunks.keys()
+            .filter(|&&coord| !chunks_to_keep.contains(&coord))
+            .cloned()
+            .collect();
+        
+        for coord in to_unload {
+            self.unload_chunk(coord);
+        }
+
+        //println!("Chunk unloading took: {:?}", start.elapsed()); // this is slow - takes around 2 millisec (while empty it takes 2 micro)
+        //let start = std::time::Instant::now();
+
+
+        // OPTIMIZATION 4: Use a more computer-friendly early exit loops
+
+        // First collect all chunks that need loading
+        for x in -radius_i32..=radius_i32 {
+            let x_sq = x * x;
+            if x_sq > radius_sq {
+                continue;
+            }
+            
+            for y in -radius_i32..=radius_i32 {
+                let y_sq = y * y;
+                let xy_sq = x_sq + y_sq;
+                if xy_sq > radius_sq {
+                    continue;
+                }
+                
+                for z in -radius_i32..=radius_i32 {
+                    if xy_sq + z * z > radius_sq {
+                        continue;
+                    }
+                    
+                    let chunk_coord = ChunkCoord::new(center.x + x, center.y + y, center.z + z);
+                    if !self.chunks.contains_key(&chunk_coord) {
+                        self.load_chunk(chunk_coord);
+                    }
+                }
+            }
+        }
+
+        //println!("Chunk loading took: {:?}", start.elapsed()); // this is slow around 2.5 millisec but when empty it takes up to 1 Sec to complete
     }
 }
 

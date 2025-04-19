@@ -339,12 +339,6 @@ impl<'a> State<'a> {
                         }
                         false
                     },
-                    Key::KeyR => {
-                        if *state == ElementState::Pressed {
-                            geometry::rem_raycasted_cube();
-                        }
-                        false
-                    },
                     Key::KeyF => {
                         if *state == ElementState::Pressed {
                             geometry::add_def_cube();
@@ -354,7 +348,7 @@ impl<'a> State<'a> {
                     },
                     Key::KeyG => {
                         if *state == ElementState::Pressed {
-                            geometry::rem_last_cube();
+                            geometry::rem_raycasted_cube();
                             return true
                         }
                         false
