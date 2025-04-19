@@ -86,21 +86,16 @@ impl Block {
 
     /// Sets the position of the cube in 3D space.
     #[inline]
-    pub fn set_position(&mut self, x: u16, y: u16, z: u16) {
+    pub fn set_pos(&mut self, x: u16, y: u16, z: u16) {
         self.position = z | (y << 4) | (x << 8);
     }
     /// Convert packed position to world coordinates
-    pub fn get_position(&self) -> cgmath::Vector3<i32> {
+    pub fn get_pos(&self) -> cgmath::Vector3<i32> {
         cgmath::Vector3::new(
             ((self.position >> 8) & 0xF) as i32,
             ((self.position >> 4) & 0xF) as i32,
             (self.position & 0xF) as i32
         )
-    }
-    /// Convert packed position to world coordinates float
-    #[inline]
-    pub fn get_position_f(&self) -> cgmath::Vector3<f32> {
-        vec3_i32_to_f32(self.get_position())
     }
 
     #[inline]
@@ -109,13 +104,13 @@ impl Block {
     /// Full conversion to Instance
     pub fn to_instance(&self) -> super::geometry::Instance {
         super::geometry::Instance {
-            position: self.get_position_f(),
+            position: vec3_i32_to_f32(self.get_pos()),
             rotation: self.rotation_to_quaternion()
         }
     }
     pub fn to_world_instance(&self, chunk_pos: ChunkCoord) -> super::geometry::Instance {
         super::geometry::Instance {
-            position: self.get_position_f() + vec3_i32_to_f32(chunk_pos.to_world_position()),
+            position: vec3_i32_to_f32(self.get_pos() + chunk_pos.to_world_pos()),
             rotation: self.rotation_to_quaternion()
         }
     }
@@ -165,6 +160,7 @@ pub fn vec3_f32_to_i32(v: cgmath::Vector3<f32>) -> cgmath::Vector3<i32> {
 pub fn vec3_i32_to_f32(v: cgmath::Vector3<i32>) -> cgmath::Vector3<f32> {
     cgmath::Vector3::new(v.x as f32, v.y as f32, v.z as f32)
 }
+// converting from i32 to u32 never happens outside chunk/block structs so it's not needed
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct ChunkCoord {
@@ -180,7 +176,7 @@ impl ChunkCoord {
     }
 
     #[inline]
-    pub fn to_world_position(&self) -> Vector3<i32> {
+    pub fn to_world_pos(&self) -> Vector3<i32> {
         Vector3::new(
             self.x * Chunk::CHUNK_SIZE_I,
             self.y * Chunk::CHUNK_SIZE_I,
@@ -189,7 +185,7 @@ impl ChunkCoord {
     }
 
     #[inline]
-    pub fn from_world_position(world_pos: Vector3<i32>) -> Self {
+    pub fn from_world_pos(world_pos: Vector3<i32>) -> Self {
         Self {
             x: world_pos.x.div_euclid(Chunk::CHUNK_SIZE_I),
             y: world_pos.y.div_euclid(Chunk::CHUNK_SIZE_I),
@@ -256,16 +252,16 @@ impl Chunk {
         Some(Self::new(chunk_coord))
     }
 
-    pub fn get(&self, local: Vector3<u32>) -> Option<&Block> {
-        self.blocks.get(Self::local_to_index(local) as usize).filter(|b| !b.is_empty())
+    pub fn get_block(&self, local_pos: Vector3<u32>) -> Option<&Block> {
+        self.blocks.get(Self::local_to_index(local_pos) as usize).filter(|b| !b.is_empty())
     }
 
-    pub fn get_mut(&mut self, local: Vector3<u32>) -> Option<&mut Block> {
-        self.blocks.get_mut(Self::local_to_index(local) as usize).filter(|b| !b.is_empty())
+    pub fn get_block_mut(&mut self, local_pos: Vector3<u32>) -> Option<&mut Block> {
+        self.blocks.get_mut(Self::local_to_index(local_pos) as usize).filter(|b| !b.is_empty())
     }
 
-    pub fn set(&mut self, local: Vector3<u32>, cube: Block) {
-        if let Some(b) = self.blocks.get_mut(Self::local_to_index(local) as usize) {
+    pub fn set_block(&mut self, local_pos: Vector3<u32>, cube: Block) {
+        if let Some(b) = self.blocks.get_mut(Self::local_to_index(local_pos) as usize) {
             *b = cube;
             self.dirty = true;
         }
@@ -273,11 +269,11 @@ impl Chunk {
 
     /// Convert local chunk coordinates to world position
     #[inline]
-    pub fn local_to_world_pos(&self, local: Vector3<u32>) -> Vector3<i32> {
+    pub fn local_to_world_pos(&self, local_pos: Vector3<u32>) -> Vector3<i32> {
         Vector3::new(
-            self.position.x * Self::CHUNK_SIZE_I + local.x as i32,
-            self.position.y * Self::CHUNK_SIZE_I + local.y as i32,
-            self.position.z * Self::CHUNK_SIZE_I + local.z as i32,
+            self.position.x * Self::CHUNK_SIZE_I + local_pos.x as i32,
+            self.position.y * Self::CHUNK_SIZE_I + local_pos.y as i32,
+            self.position.z * Self::CHUNK_SIZE_I + local_pos.z as i32,
         )
     }
 
@@ -293,8 +289,8 @@ impl Chunk {
 
     /// Convert local coordinates to array index
     #[inline]
-    pub fn local_to_index(local: Vector3<u32>) -> u32 {
-        local.z * Self::CHUNK_SIZE_U.pow(2) + local.y * Self::CHUNK_SIZE_U + local.x
+    pub fn local_to_index(local_pos: Vector3<u32>) -> u32 {
+        local_pos.z * Self::CHUNK_SIZE_U.pow(2) + local_pos.y * Self::CHUNK_SIZE_U + local_pos.x
     }
 
     /// Convert array index to local coordinates
@@ -310,14 +306,14 @@ impl Chunk {
     /// Check if a world position is within this chunk
     #[inline]
     pub fn contains_world_pos(&self, world_pos: Vector3<i32>) -> bool {
-        ChunkCoord::from_world_position(world_pos) == self.position
+        ChunkCoord::from_world_pos(world_pos) == self.position
     }
 
     /// Get block at world position if it's in this chunk
     pub fn get_block_at_world_pos(&self, world_pos: Vector3<i32>) -> Option<&Block> {
         if self.contains_world_pos(world_pos) {
             let local = Self::world_to_local_pos(world_pos);
-            self.get(local)
+            self.get_block(local)
         } else {
             None
         }
@@ -325,7 +321,7 @@ impl Chunk {
 
     #[inline]
     pub fn position(&self) -> Vector3<i32> {
-        self.position.to_world_position()
+        self.position.to_world_pos()
     }
 
     pub fn make_mesh(&self) {
@@ -368,21 +364,28 @@ impl World {
     }
 
     pub fn get_block(&self, world_pos: Vector3<i32>) -> Option<&Block> {
-        let chunk_coord = ChunkCoord::from_world_position(world_pos);
+        let chunk_coord = ChunkCoord::from_world_pos(world_pos);
         self.chunks.get(&chunk_coord)
             .and_then(|chunk| chunk.get_block_at_world_pos(world_pos))
     }
     pub fn get_block_mut(&mut self, world_pos: Vector3<i32>) -> Option<&mut Block> {
-        let chunk_coord = ChunkCoord::from_world_position(world_pos);
+        let chunk_coord = ChunkCoord::from_world_pos(world_pos);
         self.chunks.get_mut(&chunk_coord)
             .and_then(|chunk| {
                 let local = Chunk::world_to_local_pos(world_pos);
-                chunk.get_mut(local)
+                chunk.get_block_mut(local)
             })
     }
 
+    pub fn set_chunk(&mut self, chunk: Chunk) {
+        let chunk_coord = chunk.position;
+        
+        if !self.chunks.contains_key(&chunk_coord) {
+            self.chunks.insert(chunk_coord, chunk.clone());
+        }
+    }
     pub fn set_block(&mut self, world_pos: Vector3<i32>, block: Block) {
-        let chunk_coord = ChunkCoord::from_world_position(world_pos);
+        let chunk_coord = ChunkCoord::from_world_pos(world_pos);
         
         if !self.chunks.contains_key(&chunk_coord) {
             self.chunks.insert(chunk_coord, Chunk::empty(chunk_coord));
@@ -390,35 +393,35 @@ impl World {
         
         if let Some(chunk) = self.chunks.get_mut(&chunk_coord) {
             let local = Chunk::world_to_local_pos(world_pos);
-            chunk.set(local, block);
+            chunk.set_block(local, block);
         }
     }
 
-    pub fn load_chunk(&mut self, chunk_coord: ChunkCoord) {
-        if !self.chunks.contains_key(&chunk_coord) {
-            self.chunks.insert(chunk_coord, Chunk::new(chunk_coord));
+    pub fn load_chunk(&mut self, chunk_coord: ChunkCoord) -> bool {
+        if self.chunks.contains_key(&chunk_coord) {
+            eprintln!("Chunk can not be loaded : is already loaded");
+            return false;
         }
+        let chunk: Option<Chunk> = Chunk::load(chunk_coord);
+        if chunk.is_some() {
+            self.set_chunk(chunk.unwrap());
+        } else {
+            eprintln!("Chunk can not be loaded : something bad happened at chunk parsing");
+            return false;
+        };
+
+        true
     }
 
     pub fn unload_chunk(&mut self, chunk_coord: ChunkCoord) {
         self.chunks.remove(&chunk_coord);
     }
-    // Conversion helpers
-    pub fn world_pos_to_chunk_coord(pos: Vector3<i32>) -> ChunkCoord {
-        const CHUNK_SIZE: i32 = 16; // Example size
-        ChunkCoord {
-            x: pos.x.div_euclid(CHUNK_SIZE),
-            y: pos.y.div_euclid(CHUNK_SIZE),
-            z: pos.z.div_euclid(CHUNK_SIZE),
-        }
-    }
 
-    pub fn world_pos_to_local_pos(pos: Vector3<i32>) -> Vector3<usize> {
-        const CHUNK_SIZE: i32 = 16;
+    pub fn world_pos_to_local_pos(world_pos: Vector3<i32>) -> Vector3<usize> {
         Vector3::new(
-            pos.x.rem_euclid(CHUNK_SIZE) as usize,
-            pos.y.rem_euclid(CHUNK_SIZE) as usize,
-            pos.z.rem_euclid(CHUNK_SIZE) as usize,
+            world_pos.x.rem_euclid(Chunk::CHUNK_SIZE_I) as usize,
+            world_pos.y.rem_euclid(Chunk::CHUNK_SIZE_I) as usize,
+            world_pos.z.rem_euclid(Chunk::CHUNK_SIZE_I) as usize,
         )
     }
 }

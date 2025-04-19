@@ -237,7 +237,7 @@ impl InstanceManager {
                     .instances
                     .iter()
                     .position(|i| {
-                        let cube_pos = cube.get_position_f();
+                        let cube_pos = super::cube::vec3_i32_to_f32(cube.get_pos());
                         let instance_pos = i.position;
                         (cube_pos - instance_pos).magnitude() < 0.01 // Threshold for matching positions
                     })
@@ -279,7 +279,7 @@ pub fn add_def_cube() {
             super::cube::vec3_f32_to_i32(camera_pos + forward * placement_distance);
 
         // Convert to chunk coordinates
-        let chunk_pos = super::cube::ChunkCoord::from_world_position(placement_position);
+        let chunk_pos = super::cube::ChunkCoord::from_world_pos(placement_position);
 
         // Convert to local position within chunk
         //let local_pos = super::cube::Chunk::world_to_local_pos(placement_position);
@@ -308,21 +308,22 @@ pub fn rem_last_cube() {
 pub fn add_def_chunk() {
     unsafe {
         let state = super::get_state();
-        let mut instance_manager = state.instance_manager().borrow_mut();
-        let camera_position = state.camera_system.camera.position;
-        let chunk_position = cgmath::Vector3::new(
-            camera_position.x + 8.5,
-            camera_position.y + 8.0,
-            camera_position.z + 8.5,
-        );
-        let real_chunk_position = super::cube::vec3_f32_to_i32(chunk_position);
+        let chunk_pos = super::cube::vec3_f32_to_i32(state.camera_system.camera.position);
+        let chunk_pos_c_c = super::cube::ChunkCoord::from_world_pos(chunk_pos);
 
-        if let Some(chunk) = super::cube::Chunk::load(super::cube::ChunkCoord::from_world_position(
-            real_chunk_position,
-        )) {
-            instance_manager.add_chunk(state.device(), state.queue(), &chunk);
+        if state.data_system.world.load_chunk(chunk_pos_c_c) {
+            //super::cube::Chunk::load(super::cube::ChunkCoord::from_world_pos(chunk_pos));
+            let chunk: &super::cube::Chunk = state
+                .data_system
+                .world
+                .get_chunk(chunk_pos_c_c)
+                .expect("Unsuccsesful chunk load");
+            state
+                .instance_manager()
+                .borrow_mut()
+                .add_chunk(state.device(), state.queue(), &chunk);
         } else {
-            eprintln!("Failed to load chunk at {:?}", chunk_position);
+            //eprintln!("Failed to load chunk at {:?}", chunk_pos);
         }
     }
 }

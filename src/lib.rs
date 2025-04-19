@@ -66,7 +66,7 @@ pub struct DataSubsystem {
     geometry_buffer: geometry::GeometryBuffer,
     texture_manager: geometry::TextureManager,
     instance_manager: std::cell::RefCell<geometry::InstanceManager>, // Now wrapped in RefCell
-    //world: cube::World;
+    world: cube::World,
 }
 
 impl<'a> State<'a> {
@@ -159,6 +159,7 @@ impl<'a> State<'a> {
             geometry_buffer,
             texture_manager,
             instance_manager,
+            world: cube::World::empty(),
         };
         let render_context: RenderContext = RenderContext{
             surface,
@@ -221,6 +222,9 @@ impl<'a> State<'a> {
     }
     pub fn instance_manager(&self) -> &std::cell::RefCell<geometry::InstanceManager> {
         &self.data_system.instance_manager
+    }
+    pub fn world(&self) -> &cube::World {
+        &self.data_system.world
     }
     pub fn ui_manager(&self) -> &user_interface::UIManager {
         &self.ui_manager
