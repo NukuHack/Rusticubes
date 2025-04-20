@@ -195,17 +195,17 @@ impl Chunk {
     }
 
     pub fn get_block(&self, local_pos: Vector3<u32>) -> Option<&Block> {
-        let pos = ((local_pos.x as u16) << 8) | ((local_pos.y as u16) << 4) | (local_pos.z as u16);
-        self.blocks.get(&pos).filter(|b| !b.is_empty())
+        let pos = Self::local_to_position(local_pos);
+        self.blocks.get(&pos)
     }
 
     pub fn get_block_mut(&mut self, local_pos: Vector3<u32>) -> Option<&mut Block> {
-        let pos = ((local_pos.x as u16) << 8) | ((local_pos.y as u16) << 4) | (local_pos.z as u16);
+        let pos = Self::local_to_position(local_pos);
         self.blocks.get_mut(&pos)
     }
 
     pub fn set_block(&mut self, local_pos: Vector3<u32>, block: Block) {
-        let pos = ((local_pos.x as u16) << 8) | ((local_pos.y as u16) << 4) | (local_pos.z as u16);
+        let pos = Self::local_to_position(local_pos);
         if block.is_empty() {
             self.blocks.remove(&pos);
         } else {
@@ -359,7 +359,7 @@ impl World {
             .and_then(|chunk| {
                 let local = Chunk::world_to_local_pos(world_pos);
                 let pos = Chunk::local_to_position(local);
-                chunk.blocks.get(&pos).filter(|b| !b.is_empty())
+                chunk.blocks.get(&pos)
             })
     }
 
@@ -382,13 +382,7 @@ impl World {
         
         if let Some(chunk) = self.chunks.get_mut(&chunk_coord) {
             let local = Chunk::world_to_local_pos(world_pos);
-            let pos = Chunk::local_to_position(local);
-            if block.is_empty() {
-                chunk.blocks.remove(&pos);
-            } else {
-                chunk.blocks.insert(pos, block);
-            }
-            chunk.dirty = true;
+            chunk.set_block(local, block);
         }
     }
 
