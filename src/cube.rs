@@ -361,12 +361,32 @@ impl Chunk {
     }
 
     pub fn make_mesh(&mut self, device: &wgpu::Device) {
-        if !self.dirty && self.mesh.is_some() {
+        if self.mesh.is_some() {
             return; // Skip if no changes
         }
 
-        println!("Making mesh");
+        let mut builder = ChunkMeshBuilder::new();
+        
+        for (i, block) in self.blocks.iter().enumerate() {
+            if block.is_empty() {
+                continue;
+            }
 
+            let local_pos = Self::index_to_local(i as u32);
+            let world_pos = self.local_to_world_pos(local_pos);
+            let world_pos_f32 = Vector3::new(
+                world_pos.x as f32,
+                world_pos.y as f32, 
+                world_pos.z as f32
+            );
+
+            builder.add_cube(world_pos_f32, block.rotation_to_quaternion());
+        }
+
+        self.mesh = Some(builder.build(device));
+        self.dirty = false;
+    }
+    pub fn update_mesh(&mut self, device: &wgpu::Device) { // this will forceupdate the mesh
         let mut builder = ChunkMeshBuilder::new();
         
         for (i, block) in self.blocks.iter().enumerate() {
@@ -408,26 +428,12 @@ impl ChunkMeshBuilder {
     }
 
     pub fn add_cube(&mut self, position: Vector3<f32>, rotation: Quaternion<f32>) {
-        // Base cube vertices
-        let base_vertices = [
-            // Front face
-            Vertex { position: [0.0, 0.0, 0.0], normal: [0.0, 0.0, 1.0], uv: [0.0, 0.0] },
-            Vertex { position: [0.0, 1.0, 0.0], normal: [0.0, 0.0, 1.0], uv: [0.0, 1.0] },
-            Vertex { position: [1.0, 1.0, 0.0], normal: [0.0, 0.0, 1.0], uv: [1.0, 1.0] },
-            Vertex { position: [1.0, 0.0, 0.0], normal: [0.0, 0.0, 1.0], uv: [1.0, 0.0] },
-            // Back face
-            Vertex { position: [0.0, 0.0, -1.0], normal: [0.0, 0.0, -1.0], uv: [0.0, 0.0] },
-            Vertex { position: [0.0, 1.0, -1.0], normal: [0.0, 0.0, -1.0], uv: [0.0, 1.0] },
-            Vertex { position: [1.0, 1.0, -1.0], normal: [0.0, 0.0, -1.0], uv: [1.0, 1.0] },
-            Vertex { position: [1.0, 0.0, -1.0], normal: [0.0, 0.0, -1.0], uv: [1.0, 0.0] },
-        ];
-
         // Transform matrix
         let transform = Matrix4::from_translation(position) * Matrix4::from(rotation);
         let start_vertex = self.current_vertex;
 
         // Add transformed vertices
-        for vertex in &base_vertices {
+        for vertex in &VERTICES {
             let pos = transform * Vector3::from(vertex.position).extend(1.0);
             let normal = rotation * Vector3::from(vertex.normal);
             
@@ -439,23 +445,7 @@ impl ChunkMeshBuilder {
             self.current_vertex += 1;
         }
 
-        // Add indices (36 indices per cube)
-        let base_indices = [
-            // Front face
-            1, 0, 2, 3, 2, 0,
-            // Back face
-            4, 5, 6, 6, 7, 4,
-            // Bottom
-            0, 4, 7, 3, 0, 7,
-            // Top
-            5, 1, 6, 1, 2, 6,
-            // Right
-            6, 2, 7, 2, 3, 7,
-            // Left
-            4, 0, 5, 0, 1, 5,
-        ];
-
-        for index in base_indices {
+        for index in INDICES {
             self.indices.push(start_vertex + index);
         }
     }
@@ -477,8 +467,7 @@ type FastMap<K, V> = HashMap<K, V, BuildHasherDefault<AHasher>>;
 
 #[derive(Debug, Clone)]
 pub struct World {
-    pub chunks: FastMap<ChunkCoord, Chunk>,  // Position is now solely in the key
-    // Added this to track loaded chunks spatially
+    pub chunks: FastMap<ChunkCoord, Chunk>,
     pub loaded_chunks: HashSet<ChunkCoord>,
 }
 #[allow(dead_code, unused)]
@@ -486,7 +475,6 @@ impl World {
     /// Create an empty world with no chunks
     #[inline]
     pub fn empty() -> Self {
-
         Self {
             chunks: FastMap::with_capacity_and_hasher(
                 10000,
@@ -495,6 +483,7 @@ impl World {
             loaded_chunks: HashSet::with_capacity(10000),
         }
     }
+
     #[inline]
     pub fn get_chunk(&self, coord: ChunkCoord) -> Option<&Chunk> {
         self.chunks.get(&coord)
@@ -510,6 +499,7 @@ impl World {
         self.chunks.get(&chunk_coord)
             .and_then(|chunk| chunk.get_block_at_world_pos(world_pos))
     }
+
     pub fn get_block_mut(&mut self, world_pos: Vector3<i32>) -> Option<&mut Block> {
         let chunk_coord = ChunkCoord::from_world_pos(world_pos);
         self.chunks.get_mut(&chunk_coord)
@@ -535,13 +525,13 @@ impl World {
     #[inline]
     pub fn load_chunk(&mut self, chunk_coord: ChunkCoord) -> bool {
         let chunk: Option<Chunk> = Chunk::load(chunk_coord); // currently just makes a full chunk - will change this to an actual load/generate function later
-        if chunk.is_some() {
-            self.set_chunk(chunk_coord, chunk.unwrap());
-        } else {
-            return false;
-        };
 
-        true
+        if let Some(chunk) = chunk {
+            self.set_chunk(chunk_coord, chunk);
+            true
+        } else {
+            false
+        }
     }
 
     pub fn update_loaded_chunks(&mut self, center: Vector3<i32>, radius: u32) {
@@ -600,14 +590,12 @@ impl World {
         println!("Chunk loading took: {:?}", start.elapsed()); // this is free - first use takes up to 135 ms - 10 ms for active usage
     }
 
-    // Modify your set_chunk method to maintain loaded_chunks:
     #[inline]
     pub fn set_chunk(&mut self, chunk_coord: ChunkCoord, chunk: Chunk) {    
         self.chunks.insert(chunk_coord, chunk);
         self.loaded_chunks.insert(chunk_coord);
     }
 
-    // Modify your unload_chunk method:
     #[inline]
     pub fn unload_chunk(&mut self, chunk_coord: ChunkCoord) {
         self.chunks.remove(&chunk_coord);
@@ -615,7 +603,7 @@ impl World {
     }
 
 
-    pub fn update_chunk_meshes(&mut self, device: &wgpu::Device) {
+    pub fn make_chunk_meshes(&mut self, device: &wgpu::Device) {
         for (coord, chunk) in self.chunks.iter_mut() {
             if chunk.dirty {
                 chunk.make_mesh(device);
