@@ -65,7 +65,6 @@ pub struct ModifyKeyPressed {
 pub struct DataSubsystem {
     geometry_buffer: geometry::GeometryBuffer,
     texture_manager: geometry::TextureManager,
-    instance_manager: std::cell::RefCell<geometry::InstanceManager>, // Now wrapped in RefCell
     world: cube::World, // lol main data storage :)
 }
 
@@ -132,11 +131,6 @@ impl<'a> State<'a> {
 
         surface.configure(&device, &config);
 
-        let instance_manager = std::cell::RefCell::new(geometry::InstanceManager::new(
-            &device,
-            &queue,
-        ));
-
         let texture_manager: geometry::TextureManager = geometry::TextureManager::new(&device, &queue, &config);
         let geometry_buffer: geometry::GeometryBuffer = cube::BlockBuffer::new(
             &device,
@@ -158,7 +152,6 @@ impl<'a> State<'a> {
         let data_system: DataSubsystem = DataSubsystem{
             geometry_buffer,
             texture_manager,
-            instance_manager,
             world: cube::World::empty(),
         };
         let render_context: RenderContext = RenderContext{
@@ -219,9 +212,6 @@ impl<'a> State<'a> {
     }
     pub fn texture_manager(&self) -> &geometry::TextureManager {
         &self.data_system.texture_manager
-    }
-    pub fn instance_manager(&self) -> &std::cell::RefCell<geometry::InstanceManager> {
-        &self.data_system.instance_manager
     }
     pub fn world(&self) -> &cube::World {
         &self.data_system.world
@@ -346,9 +336,9 @@ impl<'a> State<'a> {
                         }
                         false
                     },
-                    Key::KeyG => {
+                    Key::KeyR => {
                         if *state == ElementState::Pressed {
-                            geometry::rem_raycasted_cube();
+                            geometry::rem_raycasted_block();
                             return true
                         }
                         false

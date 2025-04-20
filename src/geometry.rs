@@ -1,4 +1,4 @@
-use cgmath::{Deg, InnerSpace, Matrix4, Quaternion, Rotation3, SquareMatrix, Vector3, Vector4};
+use cgmath::{InnerSpace, SquareMatrix, Vector3, Vector4};
 use image::GenericImageView;
 use std::mem;
 use wgpu::util::DeviceExt;
@@ -49,6 +49,11 @@ pub struct GeometryBuffer {
 
 impl GeometryBuffer {
     pub fn new(device: &wgpu::Device, indices: &[u32], vertices: &[Vertex]) -> Self {
+        // Handle empty geometry case
+        if vertices.is_empty() || indices.is_empty() {
+            return Self::empty(device);
+        }
+
         let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Vertex Buffer"),
             contents: bytemuck::cast_slice(vertices),
@@ -70,151 +75,27 @@ impl GeometryBuffer {
     }
 
     pub fn empty(device: &wgpu::Device) -> Self {
-        Self::new(device, &[], &[])
-    }
-}
-
-// --- Instance Manager ---
-pub struct InstanceManager {
-    pub instances: Vec<Instance>,
-    pub instance_buffer: wgpu::Buffer,
-    pub capacity: usize,
-}
-impl InstanceManager {
-    pub fn new(device: &wgpu::Device, queue: &wgpu::Queue) -> Self {
-        let instances = vec![super::cube::Block::default().to_instance()];
-
-        // Rest remains the same - buffer creation and initialization
-        let capacity = instances.len() * 2;
-        let buffer_size = (capacity * mem::size_of::<InstanceRaw>()) as u64;
-        let instance_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-            label: None,
-            size: buffer_size,
-            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+        // Create minimal buffers that won't cause rendering issues
+        let vertex_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Empty Vertex Buffer"),
+            size: std::mem::size_of::<Vertex>() as wgpu::BufferAddress,
+            usage: wgpu::BufferUsages::VERTEX,
             mapped_at_creation: false,
         });
 
-        queue.write_buffer(
-            &instance_buffer,
-            0,
-            bytemuck::cast_slice(&instances.iter().map(|i| i.to_raw()).collect::<Vec<_>>()),
-        );
+        let index_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Empty Index Buffer"),
+            size: std::mem::size_of::<u32>() as wgpu::BufferAddress,
+            usage: wgpu::BufferUsages::INDEX,
+            mapped_at_creation: false,
+        });
 
         Self {
-            instances,
-            instance_buffer,
-            capacity,
+            vertex_buffer,
+            index_buffer,
+            num_indices: 0,
+            num_vertices: 0,
         }
-    }
-
-    pub fn add_instance(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, instance: Instance) {
-        if self.instances.len() >= self.capacity {
-            self.capacity *= 2;
-            let new_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-                label: Some("Instance Buffer"),
-                size: (self.capacity * mem::size_of::<InstanceRaw>()) as u64,
-                usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-                mapped_at_creation: false,
-            });
-
-            queue.write_buffer(
-                &new_buffer,
-                0,
-                bytemuck::cast_slice(
-                    &self
-                        .instances
-                        .iter()
-                        .map(|i| i.to_raw())
-                        .collect::<Vec<_>>(),
-                ),
-            );
-
-            self.instance_buffer = new_buffer;
-        }
-
-        self.instances.push(instance.clone());
-        let offset = self.instances.len() - 1;
-        queue.write_buffer(
-            &self.instance_buffer,
-            (offset * mem::size_of::<InstanceRaw>()) as u64,
-            bytemuck::cast_slice(&[instance.to_raw()]),
-        );
-    }
-
-    pub fn remove_instance(&mut self, index: usize, queue: &wgpu::Queue) {
-        if index >= self.instances.len() {
-            return; // or handle error as needed
-        }
-
-        // Remove the instance from the vector
-        self.instances.remove(index);
-
-        // Rebuild the instance buffer with the updated data
-        let instance_data: Vec<InstanceRaw> = self.instances.iter().map(|i| i.to_raw()).collect();
-        queue.write_buffer(
-            &self.instance_buffer,
-            0,
-            bytemuck::cast_slice(&instance_data),
-        );
-    }
-
-    // Add multiple instances at once
-    pub fn add_instances(
-        &mut self,
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
-        instances: &[Instance],
-    ) {
-        let required_capacity = self.instances.len() + instances.len();
-        if required_capacity > self.capacity {
-            self.capacity = required_capacity * 2;
-            let new_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-                label: Some("Instance Buffer"),
-                size: (self.capacity * mem::size_of::<InstanceRaw>()) as u64,
-                usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-                mapped_at_creation: false,
-            });
-
-            // Upload all existing + new instances
-            let all_instances = self
-                .instances
-                .iter()
-                .chain(instances.iter())
-                .map(|i| i.to_raw())
-                .collect::<Vec<_>>();
-
-            queue.write_buffer(&new_buffer, 0, bytemuck::cast_slice(&all_instances));
-            self.instance_buffer = new_buffer;
-        } else {
-            // Only upload new instances
-            let offset = self.instances.len();
-            let new_raw: Vec<_> = instances.iter().map(|i| i.to_raw()).collect();
-            queue.write_buffer(
-                &self.instance_buffer,
-                (offset * mem::size_of::<InstanceRaw>()) as u64,
-                bytemuck::cast_slice(&new_raw),
-            );
-        }
-
-        self.instances.extend_from_slice(instances);
-    }
-
-    /// Add cubes from a chunk to the instance manager
-    pub fn add_chunk(
-        &mut self,
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
-        chunk: &super::cube::Chunk,
-    ) {
-        let new_instances: Vec<Instance> = chunk
-            .blocks
-            .iter()
-            .filter(|cube| !cube.is_empty())
-            .map(|cube| cube.to_world_instance(chunk.position))
-            .collect();
-
-        // Batch upload all instances at once
-        self.add_instances(device, queue, &new_instances);
     }
 }
 
@@ -229,23 +110,15 @@ pub fn add_def_cube() {
                 + state.camera_system.camera.forward() * placement_distance,
         );
 
-        // Convert to chunk coordinates
-        let chunk_pos = super::cube::ChunkCoord::from_world_pos(placement_position);
-
-        // Convert to local position within chunk
-        //let local_pos = super::cube::Chunk::world_to_local_pos(placement_position);
-
         // Create cube at the correct position
         let cube = super::cube::Block::new_raw(placement_position);
-
         state.data_system.world.set_block(placement_position, cube);
 
-        // Add to instance manager with proper world position
-        state.instance_manager().borrow_mut().add_instance(
-            state.device(),
-            state.queue(),
-            cube.to_world_instance(chunk_pos),
-        );
+        // Update the chunk's mesh
+        let chunk_pos = super::cube::ChunkCoord::from_world_pos(placement_position);
+        if let Some(chunk) = state.data_system.world.get_chunk_mut(chunk_pos) {
+            chunk.make_mesh(super::get_state().device(), true);
+        }
     }
 }
 pub fn add_def_chunk() {
@@ -278,193 +151,78 @@ pub fn add_full_world() {
     unsafe {
         let state = super::get_state();
         let chunk_pos = super::cube::vec3_f32_to_i32(state.camera_system.camera.position);
-
-        state.data_system.world.update_loaded_chunks(chunk_pos, 10);
+        state.data_system.world.update_loaded_chunks(chunk_pos, 3);
+        state
+            .data_system
+            .world
+            .make_chunk_meshes(super::get_state().device());
     }
 }
 
-pub fn cast_ray_and_select_cube(
+pub fn cast_ray_and_select_block(
     camera: &super::camera::Camera,
     projection: &super::camera::Projection,
-    instances: &[Instance],
+    world: &super::cube::World,
     max_distance: f32,
-) -> (Option<usize>, Option<Vector3<f32>>) {
-    // Create ray directly in center of view (NDC 0,0,-1)
+) -> Option<Vector3<i32>> {
     let ray_clip = Vector4::new(0.0, 0.0, -1.0, 1.0);
-
-    // Convert to eye (camera) space
     let inv_proj = projection.calc_matrix().invert().unwrap();
     let mut ray_eye: Vector4<f32> = inv_proj * ray_clip;
     ray_eye = Vector4::new(ray_eye.x, ray_eye.y, -1.0, 0.0);
 
-    // Convert to world space
     let inv_view = camera.calc_matrix().invert().unwrap();
     let ray_world = inv_view * ray_eye;
     let ray_dir = ray_world.truncate().normalize();
-
     let ray_origin = camera.position;
 
-    // Early exit if no instances
-    if instances.is_empty() {
-        return (None, None);
-    }
+    let steps = (max_distance * 2.0) as usize;
+    let step_size = max_distance / steps as f32;
 
-    // Optimized ray-AABB intersection with distance check
-    let mut closest_index = None;
-    let mut closest_instance_pos = None;
-    let mut closest_distance = max_distance;
+    for i in 0..steps {
+        let t = i as f32 * step_size;
+        let current_pos = ray_origin + ray_dir * t;
+        let block_pos = Vector3::new(
+            current_pos.x.floor() as i32,
+            current_pos.y.floor() as i32,
+            current_pos.z.floor() as i32,
+        );
 
-    for (index, instance) in instances.iter().enumerate() {
-        let cube_center = instance.position;
-        let half_extents = Vector3::new(0.5, 0.5, 0.5);
-
-        // Early distance check - skip if too far
-        let center_dist = (cube_center - ray_origin).magnitude();
-        if center_dist > max_distance + 0.87 {
-            // 0.87 is approx sqrt(3)/2
-            continue;
-        }
-
-        // Optimized AABB intersection
-        let aabb_min = cube_center - half_extents;
-        let aabb_max = cube_center + half_extents;
-
-        if let Some(t) = ray_aabb_intersect(ray_origin, ray_dir, aabb_min, aabb_max) {
-            if t > 0.0 && t < closest_distance {
-                closest_distance = t;
-                closest_instance_pos = Some(cube_center);
-                closest_index = Some(index);
+        if let Some(block) = world.get_block(block_pos) {
+            if !block.is_empty() {
+                return Some(block_pos);
             }
         }
     }
 
-    (closest_index, closest_instance_pos)
+    None
 }
 
-#[inline]
-fn ray_aabb_intersect(
-    ray_origin: Vector3<f32>,
-    ray_dir: Vector3<f32>,
-    aabb_min: Vector3<f32>,
-    aabb_max: Vector3<f32>,
-) -> Option<f32> {
-    let mut tmin = -f32::INFINITY;
-    let mut tmax = f32::INFINITY;
-
-    // Unroll the loop for better performance
-    for i in 0..3 {
-        let inv_d = 1.0 / ray_dir[i];
-        let mut t1 = (aabb_min[i] - ray_origin[i]) * inv_d;
-        let mut t2 = (aabb_max[i] - ray_origin[i]) * inv_d;
-
-        if inv_d < 0.0 {
-            std::mem::swap(&mut t1, &mut t2);
-        }
-
-        tmin = tmin.max(t1);
-        tmax = tmax.min(t2);
-
-        if tmax < tmin {
-            return None;
-        }
-    }
-
-    // Return the closest positive intersection
-    if tmin > 0.0 {
-        Some(tmin)
-    } else if tmax > 0.0 {
-        Some(tmax)
-    } else {
-        None
-    }
-}
-
-// Function to remove the raycasted cube
-pub fn rem_raycasted_cube() {
-    unsafe {
+pub fn rem_raycasted_block() {
+    let block_pos = unsafe {
         let state = super::get_state();
-        let instance_manager = &mut *state.instance_manager().borrow_mut();
-
-        if let (Some(index), Some(pos)) = cast_ray_and_select_cube(
+        cast_ray_and_select_block(
             &state.camera_system.camera,
             &state.camera_system.projection,
-            &instance_manager.instances,
+            &state.data_system.world,
             10.0,
-        ) {
+        )
+    };
+
+    if let Some(block_pos) = block_pos {
+        unsafe {
             let state = super::get_state();
+
+            // Remove the block
             state.data_system.world.set_block(
-                super::cube::vec3_f32_to_i32(pos),
-                super::cube::Block::default(),
-            ); // default is air
-            instance_manager.remove_instance(index, state.queue());
-        }
-    }
-}
+                block_pos,
+                super::cube::Block::default(), // default is air
+            );
 
-// --- Instance Struct ---
-#[repr(C)]
-#[derive(Clone)]
-pub struct Instance {
-    pub position: Vector3<f32>,
-    pub rotation: Quaternion<f32>,
-}
-
-impl Instance {
-    #[inline] // ← Critical for performance
-    pub fn to_raw(&self) -> InstanceRaw {
-        InstanceRaw {
-            model: (Matrix4::from_translation(self.position) * Matrix4::from(self.rotation)).into(),
-        }
-    }
-    pub fn to_cube(&self) -> super::cube::Block {
-        super::cube::Block::new_rot_raw(super::cube::vec3_f32_to_i32(self.position), self.rotation)
-    }
-}
-impl Default for Instance {
-    fn default() -> Self {
-        //super::cube::default().to_instance()
-        Instance {
-            position: Vector3::new(0.0, 0.0, 0.0),
-            rotation: Quaternion::from_angle_y(Deg(0.0)),
-        }
-    }
-}
-
-// --- InstanceRaw ---
-#[repr(C)]
-#[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
-pub struct InstanceRaw {
-    pub model: [[f32; 4]; 4],
-}
-
-impl InstanceRaw {
-    pub fn desc() -> wgpu::VertexBufferLayout<'static> {
-        use std::mem;
-        wgpu::VertexBufferLayout {
-            array_stride: mem::size_of::<Self>() as wgpu::BufferAddress,
-            step_mode: wgpu::VertexStepMode::Instance,
-            attributes: &[
-                wgpu::VertexAttribute {
-                    offset: 0,
-                    shader_location: 5,
-                    format: wgpu::VertexFormat::Float32x4,
-                },
-                wgpu::VertexAttribute {
-                    offset: mem::size_of::<[f32; 4]>() as wgpu::BufferAddress,
-                    shader_location: 6,
-                    format: wgpu::VertexFormat::Float32x4,
-                },
-                wgpu::VertexAttribute {
-                    offset: mem::size_of::<[f32; 8]>() as wgpu::BufferAddress,
-                    shader_location: 7,
-                    format: wgpu::VertexFormat::Float32x4,
-                },
-                wgpu::VertexAttribute {
-                    offset: mem::size_of::<[f32; 12]>() as wgpu::BufferAddress,
-                    shader_location: 8,
-                    format: wgpu::VertexFormat::Float32x4,
-                },
-            ],
+            // Update the chunk's mesh
+            let chunk_pos = super::cube::ChunkCoord::from_world_pos(block_pos);
+            if let Some(chunk) = state.data_system.world.get_chunk_mut(chunk_pos) {
+                chunk.make_mesh(super::get_state().device(), true);
+            }
         }
     }
 }

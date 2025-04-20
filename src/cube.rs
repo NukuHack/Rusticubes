@@ -120,20 +120,6 @@ impl Block {
     #[inline]
     pub fn is_empty(&self) -> bool { self.material == 0 }
 
-    /// Full conversion to Instance
-    pub fn to_instance(&self) -> super::geometry::Instance {
-        super::geometry::Instance {
-            position: vec3_i32_to_f32(self.get_pos()),
-            rotation: self.rotation_to_quaternion()
-        }
-    }
-    pub fn to_world_instance(&self, chunk_pos: ChunkCoord) -> super::geometry::Instance {
-        super::geometry::Instance {
-            position: vec3_i32_to_f32(self.get_pos() + chunk_pos.to_world_pos()),
-            rotation: self.rotation_to_quaternion()
-        }
-    }
-
     // Here is the marching cube stuff, what i did not finish so it's commented out currently
     pub fn rotate(&mut self, axis: char, steps: u16) {
         let (current, mask, shift) = match axis {
@@ -155,7 +141,6 @@ impl Block {
 }
 
 
-/// Convert a quaternion to the packed u16 rotation format
 /// Convert a quaternion to the packed u16 rotation format
 pub fn quaternion_to_rotation(rotation: Quaternion<f32>) -> u16 {
     let angles = [
@@ -181,11 +166,7 @@ pub fn vector_to_position(position: Vector3<i32>) -> u16 {
 pub fn vec3_f32_to_i32(v: Vector3<f32>) -> Vector3<i32> {
     Vector3::new(v.x as i32, v.y as i32, v.z as i32)
 }
-#[inline]
-pub fn vec3_i32_to_f32(v: Vector3<i32>) -> Vector3<f32> {
-    Vector3::new(v.x as f32, v.y as f32, v.z as f32)
-}
-// converting from i32 to u32 never happens outside chunk/block structs so it's not needed
+// converting from i32 to f32 never happens outside chunk/block structs so it's not needed
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct ChunkCoord {
@@ -293,11 +274,11 @@ impl Chunk {
     }
 
     pub fn get_block_mut(&mut self, local_pos: Vector3<u32>) -> Option<&mut Block> {
-        self.blocks.get_mut(Self::local_to_index(local_pos) as usize).filter(|b| !b.is_empty())
+        self.blocks.get_mut(Self::local_to_index(local_pos) as usize)
     }
 
     pub fn set_block(&mut self, local_pos: Vector3<u32>, cube: Block) {
-        if let Some(b) = self.blocks.get_mut(Self::local_to_index(local_pos) as usize) {
+        if let Some(b) = self.get_block_mut(local_pos) {
             *b = cube;
             self.dirty = true;
         }
@@ -347,12 +328,7 @@ impl Chunk {
 
     /// Get block at world position if it's in this chunk
     pub fn get_block_at_world_pos(&self, world_pos: Vector3<i32>) -> Option<&Block> {
-        if self.contains_world_pos(world_pos) {
-            let local = Self::world_to_local_pos(world_pos);
-            self.get_block(local)
-        } else {
-            None
-        }
+        self.get_block(Self::world_to_local_pos(world_pos))
     }
 
     #[inline]
@@ -397,6 +373,7 @@ pub struct ChunkMeshBuilder {
 }
 
 impl ChunkMeshBuilder {
+    #[inline]
     pub fn new() -> Self {
         Self {
             vertices: Vec::with_capacity(4096 * 24), // Approximate initial capacity
@@ -428,6 +405,7 @@ impl ChunkMeshBuilder {
         }
     }
 
+    #[inline]
     pub fn build(self, device: &wgpu::Device) -> super::geometry::GeometryBuffer {
         super::geometry::GeometryBuffer::new(device, &self.indices, &self.vertices)
     }
@@ -436,6 +414,7 @@ impl ChunkMeshBuilder {
 pub struct BlockBuffer;
 
 impl BlockBuffer {
+    #[inline]
     pub fn new(device: &wgpu::Device) -> super::geometry::GeometryBuffer {
         super::geometry::GeometryBuffer::new(device, &INDICES, &VERTICES)
     }
@@ -448,7 +427,6 @@ pub struct World {
     pub chunks: FastMap<ChunkCoord, Chunk>,
     pub loaded_chunks: HashSet<ChunkCoord>,
 }
-#[allow(dead_code, unused)]
 impl World {
     /// Create an empty world with no chunks
     #[inline]
@@ -582,15 +560,23 @@ impl World {
 
 
     pub fn make_chunk_meshes(&mut self, device: &wgpu::Device) {
-        for (coord, chunk) in self.chunks.iter_mut() {
+        for (_, chunk) in self.chunks.iter_mut() {
             if chunk.dirty {
                 chunk.make_mesh(device, false); // here the false is basically : only make if there isn't mesh do not update or overwrite it
             }
         }
     }
 
+    #[allow(dead_code, unused)]
     pub fn render_chunks<'a>(&'a self, render_pass: &mut wgpu::RenderPass<'a>) {
-        for (_, chunk) in self.chunks.iter() {
+        // Sort chunks by distance for better depth testing
+        let mut chunks: Vec<_> = self.chunks.values().collect();
+        chunks.sort_by(|a, b| {
+            // Implement your sorting logic based on camera position
+            std::cmp::Ordering::Equal
+        });
+
+        for chunk in chunks {
             if let Some(mesh) = &chunk.mesh {
                 render_pass.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
                 render_pass.set_index_buffer(mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
