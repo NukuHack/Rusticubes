@@ -1,3 +1,4 @@
+use crate::traits::VectorTypeConversion;
 use cgmath::{InnerSpace, SquareMatrix, Vector3, Vector4};
 use image::GenericImageView;
 use std::mem;
@@ -7,6 +8,7 @@ use wgpu::util::DeviceExt;
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable, Default)]
 pub struct Vertex {
+    // this is 256 bits ... too much
     pub position: [f32; 3],
     pub normal: [f32; 3],
     pub uv: [f32; 2],
@@ -48,7 +50,7 @@ pub struct GeometryBuffer {
 }
 
 impl GeometryBuffer {
-    pub fn new(device: &wgpu::Device, indices: &[u32], vertices: &[Vertex]) -> Self {
+    pub fn new(device: &wgpu::Device, indices: &[u16], vertices: &[Vertex]) -> Self {
         // Handle empty geometry case
         if vertices.is_empty() || indices.is_empty() {
             return Self::empty(device);
@@ -85,7 +87,7 @@ impl GeometryBuffer {
 
         let index_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Empty Index Buffer"),
-            size: std::mem::size_of::<u32>() as wgpu::BufferAddress,
+            size: std::mem::size_of::<u16>() as wgpu::BufferAddress,
             usage: wgpu::BufferUsages::INDEX,
             mapped_at_creation: false,
         });
@@ -105,26 +107,25 @@ pub fn add_def_cube() {
 
         // Calculate where to place the cube (in front of the camera)
         let placement_distance = 6.0; // Distance in front of camera
-        let placement_position = super::cube::vec3_f32_to_i32(
-            state.camera_system.camera.position
-                + state.camera_system.camera.forward() * placement_distance,
-        );
+        let placement_position = (state.camera_system.camera.position
+            + state.camera_system.camera.forward() * placement_distance)
+            .to_vec3_i32();
 
         // Create cube at the correct position
-        let cube = super::cube::Block::new_raw(placement_position);
+        let cube = super::cube::Block::new();
         state.data_system.world.set_block(placement_position, cube);
 
         // Update the chunk's mesh
         let chunk_pos = super::cube::ChunkCoord::from_world_pos(placement_position);
         if let Some(chunk) = state.data_system.world.get_chunk_mut(chunk_pos) {
-            chunk.make_mesh(super::get_state().device(), true);
+            chunk.make_mesh(super::get_state().device(), chunk_pos, true);
         }
     }
 }
 pub fn add_def_chunk() {
     unsafe {
         let state = super::get_state();
-        let chunk_pos = super::cube::vec3_f32_to_i32(state.camera_system.camera.position);
+        let chunk_pos = (state.camera_system.camera.position).to_vec3_i32();
         let chunk_pos_c_c = super::cube::ChunkCoord::from_world_pos(chunk_pos);
 
         if state
@@ -140,7 +141,7 @@ pub fn add_def_chunk() {
         if state.data_system.world.load_chunk(chunk_pos_c_c) {
             // Get the chunk and update its mesh
             if let Some(chunk) = state.data_system.world.get_chunk_mut(chunk_pos_c_c) {
-                chunk.make_mesh(super::get_state().device(), true);
+                chunk.make_mesh(super::get_state().device(), chunk_pos_c_c, true);
             }
         } else {
             eprintln!("Chunk load failed at: {:?}", chunk_pos_c_c);
@@ -150,8 +151,8 @@ pub fn add_def_chunk() {
 pub fn add_full_world() {
     unsafe {
         let state = super::get_state();
-        let chunk_pos = super::cube::vec3_f32_to_i32(state.camera_system.camera.position);
-        state.data_system.world.update_loaded_chunks(chunk_pos, 3);
+        let chunk_pos = (state.camera_system.camera.position).to_vec3_i32();
+        state.data_system.world.update_loaded_chunks(chunk_pos, 5);
         state
             .data_system
             .world
@@ -221,7 +222,7 @@ pub fn rem_raycasted_block() {
             // Update the chunk's mesh
             let chunk_pos = super::cube::ChunkCoord::from_world_pos(block_pos);
             if let Some(chunk) = state.data_system.world.get_chunk_mut(chunk_pos) {
-                chunk.make_mesh(super::get_state().device(), true);
+                chunk.make_mesh(super::get_state().device(), chunk_pos, true);
             }
         }
     }
