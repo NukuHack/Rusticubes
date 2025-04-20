@@ -267,7 +267,7 @@ pub fn add_def_chunk() {
         if state.data_system.world.load_chunk(chunk_pos_c_c) {
             // Get the chunk and update its mesh
             if let Some(chunk) = state.data_system.world.get_chunk_mut(chunk_pos_c_c) {
-                chunk.make_mesh(super::get_state().device());
+                chunk.make_mesh(super::get_state().device(), true);
             }
         } else {
             eprintln!("Chunk load failed at: {:?}", chunk_pos_c_c);

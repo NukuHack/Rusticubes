@@ -360,33 +360,11 @@ impl Chunk {
         self.position.to_world_pos()
     }
 
-    pub fn make_mesh(&mut self, device: &wgpu::Device) {
-        if self.mesh.is_some() {
+    pub fn make_mesh(&mut self, device: &wgpu::Device, force: bool) {
+        if !force&&self.mesh.is_some() {
             return; // Skip if no changes
         }
 
-        let mut builder = ChunkMeshBuilder::new();
-        
-        for (i, block) in self.blocks.iter().enumerate() {
-            if block.is_empty() {
-                continue;
-            }
-
-            let local_pos = Self::index_to_local(i as u32);
-            let world_pos = self.local_to_world_pos(local_pos);
-            let world_pos_f32 = Vector3::new(
-                world_pos.x as f32,
-                world_pos.y as f32, 
-                world_pos.z as f32
-            );
-
-            builder.add_cube(world_pos_f32, block.rotation_to_quaternion());
-        }
-
-        self.mesh = Some(builder.build(device));
-        self.dirty = false;
-    }
-    pub fn update_mesh(&mut self, device: &wgpu::Device) { // this will forceupdate the mesh
         let mut builder = ChunkMeshBuilder::new();
         
         for (i, block) in self.blocks.iter().enumerate() {
@@ -606,7 +584,7 @@ impl World {
     pub fn make_chunk_meshes(&mut self, device: &wgpu::Device) {
         for (coord, chunk) in self.chunks.iter_mut() {
             if chunk.dirty {
-                chunk.make_mesh(device);
+                chunk.make_mesh(device, false); // here the false is basically : only make if there isn't mesh do not update or overwrite it
             }
         }
     }
