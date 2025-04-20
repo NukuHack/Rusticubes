@@ -1,7 +1,9 @@
 ﻿
+use cgmath::{Quaternion,Matrix4,Rotation3, Vector3, Deg};
 use super::geometry::Vertex;
-use cgmath::{Rotation3, Vector3};
 use std::collections::{HashMap, HashSet};
+use ahash::AHasher;
+use std::hash::BuildHasherDefault;
 
 /// Stores position for X, Y, Z as 4-bit fields: [X:4, Y:4, Z:4, Empty:4]
 /// Stores rotations for X, Y, Z as 5-bit fields: [X:5, Y:5, Z:5, Empty:1]
@@ -62,7 +64,7 @@ impl Block {
     }
 
     pub fn new_raw(
-        position: cgmath::Vector3<i32>,
+        position: Vector3<i32>,
     ) -> Self {
         Self {
             position:vector_to_position(position),
@@ -71,8 +73,8 @@ impl Block {
         }
     }
     pub fn new_rot_raw(
-        position: cgmath::Vector3<i32>,
-        rotation: cgmath::Quaternion<f32>,
+        position: Vector3<i32>,
+        rotation: Quaternion<f32>,
     ) -> Self {
         Self {
             position:vector_to_position(position),
@@ -91,13 +93,13 @@ impl Block {
     pub fn get_z_rotation(&self) -> u16 { (self.rotation & Self::ROT_MASK_Z) >> Self::ROT_SHIFT_Z }
 
     /// Rotation snapping and conversion to quaternion
-    pub fn rotation_to_quaternion(&self) -> cgmath::Quaternion<f32> {
+    pub fn rotation_to_quaternion(&self) -> Quaternion<f32> {
         let angles = [self.get_x_rotation(), self.get_y_rotation(), self.get_z_rotation()]
-            .map(|r| cgmath::Deg(r as f32 * (360.0 / 32.0)));
+            .map(|r| Deg(r as f32 * (360.0 / 32.0)));
         
-        cgmath::Quaternion::from_angle_z(angles[2]) *
-        cgmath::Quaternion::from_angle_y(angles[1]) *
-        cgmath::Quaternion::from_angle_x(angles[0])
+        Quaternion::from_angle_z(angles[2]) *
+        Quaternion::from_angle_y(angles[1]) *
+        Quaternion::from_angle_x(angles[0])
     }
 
 
@@ -107,8 +109,8 @@ impl Block {
         self.position = (x << 8) | (y << 4) | z;
     }
     /// Convert packed position to world coordinates
-    pub fn get_pos(&self) -> cgmath::Vector3<i32> {
-        cgmath::Vector3::new(
+    pub fn get_pos(&self) -> Vector3<i32> {
+        Vector3::new(
             ((self.position >> 8) & 0xF) as i32,
             ((self.position >> 4) & 0xF) as i32,
             (self.position & 0xF) as i32
@@ -155,7 +157,7 @@ impl Block {
 
 /// Convert a quaternion to the packed u16 rotation format
 /// Convert a quaternion to the packed u16 rotation format
-pub fn quaternion_to_rotation(rotation: cgmath::Quaternion<f32>) -> u16 {
+pub fn quaternion_to_rotation(rotation: Quaternion<f32>) -> u16 {
     let angles = [
         (2.0 * (rotation.s * rotation.v.x + rotation.v.y * rotation.v.z)).atan2(1.0 - 2.0 * (rotation.v.x.powi(2) + rotation.v.y.powi(2))),
         (2.0 * (rotation.s * rotation.v.y - rotation.v.z * rotation.v.x)).asin(),
@@ -169,19 +171,19 @@ pub fn quaternion_to_rotation(rotation: cgmath::Quaternion<f32>) -> u16 {
 }
 
 #[inline]
-pub fn vector_to_position(position: cgmath::Vector3<i32>) -> u16 {
+pub fn vector_to_position(position: Vector3<i32>) -> u16 {
     ((position.x as u16 & 0xF) << 8) | 
     ((position.y as u16 & 0xF) << 4) | 
     (position.z as u16 & 0xF)
 }
 // Utility functions for vector type conversion
 #[inline]
-pub fn vec3_f32_to_i32(v: cgmath::Vector3<f32>) -> cgmath::Vector3<i32> {
-    cgmath::Vector3::new(v.x as i32, v.y as i32, v.z as i32)
+pub fn vec3_f32_to_i32(v: Vector3<f32>) -> Vector3<i32> {
+    Vector3::new(v.x as i32, v.y as i32, v.z as i32)
 }
 #[inline]
-pub fn vec3_i32_to_f32(v: cgmath::Vector3<i32>) -> cgmath::Vector3<f32> {
-    cgmath::Vector3::new(v.x as f32, v.y as f32, v.z as f32)
+pub fn vec3_i32_to_f32(v: Vector3<i32>) -> Vector3<f32> {
+    Vector3::new(v.x as f32, v.y as f32, v.z as f32)
 }
 // converting from i32 to u32 never happens outside chunk/block structs so it's not needed
 
@@ -264,7 +266,7 @@ impl Chunk {
                 );
                 Block::new(precomputed_positions[x][y][z])
             }),
-            dirty: false,
+            dirty: true,
             mesh: None,
         }
     }
@@ -358,9 +360,108 @@ impl Chunk {
         self.position.to_world_pos()
     }
 
-    pub fn make_mesh(&self) {
-        todo!();
-        // self.mesh = "stuff"
+    pub fn make_mesh(&mut self, device: &wgpu::Device) {
+        if !self.dirty && self.mesh.is_some() {
+            return; // Skip if no changes
+        }
+
+        println!("Making mesh");
+
+        let mut builder = ChunkMeshBuilder::new();
+        
+        for (i, block) in self.blocks.iter().enumerate() {
+            if block.is_empty() {
+                continue;
+            }
+
+            let local_pos = Self::index_to_local(i as u32);
+            let world_pos = self.local_to_world_pos(local_pos);
+            let world_pos_f32 = Vector3::new(
+                world_pos.x as f32,
+                world_pos.y as f32, 
+                world_pos.z as f32
+            );
+
+            builder.add_cube(world_pos_f32, block.rotation_to_quaternion());
+        }
+
+        self.mesh = Some(builder.build(device));
+        self.dirty = false;
+    }
+}
+
+
+// --- Chunk Mesh Builder ---
+pub struct ChunkMeshBuilder {
+    pub vertices: Vec<Vertex>,
+    pub indices: Vec<u32>,
+    current_vertex: u32,
+}
+
+impl ChunkMeshBuilder {
+    pub fn new() -> Self {
+        Self {
+            vertices: Vec::with_capacity(4096 * 24), // Approximate initial capacity
+            indices: Vec::with_capacity(4096 * 36),
+            current_vertex: 0,
+        }
+    }
+
+    pub fn add_cube(&mut self, position: Vector3<f32>, rotation: Quaternion<f32>) {
+        // Base cube vertices
+        let base_vertices = [
+            // Front face
+            Vertex { position: [0.0, 0.0, 0.0], normal: [0.0, 0.0, 1.0], uv: [0.0, 0.0] },
+            Vertex { position: [0.0, 1.0, 0.0], normal: [0.0, 0.0, 1.0], uv: [0.0, 1.0] },
+            Vertex { position: [1.0, 1.0, 0.0], normal: [0.0, 0.0, 1.0], uv: [1.0, 1.0] },
+            Vertex { position: [1.0, 0.0, 0.0], normal: [0.0, 0.0, 1.0], uv: [1.0, 0.0] },
+            // Back face
+            Vertex { position: [0.0, 0.0, -1.0], normal: [0.0, 0.0, -1.0], uv: [0.0, 0.0] },
+            Vertex { position: [0.0, 1.0, -1.0], normal: [0.0, 0.0, -1.0], uv: [0.0, 1.0] },
+            Vertex { position: [1.0, 1.0, -1.0], normal: [0.0, 0.0, -1.0], uv: [1.0, 1.0] },
+            Vertex { position: [1.0, 0.0, -1.0], normal: [0.0, 0.0, -1.0], uv: [1.0, 0.0] },
+        ];
+
+        // Transform matrix
+        let transform = Matrix4::from_translation(position) * Matrix4::from(rotation);
+        let start_vertex = self.current_vertex;
+
+        // Add transformed vertices
+        for vertex in &base_vertices {
+            let pos = transform * Vector3::from(vertex.position).extend(1.0);
+            let normal = rotation * Vector3::from(vertex.normal);
+            
+            self.vertices.push(Vertex {
+                position: pos.truncate().into(),
+                normal: normal.into(),
+                uv: vertex.uv,
+            });
+            self.current_vertex += 1;
+        }
+
+        // Add indices (36 indices per cube)
+        let base_indices = [
+            // Front face
+            1, 0, 2, 3, 2, 0,
+            // Back face
+            4, 5, 6, 6, 7, 4,
+            // Bottom
+            0, 4, 7, 3, 0, 7,
+            // Top
+            5, 1, 6, 1, 2, 6,
+            // Right
+            6, 2, 7, 2, 3, 7,
+            // Left
+            4, 0, 5, 0, 1, 5,
+        ];
+
+        for index in base_indices {
+            self.indices.push(start_vertex + index);
+        }
+    }
+
+    pub fn build(self, device: &wgpu::Device) -> super::geometry::GeometryBuffer {
+        super::geometry::GeometryBuffer::new(device, &self.indices, &self.vertices)
     }
 }
 
@@ -371,31 +472,26 @@ impl BlockBuffer {
         super::geometry::GeometryBuffer::new(device, &INDICES, &VERTICES)
     }
 }
-/*
-use ahash::AHasher;
-use std::collections::HashMap;
-use std::hash::BuildHasherDefault;
 
 type FastMap<K, V> = HashMap<K, V, BuildHasherDefault<AHasher>>;
-let mut map = FastMap::with_capacity_and_hasher(
-    n,
-    BuildHasherDefault::<AHasher>::default(),
-);
-*/
 
 #[derive(Debug, Clone)]
 pub struct World {
-    pub chunks: HashMap<ChunkCoord, Chunk>,  // Position is now solely in the key
+    pub chunks: FastMap<ChunkCoord, Chunk>,  // Position is now solely in the key
     // Added this to track loaded chunks spatially
-    loaded_chunks: HashSet<ChunkCoord>,
+    pub loaded_chunks: HashSet<ChunkCoord>,
 }
 #[allow(dead_code, unused)]
 impl World {
     /// Create an empty world with no chunks
     #[inline]
     pub fn empty() -> Self {
+
         Self {
-            chunks: HashMap::with_capacity(10000),
+            chunks: FastMap::with_capacity_and_hasher(
+                10000,
+                BuildHasherDefault::<AHasher>::default(),
+            ),
             loaded_chunks: HashSet::with_capacity(10000),
         }
     }
@@ -454,7 +550,7 @@ impl World {
         let radius_sq = (radius * radius) as i32;
 
         // Track chunks we want to keep
-        let mut chunks_to_keep = HashSet::with_capacity(self.chunks.len());
+        let mut chunks_to_unload = Vec::new();
 
         // OPTIMIZATION: Pre-compute center components
         let center_x = center.x;
@@ -467,46 +563,33 @@ impl World {
             let dy = coord.y - center_y;
             let dz = coord.z - center_z;
             
-            if dx * dx + dy * dy + dz * dz <= radius_sq {
-                chunks_to_keep.insert(coord);
+            if dx * dx + dy * dy + dz * dz > radius_sq {
+                chunks_to_unload.push(coord);
             }
         }
 
-        println!("Chunk checking took: {:?}", start.elapsed()); // this is slow - takes around 6 millisec (while empty it takes 3 micro)
+        println!("Chunk checking took: {:?}", start.elapsed()); // this is free
         let start = std::time::Instant::now();
 
-        // Unload chunks not in range
-        let to_unload: Vec<ChunkCoord> = self.loaded_chunks.difference(&chunks_to_keep).cloned().collect();
-        for coord in to_unload {
+        // Phase 2: Unload chunks - now using pre-built list
+        for coord in chunks_to_unload {
             self.chunks.remove(&coord);
             self.loaded_chunks.remove(&coord);
         }
 
-        println!("Chunk unloading took: {:?}", start.elapsed()); // this is slow - takes around 2 millisec (while empty it takes 2 micro)
+        println!("Chunk unloading took: {:?}", start.elapsed()); // this is free - 2 ms for active usage
         let start = std::time::Instant::now();
 
         // Load new chunks in range
-        // OPTIMIZATION: Use a more cache-friendly iteration order
-        for x in (center_x - radius_i32)..=(center_x + radius_i32) {
-            let dx = x - center_x;
-            let dx_sq = dx * dx;
-            if dx_sq > radius_sq {
-                continue;
-            }
-            
-            for z in (center_z - radius_i32)..=(center_z + radius_i32) {
-                let dz = z - center_z;
-                let xz_sq = dx_sq + dz * dz;
-                if xz_sq > radius_sq {
-                    continue;
-                }
-                
-                for y in (center_y - radius_i32)..=(center_y + radius_i32) {
-                    let dy = y - center_y;
-                    if xz_sq + dy * dy > radius_sq {
+        for dx in -radius_i32..=radius_i32 {
+            for dy in -radius_i32..=radius_i32 {
+                for dz in -radius_i32..=radius_i32 {
+                    if dx * dx + dy * dy + dz * dz > radius_sq {
                         continue;
                     }
-                    
+                    let x = center.x + dx;
+                    let y = center.y + dy;
+                    let z = center.z + dz;
                     let chunk_coord = ChunkCoord::new(x, y, z);
                     if !self.loaded_chunks.contains(&chunk_coord) {
                         self.load_chunk(chunk_coord);
@@ -514,7 +597,7 @@ impl World {
                 }
             }
         }
-        println!("Chunk loading took: {:?}", start.elapsed()); // this is slow around 2.5 millisec but when empty it takes up to 1 Sec to complete
+        println!("Chunk loading took: {:?}", start.elapsed()); // this is free - first use takes up to 135 ms - 10 ms for active usage
     }
 
     // Modify your set_chunk method to maintain loaded_chunks:
@@ -529,6 +612,25 @@ impl World {
     pub fn unload_chunk(&mut self, chunk_coord: ChunkCoord) {
         self.chunks.remove(&chunk_coord);
         self.loaded_chunks.remove(&chunk_coord);
+    }
+
+
+    pub fn update_chunk_meshes(&mut self, device: &wgpu::Device) {
+        for (coord, chunk) in self.chunks.iter_mut() {
+            if chunk.dirty {
+                chunk.make_mesh(device);
+            }
+        }
+    }
+
+    pub fn render_chunks<'a>(&'a self, render_pass: &mut wgpu::RenderPass<'a>) {
+        for (_, chunk) in self.chunks.iter() {
+            if let Some(mesh) = &chunk.mesh {
+                render_pass.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
+                render_pass.set_index_buffer(mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
+                render_pass.draw_indexed(0..mesh.num_indices, 0, 0..1);
+            }
+        }
     }
 }
 

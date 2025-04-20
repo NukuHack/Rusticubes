@@ -1434,6 +1434,7 @@ dependencies = [
 name = "test_app"
 version = "0.1.0"
 dependencies = [
+ "ahash",
  "bytemuck",
  "cgmath",
  "env_logger",

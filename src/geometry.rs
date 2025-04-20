@@ -1,5 +1,4 @@
-use cgmath::SquareMatrix;
-use cgmath::{InnerSpace, Rotation3};
+use cgmath::{Deg, InnerSpace, Matrix4, Quaternion, Rotation3, SquareMatrix, Vector3, Vector4};
 use image::GenericImageView;
 use std::mem;
 use wgpu::util::DeviceExt;
@@ -39,12 +38,13 @@ impl Vertex {
     }
 }
 
-// --- Geometry Buffer ---
+// --- Geometry Buffer (modified for chunk meshes) ---
 #[derive(Debug, Clone)]
 pub struct GeometryBuffer {
     pub vertex_buffer: wgpu::Buffer,
     pub index_buffer: wgpu::Buffer,
     pub num_indices: u32,
+    pub num_vertices: u32,
 }
 
 impl GeometryBuffer {
@@ -65,7 +65,12 @@ impl GeometryBuffer {
             vertex_buffer,
             index_buffer,
             num_indices: indices.len() as u32,
+            num_vertices: vertices.len() as u32,
         }
+    }
+
+    pub fn empty(device: &wgpu::Device) -> Self {
+        Self::new(device, &[], &[])
     }
 }
 
@@ -249,27 +254,23 @@ pub fn add_def_chunk() {
         let chunk_pos = super::cube::vec3_f32_to_i32(state.camera_system.camera.position);
         let chunk_pos_c_c = super::cube::ChunkCoord::from_world_pos(chunk_pos);
 
-        if state.data_system.world.chunks.contains_key(&chunk_pos_c_c) {
+        if state
+            .data_system
+            .world
+            .loaded_chunks
+            .contains(&chunk_pos_c_c)
+        {
             return;
             // why would you try to load a chunk what already exist ?
         }
 
         if state.data_system.world.load_chunk(chunk_pos_c_c) {
-            //super::cube::Chunk::load(super::cube::ChunkCoord::from_world_pos(chunk_pos));
-            let chunk: &super::cube::Chunk = state
-                .data_system
-                .world
-                .get_chunk(chunk_pos_c_c)
-                .expect("Unsuccsesful chunk load");
-            state
-                .instance_manager()
-                .borrow_mut()
-                .add_chunk(state.device(), state.queue(), &chunk);
+            // Get the chunk and update its mesh
+            if let Some(chunk) = state.data_system.world.get_chunk_mut(chunk_pos_c_c) {
+                chunk.make_mesh(super::get_state().device());
+            }
         } else {
-            eprintln!(
-                "Chunk can not be loaded : something bad happened at chunk parsing error at: {:?}",
-                chunk_pos_c_c
-            );
+            eprintln!("Chunk load failed at: {:?}", chunk_pos_c_c);
         }
     }
 }
@@ -287,14 +288,14 @@ pub fn cast_ray_and_select_cube(
     projection: &super::camera::Projection,
     instances: &[Instance],
     max_distance: f32,
-) -> (Option<usize>, Option<cgmath::Vector3<f32>>) {
+) -> (Option<usize>, Option<Vector3<f32>>) {
     // Create ray directly in center of view (NDC 0,0,-1)
-    let ray_clip = cgmath::Vector4::new(0.0, 0.0, -1.0, 1.0);
+    let ray_clip = Vector4::new(0.0, 0.0, -1.0, 1.0);
 
     // Convert to eye (camera) space
     let inv_proj = projection.calc_matrix().invert().unwrap();
-    let mut ray_eye: cgmath::Vector4<f32> = inv_proj * ray_clip;
-    ray_eye = cgmath::Vector4::new(ray_eye.x, ray_eye.y, -1.0, 0.0);
+    let mut ray_eye: Vector4<f32> = inv_proj * ray_clip;
+    ray_eye = Vector4::new(ray_eye.x, ray_eye.y, -1.0, 0.0);
 
     // Convert to world space
     let inv_view = camera.calc_matrix().invert().unwrap();
@@ -315,7 +316,7 @@ pub fn cast_ray_and_select_cube(
 
     for (index, instance) in instances.iter().enumerate() {
         let cube_center = instance.position;
-        let half_extents = cgmath::Vector3::new(0.5, 0.5, 0.5);
+        let half_extents = Vector3::new(0.5, 0.5, 0.5);
 
         // Early distance check - skip if too far
         let center_dist = (cube_center - ray_origin).magnitude();
@@ -342,10 +343,10 @@ pub fn cast_ray_and_select_cube(
 
 #[inline]
 fn ray_aabb_intersect(
-    ray_origin: cgmath::Vector3<f32>,
-    ray_dir: cgmath::Vector3<f32>,
-    aabb_min: cgmath::Vector3<f32>,
-    aabb_max: cgmath::Vector3<f32>,
+    ray_origin: Vector3<f32>,
+    ray_dir: Vector3<f32>,
+    aabb_min: Vector3<f32>,
+    aabb_max: Vector3<f32>,
 ) -> Option<f32> {
     let mut tmin = -f32::INFINITY;
     let mut tmax = f32::INFINITY;
@@ -404,17 +405,15 @@ pub fn rem_raycasted_cube() {
 #[repr(C)]
 #[derive(Clone)]
 pub struct Instance {
-    pub position: cgmath::Vector3<f32>,
-    pub rotation: cgmath::Quaternion<f32>,
+    pub position: Vector3<f32>,
+    pub rotation: Quaternion<f32>,
 }
 
 impl Instance {
     #[inline] // ← Critical for performance
     pub fn to_raw(&self) -> InstanceRaw {
         InstanceRaw {
-            model: (cgmath::Matrix4::from_translation(self.position)
-                * cgmath::Matrix4::from(self.rotation))
-            .into(),
+            model: (Matrix4::from_translation(self.position) * Matrix4::from(self.rotation)).into(),
         }
     }
     pub fn to_cube(&self) -> super::cube::Block {
@@ -425,8 +424,8 @@ impl Default for Instance {
     fn default() -> Self {
         //super::cube::default().to_instance()
         Instance {
-            position: cgmath::Vector3::new(0.0, 0.0, 0.0),
-            rotation: cgmath::Quaternion::from_angle_y(cgmath::Deg(0.0)),
+            position: Vector3::new(0.0, 0.0, 0.0),
+            rotation: Quaternion::from_angle_y(Deg(0.0)),
         }
     }
 }

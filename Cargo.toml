@@ -17,6 +17,8 @@ log = "^0.4"
 env_logger = "^0.10"
 # just the basic math : 3d points vectors rotation etc...
 cgmath = "^0.18"
+# better hashmap acces 
+ahash = "^0.8"
 
 
 [profile.dev]

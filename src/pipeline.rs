@@ -286,6 +286,14 @@ pub fn render_all(current_state: &mut super::State) -> Result<(), wgpu::SurfaceE
             &current_state.texture_manager().bind_group,
             &current_state.camera_system.bind_group,
         ];
+        // Set bind groups
+        /*
+        bind_groups
+            .iter()
+            .enumerate()
+            .for_each(|(i, g)| rpass.set_bind_group(i as u32, *g, &[]));
+        current_state.data_system.world.render_chunks(&mut rpass);
+        */
         // Draw main geometry
         draw_with_pipeline(
             &mut rpass,
