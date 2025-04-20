@@ -371,15 +371,23 @@ impl BlockBuffer {
         super::geometry::GeometryBuffer::new(device, &INDICES, &VERTICES)
     }
 }
+/*
+use ahash::AHasher;
+use std::collections::HashMap;
+use std::hash::BuildHasherDefault;
 
+type FastMap<K, V> = HashMap<K, V, BuildHasherDefault<AHasher>>;
+let mut map = FastMap::with_capacity_and_hasher(
+    n,
+    BuildHasherDefault::<AHasher>::default(),
+);
+*/
 
 #[derive(Debug, Clone)]
 pub struct World {
     pub chunks: HashMap<ChunkCoord, Chunk>,  // Position is now solely in the key
-    
-    // Spatial indexing system
-    spatial_grid: HashMap<(i32, i32, i32), HashSet<ChunkCoord>>,
-    grid_cell_size: i32,
+    // Added this to track loaded chunks spatially
+    loaded_chunks: HashSet<ChunkCoord>,
 }
 #[allow(dead_code, unused)]
 impl World {
@@ -387,20 +395,9 @@ impl World {
     #[inline]
     pub fn empty() -> Self {
         Self {
-            chunks: HashMap::new(),
-
-            spatial_grid: HashMap::new(),
-            grid_cell_size: 1.max(1),
+            chunks: HashMap::with_capacity(10000),
+            loaded_chunks: HashSet::with_capacity(10000),
         }
-    }
-    // Helper to get grid cell coordinates for a chunk
-    #[inline]
-    fn get_grid_cell(&self, coord: &ChunkCoord) -> (i32, i32, i32) {
-        (
-            coord.x.div_euclid(self.grid_cell_size),
-            coord.y.div_euclid(self.grid_cell_size),
-            coord.z.div_euclid(self.grid_cell_size),
-        )
     }
     #[inline]
     pub fn get_chunk(&self, coord: ChunkCoord) -> Option<&Chunk> {
@@ -426,18 +423,6 @@ impl World {
             })
     }
 
-    #[inline]
-    pub fn set_chunk(&mut self, chunk_coord: ChunkCoord, chunk: Chunk) {
-        let grid_cell = self.get_grid_cell(&chunk_coord);
-        
-        // Update spatial index
-        self.spatial_grid.entry(grid_cell)
-            .or_default()
-            .insert(chunk_coord);
-        
-        // Store chunk
-        self.chunks.insert(chunk_coord, chunk);
-    }
     pub fn set_block(&mut self, world_pos: Vector3<i32>, block: Block) {
         let chunk_coord = ChunkCoord::from_world_pos(world_pos);
         
@@ -463,144 +448,87 @@ impl World {
         true
     }
 
-    #[inline]
-    pub fn unload_chunk(&mut self, chunk_coord: ChunkCoord) {
-        if let Some(grid_cell) = self.chunks.get(&chunk_coord)
-            .map(|_| self.get_grid_cell(&chunk_coord))
-        {
-            if let Some(cell_set) = self.spatial_grid.get_mut(&grid_cell) {
-                cell_set.remove(&chunk_coord);
-                if cell_set.is_empty() {
-                    self.spatial_grid.remove(&grid_cell);
-                }
-            }
-        }
-        self.chunks.remove(&chunk_coord);
-    }
-
-
-    // Add chunk loading/unloading strategies
     pub fn update_loaded_chunks(&mut self, center: Vector3<i32>, radius: u32) {
+        let start = std::time::Instant::now();
         let radius_i32 = radius as i32;
         let radius_sq = (radius * radius) as i32;
 
-        // Precompute the bounds of the sphere in chunk coordinates
-        let min_x = center.x - radius_i32;
-        let max_x = center.x + radius_i32;
-        let min_y = center.y - radius_i32;
-        let max_y = center.y + radius_i32;
-        let min_z = center.z - radius_i32;
-        let max_z = center.z + radius_i32;
-
         // Track chunks we want to keep
-        let mut chunks_to_keep = HashSet::with_capacity((radius * radius * radius * 4) as usize);
+        let mut chunks_to_keep = HashSet::with_capacity(self.chunks.len());
 
-        // OPTIMIZATION 1: Precompute grid cell ranges and only check cells that could contain chunks in range
-        let min_cell_x = min_x.div_euclid(self.grid_cell_size);
-        let max_cell_x = max_x.div_euclid(self.grid_cell_size);
-        let min_cell_y = min_y.div_euclid(self.grid_cell_size);
-        let max_cell_y = max_y.div_euclid(self.grid_cell_size);
-        let min_cell_z = min_z.div_euclid(self.grid_cell_size);
-        let max_cell_z = max_z.div_euclid(self.grid_cell_size);
+        // OPTIMIZATION: Pre-compute center components
+        let center_x = center.x;
+        let center_y = center.y;
+        let center_z = center.z;
 
-        // ^^^ this part took around 8 micro seconds so it's basically nothing
-        //let start = std::time::Instant::now();
-
-        // OPTIMIZATION 2: Use a single loop with early continues for better branch prediction
-        for cell_x in min_cell_x..=max_cell_x {
-            let cell_x_world = cell_x * self.grid_cell_size;
-            let cell_min_x = cell_x_world;
-            let cell_max_x = cell_x_world + self.grid_cell_size - 1;
+        // OPTIMIZATION: Use loaded_chunks for faster iteration
+        for &coord in &self.loaded_chunks {
+            let dx = coord.x - center_x;
+            let dy = coord.y - center_y;
+            let dz = coord.z - center_z;
             
-            // Skip if this cell is completely outside the X bounds
-            if cell_max_x < min_x || cell_min_x > max_x {
-                continue;
-            }
-
-            for cell_y in min_cell_y..=max_cell_y {
-                let cell_y_world = cell_y * self.grid_cell_size;
-                let cell_min_y = cell_y_world;
-                let cell_max_y = cell_y_world + self.grid_cell_size - 1;
-                
-                // Skip if this cell is completely outside the Y bounds
-                if cell_max_y < min_y || cell_min_y > max_y {
-                    continue;
-                }
-
-                for cell_z in min_cell_z..=max_cell_z {
-                    let cell_z_world = cell_z * self.grid_cell_size;
-                    let cell_min_z = cell_z_world;
-                    let cell_max_z = cell_z_world + self.grid_cell_size - 1;
-                    
-                    // Skip if this cell is completely outside the Z bounds
-                    if cell_max_z < min_z || cell_min_z > max_z {
-                        continue;
-                    }
-
-                    // Only proceed if this cell could potentially contain chunks in range
-                    if let Some(cell_chunks) = self.spatial_grid.get(&(cell_x, cell_y, cell_z)) {
-                        for &coord in cell_chunks {
-                            // Check if chunk is within the sphere
-                            let dx = coord.x - center.x;
-                            let dy = coord.y - center.y;
-                            let dz = coord.z - center.z;
-                            
-                            if dx * dx + dy * dy + dz * dz <= radius_sq {
-                                chunks_to_keep.insert(coord);
-                            }
-                        }
-                    }
-                }
+            if dx * dx + dy * dy + dz * dz <= radius_sq {
+                chunks_to_keep.insert(coord);
             }
         }
 
-        //println!("Chunk checking (3d loops) took: {:?}", start.elapsed()); // this is soo slow takes around 7 millisec (while empty it takes 200 micro)
-        //let start = std::time::Instant::now();
+        println!("Chunk checking took: {:?}", start.elapsed()); // this is slow - takes around 6 millisec (while empty it takes 3 micro)
+        let start = std::time::Instant::now();
 
-        // OPTIMIZATION 3: Batch unload operations
-        let to_unload: Vec<ChunkCoord> = self.chunks.keys()
-            .filter(|&&coord| !chunks_to_keep.contains(&coord))
-            .cloned()
-            .collect();
-        
+        // Unload chunks not in range
+        let to_unload: Vec<ChunkCoord> = self.loaded_chunks.difference(&chunks_to_keep).cloned().collect();
         for coord in to_unload {
-            self.unload_chunk(coord);
+            self.chunks.remove(&coord);
+            self.loaded_chunks.remove(&coord);
         }
 
-        //println!("Chunk unloading took: {:?}", start.elapsed()); // this is slow - takes around 2 millisec (while empty it takes 2 micro)
-        //let start = std::time::Instant::now();
+        println!("Chunk unloading took: {:?}", start.elapsed()); // this is slow - takes around 2 millisec (while empty it takes 2 micro)
+        let start = std::time::Instant::now();
 
-
-        // OPTIMIZATION 4: Use a more computer-friendly early exit loops
-
-        // First collect all chunks that need loading
-        for x in -radius_i32..=radius_i32 {
-            let x_sq = x * x;
-            if x_sq > radius_sq {
+        // Load new chunks in range
+        // OPTIMIZATION: Use a more cache-friendly iteration order
+        for x in (center_x - radius_i32)..=(center_x + radius_i32) {
+            let dx = x - center_x;
+            let dx_sq = dx * dx;
+            if dx_sq > radius_sq {
                 continue;
             }
             
-            for y in -radius_i32..=radius_i32 {
-                let y_sq = y * y;
-                let xy_sq = x_sq + y_sq;
-                if xy_sq > radius_sq {
+            for z in (center_z - radius_i32)..=(center_z + radius_i32) {
+                let dz = z - center_z;
+                let xz_sq = dx_sq + dz * dz;
+                if xz_sq > radius_sq {
                     continue;
                 }
                 
-                for z in -radius_i32..=radius_i32 {
-                    if xy_sq + z * z > radius_sq {
+                for y in (center_y - radius_i32)..=(center_y + radius_i32) {
+                    let dy = y - center_y;
+                    if xz_sq + dy * dy > radius_sq {
                         continue;
                     }
                     
-                    let chunk_coord = ChunkCoord::new(center.x + x, center.y + y, center.z + z);
-                    if !self.chunks.contains_key(&chunk_coord) {
+                    let chunk_coord = ChunkCoord::new(x, y, z);
+                    if !self.loaded_chunks.contains(&chunk_coord) {
                         self.load_chunk(chunk_coord);
                     }
                 }
             }
         }
+        println!("Chunk loading took: {:?}", start.elapsed()); // this is slow around 2.5 millisec but when empty it takes up to 1 Sec to complete
+    }
 
-        //println!("Chunk loading took: {:?}", start.elapsed()); // this is slow around 2.5 millisec but when empty it takes up to 1 Sec to complete
+    // Modify your set_chunk method to maintain loaded_chunks:
+    #[inline]
+    pub fn set_chunk(&mut self, chunk_coord: ChunkCoord, chunk: Chunk) {    
+        self.chunks.insert(chunk_coord, chunk);
+        self.loaded_chunks.insert(chunk_coord);
+    }
+
+    // Modify your unload_chunk method:
+    #[inline]
+    pub fn unload_chunk(&mut self, chunk_coord: ChunkCoord) {
+        self.chunks.remove(&chunk_coord);
+        self.loaded_chunks.remove(&chunk_coord);
     }
 }
 

@@ -66,7 +66,7 @@ pub struct DataSubsystem {
     geometry_buffer: geometry::GeometryBuffer,
     texture_manager: geometry::TextureManager,
     instance_manager: std::cell::RefCell<geometry::InstanceManager>, // Now wrapped in RefCell
-    world: cube::World,
+    world: cube::World, // lol main data storage :)
 }
 
 impl<'a> State<'a> {
