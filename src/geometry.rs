@@ -1,5 +1,6 @@
-use crate::traits::VectorTypeConversion;
-use cgmath::{InnerSpace, SquareMatrix, Vector3, Vector4};
+use super::cube::{ChunkCoord, ChunkCoordHelp};
+use super::traits::VectorTypeConversion;
+use cgmath::{InnerSpace, SquareMatrix, Vector3};
 use image::GenericImageView;
 use std::mem;
 use wgpu::util::DeviceExt;
@@ -101,6 +102,53 @@ impl GeometryBuffer {
     }
 }
 
+// --- Chunk Mesh Builder ---
+pub struct ChunkMeshBuilder {
+    pub vertices: Vec<Vertex>,
+    pub indices: Vec<u16>,
+    current_vertex: u32,
+}
+
+impl ChunkMeshBuilder {
+    #[inline]
+    pub fn new() -> Self {
+        Self {
+            vertices: Vec::with_capacity(4096 * 8),
+            indices: Vec::with_capacity(4096 * 36),
+            current_vertex: 0,
+        }
+    }
+
+    pub fn add_cube(&mut self, position: Vector3<f32>, rotation: cgmath::Quaternion<f32>) {
+        // Transform matrix
+        let transform =
+            cgmath::Matrix4::from_translation(position) * cgmath::Matrix4::from(rotation);
+        let start_vertex = self.current_vertex;
+
+        // Add transformed vertices
+        for vertex in &VERTICES {
+            let pos = transform * Vector3::from(vertex.position).extend(1.0);
+            let normal = rotation * Vector3::from(vertex.normal);
+
+            self.vertices.push(Vertex {
+                position: pos.truncate().into(),
+                normal: normal.into(),
+                uv: vertex.uv,
+            });
+            self.current_vertex += 1;
+        }
+
+        for index in INDICES {
+            self.indices.push(start_vertex as u16 + index);
+        }
+    }
+
+    #[inline]
+    pub fn build(self, device: &wgpu::Device) -> GeometryBuffer {
+        GeometryBuffer::new(device, &self.indices, &self.vertices)
+    }
+}
+
 pub fn add_def_cube() {
     unsafe {
         let state = super::get_state();
@@ -116,7 +164,7 @@ pub fn add_def_cube() {
         state.data_system.world.set_block(placement_position, cube);
 
         // Update the chunk's mesh
-        let chunk_pos = super::cube::ChunkCoord::from_world_pos(placement_position);
+        let chunk_pos = ChunkCoord::from_world_pos(placement_position);
         if let Some(chunk) = state.data_system.world.get_chunk_mut(chunk_pos) {
             chunk.make_mesh(super::get_state().device(), chunk_pos, true);
         }
@@ -126,7 +174,7 @@ pub fn add_def_chunk() {
     unsafe {
         let state = super::get_state();
         let chunk_pos = (state.camera_system.camera.position).to_vec3_i32();
-        let chunk_pos_c_c = super::cube::ChunkCoord::from_world_pos(chunk_pos);
+        let chunk_pos_c_c = ChunkCoord::from_world_pos(chunk_pos);
 
         if state
             .data_system
@@ -166,10 +214,10 @@ pub fn cast_ray_and_select_block(
     world: &super::cube::World,
     max_distance: f32,
 ) -> Option<Vector3<i32>> {
-    let ray_clip = Vector4::new(0.0, 0.0, -1.0, 1.0);
+    let ray_clip: cgmath::Vector4<f32> = cgmath::Vector4::new(0.0, 0.0, -1.0, 1.0);
     let inv_proj = projection.calc_matrix().invert().unwrap();
-    let mut ray_eye: Vector4<f32> = inv_proj * ray_clip;
-    ray_eye = Vector4::new(ray_eye.x, ray_eye.y, -1.0, 0.0);
+    let mut ray_eye: cgmath::Vector4<f32> = inv_proj * ray_clip;
+    ray_eye = cgmath::Vector4::new(ray_eye.x, ray_eye.y, -1.0, 0.0);
 
     let inv_view = camera.calc_matrix().invert().unwrap();
     let ray_world = inv_view * ray_eye;
@@ -220,7 +268,7 @@ pub fn rem_raycasted_block() {
             );
 
             // Update the chunk's mesh
-            let chunk_pos = super::cube::ChunkCoord::from_world_pos(block_pos);
+            let chunk_pos = ChunkCoord::from_world_pos(block_pos);
             if let Some(chunk) = state.data_system.world.get_chunk_mut(chunk_pos) {
                 chunk.make_mesh(super::get_state().device(), chunk_pos, true);
             }
@@ -408,3 +456,55 @@ impl TextureManager {
         }
     }
 }
+
+pub const VERTICES: [Vertex; 8] = [
+    Vertex {
+        position: [0.0, 0.0, 0.0],
+        normal: [0.0, 0.0, 1.0],
+        uv: [0.0, 0.0],
+    },
+    Vertex {
+        position: [0.0, 1.0, 0.0],
+        normal: [0.0, 0.0, 1.0],
+        uv: [0.0, 1.0],
+    },
+    Vertex {
+        position: [1.0, 1.0, 0.0],
+        normal: [0.0, 0.0, 1.0],
+        uv: [1.0, 1.0],
+    },
+    Vertex {
+        position: [1.0, 0.0, 0.0],
+        normal: [0.0, 0.0, 1.0],
+        uv: [1.0, 0.0],
+    },
+    Vertex {
+        position: [0.0, 0.0, -1.0],
+        normal: [0.0, 0.0, -1.0],
+        uv: [0.0, 0.0],
+    },
+    Vertex {
+        position: [0.0, 1.0, -1.0],
+        normal: [0.0, 0.0, -1.0],
+        uv: [0.0, 1.0],
+    },
+    Vertex {
+        position: [1.0, 1.0, -1.0],
+        normal: [0.0, 0.0, -1.0],
+        uv: [1.0, 1.0],
+    },
+    Vertex {
+        position: [1.0, 0.0, -1.0],
+        normal: [0.0, 0.0, -1.0],
+        uv: [1.0, 0.0],
+    },
+];
+
+pub const INDICES: [u16; 36] = [
+    1, 0, 2, 3, 2, 0, // Front face (z=0)
+    4, 5, 6, 6, 7, 4, // Back face (z=-1)
+    0, 4, 7, 3, 0, 7, // Bottom (y=0)
+    5, 1, 6, 1, 2, 6, // Top (y=1)
+    6, 2, 7, 2, 3, 7, // Right (x=1)
+    4, 0, 5, 0, 1, 5, // Left (x=0)
+];

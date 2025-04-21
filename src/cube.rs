@@ -1,6 +1,5 @@
-﻿
-use cgmath::{Quaternion, Matrix4, Rotation3, Vector3, Deg};
-use super::geometry::Vertex;
+﻿use cgmath::{Quaternion, Rotation3, Vector3, Deg};
+use super::geometry::ChunkMeshBuilder;
 use std::collections::{HashMap, HashSet};
 use ahash::AHasher;
 use std::hash::BuildHasherDefault;
@@ -115,35 +114,97 @@ pub fn quaternion_to_rotation(rotation: Quaternion<f32>) -> u16 {
     bits[0] | (bits[1] << 5) | (bits[2] << 10)
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct ChunkCoord {
-    pub x: i32,
-    pub y: i32,
-    pub z: i32,
+// New u64-based chunk coordinate representation
+// Format: [X:26 (signed), Y:12 (signed), Z:26 (signed)]
+pub type ChunkCoord = u64;
+
+pub trait ChunkCoordHelp {
+    const X_MASK: u64 = 0x03FFFFFF; // 26 bits
+    const X_SHIFT: u32 = 38;
+    const Y_MASK: u64 = 0x0FFF;     // 12 bits
+    const Y_SHIFT: u32 = 26;
+    const Z_MASK: u64 = 0x03FFFFFF; // 26 bits
+    const Z_SHIFT: u32 = 0;
+
+    fn new(x: i32, y: i32, z: i32) -> Self;
+
+    fn pack(x: i32, y: i32, z: i32) -> Self;
+
+    fn unpack(coord: &Self) -> (i32, i32, i32);
+
+    fn extract_x(coord: &Self) -> i32;
+
+    fn extract_y(coord: &Self) -> i32;
+
+    fn extract_z(coord: &Self) -> i32;
+
+    fn to_world_pos(&self) -> Vector3<i32>;
+
+    fn from_world_pos(world_pos: Vector3<i32>) -> Self;
 }
 
-impl ChunkCoord {
+impl ChunkCoordHelp for ChunkCoord {
     #[inline]
-    pub fn new(x: i32, y: i32, z: i32) -> Self {
-        Self { x, y, z }
+    fn new(x: i32, y: i32, z: i32) -> Self {
+        Self::pack(x, y, z)
     }
 
     #[inline]
-    pub fn to_world_pos(&self) -> Vector3<i32> {
-        Vector3::new(
-            self.x * Chunk::CHUNK_SIZE_I,
-            self.y * Chunk::CHUNK_SIZE_I,
-            self.z * Chunk::CHUNK_SIZE_I,
+    fn pack(x: i32, y: i32, z: i32) -> Self {
+        debug_assert!(x >= -(1 << 25) && x < (1 << 25), "X coordinate out of range");
+        debug_assert!(y >= -(1 << 11) && y < (1 << 11), "Y coordinate out of range");
+        debug_assert!(z >= -(1 << 25) && z < (1 << 25), "Z coordinate out of range");
+        
+        ((x as u64 & Self::X_MASK) << Self::X_SHIFT) |
+        ((y as u64 & Self::Y_MASK) << Self::Y_SHIFT) |
+        (z as u64 & Self::Z_MASK)
+    }
+
+    #[inline]
+    fn unpack(coord: &Self) -> (i32, i32, i32) {
+        (
+            Self::extract_x(coord),
+            Self::extract_y(coord),
+            Self::extract_z(coord),
         )
     }
 
     #[inline]
-    pub fn from_world_pos(world_pos: Vector3<i32>) -> Self {
-        Self {
-            x: world_pos.x.div_euclid(Chunk::CHUNK_SIZE_I),
-            y: world_pos.y.div_euclid(Chunk::CHUNK_SIZE_I),
-            z: world_pos.z.div_euclid(Chunk::CHUNK_SIZE_I),
-        }
+    fn extract_x(coord: &Self) -> i32 {
+        // Sign extend the 26-bit value
+        (((*coord >> Self::X_SHIFT) as i32) << 6) >> 6
+    }
+
+    #[inline]
+    fn extract_y(coord: &Self) -> i32 {
+        // Sign extend the 12-bit value
+        (((*coord >> Self::Y_SHIFT) as i32 & Self::Y_MASK as i32) << 20) >> 20
+    }
+
+    #[inline]
+    fn extract_z(coord: &Self) -> i32 {
+        // Sign extend the 26-bit value
+        ((*coord as i32 & Self::Z_MASK as i32) << 6) >> 6
+    }
+
+    #[inline]
+    fn to_world_pos(&self) -> Vector3<i32> {
+        let (x, y, z) = Self::unpack(self);
+        Vector3::new(
+            x * Chunk::CHUNK_SIZE_I,
+            y * Chunk::CHUNK_SIZE_I,
+            z * Chunk::CHUNK_SIZE_I,
+        )
+    }
+
+    #[inline]
+    fn from_world_pos(world_pos: Vector3<i32>) -> Self {
+        let chunk_size = Chunk::CHUNK_SIZE_I;
+        Self::new(
+            world_pos.x.div_euclid(chunk_size),
+            world_pos.y.div_euclid(chunk_size),
+            world_pos.z.div_euclid(chunk_size),
+        )
     }
 }
 
@@ -195,17 +256,17 @@ impl Chunk {
     }
 
     pub fn get_block(&self, local_pos: Vector3<u32>) -> Option<&Block> {
-        let pos = Self::local_to_position(local_pos);
+        let pos = Self::local_to_block_pos(local_pos);
         self.blocks.get(&pos)
     }
 
     pub fn get_block_mut(&mut self, local_pos: Vector3<u32>) -> Option<&mut Block> {
-        let pos = Self::local_to_position(local_pos);
+        let pos = Self::local_to_block_pos(local_pos);
         self.blocks.get_mut(&pos)
     }
 
     pub fn set_block(&mut self, local_pos: Vector3<u32>, block: Block) {
-        let pos = Self::local_to_position(local_pos);
+        let pos = Self::local_to_block_pos(local_pos);
         if block.is_empty() {
             self.blocks.remove(&pos);
         } else {
@@ -226,7 +287,7 @@ impl Chunk {
 
     /// Convert local coordinates to packed position key
     #[inline]
-    pub fn local_to_position(local_pos: Vector3<u32>) -> u16 {
+    pub fn local_to_block_pos(local_pos: Vector3<u32>) -> u16 {
         ((local_pos.x as u16) << 8) | ((local_pos.y as u16) << 4) | (local_pos.z as u16)
     }
 
@@ -246,6 +307,7 @@ impl Chunk {
         }
 
         let mut builder = ChunkMeshBuilder::new();
+        let (chunk_x, chunk_y, chunk_z) = ChunkCoord::unpack(&chunk_coord);
         
         for (&pos, block) in &self.blocks {
             if block.is_empty() {
@@ -255,9 +317,9 @@ impl Chunk {
             let local_pos = Self::position_to_local(pos);
             // Calculate world position by adding chunk offset
             let world_pos_f32 = Vector3::new(
-                (chunk_coord.x * Self::CHUNK_SIZE_I as i32 + local_pos.x as i32) as f32,
-                (chunk_coord.y * Self::CHUNK_SIZE_I as i32 + local_pos.y as i32) as f32,
-                (chunk_coord.z * Self::CHUNK_SIZE_I as i32 + local_pos.z as i32) as f32
+                (chunk_x * Self::CHUNK_SIZE_I + local_pos.x as i32) as f32,
+                (chunk_y * Self::CHUNK_SIZE_I + local_pos.y as i32) as f32,
+                (chunk_z * Self::CHUNK_SIZE_I + local_pos.z as i32) as f32
             );
 
             builder.add_cube(world_pos_f32, block.rotation_to_quaternion());
@@ -267,62 +329,6 @@ impl Chunk {
         self.dirty = false;
     }
 }
-
-// --- Chunk Mesh Builder ---
-pub struct ChunkMeshBuilder {
-    pub vertices: Vec<Vertex>,
-    pub indices: Vec<u16>,
-    current_vertex: u32,
-}
-
-impl ChunkMeshBuilder {
-    #[inline]
-    pub fn new() -> Self {
-        Self {
-            vertices: Vec::with_capacity(4096 * 8),
-            indices: Vec::with_capacity(4096 * 36),
-            current_vertex: 0,
-        }
-    }
-
-    pub fn add_cube(&mut self, position: Vector3<f32>, rotation: Quaternion<f32>) {
-        // Transform matrix
-        let transform = Matrix4::from_translation(position) * Matrix4::from(rotation);
-        let start_vertex = self.current_vertex;
-
-        // Add transformed vertices
-        for vertex in &VERTICES {
-            let pos = transform * Vector3::from(vertex.position).extend(1.0);
-            let normal = rotation * Vector3::from(vertex.normal);
-            
-            self.vertices.push(Vertex {
-                position: pos.truncate().into(),
-                normal: normal.into(),
-                uv: vertex.uv,
-            });
-            self.current_vertex += 1;
-        }
-
-        for index in INDICES {
-            self.indices.push(start_vertex as u16 + index);
-        }
-    }
-
-    #[inline]
-    pub fn build(self, device: &wgpu::Device) -> super::geometry::GeometryBuffer {
-        super::geometry::GeometryBuffer::new(device, &self.indices, &self.vertices)
-    }
-}
-
-pub struct BlockBuffer;
-
-impl BlockBuffer {
-    #[inline]
-    pub fn new(device: &wgpu::Device) -> super::geometry::GeometryBuffer {
-        super::geometry::GeometryBuffer::new(device, &INDICES, &VERTICES)
-    }
-}
-
 
 #[derive(Debug, Clone)]
 pub struct World {
@@ -358,7 +364,7 @@ impl World {
         self.chunks.get(&chunk_coord)
             .and_then(|chunk| {
                 let local = Chunk::world_to_local_pos(world_pos);
-                let pos = Chunk::local_to_position(local);
+                let pos = Chunk::local_to_block_pos(local);
                 chunk.blocks.get(&pos)
             })
     }
@@ -368,7 +374,7 @@ impl World {
         self.chunks.get_mut(&chunk_coord)
             .and_then(|chunk| {
                 let local = Chunk::world_to_local_pos(world_pos);
-                let pos = Chunk::local_to_position(local);
+                let pos = Chunk::local_to_block_pos(local);
                 chunk.blocks.get_mut(&pos)
             })
     }
@@ -399,25 +405,21 @@ impl World {
 
     pub fn update_loaded_chunks(&mut self, center: Vector3<i32>, radius: u32) {
         let chunk_pos = ChunkCoord::from_world_pos(center);
+        let (center_x, center_y, center_z) = ChunkCoord::unpack(&chunk_pos);
         let radius_i32 = radius as i32;
         let radius_sq = (radius * radius) as i32;
-        let partially_unload = true; // partially unload will be faster if there are less chunks to unload
-        // if it is off that will be faster if there are less chunks to keep - more chunks to unload
+        let partially_unload = true;
 
         if partially_unload {
-            // Track chunks we want to keep
+            // Track chunks we want to unload
             let mut chunks_to_unload = Vec::new();
-
-            // Pre-compute center components
-            let center_x = chunk_pos.x;
-            let center_y = chunk_pos.y;
-            let center_z = chunk_pos.z;
 
             // Use loaded_chunks for faster iteration
             for &coord in &self.loaded_chunks {
-                let dx = coord.x - center_x;
-                let dy = coord.y - center_y;
-                let dz = coord.z - center_z;
+                let (x, y, z) = ChunkCoord::unpack(&coord);
+                let dx = x - center_x;
+                let dy = y - center_y;
+                let dz = z - center_z;
                 
                 if dx * dx + dy * dy + dz * dz > radius_sq {
                     chunks_to_unload.push(coord);
@@ -449,18 +451,19 @@ impl World {
             }
         } else {
             // Calculate bounds once
-            let min_x = chunk_pos.x - radius_i32;
-            let max_x = chunk_pos.x + radius_i32;
-            let min_y = chunk_pos.y - radius_i32;
-            let max_y = chunk_pos.y + radius_i32;
-            let min_z = chunk_pos.z - radius_i32;
-            let max_z = chunk_pos.z + radius_i32;
+            let min_x = center_x - radius_i32;
+            let max_x = center_x + radius_i32;
+            let min_y = center_y - radius_i32;
+            let max_y = center_y + radius_i32;
+            let min_z = center_z - radius_i32;
+            let max_z = center_z + radius_i32;
 
             // Unload distant chunks
             self.loaded_chunks.retain(|&coord| {
-                let dx = coord.x - chunk_pos.x;
-                let dy = coord.y - chunk_pos.y;
-                let dz = coord.z - chunk_pos.z;
+                let (x, y, z) = ChunkCoord::unpack(&coord);
+                let dx = x - center_x;
+                let dy = y - center_y;
+                let dz = z - center_z;
                 let keep = dx * dx + dy * dy + dz * dz <= radius_sq;
                 if !keep {
                     self.chunks.remove(&coord);
@@ -472,9 +475,9 @@ impl World {
             for x in min_x..=max_x {
                 for y in min_y..=max_y {
                     for z in min_z..=max_z {
-                        let dx = x - chunk_pos.x;
-                        let dy = y - chunk_pos.y;
-                        let dz = z - chunk_pos.z;
+                        let dx = x - center_x;
+                        let dy = y - center_y;
+                        let dz = z - center_z;
                         if dx * dx + dy * dy + dz * dz > radius_sq {
                             continue;
                         }
@@ -501,16 +504,16 @@ impl World {
     }
 
     pub fn make_chunk_meshes(&mut self, device: &wgpu::Device) {
-        for (coord, chunk) in self.chunks.iter_mut() {
+        for (&coord, chunk) in self.chunks.iter_mut() {
             if chunk.dirty {
-                chunk.make_mesh(device, *coord, false);
+                chunk.make_mesh(device, coord, false);
             }
         }
     }
 
     pub fn render_chunks<'a>(&'a self, render_pass: &mut wgpu::RenderPass<'a>) {
         let mut chunks: Vec<_> = self.chunks.values().collect();
-        chunks.sort_by(|a, b| {
+        chunks.sort_by(|_a, _b| {
             // Implement your sorting logic based on camera position
             std::cmp::Ordering::Equal
         });
@@ -524,23 +527,3 @@ impl World {
         }
     }
 }
-
-const VERTICES: [Vertex; 8] = [
-    Vertex { position: [0.0, 0.0, 0.0], normal: [0.0, 0.0, 1.0], uv: [0.0, 0.0] },
-    Vertex { position: [0.0, 1.0, 0.0], normal: [0.0, 0.0, 1.0], uv: [0.0, 1.0] },
-    Vertex { position: [1.0, 1.0, 0.0], normal: [0.0, 0.0, 1.0], uv: [1.0, 1.0] },
-    Vertex { position: [1.0, 0.0, 0.0], normal: [0.0, 0.0, 1.0], uv: [1.0, 0.0] },
-    Vertex { position: [0.0, 0.0, -1.0], normal: [0.0, 0.0, -1.0], uv: [0.0, 0.0] },
-    Vertex { position: [0.0, 1.0, -1.0], normal: [0.0, 0.0, -1.0], uv: [0.0, 1.0] },
-    Vertex { position: [1.0, 1.0, -1.0], normal: [0.0, 0.0, -1.0], uv: [1.0, 1.0] },
-    Vertex { position: [1.0, 0.0, -1.0], normal: [0.0, 0.0, -1.0], uv: [1.0, 0.0] },
-];
-
-const INDICES: [u16; 36] = [
-    1, 0, 2, 3, 2, 0, // Front face (z=0)
-    4, 5, 6, 6, 7, 4, // Back face (z=-1)
-    0, 4, 7, 3, 0, 7, // Bottom (y=0)
-    5, 1, 6, 1, 2, 6, // Top (y=1)
-    6, 2, 7, 2, 3, 7, // Right (x=1)
-    4, 0, 5, 0, 1, 5, // Left (x=0)
-];

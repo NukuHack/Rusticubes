@@ -63,7 +63,6 @@ pub struct ModifyKeyPressed {
 }
 
 pub struct DataSubsystem {
-    geometry_buffer: geometry::GeometryBuffer,
     texture_manager: geometry::TextureManager,
     world: cube::World, // lol main data storage :)
 }
@@ -132,9 +131,6 @@ impl<'a> State<'a> {
         surface.configure(&device, &config);
 
         let texture_manager: geometry::TextureManager = geometry::TextureManager::new(&device, &queue, &config);
-        let geometry_buffer: geometry::GeometryBuffer = cube::BlockBuffer::new(
-            &device,
-        );
 
         let render_pipeline_layout: wgpu::PipelineLayout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("Render Pipeline Layout"),
@@ -150,7 +146,6 @@ impl<'a> State<'a> {
         let ui_manager:user_interface::UIManager = user_interface::UIManager::new(&device, &config, &queue);
         
         let data_system: DataSubsystem = DataSubsystem{
-            geometry_buffer,
             texture_manager,
             world: cube::World::empty(),
         };
@@ -206,9 +201,6 @@ impl<'a> State<'a> {
     }
     pub fn pipeline(&self) -> &pipeline::Pipeline {
         &self.pipeline
-    }
-    pub fn geometry_buffer(&self) -> &geometry::GeometryBuffer {
-        &self.data_system.geometry_buffer
     }
     pub fn texture_manager(&self) -> &geometry::TextureManager {
         &self.data_system.texture_manager

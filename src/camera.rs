@@ -11,7 +11,7 @@ pub struct CameraSystem {
     pub projection: Projection,
     pub controller: CameraController,
     pub uniform: CameraUniform,
-    pub buffer: wgpu::Buffer,
+    pub camera_buffer: wgpu::Buffer,
     pub bind_group: wgpu::BindGroup,
     pub bind_group_layout: wgpu::BindGroupLayout,
 }
@@ -32,7 +32,7 @@ impl CameraSystem {
         let controller: CameraController = CameraController::new(camera_speed, sensitivity);
         let mut uniform = CameraUniform::default();
         uniform.update_view_proj(&camera, &projection);
-        let buffer: wgpu::Buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        let camera_buffer: wgpu::Buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Camera Buffer"),
             contents: bytemuck::cast_slice(&[uniform]),
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
@@ -54,7 +54,7 @@ impl CameraSystem {
             layout: &bind_group_layout,
             entries: &[wgpu::BindGroupEntry {
                 binding: 0,
-                resource: buffer.as_entire_binding(),
+                resource: camera_buffer.as_entire_binding(),
             }],
             label: Some("camera_bind_group"),
         });
@@ -63,7 +63,7 @@ impl CameraSystem {
             projection,
             controller,
             uniform,
-            buffer,
+            camera_buffer,
             bind_group,
             bind_group_layout,
         }
@@ -72,7 +72,7 @@ impl CameraSystem {
         self.controller.update_camera(&mut self.camera, &mut self.projection, delta_time);
         self.uniform.update_view_proj(&self.camera, &self.projection);
         queue.write_buffer(
-            &self.buffer,
+            &self.camera_buffer,
             0,
             bytemuck::cast_slice(std::slice::from_ref(&self.uniform)),
         );
