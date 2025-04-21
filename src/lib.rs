@@ -323,6 +323,13 @@ impl<'a> State<'a> {
                     },
                     Key::KeyF => {
                         if *state == ElementState::Pressed {
+                            geometry::add_def_looked_cube();
+                            return true
+                        }
+                        false
+                    },
+                    Key::KeyH => {
+                        if *state == ElementState::Pressed {
                             geometry::add_def_cube();
                             return true
                         }

@@ -569,6 +569,13 @@ pub fn setup_ui(state: &mut super::State) {
             None,
         ),
         UIElement::new(
+            (-0.9, -0.5),
+            (0.4, 0.2),
+            [0.3, 0.3, 0.3],
+            Some("March cube".to_string()),
+            Some(Box::new(|| super::geometry::march_def_cube("0121"))),
+        ),
+        UIElement::new(
             (0.45, 0.2),
             (0.5, 0.2),
             [0.7, 0.3, 0.3],

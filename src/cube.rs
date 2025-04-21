@@ -1,5 +1,14 @@
-﻿use cgmath::{Quaternion, Rotation3, Vector3, Deg};
-use super::geometry::ChunkMeshBuilder;
+﻿use crate::geometry::GeometryBuffer;
+use crate::geometry::Vertex;
+use crate::geometry::VERTICES;
+use crate::geometry::INDICES;
+use crate::geometry::EDGE_TABLE;
+use crate::geometry::TRI_TABLE;
+use crate::traits::VectorTypeConversion;
+use cgmath::Zero;
+use cgmath::VectorSpace;
+use cgmath::InnerSpace;
+use cgmath::{Quaternion, Rotation3, Vector3, Deg};
 use std::collections::{HashMap, HashSet};
 use ahash::AHasher;
 use std::hash::BuildHasherDefault;
@@ -81,6 +90,9 @@ impl Block {
     #[inline]
     pub fn is_empty(&self) -> bool { self.material == 0 }
 
+    #[inline]
+    pub fn is_marching(&self) -> bool { self.points != 0 }
+
     pub fn rotate(&mut self, axis: char, steps: u16) {
         let (current, mask, shift) = match axis {
             'x' => (self.get_x_rotation(), Self::ROT_MASK_X, Self::ROT_SHIFT_X),
@@ -100,6 +112,124 @@ impl Block {
     }
 }
 
+impl Block {
+    /// Set a specific point in the 3x3x3 grid (x,y,z in 0..=2)
+    #[inline]
+    pub fn set_point(&mut self, (x, y, z, value):(u8,u8,u8,bool)) {
+        assert!(x < 3 && y < 3 && z < 3, "Coordinates must be in 0..=2");
+        let bit_pos = (x as u32) + (y as u32) * 3 + (z as u32) * 9;
+        if value {
+            self.points |= 1 << bit_pos;
+        } else {
+            self.points &= !(1 << bit_pos);
+        }
+    }
+
+    /// Get a specific point in the 3x3x3 grid (x,y,z in 0..=2)
+    #[inline]
+    pub fn get_point(&self, x: u8, y: u8, z: u8) -> bool {
+        assert!(x < 3 && y < 3 && z < 3, "Coordinates must be in 0..=2");
+        let bit_pos = (x as u32) + (y as u32) * 3 + (z as u32) * 9;
+        (self.points & (1 << bit_pos)) != 0
+    }
+
+    /// Generate mesh for a 2x2x2 marching cubes cell (using 8 corner points)
+    pub fn generate_marching_cubes_mesh(&self, position: Vector3<u32>, builder: &mut ChunkMeshBuilder) {
+        // Extract the 8 corner points (from the 3x3x3 grid)
+        let mut corners = [false; 8];
+        corners[0] = self.get_point(0, 0, 0);
+        corners[1] = self.get_point(1, 0, 0);
+        corners[2] = self.get_point(1, 0, 1);
+        corners[3] = self.get_point(0, 0, 1);
+        corners[4] = self.get_point(0, 1, 0);
+        corners[5] = self.get_point(1, 1, 0);
+        corners[6] = self.get_point(1, 1, 1);
+        corners[7] = self.get_point(0, 1, 1);
+
+        // Calculate the case index (0-255)
+        let mut case_index = 0;
+        for i in 0..8 {
+            if corners[i] {
+                case_index |= 1 << i;
+            }
+        }
+
+        // Skip empty or full cubes
+        if case_index == 0 || case_index == 255 {
+            return;
+        }
+
+        // Get edges for this case
+        let edges = EDGE_TABLE[case_index];
+        if edges == 0 {
+            return;
+        }
+
+        // CORRECTED: Vertex positions for the 8 corners (relative to block center)
+        // Now properly aligned with the marching cubes algorithm's expected cube
+        let corner_positions: [Vector3<f32>; 8] = [
+            Vector3::new(0.0, 0.0, 0.0),  // 0
+            Vector3::new(1.0, 0.0, 0.0),  // 1
+            Vector3::new(1.0, 0.0, 1.0),  // 2
+            Vector3::new(0.0, 0.0, 1.0),  // 3
+            Vector3::new(0.0, 1.0, 0.0),  // 4
+            Vector3::new(1.0, 1.0, 0.0),  // 5
+            Vector3::new(1.0, 1.0, 1.0),  // 6
+            Vector3::new(0.0, 1.0, 1.0),  // 7
+        ];
+
+        // Calculate vertex positions for each edge that is crossed
+        let mut edge_vertices = [Vector3::zero(); 12];
+        for edge in 0..12 {
+            if (edges & (1 << edge)) != 0 {
+                let (a, b) = match edge {
+                    0 => (0, 1),
+                    1 => (1, 2),
+                    2 => (2, 3),
+                    3 => (3, 0),
+                    4 => (4, 5),
+                    5 => (5, 6),
+                    6 => (6, 7),
+                    7 => (7, 4),
+                    8 => (0, 4),
+                    9 => (1, 5),
+                    10 => (2, 6),
+                    11 => (3, 7),
+                    _ => unreachable!(),
+                };
+                
+                // Linear interpolation - could be improved with actual density values
+                let t = 0.5; // Midpoint for binary case
+                edge_vertices[edge] = corner_positions[a].lerp(corner_positions[b], t);
+            }
+        }
+
+        // Generate triangles from the triangle table
+        let triangles = TRI_TABLE[case_index];
+        let mut i = 0;
+        while i < 16 && triangles[i] != -1 {
+            let a = triangles[i] as usize;
+            let b = triangles[i+1] as usize;
+            let c = triangles[i+2] as usize;
+            
+            // Convert position to f32 and add the edge vertex position
+            let v1 = Vector3::new(position.x as f32, position.y as f32, position.z as f32) + edge_vertices[a];
+            let v2 = Vector3::new(position.x as f32, position.y as f32, position.z as f32) + edge_vertices[b];
+            let v3 = Vector3::new(position.x as f32, position.y as f32, position.z as f32) + edge_vertices[c];
+            
+            // Calculate normal (CCW winding)
+            let normal = (v2 - v1).cross(v3 - v1).normalize();
+            
+            builder.add_vertex(v1, normal);
+            builder.add_vertex(v2, normal);
+            builder.add_vertex(v3, normal);
+            
+            i += 3;
+        }
+    }
+}
+
+
 /// Convert a quaternion to the packed u16 rotation format
 pub fn quaternion_to_rotation(rotation: Quaternion<f32>) -> u16 {
     let angles = [
@@ -118,6 +248,7 @@ pub fn quaternion_to_rotation(rotation: Quaternion<f32>) -> u16 {
 // Format: [X:26 (signed), Y:12 (signed), Z:26 (signed)]
 pub type ChunkCoord = u64;
 
+#[allow(dead_code, unused)]
 pub trait ChunkCoordHelp {
     const X_MASK: u64 = 0x03FFFFFF; // 26 bits
     const X_SHIFT: u32 = 38;
@@ -313,8 +444,12 @@ impl Chunk {
             if block.is_empty() {
                 continue;
             }
-
             let local_pos = Self::position_to_local(pos);
+            if block.is_marching() {
+                block.generate_marching_cubes_mesh(local_pos, &mut builder);
+                continue;
+            }
+
             // Calculate world position by adding chunk offset
             let world_pos_f32 = Vector3::new(
                 (chunk_x * Self::CHUNK_SIZE_I + local_pos.x as i32) as f32,
@@ -525,5 +660,64 @@ impl World {
                 render_pass.draw_indexed(0..mesh.num_indices, 0, 0..1);
             }
         }
+    }
+}
+
+
+// --- Chunk Mesh Builder ---
+pub struct ChunkMeshBuilder {
+    pub vertices: Vec<Vertex>,
+    pub indices: Vec<u16>,
+    current_vertex: u32,
+}
+
+impl ChunkMeshBuilder {
+    #[inline]
+    pub fn new() -> Self {
+        Self {
+            vertices: Vec::with_capacity(4096 * 8),
+            indices: Vec::with_capacity(4096 * 36),
+            current_vertex: 0,
+        }
+    }
+
+    pub fn add_cube(&mut self, position: Vector3<f32>, rotation: cgmath::Quaternion<f32>) {
+        // Transform matrix
+        let transform =
+            cgmath::Matrix4::from_translation(position) * cgmath::Matrix4::from(rotation);
+        let start_vertex = self.current_vertex;
+
+        // Add transformed vertices
+        for vertex in &VERTICES {
+            let pos = transform * Vector3::from(vertex.position).extend(1.0);
+            let normal = rotation * Vector3::from(vertex.normal);
+
+            self.vertices.push(Vertex {
+                position: pos.truncate().into(),
+                normal: normal.into(),
+                uv: vertex.uv,
+            });
+            self.current_vertex += 1;
+        }
+
+        for index in INDICES {
+            self.indices.push(start_vertex as u16 + index);
+        }
+    }
+
+    // New function to add individual vertices for marching cubes
+    pub fn add_vertex(&mut self, position: Vector3<f32>, normal: Vector3<f32>) {
+        self.vertices.push(Vertex {
+            position: position.into(),
+            normal: normal.into(),
+            uv: [0.0, 0.0], // Default UVs, could be improved
+        });
+        self.indices.push(self.current_vertex as u16);
+        self.current_vertex += 1;
+    }
+
+    #[inline]
+    pub fn build(self, device: &wgpu::Device) -> GeometryBuffer {
+        GeometryBuffer::new(device, &self.indices, &self.vertices)
     }
 }
