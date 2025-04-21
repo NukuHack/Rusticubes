@@ -16,6 +16,7 @@ struct Vertex {
 
 #[derive(Default)]
 pub struct UIElement {
+    pub id: usize, // Added ID field
     pub position: (f32, f32),
     pub size: (f32, f32),
     pub color: [f32; 4],
@@ -30,6 +31,7 @@ impl UIElement {
     pub const DEFAULT_SIZE: (f32, f32) = (0.2, 0.2);
 
     pub fn new(
+        id: usize, // Added ID parameter
         position: (f32, f32),
         size: (f32, f32),
         color: [f32; 3],
@@ -37,6 +39,7 @@ impl UIElement {
         on_click: Option<Box<dyn FnMut()>>,
     ) -> Self {
         Self {
+            id,
             position,
             size,
             color: [color[0], color[1], color[2], DEFAULT_ALPHA],
@@ -47,6 +50,7 @@ impl UIElement {
     }
 
     pub fn new_input(
+        id: usize, // Added ID parameter
         position: (f32, f32),
         size: (f32, f32),
         color: [f32; 3],
@@ -54,8 +58,9 @@ impl UIElement {
         on_click: Option<Box<dyn FnMut()>>,
     ) -> Self {
         Self {
+            id,
             is_input: true,
-            ..Self::new(position, size, color, text, on_click)
+            ..Self::new(id, position, size, color, text, on_click)
         }
     }
 
@@ -69,6 +74,7 @@ impl UIElement {
 impl std::fmt::Debug for UIElement {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("UIElement")
+            .field("id", &self.id)
             .field("position", &self.position)
             .field("size", &self.size)
             .field("color", &self.color)
@@ -90,6 +96,7 @@ pub struct UIManager {
     pub bind_group: wgpu::BindGroup,
     pub font_texture: wgpu::Texture,
     pub font_sampler: wgpu::Sampler,
+    next_id: usize, // Counter for generating unique IDs
 }
 
 impl UIManager {
@@ -244,8 +251,31 @@ impl UIManager {
         [base, base + 1, base + 2, base + 1, base + 3, base + 2]
     }
 
-    pub fn add_ui_element(&mut self, element: UIElement) {
+    pub fn add_ui_element(&mut self, mut element: UIElement) {
+        // Assign the next available ID if not already set
+        if element.id == 0 {
+            element.id = self.next_id;
+            self.next_id += 1;
+        }
         self.elements.push(element);
+    }
+
+    // Helper method to get an element by ID
+    pub fn get_element(&self, id: usize) -> Option<&UIElement> {
+        self.elements.iter().find(|e| e.id == id)
+    }
+
+    // Helper method to get a mutable element by ID
+    pub fn get_element_mut(&mut self, id: usize) -> Option<&mut UIElement> {
+        self.elements.iter_mut().find(|e| e.id == id)
+    }
+
+    // Example method to get text from an input element by ID
+    pub fn get_input_text(&self, id: usize) -> Option<&str> {
+        self.elements
+            .iter()
+            .find(|e| e.id == id && e.is_input)
+            .and_then(|e| e.text.as_deref())
     }
 
     pub fn new(
@@ -417,6 +447,7 @@ impl UIManager {
             bind_group,
             font_texture,
             font_sampler,
+            next_id: 1, // Start IDs at 1 (0 is reserved for uninitialized)
         }
     }
 
@@ -562,6 +593,7 @@ pub fn handle_ui_click(state: &mut super::State) {
 pub fn setup_ui(state: &mut super::State) {
     let elements = vec![
         UIElement::new_input(
+            123,
             (-0.9, 0.2),
             (0.4, 0.2),
             [0.3, 0.3, 0.3],
@@ -569,13 +601,19 @@ pub fn setup_ui(state: &mut super::State) {
             None,
         ),
         UIElement::new(
+            0,
             (-0.9, -0.5),
             (0.4, 0.2),
             [0.3, 0.3, 0.3],
             Some("March cube".to_string()),
-            Some(Box::new(|| super::geometry::march_def_cube("0121"))),
+            Some(Box::new(|| unsafe {
+                let state = super::get_state();
+                let raw_data: &str = state.ui_manager().get_input_text(123).expect("REASON");
+                super::geometry::march_def_cube(raw_data);
+            })),
         ),
         UIElement::new(
+            0,
             (0.45, 0.2),
             (0.5, 0.2),
             [0.7, 0.3, 0.3],
@@ -583,6 +621,7 @@ pub fn setup_ui(state: &mut super::State) {
             Some(Box::new(|| super::geometry::add_def_chunk())),
         ),
         UIElement::new(
+            0,
             (0.45, -0.1),
             (0.5, 0.25),
             [0.7, 0.3, 0.3],
@@ -590,14 +629,15 @@ pub fn setup_ui(state: &mut super::State) {
             Some(Box::new(|| super::geometry::add_full_world())),
         ),
         UIElement::new(
+            0,
             (0.6, -0.7),
             (0.2, 0.1),
             [1.0, 0.2, 0.1],
             Some("Close".to_string()),
             Some(Box::new(|| super::close_app())),
         ),
-        UIElement::new((0.0, -0.02), (0.02, 0.06), [0.1, 0.1, 0.1], None, None),
-        UIElement::new((-0.02, 0.0), (0.06, 0.02), [0.1, 0.1, 0.1], None, None),
+        UIElement::new(5, (0.0, -0.02), (0.02, 0.06), [0.1, 0.1, 0.1], None, None),
+        UIElement::new(6, (-0.02, 0.0), (0.06, 0.02), [0.1, 0.1, 0.1], None, None),
     ];
 
     state.ui_manager.elements = elements;

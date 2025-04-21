@@ -1,10 +1,10 @@
-﻿use crate::geometry::GeometryBuffer;
+﻿use crate::traits::VectorTypeConversion;
+use crate::geometry::GeometryBuffer;
 use crate::geometry::Vertex;
 use crate::geometry::VERTICES;
 use crate::geometry::INDICES;
 use crate::geometry::EDGE_TABLE;
 use crate::geometry::TRI_TABLE;
-use crate::traits::VectorTypeConversion;
 use cgmath::Zero;
 use cgmath::VectorSpace;
 use cgmath::InnerSpace;
@@ -50,6 +50,11 @@ impl Block {
     #[inline]
     pub fn new() -> Self {
         Self { material: 1, ..Self::default() }
+    }
+
+    #[inline]
+    pub fn new_dot() -> Self { // hexadecimal is my life ... here is in binary in case you need it -> 0b10_000_000_000_000
+        Self { material: 1, points: 0x_20_00, ..Self::default() }
     }
 
     #[inline]
@@ -133,98 +138,120 @@ impl Block {
         (self.points & (1 << bit_pos)) != 0
     }
 
-    /// Generate mesh for a 2x2x2 marching cubes cell (using 8 corner points)
-    pub fn generate_marching_cubes_mesh(&self, position: Vector3<u32>, builder: &mut ChunkMeshBuilder) {
-        // Extract the 8 corner points (from the 3x3x3 grid)
-        let mut corners = [false; 8];
-        corners[0] = self.get_point(0, 0, 0);
-        corners[1] = self.get_point(1, 0, 0);
-        corners[2] = self.get_point(1, 0, 1);
-        corners[3] = self.get_point(0, 0, 1);
-        corners[4] = self.get_point(0, 1, 0);
-        corners[5] = self.get_point(1, 1, 0);
-        corners[6] = self.get_point(1, 1, 1);
-        corners[7] = self.get_point(0, 1, 1);
 
-        // Calculate the case index (0-255)
-        let mut case_index = 0;
-        for i in 0..8 {
-            if corners[i] {
-                case_index |= 1 << i;
+    /// Generate mesh for a 3x3x3 marching cubes cell by processing 8 sub-cubes
+    pub fn generate_marching_cubes_mesh(&self, position: Vector3<u32>, chunk_pos: Vector3<i32>, builder: &mut ChunkMeshBuilder) {
+        // Convert position to f32 once
+        let base_pos = position.to_vec3_f32();
+        let base_pos = Vector3::new(base_pos.x,base_pos.y,base_pos.z-1.0) + chunk_pos.to_vec3_f32();
+        // Process each of the 8 sub-cubes in the 3x3x3 grid
+        for sub_x in 0..2 {
+            for sub_y in 0..2 {
+                for sub_z in 0..2 {
+                    // Get the 8 corner points for this sub-cube
+                    let mut corners = [false; 8];
+                    corners[0] = self.get_point(sub_x, sub_y, sub_z);
+                    corners[1] = self.get_point(sub_x + 1, sub_y, sub_z);
+                    corners[2] = self.get_point(sub_x + 1, sub_y, sub_z + 1);
+                    corners[3] = self.get_point(sub_x, sub_y, sub_z + 1);
+                    corners[4] = self.get_point(sub_x, sub_y + 1, sub_z);
+                    corners[5] = self.get_point(sub_x + 1, sub_y + 1, sub_z);
+                    corners[6] = self.get_point(sub_x + 1, sub_y + 1, sub_z + 1);
+                    corners[7] = self.get_point(sub_x, sub_y + 1, sub_z + 1);
+
+                    // Calculate the case index (0-255)
+                    let mut case_index = 0;
+                    for i in 0..8 {
+                        if corners[i] {
+                            case_index |= 1 << i;
+                        }
+                    }
+
+                    // Skip empty or full sub-cubes
+                    if case_index == 0 || case_index == 255 {
+                        continue;
+                    }
+
+                    // Get edges for this case
+                    let edges = EDGE_TABLE[case_index];
+                    if edges == 0 {
+                        continue;
+                    }
+
+                    // Vertex positions for the 8 corners (relative to sub-cube origin)
+                    let corner_positions: [Vector3<f32>; 8] = [
+                        Vector3::new(0.0, 0.0, 0.0),  // 0
+                        Vector3::new(0.5, 0.0, 0.0),  // 1
+                        Vector3::new(0.5, 0.0, 0.5), // 2
+                        Vector3::new(0.0, 0.0, 0.5),  // 3
+                        Vector3::new(0.0, 0.5, 0.0),  // 4
+                        Vector3::new(0.5, 0.5, 0.0),  // 5
+                        Vector3::new(0.5, 0.5, 0.5), // 6
+                        Vector3::new(0.0, 0.5, 0.5),  // 7
+                    ];
+
+                    // Calculate vertex positions for each edge that is crossed
+                    let mut edge_vertices = [Vector3::zero(); 12];
+                    for edge in 0..12 {
+                        if (edges & (1 << edge)) != 0 {
+                            let (a, b) = match edge {
+                                0 => (0, 1),
+                                1 => (1, 2),
+                                2 => (2, 3),
+                                3 => (3, 0),
+                                4 => (4, 5),
+                                5 => (5, 6),
+                                6 => (6, 7),
+                                7 => (7, 4),
+                                8 => (0, 4),
+                                9 => (1, 5),
+                                10 => (2, 6),
+                                11 => (3, 7),
+                                _ => unreachable!(),
+                            };
+                            
+                            // Linear interpolation - could be improved with actual density values
+                            let t = 0.5; // Midpoint for binary case
+                            edge_vertices[edge] = corner_positions[a].lerp(corner_positions[b], t);
+                        }
+                    }
+
+                    // Generate triangles from the triangle table
+                    let triangles = TRI_TABLE[case_index];
+                    let mut i = 0;
+                    while i < 16 && triangles[i] != -1 {
+                        let a = triangles[i] as usize;
+                        let b = triangles[i+1] as usize;
+                        let c = triangles[i+2] as usize;
+                        
+                        // Calculate sub-cube offset (each sub-cube is 0.5 units in size)
+                        let sub_offset = Vector3::new(
+                            sub_x as f32 * 0.5,
+                            sub_y as f32 * 0.5,
+                            sub_z as f32 * 0.5
+                        );
+                        
+                        let v1 = base_pos + sub_offset + edge_vertices[a];
+                        let v2 = base_pos + sub_offset + edge_vertices[b];
+                        let v3 = base_pos + sub_offset + edge_vertices[c];
+                        
+                        // Calculate normal (CCW winding)
+                        let normal = (v2 - v1).cross(v3 - v1).normalize();
+                        
+                        let start_index = builder.current_vertex;
+                        builder.add_vertex(v1, normal);
+                        builder.add_vertex(v2, normal);
+                        builder.add_vertex(v3, normal);
+                        
+                        // Add indices for the triangle
+                        builder.indices.push(start_index as u16);
+                        builder.indices.push((start_index + 1) as u16);
+                        builder.indices.push((start_index + 2) as u16);
+                        
+                        i += 3;
+                    }
+                }
             }
-        }
-
-        // Skip empty or full cubes
-        if case_index == 0 || case_index == 255 {
-            return;
-        }
-
-        // Get edges for this case
-        let edges = EDGE_TABLE[case_index];
-        if edges == 0 {
-            return;
-        }
-
-        // CORRECTED: Vertex positions for the 8 corners (relative to block center)
-        // Now properly aligned with the marching cubes algorithm's expected cube
-        let corner_positions: [Vector3<f32>; 8] = [
-            Vector3::new(0.0, 0.0, 0.0),  // 0
-            Vector3::new(1.0, 0.0, 0.0),  // 1
-            Vector3::new(1.0, 0.0, 1.0),  // 2
-            Vector3::new(0.0, 0.0, 1.0),  // 3
-            Vector3::new(0.0, 1.0, 0.0),  // 4
-            Vector3::new(1.0, 1.0, 0.0),  // 5
-            Vector3::new(1.0, 1.0, 1.0),  // 6
-            Vector3::new(0.0, 1.0, 1.0),  // 7
-        ];
-
-        // Calculate vertex positions for each edge that is crossed
-        let mut edge_vertices = [Vector3::zero(); 12];
-        for edge in 0..12 {
-            if (edges & (1 << edge)) != 0 {
-                let (a, b) = match edge {
-                    0 => (0, 1),
-                    1 => (1, 2),
-                    2 => (2, 3),
-                    3 => (3, 0),
-                    4 => (4, 5),
-                    5 => (5, 6),
-                    6 => (6, 7),
-                    7 => (7, 4),
-                    8 => (0, 4),
-                    9 => (1, 5),
-                    10 => (2, 6),
-                    11 => (3, 7),
-                    _ => unreachable!(),
-                };
-                
-                // Linear interpolation - could be improved with actual density values
-                let t = 0.5; // Midpoint for binary case
-                edge_vertices[edge] = corner_positions[a].lerp(corner_positions[b], t);
-            }
-        }
-
-        // Generate triangles from the triangle table
-        let triangles = TRI_TABLE[case_index];
-        let mut i = 0;
-        while i < 16 && triangles[i] != -1 {
-            let a = triangles[i] as usize;
-            let b = triangles[i+1] as usize;
-            let c = triangles[i+2] as usize;
-            
-            // Convert position to f32 and add the edge vertex position
-            let v1 = Vector3::new(position.x as f32, position.y as f32, position.z as f32) + edge_vertices[a];
-            let v2 = Vector3::new(position.x as f32, position.y as f32, position.z as f32) + edge_vertices[b];
-            let v3 = Vector3::new(position.x as f32, position.y as f32, position.z as f32) + edge_vertices[c];
-            
-            // Calculate normal (CCW winding)
-            let normal = (v2 - v1).cross(v3 - v1).normalize();
-            
-            builder.add_vertex(v1, normal);
-            builder.add_vertex(v2, normal);
-            builder.add_vertex(v3, normal);
-            
-            i += 3;
         }
     }
 }
@@ -433,29 +460,28 @@ impl Chunk {
     }
 
     pub fn make_mesh(&mut self, device: &wgpu::Device, chunk_coord: ChunkCoord, force: bool) {
-        if !force && self.mesh.is_some() {
-            return; // Skip if no changes
+        if !force && !self.dirty && self.mesh.is_some() {
+            return;
         }
 
         let mut builder = ChunkMeshBuilder::new();
-        let (chunk_x, chunk_y, chunk_z) = ChunkCoord::unpack(&chunk_coord);
         
+        // Pre-compute chunk offset
+        let chunk_offset = chunk_coord.to_world_pos();
+
         for (&pos, block) in &self.blocks {
             if block.is_empty() {
                 continue;
             }
+            
             let local_pos = Self::position_to_local(pos);
             if block.is_marching() {
-                block.generate_marching_cubes_mesh(local_pos, &mut builder);
+                block.generate_marching_cubes_mesh(local_pos, chunk_offset, &mut builder);
                 continue;
             }
 
-            // Calculate world position by adding chunk offset
-            let world_pos_f32 = Vector3::new(
-                (chunk_x * Self::CHUNK_SIZE_I + local_pos.x as i32) as f32,
-                (chunk_y * Self::CHUNK_SIZE_I + local_pos.y as i32) as f32,
-                (chunk_z * Self::CHUNK_SIZE_I + local_pos.z as i32) as f32
-            );
+            // Calculate world position
+            let world_pos_f32 = chunk_offset.to_vec3_f32() + local_pos.to_vec3_f32();
 
             builder.add_cube(world_pos_f32, block.rotation_to_quaternion());
         }

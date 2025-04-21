@@ -251,9 +251,8 @@ pub fn render_all(current_state: &mut super::State) -> Result<(), wgpu::SurfaceE
             &current_state.camera_system.bind_group,
         ];
 
-        // Draw inside surfaces
         {
-            rpass.set_pipeline(&current_state.pipeline.inside_pipeline);
+            rpass.set_pipeline(&current_state.pipeline.chunk_pipeline);
             // Draw chunks using chunk pipeline
             // Set bind groups
             bind_groups
@@ -263,8 +262,9 @@ pub fn render_all(current_state: &mut super::State) -> Result<(), wgpu::SurfaceE
             current_state.data_system.world.render_chunks(&mut rpass);
         }
 
+        // Draw inside surfaces
         {
-            rpass.set_pipeline(&current_state.pipeline.chunk_pipeline);
+            rpass.set_pipeline(&current_state.pipeline.inside_pipeline);
             // Draw chunks using chunk pipeline
             // Set bind groups
             bind_groups

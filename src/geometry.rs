@@ -101,24 +101,20 @@ impl GeometryBuffer {
         }
     }
 }
-fn function_bad(raw_data: &str) -> (u8, u8, u8, bool) {
-    // Ensure the input string has exactly 6 characters
+fn parse_raw(raw_data: &str) -> (u8, u8, u8, bool) {
     if raw_data.len() != 4 {
-        panic!("Input string must have exactly 4 characters.");
+        println!("Input string must have exactly 4 characters.");
+        return (0, 0, 0, true);
     }
 
     // Parse the first three characters as u8 values
-    let x = u8::from_str_radix(&raw_data[0..1], 10).unwrap();
-    let y = u8::from_str_radix(&raw_data[1..2], 10).unwrap();
-    let z = u8::from_str_radix(&raw_data[2..3], 10).unwrap();
-    let boo = u8::from_str_radix(&raw_data[3..4], 10).unwrap();
+    let x = u8::from_str_radix(&raw_data[0..1], 10).unwrap_or(0);
+    let y = u8::from_str_radix(&raw_data[1..2], 10).unwrap_or(0);
+    let z = u8::from_str_radix(&raw_data[2..3], 10).unwrap_or(0);
+    let boo = u8::from_str_radix(&raw_data[3..4], 10).unwrap_or(0);
 
     // Parse the last part as a boolean
-    let val = match boo {
-        1 => true,
-        2 => false,
-        _ => panic!("Invalid boolean value in input string."),
-    };
+    let val = if boo == 1 { true } else { false };
 
     (x, y, z, val)
 }
@@ -130,7 +126,7 @@ pub fn march_def_cube(raw_data: &str) {
 
         // March cube at the correct position
         if let Some(block) = state.data_system.world.get_block_mut(pos) {
-            block.set_point(function_bad(raw_data));
+            block.set_point(parse_raw(raw_data));
         }
 
         // Get the chunk and update its mesh
@@ -147,7 +143,7 @@ pub fn add_def_cube() {
         let placement_position: Vector3<i32> = Vector3::new(0, 0, 0);
 
         // Create cube at the correct position
-        let cube = super::cube::Block::new();
+        let cube = super::cube::Block::new_dot();
         state.data_system.world.set_block(placement_position, cube);
 
         // Update the chunk's mesh
