@@ -171,15 +171,11 @@ impl Block {
                     case_index |= (self.get_point(sub_x, sub_y + 1, sub_z + 1) as u8) << 7;
 
                     // Skip empty or full sub-cubes
-                    if case_index == 0 || case_index == 255 {
-                        continue;
-                    }
+                    if case_index == 0 || case_index == 255 { continue; }
 
                     // Get edges for this case
                     let edges = EDGE_TABLE[case_index as usize];
-                    if edges == 0 {
-                        continue;
-                    }
+                    if edges == 0 { continue; }
 
                     // Calculate vertex positions for each edge that is crossed
                     let mut edge_vertices = [Vector3::zero(); 12];
@@ -217,28 +213,10 @@ impl Block {
                     for i in (0..16).step_by(3) {
                         if triangles[i] == -1 { break; }
                         
-                        let a = triangles[i] as usize;
-                        let b = triangles[i+1] as usize;
-                        let c = triangles[i+2] as usize;
+                        let indices = [triangles[i] as usize, triangles[i+1] as usize, triangles[i+2] as usize];
+                        let vertices = indices.map(|idx| base_pos + sub_offset + edge_vertices[idx]);
                         
-                        let v1 = base_pos + sub_offset + edge_vertices[a];
-                        let v2 = base_pos + sub_offset + edge_vertices[b];
-                        let v3 = base_pos + sub_offset + edge_vertices[c];
-                        
-                        // Calculate normal (CCW winding)
-                        let normal = (v2 - v1).cross(v3 - v1).normalize();
-                        
-                        let start_index = builder.current_vertex;
-                        builder.add_vertex(v1, normal);
-                        builder.add_vertex(v2, normal);
-                        builder.add_vertex(v3, normal);
-                        
-                        // Add indices for the triangle
-                        builder.indices.extend(&[
-                            start_index as u16,
-                            start_index as u16 + 1,
-                            start_index as u16 + 2
-                        ]);
+                        builder.add_triangle(&vertices);
                     }
                 }
             }
@@ -750,8 +728,31 @@ impl ChunkMeshBuilder {
         // Add indices with offset
         self.indices.extend(INDICES.iter().map(|&i| start_vertex as u16 + i));
     }
+    #[inline]
+    pub fn add_face(
+        &mut self,
+        position: Vector3<f32>,
+        rotation: Quaternion<f32>,
+        corners: [Vector3<f32>; 4],
+        normal: Vector3<f32>,
+    ) {
+        let normal = rotation * normal;
+        let base = self.vertices.len() as u16;
+
+        for corner in corners {
+            let pos = position + rotation * corner;
+            self.vertices.push(Vertex {
+                position: pos.into(),
+                normal: normal.into(),
+                uv: [0.5; 2], // Simplified UVs
+            });
+        }
+
+        self.indices.extend(&[base, base+1, base+2, base, base+2, base+3]);
+    }
 
     // New function to add individual vertices for marching cubes
+    #[inline]
     pub fn add_vertex(&mut self, position: Vector3<f32>, normal: Vector3<f32>) {
         self.vertices.push(Vertex {
             position: position.into(),
@@ -760,6 +761,22 @@ impl ChunkMeshBuilder {
         });
         self.indices.push(self.current_vertex as u16);
         self.current_vertex += 1;
+    }
+    #[inline]
+    pub fn add_triangle(&mut self, vertices: &[Vector3<f32>; 3]) {
+        let normal = (vertices[1] - vertices[0])
+            .cross(vertices[2] - vertices[0])
+            .normalize();
+
+        let base = self.vertices.len() as u16;
+        for vertex in vertices {
+            self.vertices.push(Vertex {
+                position: (*vertex).into(),
+                normal: normal.into(),
+                uv: [0.0; 2],
+            });
+        }
+        self.indices.extend(&[base, base+1, base+2]);
     }
 
     #[inline]

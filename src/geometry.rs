@@ -138,9 +138,7 @@ pub fn march_def_cube(raw_data: &str) {
 pub fn add_def_cube() {
     unsafe {
         let state = super::get_state();
-
-        // Calculate where to place the cube (in front of the camera)
-        let placement_position: Vector3<i32> = Vector3::new(0, 0, 0);
+        let placement_position: Vector3<i32> = Vector3::new(0i32, 0i32, 0i32);
 
         // Create cube at the correct position
         let cube = super::cube::Block::new_dot();
