@@ -147,7 +147,7 @@ fn depth_stencil_state(write_enabled: bool) -> wgpu::DepthStencilState {
         // Disable depth write for opaque objects after first pass
         depth_write_enabled: write_enabled,
         // Use LessEqual for early depth test
-        depth_compare: wgpu::CompareFunction::LessEqual,
+        depth_compare: wgpu::CompareFunction::Less,
         // Disable stencil if unused
         stencil: wgpu::StencilState::default(),
         // Disable depth bias
