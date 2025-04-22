@@ -764,17 +764,6 @@ impl ChunkMeshBuilder {
     }
 
     #[inline]
-    pub fn add_vertex(&mut self, position: Vector3<f32>, normal: Vector3<f32>) {
-        self.vertices.push(Vertex {
-            position: [position.x, position.y, position.z],
-            normal: [normal.x, normal.y, normal.z],
-            uv: [0.0, 0.0],
-        });
-        self.indices.push(self.current_vertex as u16);
-        self.current_vertex += 1;
-    }
-
-    #[inline]
     pub fn add_triangle(&mut self, vertices: &[Vector3<f32>; 3]) {
         let normal = (vertices[1] - vertices[0])
             .cross(vertices[2] - vertices[0])
@@ -796,9 +785,7 @@ impl ChunkMeshBuilder {
     pub fn build(self, device: &wgpu::Device) -> GeometryBuffer {
         GeometryBuffer::new(device, &self.indices, &self.vertices)
     }
-}
 
-impl ChunkMeshBuilder {
     pub fn add_cube(&mut self, position: Vector3<f32>, rotation: Quaternion<f32>) {
         // Transform matrix
         let transform = Matrix4::from_translation(position) * Matrix4::from(rotation);
@@ -821,7 +808,43 @@ impl ChunkMeshBuilder {
         self.indices.extend(INDICES.iter().map(|&i| start_vertex as u16 + i));
     }
 
-    pub fn add_cube_bad_f(&mut self, position: Vector3<f32>, rotation: Quaternion<f32>) {
+    pub fn add_cube_worse(&mut self, position: Vector3<f32>, rotation: Quaternion<f32>) {
+        
+        // Generate vertices for each face
+        for (_i, (normal, corners)) in CUBE_FACES.iter().enumerate() {
+            
+            // UV coordinates for this face
+            let uvs = [
+                [0.0, 0.0], // bottom-left
+                [1.0, 0.0], // bottom-right 
+                [1.0, 1.0], // top-right
+                [0.0, 1.0], // top-left
+            ];
+
+            // Add vertices
+            for (i, corner) in corners.iter().enumerate() {
+                let rotated_pos = position + rotation * corner;
+                self.vertices.push(Vertex {
+                    position: [rotated_pos.x, rotated_pos.y, rotated_pos.z],
+                    normal: (*normal).into(),
+                    uv: uvs[i],
+                });
+            }
+        }
+
+        // Add indices (6 indices per face, 36 total)
+        for _i in 0..6 {
+            let face_offset = self.current_vertex as u16;
+            self.indices.extend(&[
+                face_offset, face_offset + 1, face_offset + 2,
+                face_offset, face_offset + 2, face_offset + 3,
+            ]);
+            self.current_vertex += 4; // 6 faces * 4 vertices
+        }
+
+    }
+
+    pub fn add_cube_bad(&mut self, position: Vector3<f32>, rotation: Quaternion<f32>) {
         for (normal, corners) in &CUBE_FACES {
             self.add_face(position, rotation, *corners, *normal);
         }
