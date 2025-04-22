@@ -82,23 +82,20 @@ fn create_chunk_pipeline(
 fn create_inside_pipeline(
     device: &wgpu::Device,
     layout: &wgpu::PipelineLayout,
-    inside_shader: &wgpu::ShaderModule,
+    shader: &wgpu::ShaderModule,
     format: wgpu::TextureFormat,
 ) -> wgpu::RenderPipeline {
     device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
         label: Some("Inside Render Pipeline"),
         layout: Some(layout),
         vertex: wgpu::VertexState {
-            module: inside_shader,
+            module: shader,
             entry_point: Some("vs_main"),
             compilation_options: Default::default(),
-            buffers: &[
-                // Reference the const + static instance layout
-                super::geometry::Vertex::desc(),
-            ],
+            buffers: &[super::geometry::Vertex::desc()],
         },
         fragment: Some(wgpu::FragmentState {
-            module: inside_shader,
+            module: shader,
             entry_point: Some("fs_main"),
             compilation_options: Default::default(),
             targets: &[Some(wgpu::ColorTargetState {

@@ -31,6 +31,7 @@ pub struct RenderContext<'a> {
     queue: wgpu::Queue,
     config: wgpu::SurfaceConfiguration,
     size: winit::dpi::PhysicalSize<u32>,
+    chunk_bind_group_layout:  wgpu::BindGroupLayout,
 }
 
 pub struct InputSubsystem {
@@ -132,11 +133,28 @@ impl<'a> State<'a> {
 
         let texture_manager: geometry::TextureManager = geometry::TextureManager::new(&device, &queue, &config);
 
+        let chunk_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::VERTEX,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: wgpu::BufferSize::new(16), // Specify minimum size
+                    },
+                    count: None,
+                },
+            ],
+            label: Some("chunk_bind_group_layout"),
+        });
         let render_pipeline_layout: wgpu::PipelineLayout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("Render Pipeline Layout"),
             bind_group_layouts: &[
                 &texture_manager.bind_group_layout,
                 &camera_system.bind_group_layout,
+                &chunk_bind_group_layout,
+
             ],
             ..Default::default()
         });
@@ -155,6 +173,7 @@ impl<'a> State<'a> {
             queue,
             config,
             size,
+            chunk_bind_group_layout,
         };
 
         Self {

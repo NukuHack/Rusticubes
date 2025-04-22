@@ -1,4 +1,5 @@
-﻿use crate::traits::VectorTypeConversion;
+﻿use wgpu::util::DeviceExt;
+use crate::traits::VectorTypeConversion;
 use crate::geometry::GeometryBuffer;
 use crate::geometry::Vertex;
 use crate::geometry::VERTICES;
@@ -28,8 +29,8 @@ impl std::fmt::Debug for Block {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Block")
             .field("material", &format_args!("{:?}", self.material))
-            .field("points", &format_args!("{:?}", self.points))
-            .field("rotation", &format_args!("{:?}", self.rotation))
+            .field("points", &format!("{:027b}", self.points))
+            .field("rotation", &format!("{:015b}", self.rotation))
             .finish()
     }
 }
@@ -123,11 +124,11 @@ impl Block {
     pub fn set_point(&mut self, (x, y, z, value):(u8,u8,u8,bool)) {
         assert!(x < 3 && y < 3 && z < 3, "Coordinates must be in 0..=2");
         let bit_pos = (x as u32) + (y as u32) * 3 + (z as u32) * 9;
-        if value {
-            self.points |= 1 << bit_pos;
+        self.points = if value {
+            self.points | (1 << bit_pos)
         } else {
-            self.points &= !(1 << bit_pos);
-        }
+            self.points & !(1 << bit_pos)
+        };
     }
 
     /// Get a specific point in the 3x3x3 grid (x,y,z in 0..=2)
@@ -138,34 +139,36 @@ impl Block {
         (self.points & (1 << bit_pos)) != 0
     }
 
+    /// Precomputed corner positions for marching cubes
+    const CORNER_POSITIONS: [Vector3<f32>; 8] = [
+        Vector3::new(0.0, 0.0, 0.0),  // 0
+        Vector3::new(0.5, 0.0, 0.0),  // 1
+        Vector3::new(0.5, 0.0, 0.5),  // 2
+        Vector3::new(0.0, 0.0, 0.5),  // 3
+        Vector3::new(0.0, 0.5, 0.0),  // 4
+        Vector3::new(0.5, 0.5, 0.0),  // 5
+        Vector3::new(0.5, 0.5, 0.5),  // 6
+        Vector3::new(0.0, 0.5, 0.5),  // 7
+    ];
 
-    /// Generate mesh for a 3x3x3 marching cubes cell by processing 8 sub-cubes
-    pub fn generate_marching_cubes_mesh(&self, position: Vector3<u32>, chunk_pos: Vector3<i32>, builder: &mut ChunkMeshBuilder) {
-        // Convert position to f32 once
-        let base_pos = position.to_vec3_f32();
-        let base_pos = Vector3::new(base_pos.x,base_pos.y,base_pos.z-1.0) + chunk_pos.to_vec3_f32();
+    /// Generate mesh for a 3x3x3 marching cubes cell
+    pub fn generate_marching_cubes_mesh(&self, position: Vector3<u32>, builder: &mut ChunkMeshBuilder) {
+        let base_pos = position.to_vec3_f32() - Vector3::new(0.0, 0.0, 1.0);
+
         // Process each of the 8 sub-cubes in the 3x3x3 grid
-        for sub_x in 0..2 {
+        for sub_z in 0..2 {
             for sub_y in 0..2 {
-                for sub_z in 0..2 {
+                for sub_x in 0..2 {
                     // Get the 8 corner points for this sub-cube
-                    let mut corners = [false; 8];
-                    corners[0] = self.get_point(sub_x, sub_y, sub_z);
-                    corners[1] = self.get_point(sub_x + 1, sub_y, sub_z);
-                    corners[2] = self.get_point(sub_x + 1, sub_y, sub_z + 1);
-                    corners[3] = self.get_point(sub_x, sub_y, sub_z + 1);
-                    corners[4] = self.get_point(sub_x, sub_y + 1, sub_z);
-                    corners[5] = self.get_point(sub_x + 1, sub_y + 1, sub_z);
-                    corners[6] = self.get_point(sub_x + 1, sub_y + 1, sub_z + 1);
-                    corners[7] = self.get_point(sub_x, sub_y + 1, sub_z + 1);
-
-                    // Calculate the case index (0-255)
                     let mut case_index = 0;
-                    for i in 0..8 {
-                        if corners[i] {
-                            case_index |= 1 << i;
-                        }
-                    }
+                    case_index |= (self.get_point(sub_x, sub_y, sub_z) as u8) << 0;
+                    case_index |= (self.get_point(sub_x + 1, sub_y, sub_z) as u8) << 1;
+                    case_index |= (self.get_point(sub_x + 1, sub_y, sub_z + 1) as u8) << 2;
+                    case_index |= (self.get_point(sub_x, sub_y, sub_z + 1) as u8) << 3;
+                    case_index |= (self.get_point(sub_x, sub_y + 1, sub_z) as u8) << 4;
+                    case_index |= (self.get_point(sub_x + 1, sub_y + 1, sub_z) as u8) << 5;
+                    case_index |= (self.get_point(sub_x + 1, sub_y + 1, sub_z + 1) as u8) << 6;
+                    case_index |= (self.get_point(sub_x, sub_y + 1, sub_z + 1) as u8) << 7;
 
                     // Skip empty or full sub-cubes
                     if case_index == 0 || case_index == 255 {
@@ -173,22 +176,10 @@ impl Block {
                     }
 
                     // Get edges for this case
-                    let edges = EDGE_TABLE[case_index];
+                    let edges = EDGE_TABLE[case_index as usize];
                     if edges == 0 {
                         continue;
                     }
-
-                    // Vertex positions for the 8 corners (relative to sub-cube origin)
-                    let corner_positions: [Vector3<f32>; 8] = [
-                        Vector3::new(0.0, 0.0, 0.0),  // 0
-                        Vector3::new(0.5, 0.0, 0.0),  // 1
-                        Vector3::new(0.5, 0.0, 0.5), // 2
-                        Vector3::new(0.0, 0.0, 0.5),  // 3
-                        Vector3::new(0.0, 0.5, 0.0),  // 4
-                        Vector3::new(0.5, 0.5, 0.0),  // 5
-                        Vector3::new(0.5, 0.5, 0.5), // 6
-                        Vector3::new(0.0, 0.5, 0.5),  // 7
-                    ];
 
                     // Calculate vertex positions for each edge that is crossed
                     let mut edge_vertices = [Vector3::zero(); 12];
@@ -210,26 +201,25 @@ impl Block {
                                 _ => unreachable!(),
                             };
                             
-                            // Linear interpolation - could be improved with actual density values
-                            let t = 0.5; // Midpoint for binary case
-                            edge_vertices[edge] = corner_positions[a].lerp(corner_positions[b], t);
+                            // Linear interpolation at midpoint
+                            edge_vertices[edge] = Self::CORNER_POSITIONS[a].lerp(Self::CORNER_POSITIONS[b], 0.5);
                         }
                     }
 
                     // Generate triangles from the triangle table
-                    let triangles = TRI_TABLE[case_index];
-                    let mut i = 0;
-                    while i < 16 && triangles[i] != -1 {
+                    let triangles = &TRI_TABLE[case_index as usize];
+                    let sub_offset = Vector3::new(
+                        sub_x as f32 * 0.5,
+                        sub_y as f32 * 0.5,
+                        sub_z as f32 * 0.5
+                    );
+
+                    for i in (0..16).step_by(3) {
+                        if triangles[i] == -1 { break; }
+                        
                         let a = triangles[i] as usize;
                         let b = triangles[i+1] as usize;
                         let c = triangles[i+2] as usize;
-                        
-                        // Calculate sub-cube offset (each sub-cube is 0.5 units in size)
-                        let sub_offset = Vector3::new(
-                            sub_x as f32 * 0.5,
-                            sub_y as f32 * 0.5,
-                            sub_z as f32 * 0.5
-                        );
                         
                         let v1 = base_pos + sub_offset + edge_vertices[a];
                         let v2 = base_pos + sub_offset + edge_vertices[b];
@@ -244,11 +234,11 @@ impl Block {
                         builder.add_vertex(v3, normal);
                         
                         // Add indices for the triangle
-                        builder.indices.push(start_index as u16);
-                        builder.indices.push((start_index + 1) as u16);
-                        builder.indices.push((start_index + 2) as u16);
-                        
-                        i += 3;
+                        builder.indices.extend(&[
+                            start_index as u16,
+                            start_index as u16 + 1,
+                            start_index as u16 + 2
+                        ]);
                     }
                 }
             }
@@ -366,11 +356,13 @@ impl ChunkCoordHelp for ChunkCoord {
     }
 }
 
+
 #[derive(Clone, Debug)]
 pub struct Chunk {
     pub blocks: FastMap<u16, Block>,  // Key is packed position (x,y,z)
     pub dirty: bool,  // For mesh regeneration
     pub mesh: Option<super::geometry::GeometryBuffer>,
+    bind_group: Option<wgpu::BindGroup>,
 }
 
 impl Chunk {
@@ -386,6 +378,7 @@ impl Chunk {
             ),
             dirty: false,
             mesh: None,
+            bind_group: None,
         }
     }
 
@@ -459,16 +452,13 @@ impl Chunk {
         )
     }
 
-    pub fn make_mesh(&mut self, device: &wgpu::Device, chunk_coord: ChunkCoord, force: bool) {
-        if !force && !self.dirty && self.mesh.is_some() {
+    pub fn make_mesh(&mut self, device: &wgpu::Device, force: bool) {
+        if !force || (!self.dirty && self.mesh.is_some()) {
             return;
         }
 
         let mut builder = ChunkMeshBuilder::new();
         
-        // Pre-compute chunk offset
-        let chunk_offset = chunk_coord.to_world_pos();
-
         for (&pos, block) in &self.blocks {
             if block.is_empty() {
                 continue;
@@ -476,14 +466,11 @@ impl Chunk {
             
             let local_pos = Self::position_to_local(pos);
             if block.is_marching() {
-                block.generate_marching_cubes_mesh(local_pos, chunk_offset, &mut builder);
+                block.generate_marching_cubes_mesh(local_pos, &mut builder);
                 continue;
             }
 
-            // Calculate world position
-            let world_pos_f32 = chunk_offset.to_vec3_f32() + local_pos.to_vec3_f32();
-
-            builder.add_cube(world_pos_f32, block.rotation_to_quaternion());
+            builder.add_cube(local_pos.to_vec3_f32(), block.rotation_to_quaternion());
         }
 
         self.mesh = Some(builder.build(device));
@@ -555,12 +542,50 @@ impl World {
 
     #[inline]
     pub fn load_chunk(&mut self, chunk_coord: ChunkCoord) -> bool {
-        let chunk: Option<Chunk> = Chunk::load();
-        if let Some(chunk) = chunk {
-            self.set_chunk(chunk_coord, chunk);
+        unsafe {
+            let state = super::get_state();
+            let device = &state.render_context.device;
+            let chunk_bind_group_layout = &state.render_context.chunk_bind_group_layout;
+
+            // Unload existing chunk if present
+            if self.get_chunk(chunk_coord).is_some() {
+                super::get_state().data_system.world.unload_chunk(chunk_coord);
+            }
+
+            // Attempt to load chunk
+            let chunk = match Chunk::load() {
+                Some(c) => c,
+                None => return false,
+            };
+            
+            // Create position buffer (only storing Vector3<f32> now)
+            let world_pos = chunk_coord.to_world_pos().to_vec3_f32();
+            let position_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("Chunk Position Buffer"),
+                contents: bytemuck::cast_slice(&[world_pos.x, world_pos.y, world_pos.z, 0.0]),
+                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            });
+            
+            // Create bind group
+            let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+                layout: &chunk_bind_group_layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: position_buffer.as_entire_binding(),
+                    },
+                ],
+                label: Some("chunk_bind_group"),
+            });
+            
+            // Update chunk with new GPU resources
+            let updated_chunk = Chunk {
+                bind_group: Some(bind_group),
+                ..chunk
+            };
+            
+            self.set_chunk(chunk_coord, updated_chunk);
             true
-        } else {
-            false
         }
     }
 
@@ -665,25 +690,21 @@ impl World {
     }
 
     pub fn make_chunk_meshes(&mut self, device: &wgpu::Device) {
-        for (&coord, chunk) in self.chunks.iter_mut() {
-            if chunk.dirty {
-                chunk.make_mesh(device, coord, false);
-            }
+        for (&_coord, chunk) in self.chunks.iter_mut() {
+            chunk.make_mesh(device, false);
         }
     }
 
     pub fn render_chunks<'a>(&'a self, render_pass: &mut wgpu::RenderPass<'a>) {
-        let mut chunks: Vec<_> = self.chunks.values().collect();
-        chunks.sort_by(|_a, _b| {
-            // Implement your sorting logic based on camera position
-            std::cmp::Ordering::Equal
-        });
-
-        for chunk in chunks {
+        for (&_coord, chunk) in self.chunks.iter() {
             if let Some(mesh) = &chunk.mesh {
-                render_pass.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
-                render_pass.set_index_buffer(mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
-                render_pass.draw_indexed(0..mesh.num_indices, 0, 0..1);
+                if let Some(bind_group) = &chunk.bind_group {
+                    render_pass.set_bind_group(2, bind_group, &[]);
+                    
+                    render_pass.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
+                    render_pass.set_index_buffer(mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
+                    render_pass.draw_indexed(0..mesh.num_indices, 0, 0..1);
+                }
             }
         }
     }
@@ -723,12 +744,11 @@ impl ChunkMeshBuilder {
                 normal: normal.into(),
                 uv: vertex.uv,
             });
-            self.current_vertex += 1;
         }
+        self.current_vertex += VERTICES.len() as u32;
 
-        for index in INDICES {
-            self.indices.push(start_vertex as u16 + index);
-        }
+        // Add indices with offset
+        self.indices.extend(INDICES.iter().map(|&i| start_vertex as u16 + i));
     }
 
     // New function to add individual vertices for marching cubes

@@ -53,7 +53,7 @@ pub struct GeometryBuffer {
 impl GeometryBuffer {
     pub fn new(device: &wgpu::Device, indices: &[u16], vertices: &[Vertex]) -> Self {
         // Handle empty geometry case
-        if vertices.is_empty() || indices.is_empty() {
+        if vertices.is_empty() && indices.is_empty() {
             return Self::empty(device);
         }
 
@@ -131,7 +131,7 @@ pub fn march_def_cube(raw_data: &str) {
 
         // Get the chunk and update its mesh
         if let Some(chunk) = state.data_system.world.get_chunk_mut(chunk_pos) {
-            chunk.make_mesh(super::get_state().device(), chunk_pos, true);
+            chunk.make_mesh(super::get_state().device(), true);
         }
     }
 }
@@ -149,7 +149,7 @@ pub fn add_def_cube() {
         // Update the chunk's mesh
         let chunk_pos = ChunkCoord::from_world_pos(placement_position);
         if let Some(chunk) = state.data_system.world.get_chunk_mut(chunk_pos) {
-            chunk.make_mesh(super::get_state().device(), chunk_pos, true);
+            chunk.make_mesh(super::get_state().device(), true);
         }
     }
 }
@@ -170,7 +170,7 @@ pub fn add_def_looked_cube() {
         // Update the chunk's mesh
         let chunk_pos = ChunkCoord::from_world_pos(placement_position);
         if let Some(chunk) = state.data_system.world.get_chunk_mut(chunk_pos) {
-            chunk.make_mesh(super::get_state().device(), chunk_pos, true);
+            chunk.make_mesh(super::get_state().device(), true);
         }
     }
 }
@@ -193,7 +193,7 @@ pub fn add_def_chunk() {
         if state.data_system.world.load_chunk(chunk_pos_c_c) {
             // Get the chunk and update its mesh
             if let Some(chunk) = state.data_system.world.get_chunk_mut(chunk_pos_c_c) {
-                chunk.make_mesh(super::get_state().device(), chunk_pos_c_c, true);
+                chunk.make_mesh(super::get_state().device(), true);
             }
         } else {
             eprintln!("Chunk load failed at: {:?}", chunk_pos_c_c);
@@ -274,7 +274,7 @@ pub fn rem_raycasted_block() {
             // Update the chunk's mesh
             let chunk_pos = ChunkCoord::from_world_pos(block_pos);
             if let Some(chunk) = state.data_system.world.get_chunk_mut(chunk_pos) {
-                chunk.make_mesh(super::get_state().device(), chunk_pos, true);
+                chunk.make_mesh(super::get_state().device(), true);
             }
         }
     }
