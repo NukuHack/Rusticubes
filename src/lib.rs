@@ -342,21 +342,28 @@ impl<'a> State<'a> {
                     },
                     Key::KeyF => {
                         if *state == ElementState::Pressed {
-                            geometry::add_def_looked_cube();
+                            geometry::place_looked_cube();
                             return true
                         }
                         false
                     },
                     Key::KeyH => {
                         if *state == ElementState::Pressed {
-                            geometry::add_def_cube();
+                            geometry::place_marched_cube();
+                            return true
+                        }
+                        false
+                    },
+                    Key::KeyG => {
+                        if *state == ElementState::Pressed {
+                            geometry::place_default_cube();
                             return true
                         }
                         false
                     },
                     Key::KeyR => {
                         if *state == ElementState::Pressed {
-                            geometry::rem_raycasted_block();
+                            geometry::remove_targeted_block();
                             return true
                         }
                         false

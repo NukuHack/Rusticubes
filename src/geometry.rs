@@ -1,6 +1,10 @@
-use super::cube::{ChunkCoord, ChunkCoordHelp};
+use super::cube::ChunkCoord;
 use super::traits::VectorTypeConversion;
-use cgmath::{InnerSpace, SquareMatrix, Vector3};
+use crate::camera::Camera;
+use crate::cube::Block;
+use crate::cube::World;
+use cgmath::Vector3;
+use cgmath::Zero;
 use image::GenericImageView;
 use std::mem;
 use wgpu::util::DeviceExt;
@@ -101,175 +105,244 @@ impl GeometryBuffer {
         }
     }
 }
-fn parse_raw(raw_data: &str) -> (u8, u8, u8, bool) {
+/// Parses a 4-character string into (x,y,z,value) for block point manipulation
+/// Format: "XYZV" where X,Y,Z are digits 0-2 and V is 0 or 1
+fn parse_block_point_input(raw_data: &str) -> Option<(u8, u8, u8, bool)> {
     if raw_data.len() != 4 {
-        println!("Input string must have exactly 4 characters.");
-        return (0, 0, 0, true);
+        eprintln!("Input must be exactly 4 characters (XYZV)");
+        return None;
     }
 
-    // Parse the first three characters as u8 values
-    let x = u8::from_str_radix(&raw_data[0..1], 10).unwrap_or(0);
-    let y = u8::from_str_radix(&raw_data[1..2], 10).unwrap_or(0);
-    let z = u8::from_str_radix(&raw_data[2..3], 10).unwrap_or(0);
-    let boo = u8::from_str_radix(&raw_data[3..4], 10).unwrap_or(0);
+    let parse_digit = |c: char| -> Option<u8> {
+        c.to_digit(10)
+            .and_then(|d| if d <= 2 { Some(d as u8) } else { None })
+    };
 
-    // Parse the last part as a boolean
-    let val = if boo == 1 { true } else { false };
+    let mut chars = raw_data.chars();
+    let x = parse_digit(chars.next()?)?;
+    let y = parse_digit(chars.next()?)?;
+    let z = parse_digit(chars.next()?)?;
+    let val = chars.next()? == '1';
 
-    (x, y, z, val)
+    Some((x, y, z, val))
 }
-pub fn march_def_cube(raw_data: &str) {
+/// Updates a marching cubes block at (0,0,0) with new point data
+pub fn march_def_cube(raw_data: &str) -> bool {
+    let Some((x, y, z, value)) = parse_block_point_input(raw_data) else {
+        return false;
+    };
+
     unsafe {
         let state = super::get_state();
-        let pos: Vector3<i32> = Vector3::new(0i32, 0i32, 0i32);
-        let chunk_pos = ChunkCoord::from_world_pos(pos);
+        let pos = Vector3::zero();
 
-        // March cube at the correct position
         if let Some(block) = state.data_system.world.get_block_mut(pos) {
-            block.set_point(parse_raw(raw_data));
-        }
-
-        // Get the chunk and update its mesh
-        if let Some(chunk) = state.data_system.world.get_chunk_mut(chunk_pos) {
-            chunk.make_mesh(super::get_state().device(), true);
+            block.set_point((x, y, z, value));
+            // Update chunk mesh
+            let chunk_pos = ChunkCoord::from_world_pos(pos);
+            if let Some(chunk) = state.data_system.world.get_chunk_mut(chunk_pos) {
+                chunk.make_mesh(super::get_state().device(), true);
+            }
+            true
+        } else {
+            false
         }
     }
 }
-pub fn add_def_cube() {
+/// Places a simple cube at (0,0,0)
+pub fn place_default_cube() {
     unsafe {
         let state = super::get_state();
-        let placement_position: Vector3<i32> = Vector3::new(0i32, 0i32, 0i32);
+        let pos = Vector3::zero();
+        state.data_system.world.set_block(pos, Block::new());
 
-        // Create cube at the correct position
-        let cube = super::cube::Block::new_dot();
-        state.data_system.world.set_block(placement_position, cube);
-
-        // Update the chunk's mesh
-        let chunk_pos = ChunkCoord::from_world_pos(placement_position);
+        // Update chunk mesh
+        let chunk_pos = ChunkCoord::from_world_pos(pos);
         if let Some(chunk) = state.data_system.world.get_chunk_mut(chunk_pos) {
             chunk.make_mesh(super::get_state().device(), true);
         }
     }
 }
-pub fn add_def_looked_cube() {
+/// Places a complex cube at (0,0,0)
+pub fn place_marched_cube() {
     unsafe {
         let state = super::get_state();
+        let pos = Vector3::zero();
+        state.data_system.world.set_block(pos, Block::new_dot());
 
-        // Calculate where to place the cube (in front of the camera)
-        let placement_distance = 6.0; // Distance in front of camera
-        let placement_position = (state.camera_system.camera.position
-            + state.camera_system.camera.forward() * placement_distance)
-            .to_vec3_i32();
-
-        // Create cube at the correct position
-        let cube = super::cube::Block::new();
-        state.data_system.world.set_block(placement_position, cube);
-
-        // Update the chunk's mesh
-        let chunk_pos = ChunkCoord::from_world_pos(placement_position);
+        // Update chunk mesh
+        let chunk_pos = ChunkCoord::from_world_pos(pos);
         if let Some(chunk) = state.data_system.world.get_chunk_mut(chunk_pos) {
             chunk.make_mesh(super::get_state().device(), true);
         }
     }
 }
+/// Loads a chunk at the camera's position if not already loaded
 pub fn add_def_chunk() {
     unsafe {
         let state = super::get_state();
-        let chunk_pos = (state.camera_system.camera.position).to_vec3_i32();
-        let chunk_pos_c_c = ChunkCoord::from_world_pos(chunk_pos);
+        let chunk_pos =
+            ChunkCoord::from_world_pos(state.camera_system.camera.position.to_vec3_i32());
 
-        if state
-            .data_system
-            .world
-            .loaded_chunks
-            .contains(&chunk_pos_c_c)
-        {
+        if state.data_system.world.loaded_chunks.contains(&chunk_pos) {
             return;
-            // why would you try to load a chunk what already exist ?
         }
 
-        if state.data_system.world.load_chunk(chunk_pos_c_c) {
-            // Get the chunk and update its mesh
-            if let Some(chunk) = state.data_system.world.get_chunk_mut(chunk_pos_c_c) {
+        if state.data_system.world.load_chunk(chunk_pos) {
+            // Update mesh for the new chunk
+            if let Some(chunk) = state.data_system.world.get_chunk_mut(chunk_pos) {
                 chunk.make_mesh(super::get_state().device(), true);
             }
-        } else {
-            eprintln!("Chunk load failed at: {:?}", chunk_pos_c_c);
         }
     }
 }
-pub fn add_full_world() {
+/// Loads chunks around the camera in a radius
+pub fn add_full_world(radius: u32) {
     unsafe {
         let state = super::get_state();
-        let chunk_pos = (state.camera_system.camera.position).to_vec3_i32();
-        state.data_system.world.update_loaded_chunks(chunk_pos, 5);
+        let center = state.camera_system.camera.position.to_vec3_i32();
+        state.data_system.world.update_loaded_chunks(center, radius);
         state
             .data_system
             .world
             .make_chunk_meshes(super::get_state().device());
     }
 }
-
-pub fn cast_ray_and_select_block(
-    camera: &super::camera::Camera,
-    projection: &super::camera::Projection,
-    world: &super::cube::World,
+/// Improved raycasting function that finds the first non-empty block and its face
+pub fn raycast_to_block(
+    camera: &Camera,
+    world: &World,
     max_distance: f32,
-) -> Option<Vector3<i32>> {
-    let ray_clip: cgmath::Vector4<f32> = cgmath::Vector4::new(0.0, 0.0, -1.0, 1.0);
-    let inv_proj = projection.calc_matrix().invert().unwrap();
-    let mut ray_eye: cgmath::Vector4<f32> = inv_proj * ray_clip;
-    ray_eye = cgmath::Vector4::new(ray_eye.x, ray_eye.y, -1.0, 0.0);
+) -> Option<(Vector3<i32>, Vector3<i32>)> {
+    // Adjust ray origin to block center
+    let ray_origin = camera.position + Vector3::new(0.0, 0.0, 0.5);
+    let ray_dir = camera.forward();
 
-    let inv_view = camera.calc_matrix().invert().unwrap();
-    let ray_world = inv_view * ray_eye;
-    let ray_dir = ray_world.truncate().normalize();
-    let ray_origin = camera.position;
+    // Initialize variables for DDA algorithm
+    let step = Vector3::new(
+        ray_dir.x.signum() as i32,
+        ray_dir.y.signum() as i32,
+        ray_dir.z.signum() as i32,
+    );
 
-    let steps = (max_distance * 2.0) as usize;
-    let step_size = max_distance / steps as f32;
+    let mut block_pos = Vector3::new(
+        ray_origin.x.floor() as i32,
+        ray_origin.y.floor() as i32,
+        ray_origin.z.floor() as i32,
+    );
 
-    for i in 0..steps {
-        let t = i as f32 * step_size;
-        let current_pos = ray_origin + ray_dir * t;
-        let block_pos = Vector3::new(
-            current_pos.x.floor() as i32,
-            current_pos.y.floor() as i32,
-            current_pos.z.floor() as i32,
-        );
+    let t_delta = Vector3::new(
+        if ray_dir.x != 0.0 {
+            1.0 / ray_dir.x.abs()
+        } else {
+            f32::MAX
+        },
+        if ray_dir.y != 0.0 {
+            1.0 / ray_dir.y.abs()
+        } else {
+            f32::MAX
+        },
+        if ray_dir.z != 0.0 {
+            1.0 / ray_dir.z.abs()
+        } else {
+            f32::MAX
+        },
+    );
 
+    let mut t_max = Vector3::new(
+        if step.x > 0 {
+            (block_pos.x as f32 + 1.0 - ray_origin.x) / ray_dir.x
+        } else {
+            (block_pos.x as f32 - ray_origin.x) / ray_dir.x
+        }
+        .abs(),
+        if step.y > 0 {
+            (block_pos.y as f32 + 1.0 - ray_origin.y) / ray_dir.y
+        } else {
+            (block_pos.y as f32 - ray_origin.y) / ray_dir.y
+        }
+        .abs(),
+        if step.z > 0 {
+            (block_pos.z as f32 + 1.0 - ray_origin.z) / ray_dir.z
+        } else {
+            (block_pos.z as f32 - ray_origin.z) / ray_dir.z
+        }
+        .abs(),
+    );
+
+    let mut traveled = 0.0f32;
+    let mut normal = Vector3::new(0, 0, 0);
+
+    while traveled < max_distance {
+        // Check current block
         if let Some(block) = world.get_block(block_pos) {
             if !block.is_empty() {
-                return Some(block_pos);
+                return Some((block_pos, normal));
             }
+        }
+
+        // Move to next block boundary
+        if t_max.x < t_max.y && t_max.x < t_max.z {
+            normal = Vector3::new(-step.x, 0, 0);
+            block_pos.x += step.x;
+            traveled = t_max.x;
+            t_max.x += t_delta.x;
+        } else if t_max.y < t_max.z {
+            normal = Vector3::new(0, -step.y, 0);
+            block_pos.y += step.y;
+            traveled = t_max.y;
+            t_max.y += t_delta.y;
+        } else {
+            normal = Vector3::new(0, 0, -step.z);
+            block_pos.z += step.z;
+            traveled = t_max.z;
+            t_max.z += t_delta.z;
         }
     }
 
     None
 }
 
-pub fn rem_raycasted_block() {
-    let block_pos = unsafe {
+/// Places a cube on the face of the block the player is looking at
+pub fn place_looked_cube() {
+    unsafe {
         let state = super::get_state();
-        cast_ray_and_select_block(
-            &state.camera_system.camera,
-            &state.camera_system.projection,
-            &state.data_system.world,
-            10.0,
-        )
-    };
+        let camera = &state.camera_system.camera;
+        let world = &state.data_system.world;
 
-    if let Some(block_pos) = block_pos {
-        unsafe {
-            let state = super::get_state();
+        if let Some((block_pos, normal)) = raycast_to_block(camera, world, 6.0) {
+            let placement_pos = block_pos + normal;
 
-            // Remove the block
-            state.data_system.world.set_block(
-                block_pos,
-                super::cube::Block::default(), // default is air
-            );
+            // Place the cube
+            state
+                .data_system
+                .world
+                .set_block(placement_pos, Block::new());
 
-            // Update the chunk's mesh
+            // Update chunk mesh
+            let chunk_pos = ChunkCoord::from_world_pos(placement_pos);
+            if let Some(chunk) = state.data_system.world.get_chunk_mut(chunk_pos) {
+                chunk.make_mesh(super::get_state().device(), true);
+            }
+        }
+    }
+}
+
+/// Removes the block the player is looking at
+pub fn remove_targeted_block() {
+    unsafe {
+        let state = super::get_state();
+        let camera = &state.camera_system.camera;
+        let world = &state.data_system.world;
+
+        if let Some((block_pos, _)) = raycast_to_block(camera, world, 10.0) {
+            // Set block to air
+            state
+                .data_system
+                .world
+                .set_block(block_pos, Block::default());
+
+            // Update chunk mesh
             let chunk_pos = ChunkCoord::from_world_pos(block_pos);
             if let Some(chunk) = state.data_system.world.get_chunk_mut(chunk_pos) {
                 chunk.make_mesh(super::get_state().device(), true);

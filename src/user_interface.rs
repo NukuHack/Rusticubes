@@ -608,7 +608,10 @@ pub fn setup_ui(state: &mut super::State) {
             Some("March cube".to_string()),
             Some(Box::new(|| unsafe {
                 let state = super::get_state();
-                let raw_data: &str = state.ui_manager().get_input_text(123).expect("REASON");
+                let raw_data: &str = state
+                    .ui_manager()
+                    .get_input_text(123)
+                    .expect("Input needs to be defined");
                 super::geometry::march_def_cube(raw_data);
             })),
         ),
@@ -626,7 +629,7 @@ pub fn setup_ui(state: &mut super::State) {
             (0.5, 0.25),
             [0.7, 0.3, 0.3],
             Some("fill world w* chunks".to_string()),
-            Some(Box::new(|| super::geometry::add_full_world())),
+            Some(Box::new(|| super::geometry::add_full_world(6))),
         ),
         UIElement::new(
             0,
