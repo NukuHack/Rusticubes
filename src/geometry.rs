@@ -215,7 +215,7 @@ pub fn raycast_to_block(
     max_distance: f32,
 ) -> Option<(Vector3<i32>, Vector3<i32>)> {
     // Adjust ray origin to block center
-    let ray_origin = camera.position + Vector3::new(0.0, 0.0, 0.5);
+    let ray_origin = camera.position + Vector3::new(0.0, 0.0, 1.0);
     let ray_dir = camera.forward();
 
     // Initialize variables for DDA algorithm

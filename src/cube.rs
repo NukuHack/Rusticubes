@@ -5,10 +5,192 @@ use cgmath::{Deg, InnerSpace, Matrix4, Quaternion, Rotation3, Vector3, VectorSpa
 use std::{
     collections::{HashMap, HashSet},
     hash::BuildHasherDefault,
+    sync::OnceLock,
 };
 use wgpu::util::DeviceExt;
 
 type FastMap<K, V> = HashMap<K, V, BuildHasherDefault<AHasher>>;
+
+/// Get static reference to edge vertices data
+fn get_edge_vertices() -> &'static [[Vector3<f32>; 2]; 12] {
+    static EDGE_VERTICES: OnceLock<[[Vector3<f32>; 2]; 12]> = OnceLock::new();
+    EDGE_VERTICES.get_or_init(|| {
+        [
+            [Vector3::new(0.0, 0.0, 0.0), Vector3::new(0.5, 0.0, 0.0)], // Edge 0
+            [Vector3::new(0.5, 0.0, 0.0), Vector3::new(0.5, 0.0, 0.5)], // Edge 1
+            [Vector3::new(0.5, 0.0, 0.5), Vector3::new(0.0, 0.0, 0.5)], // Edge 2
+            [Vector3::new(0.0, 0.0, 0.5), Vector3::new(0.0, 0.0, 0.0)], // Edge 3
+            [Vector3::new(0.0, 0.5, 0.0), Vector3::new(0.5, 0.5, 0.0)], // Edge 4
+            [Vector3::new(0.5, 0.5, 0.0), Vector3::new(0.5, 0.5, 0.5)], // Edge 5
+            [Vector3::new(0.5, 0.5, 0.5), Vector3::new(0.0, 0.5, 0.5)], // Edge 6
+            [Vector3::new(0.0, 0.5, 0.5), Vector3::new(0.0, 0.5, 0.0)], // Edge 7
+            [Vector3::new(0.0, 0.0, 0.0), Vector3::new(0.0, 0.5, 0.0)], // Edge 8
+            [Vector3::new(0.5, 0.0, 0.0), Vector3::new(0.5, 0.5, 0.0)], // Edge 9
+            [Vector3::new(0.5, 0.0, 0.5), Vector3::new(0.5, 0.5, 0.5)], // Edge 10
+            [Vector3::new(0.0, 0.0, 0.5), Vector3::new(0.0, 0.5, 0.5)], // Edge 11
+        ]
+    })
+}
+
+/// Get static reference to cube vertex data
+fn get_cube_vertices() -> &'static [Vertex; 24] {
+    static CUBE_VERTICES: OnceLock<[Vertex; 24]> = OnceLock::new();
+    CUBE_VERTICES.get_or_init(|| {
+        // Create pre-calculated vertices with correct normals and UVs for each face
+        [
+            // Front face (+z)
+            Vertex {
+                position: [0.0, 0.0, 1.0],
+                normal: [0.0, 0.0, 1.0],
+                uv: [0.0, 0.0],
+            },
+            Vertex {
+                position: [1.0, 0.0, 1.0],
+                normal: [0.0, 0.0, 1.0],
+                uv: [1.0, 0.0],
+            },
+            Vertex {
+                position: [1.0, 1.0, 1.0],
+                normal: [0.0, 0.0, 1.0],
+                uv: [1.0, 1.0],
+            },
+            Vertex {
+                position: [0.0, 1.0, 1.0],
+                normal: [0.0, 0.0, 1.0],
+                uv: [0.0, 1.0],
+            },
+            // Back face (-z)
+            Vertex {
+                position: [1.0, 0.0, 0.0],
+                normal: [0.0, 0.0, -1.0],
+                uv: [0.0, 0.0],
+            },
+            Vertex {
+                position: [0.0, 0.0, 0.0],
+                normal: [0.0, 0.0, -1.0],
+                uv: [1.0, 0.0],
+            },
+            Vertex {
+                position: [0.0, 1.0, 0.0],
+                normal: [0.0, 0.0, -1.0],
+                uv: [1.0, 1.0],
+            },
+            Vertex {
+                position: [1.0, 1.0, 0.0],
+                normal: [0.0, 0.0, -1.0],
+                uv: [0.0, 1.0],
+            },
+            // Top face (+y)
+            Vertex {
+                position: [0.0, 1.0, 0.0],
+                normal: [0.0, 1.0, 0.0],
+                uv: [0.0, 0.0],
+            },
+            Vertex {
+                position: [1.0, 1.0, 0.0],
+                normal: [0.0, 1.0, 0.0],
+                uv: [1.0, 0.0],
+            },
+            Vertex {
+                position: [1.0, 1.0, 1.0],
+                normal: [0.0, 1.0, 0.0],
+                uv: [1.0, 1.0],
+            },
+            Vertex {
+                position: [0.0, 1.0, 1.0],
+                normal: [0.0, 1.0, 0.0],
+                uv: [0.0, 1.0],
+            },
+            // Bottom face (-y)
+            Vertex {
+                position: [0.0, 0.0, 0.0],
+                normal: [0.0, -1.0, 0.0],
+                uv: [0.0, 0.0],
+            },
+            Vertex {
+                position: [1.0, 0.0, 0.0],
+                normal: [0.0, -1.0, 0.0],
+                uv: [1.0, 0.0],
+            },
+            Vertex {
+                position: [1.0, 0.0, 1.0],
+                normal: [0.0, -1.0, 0.0],
+                uv: [1.0, 1.0],
+            },
+            Vertex {
+                position: [0.0, 0.0, 1.0],
+                normal: [0.0, -1.0, 0.0],
+                uv: [0.0, 1.0],
+            },
+            // Right face (+x)
+            Vertex {
+                position: [1.0, 0.0, 0.0],
+                normal: [1.0, 0.0, 0.0],
+                uv: [0.0, 0.0],
+            },
+            Vertex {
+                position: [1.0, 0.0, 1.0],
+                normal: [1.0, 0.0, 0.0],
+                uv: [1.0, 0.0],
+            },
+            Vertex {
+                position: [1.0, 1.0, 1.0],
+                normal: [1.0, 0.0, 0.0],
+                uv: [1.0, 1.0],
+            },
+            Vertex {
+                position: [1.0, 1.0, 0.0],
+                normal: [1.0, 0.0, 0.0],
+                uv: [0.0, 1.0],
+            },
+            // Left face (-x)
+            Vertex {
+                position: [0.0, 0.0, 1.0],
+                normal: [-1.0, 0.0, 0.0],
+                uv: [0.0, 0.0],
+            },
+            Vertex {
+                position: [0.0, 0.0, 0.0],
+                normal: [-1.0, 0.0, 0.0],
+                uv: [1.0, 0.0],
+            },
+            Vertex {
+                position: [0.0, 1.0, 0.0],
+                normal: [-1.0, 0.0, 0.0],
+                uv: [1.0, 1.0],
+            },
+            Vertex {
+                position: [0.0, 1.0, 1.0],
+                normal: [-1.0, 0.0, 0.0],
+                uv: [0.0, 1.0],
+            },
+        ]
+    })
+}
+
+/// Get static reference to cube indices data
+fn get_cube_indices() -> &'static [u16; 36] {
+    static CUBE_INDICES: OnceLock<[u16; 36]> = OnceLock::new();
+    CUBE_INDICES.get_or_init(|| {
+        // Create quad indices for each face (6 faces, 2 triangles each = 36 indices)
+        let mut indices: [u16; 36] = [0; 36];
+        for face in 0..6 {
+            let base = face as u16 * 4;
+            let idx_base = face * 6;
+
+            // First triangle
+            indices[idx_base] = base;
+            indices[idx_base + 1] = base + 1;
+            indices[idx_base + 2] = base + 2;
+
+            // Second triangle
+            indices[idx_base + 3] = base;
+            indices[idx_base + 4] = base + 2;
+            indices[idx_base + 5] = base + 3;
+        }
+        indices
+    })
+}
 
 /// Compact block representation with optimized storage
 #[derive(Clone, Copy, Debug)]
@@ -67,6 +249,7 @@ impl Block {
     }
 
     /// Creates a block from a quaternion rotation
+    #[inline]
     pub fn from_quaternion(rotation: Quaternion<f32>) -> Self {
         Self::Simple {
             material: 1,
@@ -76,53 +259,42 @@ impl Block {
 
     /// Extracts rotation components (0-3)
     #[inline]
-    pub fn get_x_rotation(&self) -> Option<u8> {
+    pub fn get_rotation(&self) -> Option<(u8, u8, u8)> {
         match self {
-            Block::Simple { rotation, .. } => {
-                Some((rotation & Self::ROT_MASK_X) >> Self::ROT_SHIFT_X)
-            }
+            Block::Simple { rotation, .. } => Some((
+                (rotation & Self::ROT_MASK_X) >> Self::ROT_SHIFT_X,
+                (rotation & Self::ROT_MASK_Y) >> Self::ROT_SHIFT_Y,
+                (rotation & Self::ROT_MASK_Z) >> Self::ROT_SHIFT_Z,
+            )),
             _ => None,
         }
     }
 
+    /// Converts packed rotation to quaternion - optimized version
     #[inline]
-    pub fn get_y_rotation(&self) -> Option<u8> {
-        match self {
-            Block::Simple { rotation, .. } => {
-                Some((rotation & Self::ROT_MASK_Y) >> Self::ROT_SHIFT_Y)
-            }
-            _ => None,
-        }
-    }
-
-    #[inline]
-    pub fn get_z_rotation(&self) -> Option<u8> {
-        match self {
-            Block::Simple { rotation, .. } => {
-                Some((rotation & Self::ROT_MASK_Z) >> Self::ROT_SHIFT_Z)
-            }
-            _ => None,
-        }
-    }
-
-    /// Converts packed rotation to quaternion
     pub fn rotation_to_quaternion(&self) -> Quaternion<f32> {
-        let angles = [
-            self.get_x_rotation().unwrap(),
-            self.get_y_rotation().unwrap(),
-            self.get_z_rotation().unwrap(),
-        ]
-        .map(|r| Deg(r as f32 * 90.0)); // 0°-270° in 90° steps
+        if let Some((x, y, z)) = self.get_rotation() {
+            // Convert to degrees (0, 90, 180, 270)
+            let angles = [
+                Deg(x as f32 * 90.0),
+                Deg(y as f32 * 90.0),
+                Deg(z as f32 * 90.0),
+            ];
 
-        // Apply rotations in ZYX order
-        Quaternion::from_angle_z(angles[2])
-            * Quaternion::from_angle_y(angles[1])
-            * Quaternion::from_angle_x(angles[0])
+            // Apply rotations in ZYX order (cached calculation)
+            Quaternion::from_angle_z(angles[2])
+                * Quaternion::from_angle_y(angles[1])
+                * Quaternion::from_angle_x(angles[0])
+        } else {
+            Quaternion::new(1.0, 0.0, 0.0, 0.0) // Identity quaternion
+        }
     }
 
     #[inline]
     pub fn is_empty(&self) -> bool {
-        self.material() == 0
+        match self {
+            Block::Simple { material, .. } | Block::Marching { material, .. } => *material == 0,
+        }
     }
 
     #[inline]
@@ -147,34 +319,25 @@ impl Block {
     }
 
     /// Rotates the block around an axis by N 90° steps
+    #[inline]
     pub fn rotate(&mut self, axis: Axis, steps: u8) {
         if let Block::Simple { rotation, .. } = self {
-            let (current, mask, shift) = match axis {
-                Axis::X => (
-                    (*rotation & Self::ROT_MASK_X) >> Self::ROT_SHIFT_X,
-                    Self::ROT_MASK_X,
-                    Self::ROT_SHIFT_X,
-                ),
-                Axis::Y => (
-                    (*rotation & Self::ROT_MASK_Y) >> Self::ROT_SHIFT_Y,
-                    Self::ROT_MASK_Y,
-                    Self::ROT_SHIFT_Y,
-                ),
-                Axis::Z => (
-                    (*rotation & Self::ROT_MASK_Z) >> Self::ROT_SHIFT_Z,
-                    Self::ROT_MASK_Z,
-                    Self::ROT_SHIFT_Z,
-                ),
+            let (mask, shift) = match axis {
+                Axis::X => (Self::ROT_MASK_X, Self::ROT_SHIFT_X),
+                Axis::Y => (Self::ROT_MASK_Y, Self::ROT_SHIFT_Y),
+                Axis::Z => (Self::ROT_MASK_Z, Self::ROT_SHIFT_Z),
             };
 
+            let current = (*rotation & mask) >> shift;
             let new_rot = (current + steps) % 4;
             *rotation = (*rotation & !mask) | (new_rot << shift);
         }
     }
 
     /// Converts quaternion to packed rotation format
+    #[inline]
     pub fn quaternion_to_rotation(rotation: Quaternion<f32>) -> u8 {
-        // Simplified Euler angles extraction
+        // Extract Euler angles using efficient quaternion conversion
         let angles = [
             (2.0 * (rotation.s * rotation.v.x + rotation.v.y * rotation.v.z))
                 .atan2(1.0 - 2.0 * (rotation.v.x.powi(2) + rotation.v.y.powi(2))),
@@ -183,51 +346,56 @@ impl Block {
                 .atan2(1.0 - 2.0 * (rotation.v.y.powi(2) + rotation.v.z.powi(2))),
         ];
 
-        // Snap to nearest 90° increment
-        let bits: [u8; 3] = angles.map(|a| {
-            let normalized = (a.rem_euclid(std::f32::consts::TAU) / std::f32::consts::FRAC_PI_2)
-                .round() as u8
-                % 4;
-            normalized & 0x3
-        });
+        // Convert to 2-bit values (0-3) representing 90-degree increments
+        let x = ((angles[0].rem_euclid(std::f32::consts::TAU) / std::f32::consts::FRAC_PI_2).round()
+            as u8)
+            & 0x3;
+        let y = ((angles[1].rem_euclid(std::f32::consts::TAU) / std::f32::consts::FRAC_PI_2).round()
+            as u8)
+            & 0x3;
+        let z = ((angles[2].rem_euclid(std::f32::consts::TAU) / std::f32::consts::FRAC_PI_2).round()
+            as u8)
+            & 0x3;
 
-        bits[0] | (bits[1] << 2) | (bits[2] << 4)
+        // Pack into a single byte
+        x | (y << 2) | (z << 4)
     }
 
     /// Sets all rotation axes at once
+    #[inline]
     pub fn set_rotation(&mut self, x: u8, y: u8, z: u8) {
         if let Block::Simple { rotation, .. } = self {
             *rotation = (x & 0x3) | ((y & 0x3) << 2) | ((z & 0x3) << 4);
         }
     }
 
-    /// Sets a point in the 3x3x3 density field
+    /// Sets a point in the 3x3x3 density field - optimized bit manipulation
     #[inline]
     pub fn set_point(&mut self, (x, y, z, value): (u8, u8, u8, bool)) {
         if let Block::Marching { points, .. } = self {
             debug_assert!(x < 3 && y < 3 && z < 3, "Coordinates must be 0-2");
-            let bit_pos = x as u32 + y as u32 * 3 + z as u32 * 9;
-            *points = if value {
-                *points | (1 << bit_pos)
-            } else {
-                *points & !(1 << bit_pos)
-            };
+            let bit_pos = x as u32 + (y as u32) * 3 + (z as u32) * 9;
+            let mask = 1u32 << bit_pos;
+
+            // Use bitwise operations instead of branches
+            *points = (*points & !mask) | (if value { mask } else { 0 });
         }
     }
 
-    /// Gets a point from the 3x3x3 density field
+    /// Gets a point from the 3x3x3 density field - optimized
     #[inline]
     pub fn get_point(&self, x: u8, y: u8, z: u8) -> Option<bool> {
-        if let Block::Marching { points, .. } = self {
-            debug_assert!(x < 3 && y < 3 && z < 3, "Coordinates must be 0-2");
-            let bit_pos = x as u32 + y as u32 * 3 + z as u32 * 9;
-            Some((*points & (1 << bit_pos)) != 0)
-        } else {
-            None
+        match self {
+            Block::Marching { points, .. } => {
+                debug_assert!(x < 3 && y < 3 && z < 3, "Coordinates must be 0-2");
+                let bit_pos = x as u32 + (y as u32) * 3 + (z as u32) * 9;
+                Some((*points & (1u32 << bit_pos)) != 0)
+            }
+            _ => None,
         }
     }
 
-    /// Generates marching cubes mesh for this block
+    /// Generates marching cubes mesh for this block - optimized implementation
     pub fn generate_marching_cubes_mesh(
         &self,
         position: Vector3<u32>,
@@ -238,21 +406,32 @@ impl Block {
         };
 
         let base_pos = position.to_vec3_f32() - Vector3::unit_z(); // Z-offset adjustment
-        let mut edge_vertices = [Vector3::zero(); 12];
+        let edge_vertices_ref = get_edge_vertices();
+        let mut edge_vertex_cache = [None; 12]; // Cache calculated edge vertices
 
-        // Process each sub-cube
+        // Process each sub-cube more efficiently
         for sub_z in 0..2 {
             for sub_y in 0..2 {
                 for sub_x in 0..2 {
-                    // Calculate case index using bit shifts
-                    let case_index = ((points >> (sub_x + sub_y * 3 + sub_z * 9)) & 1)
-                        | ((points >> (sub_x + 1 + sub_y * 3 + sub_z * 9)) & 1) << 1
-                        | ((points >> (sub_x + 1 + sub_y * 3 + (sub_z + 1) * 9)) & 1) << 2
-                        | ((points >> (sub_x + sub_y * 3 + (sub_z + 1) * 9)) & 1) << 3
-                        | ((points >> (sub_x + (sub_y + 1) * 3 + sub_z * 9)) & 1) << 4
-                        | ((points >> (sub_x + 1 + (sub_y + 1) * 3 + sub_z * 9)) & 1) << 5
-                        | ((points >> (sub_x + 1 + (sub_y + 1) * 3 + (sub_z + 1) * 9)) & 1) << 6
-                        | ((points >> (sub_x + (sub_y + 1) * 3 + (sub_z + 1) * 9)) & 1) << 7;
+                    // Calculate case index using bit manipulation
+                    let idx = [
+                        (sub_x, sub_y, sub_z),
+                        (sub_x + 1, sub_y, sub_z),
+                        (sub_x + 1, sub_y, sub_z + 1),
+                        (sub_x, sub_y, sub_z + 1),
+                        (sub_x, sub_y + 1, sub_z),
+                        (sub_x + 1, sub_y + 1, sub_z),
+                        (sub_x + 1, sub_y + 1, sub_z + 1),
+                        (sub_x, sub_y + 1, sub_z + 1),
+                    ];
+
+                    let mut case_index = 0u8;
+                    for (i, &(x, y, z)) in idx.iter().enumerate() {
+                        let bit_pos = x as u32 + (y as u32) * 3 + (z as u32) * 9;
+                        if (*points & (1u32 << bit_pos)) != 0 {
+                            case_index |= 1 << i;
+                        }
+                    }
 
                     // Skip empty/full sub-cubes
                     if case_index == 0 || case_index == 255 {
@@ -264,11 +443,13 @@ impl Block {
                         continue;
                     }
 
-                    // Calculate edge vertices only when needed
+                    // Calculate and cache edge vertices only when needed
                     for edge in 0..12 {
                         if (edges & (1 << edge)) != 0 {
-                            let [a, b] = Self::EDGE_VERTICES[edge];
-                            edge_vertices[edge] = a.lerp(b, 0.5);
+                            if edge_vertex_cache[edge].is_none() {
+                                let [a, b] = edge_vertices_ref[edge];
+                                edge_vertex_cache[edge] = Some(a.lerp(b, 0.5));
+                            }
                         }
                     }
 
@@ -277,41 +458,31 @@ impl Block {
                     let sub_offset =
                         Vector3::new(sub_x as f32 * 0.5, sub_y as f32 * 0.5, sub_z as f32 * 0.5);
 
-                    for i in (0..16).step_by(3) {
-                        if triangles[i] == -1 {
-                            break;
-                        }
-
-                        let indices = [
-                            triangles[i] as usize,
-                            triangles[i + 1] as usize,
-                            triangles[i + 2] as usize,
+                    // Process triangles in a more efficient way
+                    let mut i = 0;
+                    while i < 16 && triangles[i] != -1 {
+                        let tri_vertices = [
+                            edge_vertex_cache[triangles[i] as usize].unwrap(),
+                            edge_vertex_cache[triangles[i + 1] as usize].unwrap(),
+                            edge_vertex_cache[triangles[i + 2] as usize].unwrap(),
                         ];
 
-                        let vertices =
-                            indices.map(|idx| base_pos + sub_offset + edge_vertices[idx]);
-                        builder.add_triangle(&vertices);
+                        let world_vertices = [
+                            base_pos + sub_offset + tri_vertices[0],
+                            base_pos + sub_offset + tri_vertices[1],
+                            base_pos + sub_offset + tri_vertices[2],
+                        ];
+
+                        builder.add_triangle(&world_vertices);
+                        i += 3;
                     }
+
+                    // Clear the cache for the next sub-cube
+                    edge_vertex_cache = [None; 12];
                 }
             }
         }
     }
-
-    /// Precomputed edge vertex positions (relative to sub-cube)
-    const EDGE_VERTICES: [[Vector3<f32>; 2]; 12] = [
-        [Vector3::new(0.0, 0.0, 0.0), Vector3::new(0.5, 0.0, 0.0)], // Edge 0
-        [Vector3::new(0.5, 0.0, 0.0), Vector3::new(0.5, 0.0, 0.5)], // Edge 1
-        [Vector3::new(0.5, 0.0, 0.5), Vector3::new(0.0, 0.0, 0.5)], // Edge 2
-        [Vector3::new(0.0, 0.0, 0.5), Vector3::new(0.0, 0.0, 0.0)], // Edge 3
-        [Vector3::new(0.0, 0.5, 0.0), Vector3::new(0.5, 0.5, 0.0)], // Edge 4
-        [Vector3::new(0.5, 0.5, 0.0), Vector3::new(0.5, 0.5, 0.5)], // Edge 5
-        [Vector3::new(0.5, 0.5, 0.5), Vector3::new(0.0, 0.5, 0.5)], // Edge 6
-        [Vector3::new(0.0, 0.5, 0.5), Vector3::new(0.0, 0.5, 0.0)], // Edge 7
-        [Vector3::new(0.0, 0.0, 0.0), Vector3::new(0.0, 0.5, 0.0)], // Edge 8
-        [Vector3::new(0.5, 0.0, 0.0), Vector3::new(0.5, 0.5, 0.0)], // Edge 9
-        [Vector3::new(0.5, 0.0, 0.5), Vector3::new(0.5, 0.5, 0.5)], // Edge 10
-        [Vector3::new(0.0, 0.0, 0.5), Vector3::new(0.0, 0.5, 0.5)], // Edge 11
-    ];
 }
 
 /// Axis enumeration for rotation

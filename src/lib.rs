@@ -37,14 +37,14 @@ pub struct RenderContext<'a> {
 pub struct InputSubsystem {
     previous_mouse: Option<winit::dpi::PhysicalPosition<f64>>,
     mouse_button_state: MouseButtonState,
-    modifier_keys_state: ModifyKeyPressed,
+    modifier_keys: ModifierKeys,
 }
 impl Default for InputSubsystem{
      fn default() -> Self{
         Self{
             previous_mouse: None,
             mouse_button_state: MouseButtonState::default(),
-            modifier_keys_state: ModifyKeyPressed::default(),
+            modifier_keys: ModifierKeys::default(),
         }
     }
 }
@@ -55,12 +55,55 @@ pub struct MouseButtonState {
     pub right: bool,
 }
 #[derive(Default)]
-pub struct ModifyKeyPressed {
+pub struct ModifierKeys {
     pub sift: bool,
     pub alt: bool,
     pub ctr: bool,
     pub altgr: bool,
     pub caps: bool,
+}
+impl ModifierKeys {
+    pub fn set_modify_kes(&mut self,key : winit::keyboard::KeyCode, state: ElementState){
+        if state == ElementState::Pressed {
+            match key {
+                Key::AltLeft => {
+                    self.alt = true;
+                },
+                Key::ShiftLeft | Key::ShiftRight => {
+                    self.sift = true;
+                },
+                Key::AltRight => {
+                    self.altgr = true;
+                },
+                Key::CapsLock => {
+                    self.caps = true;
+                },
+                Key::ControlLeft | Key::ControlRight => {
+                    self.ctr = true;
+                }
+                _ => {}
+            }
+        } else {
+            match key {
+                Key::AltLeft => {
+                    self.alt = false;
+                },
+                Key::ShiftLeft | Key::ShiftRight => {
+                    self.sift = false;
+                },
+                Key::AltRight => {
+                    self.altgr = false;
+                },
+                Key::CapsLock => {
+                    self.caps = false;
+                },
+                Key::ControlLeft | Key::ControlRight => {
+                    self.ctr = false;
+                }
+                _ => {}
+            }
+        }
+    }
 }
 
 pub struct DataSubsystem {
@@ -206,8 +249,8 @@ impl<'a> State<'a> {
     pub fn size(&self) -> &winit::dpi::PhysicalSize<u32> {
         &self.render_context.size
     }
-    pub fn key_states(&self) -> &ModifyKeyPressed {
-        &self.input_system.modifier_keys_state
+    pub fn modifier_keys(&self) -> &ModifierKeys {
+        &self.input_system.modifier_keys
     }
     pub fn mouse_states(&self) -> &MouseButtonState {
         &self.input_system.mouse_button_state
@@ -288,7 +331,7 @@ impl<'a> State<'a> {
                     , .. },..
             } => {
                 // allways handle the modifier keys
-                self.set_modify_kes(*key,*state);
+                self.input_system.modifier_keys.set_modify_kes(*key,*state);
 
                 // Handle UI input first if there's a focused element
                 if let Some(focused_idx) = self.ui_manager.focused_element {
@@ -310,7 +353,7 @@ impl<'a> State<'a> {
                                 return true;
                             }
                             _ => {
-                                if let Some(c) = user_interface::key_to_char(*key, self.key_states().sift) {
+                                if let Some(c) = user_interface::key_to_char(*key, self.modifier_keys().sift) {
                                     self.ui_manager.process_text_input(focused_idx, c);
                                     return true;
                                 }
@@ -375,47 +418,6 @@ impl<'a> State<'a> {
         }
     }
 
-    pub fn set_modify_kes(&mut self,key : winit::keyboard::KeyCode, state: ElementState){
-        if state == ElementState::Pressed {
-            match key {
-                Key::AltLeft => {
-                    self.input_system.modifier_keys_state.alt = true;
-                },
-                Key::ShiftLeft | Key::ShiftRight => {
-                    self.input_system.modifier_keys_state.sift = true;
-                },
-                Key::AltRight => {
-                    self.input_system.modifier_keys_state.altgr = true;
-                },
-                Key::CapsLock => {
-                    self.input_system.modifier_keys_state.caps = true;
-                },
-                Key::ControlLeft | Key::ControlRight => {
-                    self.input_system.modifier_keys_state.ctr = true;
-                }
-                _ => {}
-            }
-        } else {
-            match key {
-                Key::AltLeft => {
-                    self.input_system.modifier_keys_state.alt = false;
-                },
-                Key::ShiftLeft | Key::ShiftRight => {
-                    self.input_system.modifier_keys_state.sift = false;
-                },
-                Key::AltRight => {
-                    self.input_system.modifier_keys_state.altgr = false;
-                },
-                Key::CapsLock => {
-                    self.input_system.modifier_keys_state.caps = false;
-                },
-                Key::ControlLeft | Key::ControlRight => {
-                    self.input_system.modifier_keys_state.ctr = false;
-                }
-                _ => {}
-            }
-        }
-    }
 
     pub fn center_mouse(&self) {
         // Reset mouse to center
