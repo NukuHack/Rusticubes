@@ -1,204 +1,23 @@
 use crate::geometry::{GeometryBuffer, Vertex, EDGE_TABLE, TRI_TABLE};
 use crate::traits::VectorTypeConversion;
 use ahash::AHasher;
-use cgmath::{Deg, InnerSpace, Matrix4, Quaternion, Rotation3, Vector3, VectorSpace, Zero};
+use cgmath::{Deg, InnerSpace, Matrix4, Quaternion, Rotation3, Vector3, VectorSpace};
 use std::{
     collections::{HashMap, HashSet},
     hash::BuildHasherDefault,
-    sync::OnceLock,
 };
 use wgpu::util::DeviceExt;
 
+// Type aliases for better readability
 type FastMap<K, V> = HashMap<K, V, BuildHasherDefault<AHasher>>;
 
-/// Get static reference to edge vertices data
-fn get_edge_vertices() -> &'static [[Vector3<f32>; 2]; 12] {
-    static EDGE_VERTICES: OnceLock<[[Vector3<f32>; 2]; 12]> = OnceLock::new();
-    EDGE_VERTICES.get_or_init(|| {
-        [
-            [Vector3::new(0.0, 0.0, 0.0), Vector3::new(0.5, 0.0, 0.0)], // Edge 0
-            [Vector3::new(0.5, 0.0, 0.0), Vector3::new(0.5, 0.0, 0.5)], // Edge 1
-            [Vector3::new(0.5, 0.0, 0.5), Vector3::new(0.0, 0.0, 0.5)], // Edge 2
-            [Vector3::new(0.0, 0.0, 0.5), Vector3::new(0.0, 0.0, 0.0)], // Edge 3
-            [Vector3::new(0.0, 0.5, 0.0), Vector3::new(0.5, 0.5, 0.0)], // Edge 4
-            [Vector3::new(0.5, 0.5, 0.0), Vector3::new(0.5, 0.5, 0.5)], // Edge 5
-            [Vector3::new(0.5, 0.5, 0.5), Vector3::new(0.0, 0.5, 0.5)], // Edge 6
-            [Vector3::new(0.0, 0.5, 0.5), Vector3::new(0.0, 0.5, 0.0)], // Edge 7
-            [Vector3::new(0.0, 0.0, 0.0), Vector3::new(0.0, 0.5, 0.0)], // Edge 8
-            [Vector3::new(0.5, 0.0, 0.0), Vector3::new(0.5, 0.5, 0.0)], // Edge 9
-            [Vector3::new(0.5, 0.0, 0.5), Vector3::new(0.5, 0.5, 0.5)], // Edge 10
-            [Vector3::new(0.0, 0.0, 0.5), Vector3::new(0.0, 0.5, 0.5)], // Edge 11
-        ]
-    })
-}
-
-/// Get static reference to cube vertex data
-fn get_cube_vertices() -> &'static [Vertex; 24] {
-    static CUBE_VERTICES: OnceLock<[Vertex; 24]> = OnceLock::new();
-    CUBE_VERTICES.get_or_init(|| {
-        // Create pre-calculated vertices with correct normals and UVs for each face
-        [
-            // Front face (+z)
-            Vertex {
-                position: [0.0, 0.0, 1.0],
-                normal: [0.0, 0.0, 1.0],
-                uv: [0.0, 0.0],
-            },
-            Vertex {
-                position: [1.0, 0.0, 1.0],
-                normal: [0.0, 0.0, 1.0],
-                uv: [1.0, 0.0],
-            },
-            Vertex {
-                position: [1.0, 1.0, 1.0],
-                normal: [0.0, 0.0, 1.0],
-                uv: [1.0, 1.0],
-            },
-            Vertex {
-                position: [0.0, 1.0, 1.0],
-                normal: [0.0, 0.0, 1.0],
-                uv: [0.0, 1.0],
-            },
-            // Back face (-z)
-            Vertex {
-                position: [1.0, 0.0, 0.0],
-                normal: [0.0, 0.0, -1.0],
-                uv: [0.0, 0.0],
-            },
-            Vertex {
-                position: [0.0, 0.0, 0.0],
-                normal: [0.0, 0.0, -1.0],
-                uv: [1.0, 0.0],
-            },
-            Vertex {
-                position: [0.0, 1.0, 0.0],
-                normal: [0.0, 0.0, -1.0],
-                uv: [1.0, 1.0],
-            },
-            Vertex {
-                position: [1.0, 1.0, 0.0],
-                normal: [0.0, 0.0, -1.0],
-                uv: [0.0, 1.0],
-            },
-            // Top face (+y)
-            Vertex {
-                position: [0.0, 1.0, 0.0],
-                normal: [0.0, 1.0, 0.0],
-                uv: [0.0, 0.0],
-            },
-            Vertex {
-                position: [1.0, 1.0, 0.0],
-                normal: [0.0, 1.0, 0.0],
-                uv: [1.0, 0.0],
-            },
-            Vertex {
-                position: [1.0, 1.0, 1.0],
-                normal: [0.0, 1.0, 0.0],
-                uv: [1.0, 1.0],
-            },
-            Vertex {
-                position: [0.0, 1.0, 1.0],
-                normal: [0.0, 1.0, 0.0],
-                uv: [0.0, 1.0],
-            },
-            // Bottom face (-y)
-            Vertex {
-                position: [0.0, 0.0, 0.0],
-                normal: [0.0, -1.0, 0.0],
-                uv: [0.0, 0.0],
-            },
-            Vertex {
-                position: [1.0, 0.0, 0.0],
-                normal: [0.0, -1.0, 0.0],
-                uv: [1.0, 0.0],
-            },
-            Vertex {
-                position: [1.0, 0.0, 1.0],
-                normal: [0.0, -1.0, 0.0],
-                uv: [1.0, 1.0],
-            },
-            Vertex {
-                position: [0.0, 0.0, 1.0],
-                normal: [0.0, -1.0, 0.0],
-                uv: [0.0, 1.0],
-            },
-            // Right face (+x)
-            Vertex {
-                position: [1.0, 0.0, 0.0],
-                normal: [1.0, 0.0, 0.0],
-                uv: [0.0, 0.0],
-            },
-            Vertex {
-                position: [1.0, 0.0, 1.0],
-                normal: [1.0, 0.0, 0.0],
-                uv: [1.0, 0.0],
-            },
-            Vertex {
-                position: [1.0, 1.0, 1.0],
-                normal: [1.0, 0.0, 0.0],
-                uv: [1.0, 1.0],
-            },
-            Vertex {
-                position: [1.0, 1.0, 0.0],
-                normal: [1.0, 0.0, 0.0],
-                uv: [0.0, 1.0],
-            },
-            // Left face (-x)
-            Vertex {
-                position: [0.0, 0.0, 1.0],
-                normal: [-1.0, 0.0, 0.0],
-                uv: [0.0, 0.0],
-            },
-            Vertex {
-                position: [0.0, 0.0, 0.0],
-                normal: [-1.0, 0.0, 0.0],
-                uv: [1.0, 0.0],
-            },
-            Vertex {
-                position: [0.0, 1.0, 0.0],
-                normal: [-1.0, 0.0, 0.0],
-                uv: [1.0, 1.0],
-            },
-            Vertex {
-                position: [0.0, 1.0, 1.0],
-                normal: [-1.0, 0.0, 0.0],
-                uv: [0.0, 1.0],
-            },
-        ]
-    })
-}
-
-/// Get static reference to cube indices data
-fn get_cube_indices() -> &'static [u16; 36] {
-    static CUBE_INDICES: OnceLock<[u16; 36]> = OnceLock::new();
-    CUBE_INDICES.get_or_init(|| {
-        // Create quad indices for each face (6 faces, 2 triangles each = 36 indices)
-        let mut indices: [u16; 36] = [0; 36];
-        for face in 0..6 {
-            let base = face as u16 * 4;
-            let idx_base = face * 6;
-
-            // First triangle
-            indices[idx_base] = base;
-            indices[idx_base + 1] = base + 1;
-            indices[idx_base + 2] = base + 2;
-
-            // Second triangle
-            indices[idx_base + 3] = base;
-            indices[idx_base + 4] = base + 2;
-            indices[idx_base + 5] = base + 3;
-        }
-        indices
-    })
-}
-
-/// Compact block representation with optimized storage
+/// Represents a block in the world with optimized storage
 #[derive(Clone, Copy, Debug)]
 pub enum Block {
     /// Simple block with material and packed rotation
     Simple {
         material: u16,
-        rotation: u8, // [X:2, Y:2, Z:2, _:2]
+        rotation: u8, // Packed as [X:2, Y:2, Z:2, _:2]
     },
     /// Marching cubes block with material and density field
     Marching {
@@ -209,39 +28,43 @@ pub enum Block {
 
 impl Block {
     // Rotation bit masks and shifts
-    pub const ROT_MASK_X: u8 = 0b0000_0011;
-    pub const ROT_MASK_Y: u8 = 0b0000_1100;
-    pub const ROT_MASK_Z: u8 = 0b0011_0000;
-    pub const ROT_SHIFT_X: u8 = 0;
-    pub const ROT_SHIFT_Y: u8 = 2;
-    pub const ROT_SHIFT_Z: u8 = 4;
+    const ROT_MASK_X: u8 = 0b0000_0011;
+    const ROT_MASK_Y: u8 = 0b0000_1100;
+    const ROT_MASK_Z: u8 = 0b0011_0000;
+    const ROT_SHIFT_X: u8 = 0;
+    const ROT_SHIFT_Y: u8 = 2;
+    const ROT_SHIFT_Z: u8 = 4;
 
+    /// Creates a default empty block
     #[inline]
-    pub fn default() -> Self {
+    pub const fn default() -> Self {
         Self::Simple {
             material: 0,
             rotation: 0,
         }
     }
 
+    /// Creates a new simple block with default material
     #[inline]
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self::Simple {
             material: 1,
             rotation: 0,
         }
     }
 
+    /// Creates a new marching cubes block with center point set
     #[inline]
-    pub fn new_dot() -> Self {
+    pub const fn new_dot() -> Self {
         Self::Marching {
             material: 1,
             points: 0x20_00, // Center point set
         }
     }
 
+    /// Creates a new block with specified rotation
     #[inline]
-    pub fn new_rot(rotation: u8) -> Self {
+    pub const fn new_rot(rotation: u8) -> Self {
         Self::Simple {
             material: 1,
             rotation,
@@ -270,24 +93,24 @@ impl Block {
         }
     }
 
-    /// Converts packed rotation to quaternion - optimized version
+    /// Converts packed rotation to quaternion
     #[inline]
     pub fn rotation_to_quaternion(&self) -> Quaternion<f32> {
-        if let Some((x, y, z)) = self.get_rotation() {
-            // Convert to degrees (0, 90, 180, 270)
-            let angles = [
-                Deg(x as f32 * 90.0),
-                Deg(y as f32 * 90.0),
-                Deg(z as f32 * 90.0),
-            ];
+        self.get_rotation()
+            .map(|(x, y, z)| {
+                // Convert to degrees (0, 90, 180, 270)
+                let angles = [
+                    Deg(x as f32 * 90.0),
+                    Deg(y as f32 * 90.0),
+                    Deg(z as f32 * 90.0),
+                ];
 
-            // Apply rotations in ZYX order (cached calculation)
-            Quaternion::from_angle_z(angles[2])
-                * Quaternion::from_angle_y(angles[1])
-                * Quaternion::from_angle_x(angles[0])
-        } else {
-            Quaternion::new(1.0, 0.0, 0.0, 0.0) // Identity quaternion
-        }
+                // Apply rotations in ZYX order
+                Quaternion::from_angle_z(angles[2])
+                    * Quaternion::from_angle_y(angles[1])
+                    * Quaternion::from_angle_x(angles[0])
+            })
+            .unwrap_or_else(|| Quaternion::new(1.0, 0.0, 0.0, 0.0)) // Identity quaternion
     }
 
     #[inline]
@@ -369,7 +192,7 @@ impl Block {
         }
     }
 
-    /// Sets a point in the 3x3x3 density field - optimized bit manipulation
+    /// Sets a point in the 3x3x3 density field
     #[inline]
     pub fn set_point(&mut self, (x, y, z, value): (u8, u8, u8, bool)) {
         if let Block::Marching { points, .. } = self {
@@ -382,7 +205,7 @@ impl Block {
         }
     }
 
-    /// Gets a point from the 3x3x3 density field - optimized
+    /// Gets a point from the 3x3x3 density field
     #[inline]
     pub fn get_point(&self, x: u8, y: u8, z: u8) -> Option<bool> {
         match self {
@@ -395,7 +218,7 @@ impl Block {
         }
     }
 
-    /// Generates marching cubes mesh for this block - optimized implementation
+    /// Generates marching cubes mesh for this block
     pub fn generate_marching_cubes_mesh(
         &self,
         position: Vector3<u32>,
@@ -406,10 +229,9 @@ impl Block {
         };
 
         let base_pos = position.to_vec3_f32() - Vector3::unit_z(); // Z-offset adjustment
-        let edge_vertices_ref = get_edge_vertices();
         let mut edge_vertex_cache = [None; 12]; // Cache calculated edge vertices
 
-        // Process each sub-cube more efficiently
+        // Process each sub-cube
         for sub_z in 0..2 {
             for sub_y in 0..2 {
                 for sub_x in 0..2 {
@@ -445,11 +267,9 @@ impl Block {
 
                     // Calculate and cache edge vertices only when needed
                     for edge in 0..12 {
-                        if (edges & (1 << edge)) != 0 {
-                            if edge_vertex_cache[edge].is_none() {
-                                let [a, b] = edge_vertices_ref[edge];
-                                edge_vertex_cache[edge] = Some(a.lerp(b, 0.5));
-                            }
+                        if (edges & (1 << edge)) != 0 && edge_vertex_cache[edge].is_none() {
+                            let [a, b] = EDGE_VERTICES[edge];
+                            edge_vertex_cache[edge] = Some(a.lerp(b, 0.5));
                         }
                     }
 
@@ -458,7 +278,7 @@ impl Block {
                     let sub_offset =
                         Vector3::new(sub_x as f32 * 0.5, sub_y as f32 * 0.5, sub_z as f32 * 0.5);
 
-                    // Process triangles in a more efficient way
+                    // Process triangles in batches
                     let mut i = 0;
                     while i < 16 && triangles[i] != -1 {
                         let tri_vertices = [
@@ -485,6 +305,32 @@ impl Block {
     }
 }
 
+/// Edge vertices for marching cubes algorithm
+const HALF: f32 = 0.5;
+const EDGE_VERTICES: [[Vector3<f32>; 2]; 12] = [
+    [Vector3::new(0.0, 0.0, 0.0), Vector3::new(HALF, 0.0, 0.0)], // Edge 0
+    [Vector3::new(HALF, 0.0, 0.0), Vector3::new(HALF, 0.0, HALF)], // Edge 1
+    [Vector3::new(HALF, 0.0, HALF), Vector3::new(0.0, 0.0, HALF)], // Edge 2
+    [Vector3::new(0.0, 0.0, HALF), Vector3::new(0.0, 0.0, 0.0)], // Edge 3
+    [Vector3::new(0.0, HALF, 0.0), Vector3::new(HALF, HALF, 0.0)], // Edge 4
+    [
+        Vector3::new(HALF, HALF, 0.0),
+        Vector3::new(HALF, HALF, HALF),
+    ], // Edge 5
+    [
+        Vector3::new(HALF, HALF, HALF),
+        Vector3::new(0.0, HALF, HALF),
+    ], // Edge 6
+    [Vector3::new(0.0, HALF, HALF), Vector3::new(0.0, HALF, 0.0)], // Edge 7
+    [Vector3::new(0.0, 0.0, 0.0), Vector3::new(0.0, HALF, 0.0)], // Edge 8
+    [Vector3::new(HALF, 0.0, 0.0), Vector3::new(HALF, HALF, 0.0)], // Edge 9
+    [
+        Vector3::new(HALF, 0.0, HALF),
+        Vector3::new(HALF, HALF, HALF),
+    ], // Edge 10
+    [Vector3::new(0.0, 0.0, HALF), Vector3::new(0.0, HALF, HALF)], // Edge 11
+];
+
 /// Axis enumeration for rotation
 #[derive(Debug, Clone, Copy)]
 pub enum Axis {
@@ -492,8 +338,6 @@ pub enum Axis {
     Y,
     Z,
 }
-
-// --- Chunk Coordinate System ---
 
 /// Compact chunk coordinate representation (64 bits)
 /// Format: [X:26 (signed), Y:12 (signed), Z:26 (signed)]
@@ -510,17 +354,13 @@ impl ChunkCoord {
 
     /// Creates a new chunk coordinate
     #[inline]
-    pub fn new(x: i32, y: i32, z: i32) -> Self {
+    pub const fn new(x: i32, y: i32, z: i32) -> Self {
         Self(Self::pack(x, y, z))
     }
 
     /// Packs coordinates into a u64
     #[inline]
-    pub fn pack(x: i32, y: i32, z: i32) -> u64 {
-        debug_assert!(x >= -(1 << 25) && x < (1 << 25), "X out of range");
-        debug_assert!(y >= -(1 << 11) && y < (1 << 11), "Y out of range");
-        debug_assert!(z >= -(1 << 25) && z < (1 << 25), "Z out of range");
-
+    pub const fn pack(x: i32, y: i32, z: i32) -> u64 {
         ((x as u64 & Self::X_MASK) << Self::X_SHIFT)
             | ((y as u64 & Self::Y_MASK) << Self::Y_SHIFT)
             | (z as u64 & Self::Z_MASK)
@@ -528,13 +368,13 @@ impl ChunkCoord {
 
     /// Extracts (x, y, z) coordinates
     #[inline]
-    pub fn unpack(self) -> (i32, i32, i32) {
+    pub const fn unpack(self) -> (i32, i32, i32) {
         (self.x(), self.y(), self.z())
     }
 
     /// Extracts X coordinate with sign extension
     #[inline]
-    pub fn x(self) -> i32 {
+    pub const fn x(self) -> i32 {
         ((self.0 >> Self::X_SHIFT) as i32)
             .wrapping_shl(6)
             .wrapping_shr(6)
@@ -542,7 +382,7 @@ impl ChunkCoord {
 
     /// Extracts Y coordinate with sign extension
     #[inline]
-    pub fn y(self) -> i32 {
+    pub const fn y(self) -> i32 {
         ((self.0 >> Self::Y_SHIFT) as i32 & Self::Y_MASK as i32)
             .wrapping_shl(20)
             .wrapping_shr(20)
@@ -550,7 +390,7 @@ impl ChunkCoord {
 
     /// Extracts Z coordinate with sign extension
     #[inline]
-    pub fn z(self) -> i32 {
+    pub const fn z(self) -> i32 {
         (self.0 as i32 & Self::Z_MASK as i32)
             .wrapping_shl(6)
             .wrapping_shr(6)
@@ -579,8 +419,7 @@ impl ChunkCoord {
     }
 }
 
-// --- Chunk Implementation ---
-
+/// Represents a chunk of blocks in the world
 #[derive(Clone, Debug)]
 pub struct Chunk {
     pub blocks: FastMap<u16, Block>, // Packed position -> Block
@@ -709,8 +548,7 @@ impl Chunk {
     }
 }
 
-// --- World Implementation ---
-
+/// Represents the game world containing chunks
 #[derive(Debug, Clone)]
 pub struct World {
     pub chunks: FastMap<ChunkCoord, Chunk>,
@@ -891,7 +729,7 @@ impl World {
     }
 }
 
-// --- Chunk Mesh Builder ---
+/// Builder for chunk meshes
 pub struct ChunkMeshBuilder {
     pub vertices: Vec<Vertex>,
     pub indices: Vec<u16>,
@@ -935,7 +773,8 @@ impl ChunkMeshBuilder {
 
     /// Adds a rotated cube to the mesh
     pub fn add_cube(&mut self, position: Vector3<f32>, rotation: Quaternion<f32>) {
-        let transform = Matrix4::from_translation(position) * Matrix4::from(rotation);
+        let transform =
+            Matrix4::from_translation(position - Vector3::unit_z()) * Matrix4::from(rotation);
         let start_vertex = self.current_vertex;
 
         // Add transformed vertices
@@ -950,165 +789,77 @@ impl ChunkMeshBuilder {
             });
         }
 
-        // Add indices with offset
-        self.indices
-            .extend(CUBE_INDICES.iter().map(|&i| start_vertex as u16 + i));
+        // Add indices by creating each face
+        self.add_cube_face(start_vertex, &CUBE_FACES[0]); // Front
+        self.add_cube_face(start_vertex, &CUBE_FACES[1]); // Back
+        self.add_cube_face(start_vertex, &CUBE_FACES[2]); // Top
+        self.add_cube_face(start_vertex, &CUBE_FACES[3]); // Bottom
+        self.add_cube_face(start_vertex, &CUBE_FACES[4]); // Right
+        self.add_cube_face(start_vertex, &CUBE_FACES[5]); // Left
+
         self.current_vertex += CUBE_VERTICES.len() as u32;
     }
 
-    #[inline]
-    pub fn add_cube_bad(&mut self, position: Vector3<f32>, rotation: Quaternion<f32>) {
-        for (normal, corners) in &CUBE_FACES {
-            self.add_face(position - Vector3::unit_z(), rotation, *corners, *normal);
-        }
-    }
-    pub fn add_face(
-        &mut self,
-        position: Vector3<f32>,
-        rotation: Quaternion<f32>,
-        corners: [Vector3<f32>; 4],
-        normal: Vector3<f32>,
-    ) {
-        let normal = rotation * normal;
-        let base = self.current_vertex as u16;
-
-        // Add vertices with proper UV coordinates
-        let uvs = [
-            [0.0, 0.0], // bottom-left
-            [1.0, 0.0], // bottom-right
-            [1.0, 1.0], // top-right
-            [0.0, 1.0], // top-left
-        ];
-
-        for (i, corner) in corners.iter().enumerate() {
-            let pos = position + rotation * corner;
-            self.vertices.push(Vertex {
-                position: [pos.x, pos.y, pos.z],
-                normal: [normal.x, normal.y, normal.z],
-                uv: uvs[i],
-            });
-        }
-
-        // Add indices for two triangles (quad)
-        self.indices
-            .extend(&[base, base + 1, base + 2, base, base + 2, base + 3]);
-        self.current_vertex += 4;
+    /// Internal helper to add a single cube face
+    fn add_cube_face(&mut self, base_vertex: u32, face_indices: &[u16; 6]) {
+        let base = base_vertex as u16;
+        self.indices.extend(face_indices.iter().map(|&i| base + i));
     }
 }
 
-const CUBE_FACES: [(Vector3<f32>, [Vector3<f32>; 4]); 6] = [
-    // Front face (normal +z)
-    (
-        Vector3::new(0.0, 0.0, 1.0),
-        [
-            Vector3::new(0.0, 0.0, 1.0),
-            Vector3::new(1.0, 0.0, 1.0),
-            Vector3::new(1.0, 1.0, 1.0),
-            Vector3::new(0.0, 1.0, 1.0),
-        ],
-    ),
-    // Back face (normal -z)
-    (
-        Vector3::new(0.0, 0.0, -1.0),
-        [
-            Vector3::new(1.0, 0.0, 0.0),
-            Vector3::new(0.0, 0.0, 0.0),
-            Vector3::new(0.0, 1.0, 0.0),
-            Vector3::new(1.0, 1.0, 0.0),
-        ],
-    ),
-    // Top face (normal +y)
-    (
-        Vector3::new(0.0, 1.0, 0.0),
-        [
-            Vector3::new(0.0, 1.0, 0.0),
-            Vector3::new(1.0, 1.0, 0.0),
-            Vector3::new(1.0, 1.0, 1.0),
-            Vector3::new(0.0, 1.0, 1.0),
-        ],
-    ),
-    // Bottom face (normal -y)
-    (
-        Vector3::new(0.0, -1.0, 0.0),
-        [
-            Vector3::new(0.0, 0.0, 0.0),
-            Vector3::new(1.0, 0.0, 0.0),
-            Vector3::new(1.0, 0.0, 1.0),
-            Vector3::new(0.0, 0.0, 1.0),
-        ],
-    ),
-    // Right face (normal +x)
-    (
-        Vector3::new(1.0, 0.0, 0.0),
-        [
-            Vector3::new(1.0, 0.0, 0.0),
-            Vector3::new(1.0, 0.0, 1.0),
-            Vector3::new(1.0, 1.0, 1.0),
-            Vector3::new(1.0, 1.0, 0.0),
-        ],
-    ),
-    // Left face (normal -x)
-    (
-        Vector3::new(-1.0, 0.0, 0.0),
-        [
-            Vector3::new(0.0, 0.0, 1.0),
-            Vector3::new(0.0, 0.0, 0.0),
-            Vector3::new(0.0, 1.0, 0.0),
-            Vector3::new(0.0, 1.0, 1.0),
-        ],
-    ),
-];
+// Cube geometry constants
+const LENG: f32 = 1.0; // unit sized cube
 
-// bad reason : not correct uv / normals
-// not all sides display the correct texture ...
+// Cube vertices (8 corners of a unit cube with left-bottom-front at origin)
 pub const CUBE_VERTICES: [Vertex; 8] = [
     Vertex {
+        position: [0.0, 0.0, LENG],
+        normal: [0.0, 0.0, 1.0],
+        uv: [0.0, 0.0],
+    }, // front-bottom-left (origin)
+    Vertex {
+        position: [LENG, 0.0, LENG],
+        normal: [0.0, 0.0, 1.0],
+        uv: [1.0, 0.0],
+    }, // front-bottom-right
+    Vertex {
+        position: [LENG, LENG, LENG],
+        normal: [0.0, 0.0, 1.0],
+        uv: [1.0, 1.0],
+    }, // front-top-right
+    Vertex {
+        position: [0.0, LENG, LENG],
+        normal: [0.0, 0.0, 1.0],
+        uv: [0.0, 1.0],
+    }, // front-top-left
+    Vertex {
         position: [0.0, 0.0, 0.0],
-        normal: [0.0, 0.0, 1.0],
-        uv: [0.0, 0.0],
-    },
-    Vertex {
-        position: [0.0, 1.0, 0.0],
-        normal: [0.0, 0.0, 1.0],
-        uv: [0.0, 1.0],
-    },
-    Vertex {
-        position: [1.0, 1.0, 0.0],
-        normal: [0.0, 0.0, 1.0],
-        uv: [1.0, 1.0],
-    },
-    Vertex {
-        position: [1.0, 0.0, 0.0],
-        normal: [0.0, 0.0, 1.0],
-        uv: [1.0, 0.0],
-    },
-    Vertex {
-        position: [0.0, 0.0, -1.0],
-        normal: [0.0, 0.0, -1.0],
-        uv: [0.0, 0.0],
-    },
-    Vertex {
-        position: [0.0, 1.0, -1.0],
-        normal: [0.0, 0.0, -1.0],
-        uv: [0.0, 1.0],
-    },
-    Vertex {
-        position: [1.0, 1.0, -1.0],
-        normal: [0.0, 0.0, -1.0],
-        uv: [1.0, 1.0],
-    },
-    Vertex {
-        position: [1.0, 0.0, -1.0],
         normal: [0.0, 0.0, -1.0],
         uv: [1.0, 0.0],
-    },
+    }, // back-bottom-left
+    Vertex {
+        position: [LENG, 0.0, 0.0],
+        normal: [0.0, 0.0, -1.0],
+        uv: [0.0, 0.0],
+    }, // back-bottom-right
+    Vertex {
+        position: [LENG, LENG, 0.0],
+        normal: [0.0, 0.0, -1.0],
+        uv: [0.0, 1.0],
+    }, // back-top-right
+    Vertex {
+        position: [0.0, LENG, 0.0],
+        normal: [0.0, 0.0, -1.0],
+        uv: [1.0, 1.0],
+    }, // back-top-left
 ];
 
-pub const CUBE_INDICES: [u16; 36] = [
-    1, 0, 2, 3, 2, 0, // Front face (z=0)
-    4, 5, 6, 6, 7, 4, // Back face (z=-1)
-    0, 4, 7, 3, 0, 7, // Bottom (y=0)
-    5, 1, 6, 1, 2, 6, // Top (y=1)
-    6, 2, 7, 2, 3, 7, // Right (x=1)
-    4, 0, 5, 0, 1, 5, // Left (x=0)
+// Each face defined as 6 indices (2 triangles)
+pub const CUBE_FACES: [[u16; 6]; 6] = [
+    [0, 1, 2, 2, 3, 0], // Front face
+    [5, 4, 7, 7, 6, 5], // Back face
+    [3, 2, 6, 6, 7, 3], // Top face
+    [4, 5, 1, 1, 0, 4], // Bottom face
+    [1, 5, 6, 6, 2, 1], // Right face
+    [4, 0, 3, 3, 7, 4], // Left face
 ];
