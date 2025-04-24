@@ -778,14 +778,17 @@ impl ChunkMeshBuilder {
         let start_vertex = self.current_vertex;
 
         // Add transformed vertices
-        for vertex in &CUBE_VERTICES {
-            let pos = transform * Vector3::from(vertex.position).extend(1.0);
-            let normal = rotation * Vector3::from(vertex.normal);
+        for (i, vertex) in CUBE_VERTICES.iter().enumerate() {
+            let pos = transform * Vector3::from(*vertex).extend(1.0);
 
             self.vertices.push(Vertex {
                 position: [pos.x, pos.y, pos.z],
-                normal: [normal.x, normal.y, normal.z],
-                uv: vertex.uv,
+                normal: if i <= 4 {
+                    [0.0, 0.0, 1.0]
+                } else {
+                    [0.0, 0.0, -1.0]
+                },
+                uv: CUBE_UV[(i as f32 % 4.0) as usize],
             });
         }
 
@@ -811,48 +814,18 @@ impl ChunkMeshBuilder {
 const LENG: f32 = 1.0; // unit sized cube
 
 // Cube vertices (8 corners of a unit cube with left-bottom-front at origin)
-pub const CUBE_VERTICES: [Vertex; 8] = [
-    Vertex {
-        position: [0.0, 0.0, LENG],
-        normal: [0.0, 0.0, 1.0],
-        uv: [0.0, 0.0],
-    }, // front-bottom-left (origin)
-    Vertex {
-        position: [LENG, 0.0, LENG],
-        normal: [0.0, 0.0, 1.0],
-        uv: [1.0, 0.0],
-    }, // front-bottom-right
-    Vertex {
-        position: [LENG, LENG, LENG],
-        normal: [0.0, 0.0, 1.0],
-        uv: [1.0, 1.0],
-    }, // front-top-right
-    Vertex {
-        position: [0.0, LENG, LENG],
-        normal: [0.0, 0.0, 1.0],
-        uv: [0.0, 1.0],
-    }, // front-top-left
-    Vertex {
-        position: [0.0, 0.0, 0.0],
-        normal: [0.0, 0.0, -1.0],
-        uv: [1.0, 0.0],
-    }, // back-bottom-left
-    Vertex {
-        position: [LENG, 0.0, 0.0],
-        normal: [0.0, 0.0, -1.0],
-        uv: [0.0, 0.0],
-    }, // back-bottom-right
-    Vertex {
-        position: [LENG, LENG, 0.0],
-        normal: [0.0, 0.0, -1.0],
-        uv: [0.0, 1.0],
-    }, // back-top-right
-    Vertex {
-        position: [0.0, LENG, 0.0],
-        normal: [0.0, 0.0, -1.0],
-        uv: [1.0, 1.0],
-    }, // back-top-left
+pub const CUBE_VERTICES: [[f32; 3]; 8] = [
+    [0.0, 0.0, LENG],   // front-bottom-left (origin)
+    [LENG, 0.0, LENG],  // front-bottom-right
+    [LENG, LENG, LENG], // front-top-right
+    [0.0, LENG, LENG],  // front-top-left
+    [0.0, 0.0, 0.0],    // back-bottom-left
+    [LENG, 0.0, 0.0],   // back-bottom-right
+    [LENG, LENG, 0.0],  // back-top-right
+    [0.0, LENG, 0.0],   // back-top-left
 ];
+
+const CUBE_UV: [[f32; 2]; 4] = [[1.0, 0.0], [0.0, 0.0], [0.0, 1.0], [1.0, 1.0]];
 
 // Each face defined as 6 indices (2 triangles)
 pub const CUBE_FACES: [[u16; 6]; 6] = [
@@ -862,4 +835,5 @@ pub const CUBE_FACES: [[u16; 6]; 6] = [
     [4, 5, 1, 1, 0, 4], // Bottom face
     [1, 5, 6, 6, 2, 1], // Right face
     [4, 0, 3, 3, 7, 4], // Left face
+                        // 1;2;3 - 3;4;1
 ];
