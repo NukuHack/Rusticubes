@@ -629,7 +629,7 @@ pub fn setup_ui(state: &mut super::State) {
             (0.5, 0.25),
             [0.7, 0.3, 0.3],
             Some("fill world w* chunks".to_string()),
-            Some(Box::new(|| super::geometry::add_full_world(6))),
+            Some(Box::new(|| super::geometry::add_full_world())),
         ),
         UIElement::new(
             0,

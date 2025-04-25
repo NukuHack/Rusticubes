@@ -1,4 +1,4 @@
-use crate::geometry::{GeometryBuffer, Vertex, EDGE_TABLE, TRI_TABLE};
+use crate::geometry::{Vertex, EDGE_TABLE, TRI_TABLE};
 use crate::traits::VectorTypeConversion;
 use ahash::AHasher;
 use cgmath::{Deg, InnerSpace, Matrix4, Quaternion, Rotation3, Vector3, VectorSpace};
@@ -12,7 +12,7 @@ use wgpu::util::DeviceExt;
 type FastMap<K, V> = HashMap<K, V, BuildHasherDefault<AHasher>>;
 
 /// Represents a block in the world with optimized storage
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Block {
     /// Simple block with material and packed rotation
     Simple {
@@ -194,7 +194,7 @@ impl Block {
 
     /// Sets a point in the 3x3x3 density field
     #[inline]
-    pub fn set_point(&mut self, (x, y, z, value): (u8, u8, u8, bool)) {
+    pub fn set_point(&mut self, x: u8, y: u8, z: u8, value: bool) {
         if let Block::Marching { points, .. } = self {
             debug_assert!(x < 3 && y < 3 && z < 3, "Coordinates must be 0-2");
             let bit_pos = x as u32 + (y as u32) * 3 + (z as u32) * 9;
@@ -228,79 +228,90 @@ impl Block {
             return;
         };
 
-        let base_pos = position.to_vec3_f32() - Vector3::unit_z(); // Z-offset adjustment
-        let mut edge_vertex_cache = [None; 12]; // Cache calculated edge vertices
+        // Early exit if no points are set
+        if *points == 0 {
+            return;
+        }
 
-        // Process each sub-cube
-        for sub_z in 0..2 {
-            for sub_y in 0..2 {
-                for sub_x in 0..2 {
-                    // Calculate case index using bit manipulation
-                    let idx = [
-                        (sub_x, sub_y, sub_z),
-                        (sub_x + 1, sub_y, sub_z),
-                        (sub_x + 1, sub_y, sub_z + 1),
-                        (sub_x, sub_y, sub_z + 1),
-                        (sub_x, sub_y + 1, sub_z),
-                        (sub_x + 1, sub_y + 1, sub_z),
-                        (sub_x + 1, sub_y + 1, sub_z + 1),
-                        (sub_x, sub_y + 1, sub_z + 1),
-                    ];
+        let base_pos = position.to_vec3_f32() - Vector3::unit_z();
+        let mut edge_vertex_cache = [None; 12];
+        let mut case_cache = [0u8; 8]; // Cache case indices for each sub-cube
 
-                    let mut case_index = 0u8;
-                    for (i, &(x, y, z)) in idx.iter().enumerate() {
-                        let bit_pos = x as u32 + (y as u32) * 3 + (z as u32) * 9;
-                        if (*points & (1u32 << bit_pos)) != 0 {
-                            case_index |= 1 << i;
-                        }
-                    }
+        // Precompute all case indices first
+        for i in 0..8 {
+            let (x, y, z) = ((i & 1) as u8, ((i >> 1) & 1) as u8, ((i >> 2) & 1) as u8);
 
-                    // Skip empty/full sub-cubes
-                    if case_index == 0 || case_index == 255 {
-                        continue;
-                    }
+            let idx = [
+                (x, y, z),
+                (x + 1, y, z),
+                (x + 1, y, z + 1),
+                (x, y, z + 1),
+                (x, y + 1, z),
+                (x + 1, y + 1, z),
+                (x + 1, y + 1, z + 1),
+                (x, y + 1, z + 1),
+            ];
 
-                    let edges = EDGE_TABLE[case_index as usize];
-                    if edges == 0 {
-                        continue;
-                    }
-
-                    // Calculate and cache edge vertices only when needed
-                    for edge in 0..12 {
-                        if (edges & (1 << edge)) != 0 && edge_vertex_cache[edge].is_none() {
-                            let [a, b] = EDGE_VERTICES[edge];
-                            edge_vertex_cache[edge] = Some(a.lerp(b, 0.5));
-                        }
-                    }
-
-                    // Generate triangles
-                    let triangles = &TRI_TABLE[case_index as usize];
-                    let sub_offset =
-                        Vector3::new(sub_x as f32 * 0.5, sub_y as f32 * 0.5, sub_z as f32 * 0.5);
-
-                    // Process triangles in batches
-                    let mut i = 0;
-                    while i < 16 && triangles[i] != -1 {
-                        let tri_vertices = [
-                            edge_vertex_cache[triangles[i] as usize].unwrap(),
-                            edge_vertex_cache[triangles[i + 1] as usize].unwrap(),
-                            edge_vertex_cache[triangles[i + 2] as usize].unwrap(),
-                        ];
-
-                        let world_vertices = [
-                            base_pos + sub_offset + tri_vertices[0],
-                            base_pos + sub_offset + tri_vertices[1],
-                            base_pos + sub_offset + tri_vertices[2],
-                        ];
-
-                        builder.add_triangle(&world_vertices);
-                        i += 3;
-                    }
-
-                    // Clear the cache for the next sub-cube
-                    edge_vertex_cache = [None; 12];
+            let mut case_index = 0u8;
+            for (bit, &(x, y, z)) in idx.iter().enumerate() {
+                let bit_pos = x as u32 + (y as u32) * 3 + (z as u32) * 9;
+                if (*points & (1u32 << bit_pos)) != 0 {
+                    case_index |= 1 << bit;
                 }
             }
+            case_cache[i] = case_index;
+        }
+
+        // Process each sub-cube
+        for i in 0..8 {
+            let case_index = case_cache[i];
+
+            // Skip empty/full sub-cubes
+            if case_index == 0 || case_index == 255 {
+                continue;
+            }
+
+            let edges = EDGE_TABLE[case_index as usize];
+            if edges == 0 {
+                continue;
+            }
+
+            // Calculate sub-cube offset
+            let (x, y, z) = (
+                (i & 1) as f32 * 0.5,
+                ((i >> 1) & 1) as f32 * 0.5,
+                ((i >> 2) & 1) as f32 * 0.5,
+            );
+            let sub_offset = Vector3::new(x, y, z);
+
+            // Calculate and cache edge vertices
+            for edge in 0..12 {
+                if (edges & (1 << edge)) != 0 && edge_vertex_cache[edge].is_none() {
+                    let [a, b] = EDGE_VERTICES[edge];
+                    edge_vertex_cache[edge] = Some(a.lerp(b, 0.5));
+                }
+            }
+
+            // Generate triangles
+            let triangles = &TRI_TABLE[case_index as usize];
+            let mut i = 0;
+            while i < 16 && triangles[i] != -1 {
+                let v0 = edge_vertex_cache[triangles[i] as usize].unwrap();
+                let v1 = edge_vertex_cache[triangles[i + 1] as usize].unwrap();
+                let v2 = edge_vertex_cache[triangles[i + 2] as usize].unwrap();
+
+                let world_vertices = [
+                    base_pos + sub_offset + v0,
+                    base_pos + sub_offset + v1,
+                    base_pos + sub_offset + v2,
+                ];
+
+                builder.add_triangle(&world_vertices);
+                i += 3;
+            }
+
+            // Clear the cache for the next sub-cube
+            edge_vertex_cache = [None; 12];
         }
     }
 }
@@ -343,7 +354,7 @@ pub enum Axis {
 /// Format: [X:26 (signed), Y:12 (signed), Z:26 (signed)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct ChunkCoord(u64);
-
+#[allow(dead_code, unused)]
 impl ChunkCoord {
     const Z_SHIFT: u8 = 0;
     const Y_SHIFT: u8 = 26;
@@ -451,12 +462,13 @@ impl Chunk {
     pub fn new() -> Self {
         let mut chunk = Self::empty();
         chunk.blocks.reserve(Self::VOLUME);
+        let new_block = Block::new();
 
         for x in 0..Self::SIZE {
             for y in 0..Self::SIZE {
                 for z in 0..Self::SIZE {
                     let pos = Self::local_to_block_pos(Vector3::new(x as u32, y as u32, z as u32));
-                    chunk.blocks.insert(pos, Block::new());
+                    chunk.blocks.insert(pos, new_block);
                 }
             }
         }
@@ -524,12 +536,13 @@ impl Chunk {
 
     /// Generates the chunk mesh if dirty
     pub fn make_mesh(&mut self, device: &wgpu::Device, force: bool) {
-        if !force && (!self.dirty || self.mesh.is_some()) {
+        if !force && !self.dirty && self.mesh.is_some() {
             return;
         }
 
         let mut builder = ChunkMeshBuilder::new();
 
+        let start = std::time::Instant::now();
         for (&pos, block) in &self.blocks {
             if block.is_empty() {
                 continue;
@@ -539,12 +552,38 @@ impl Chunk {
             if block.is_marching() {
                 block.generate_marching_cubes_mesh(local_pos, &mut builder);
             } else {
-                builder.add_cube(local_pos.to_vec3_f32(), block.rotation_to_quaternion());
+                builder.add_cube(
+                    local_pos.to_vec3_f32(),
+                    block.rotation_to_quaternion(),
+                    self, // Pass chunk reference for face culling
+                );
             }
         }
+        println!("Mesh cost: {:?}", start.elapsed());
 
         self.mesh = Some(builder.build(device));
         self.dirty = false;
+    }
+
+    /// Checks if a block position is empty or outside the chunk
+    #[inline]
+    fn is_block_null(&self, pos: Vector3<i32>) -> bool {
+        // Check if position is outside chunk bounds
+        if pos.x < 0
+            || pos.y < 0
+            || pos.z < 0
+            || pos.x >= Self::SIZE_I32
+            || pos.y >= Self::SIZE_I32
+            || pos.z >= Self::SIZE_I32
+        {
+            return true;
+        }
+        // Check if block is empty
+        let local_pos = Vector3::new(pos.x as u32, pos.y as u32, pos.z as u32);
+        match self.blocks.get(&Self::local_to_block_pos(local_pos)) {
+            Some(block) => block.is_empty() || block.is_marching(),
+            None => true,
+        }
     }
 }
 
@@ -605,7 +644,10 @@ impl World {
 
         if let Some(chunk) = self.chunks.get_mut(&chunk_coord) {
             let local = Chunk::world_to_local_pos(world_pos);
-            chunk.set_block(local, block);
+            if chunk.get_block(local) != Some(&block) {
+                println!(" equ ");
+                chunk.set_block(local, block);
+            }
         }
     }
 
@@ -650,7 +692,6 @@ impl World {
                     ..chunk
                 },
             );
-
             true
         }
     }
@@ -709,6 +750,7 @@ impl World {
     }
 
     /// Generates meshes for all dirty chunks
+    #[inline]
     pub fn make_chunk_meshes(&mut self, device: &wgpu::Device) {
         for chunk in self.chunks.values_mut() {
             chunk.make_mesh(device, false);
@@ -771,42 +813,65 @@ impl ChunkMeshBuilder {
         GeometryBuffer::new(device, &self.indices, &self.vertices)
     }
 
-    /// Adds a rotated cube to the mesh
-    pub fn add_cube(&mut self, position: Vector3<f32>, rotation: Quaternion<f32>) {
+    /// Adds a rotated cube to the mesh with face culling
+    pub fn add_cube(&mut self, position: Vector3<f32>, rotation: Quaternion<f32>, chunk: &Chunk) {
+        // Pre-calculate the transform matrix once
         let transform =
             Matrix4::from_translation(position - Vector3::unit_z()) * Matrix4::from(rotation);
+
+        // Convert position to i32 for neighbor checks
+        let block_pos = Vector3::new(position.x as i32, position.y as i32, position.z as i32);
+
+        // Check face visibility first to avoid unnecessary vertex calculations
+        let face_visibility = [
+            chunk.is_block_null(block_pos + Vector3::unit_z()), // Front
+            chunk.is_block_null(block_pos - Vector3::unit_z()), // Back
+            chunk.is_block_null(block_pos + Vector3::unit_y()), // Top
+            chunk.is_block_null(block_pos - Vector3::unit_y()), // Bottom
+            chunk.is_block_null(block_pos + Vector3::unit_x()), // Right
+            chunk.is_block_null(block_pos - Vector3::unit_x()), // Left
+        ];
+
+        // Early exit if no faces are visible
+        if !face_visibility.iter().any(|&v| v) {
+            return;
+        }
+
         let start_vertex = self.current_vertex;
 
-        // Add transformed vertices
+        // Transform all vertices at once and store them
+        let mut transformed_vertices = [[0.0f32; 3]; 8];
         for (i, vertex) in CUBE_VERTICES.iter().enumerate() {
             let pos = transform * Vector3::from(*vertex).extend(1.0);
+            transformed_vertices[i] = [pos.x, pos.y, pos.z];
+        }
 
+        // Add all vertices to the buffer with pre-calculated normals
+        for (i, pos) in transformed_vertices.iter().enumerate() {
             self.vertices.push(Vertex {
-                position: [pos.x, pos.y, pos.z],
-                normal: if i <= 4 {
-                    [0.0, 0.0, 1.0]
-                } else {
-                    [0.0, 0.0, -1.0]
-                },
-                uv: CUBE_UV[(i as f32 % 4.0) as usize],
+                position: *pos,
+                normal: CUBE_NORMALS[i],
+                uv: CUBE_UV[i % 4],
             });
         }
 
-        // Add indices by creating each face
-        self.add_cube_face(start_vertex, &CUBE_FACES[0]); // Front
-        self.add_cube_face(start_vertex, &CUBE_FACES[1]); // Back
-        self.add_cube_face(start_vertex, &CUBE_FACES[2]); // Top
-        self.add_cube_face(start_vertex, &CUBE_FACES[3]); // Bottom
-        self.add_cube_face(start_vertex, &CUBE_FACES[4]); // Right
-        self.add_cube_face(start_vertex, &CUBE_FACES[5]); // Left
+        // Add indices for visible faces
+        for (face_idx, &visible) in face_visibility.iter().enumerate() {
+            if visible {
+                let face = &CUBE_FACES[face_idx];
+                let base = start_vertex as u16;
+                self.indices.extend_from_slice(&[
+                    base + face[0],
+                    base + face[1],
+                    base + face[2],
+                    base + face[2],
+                    base + face[3],
+                    base + face[0],
+                ]);
+            }
+        }
 
-        self.current_vertex += CUBE_VERTICES.len() as u32;
-    }
-
-    /// Internal helper to add a single cube face
-    fn add_cube_face(&mut self, base_vertex: u32, face_indices: &[u16; 6]) {
-        let base = base_vertex as u16;
-        self.indices.extend(face_indices.iter().map(|&i| base + i));
+        self.current_vertex += 8;
     }
 }
 
@@ -824,17 +889,84 @@ pub const CUBE_VERTICES: [[f32; 3]; 8] = [
     [LENG, LENG, 0.0],  // back-top-right
     [0.0, LENG, 0.0],   // back-top-left
 ];
+// Pre-calculated normals for each vertex (8 normals matching the cube vertices)
+const CUBE_NORMALS: [[f32; 3]; 8] = [
+    [-0.577, -0.577, 0.577],  // front-bottom-left
+    [0.577, -0.577, 0.577],   // front-bottom-right
+    [0.577, 0.577, 0.577],    // front-top-right
+    [-0.577, 0.577, 0.577],   // front-top-left
+    [-0.577, -0.577, -0.577], // back-bottom-left
+    [0.577, -0.577, -0.577],  // back-bottom-right
+    [0.577, 0.577, -0.577],   // back-top-right
+    [-0.577, 0.577, -0.577],  // back-top-left
+];
 
 const CUBE_UV: [[f32; 2]; 4] = [[1.0, 0.0], [0.0, 0.0], [0.0, 1.0], [1.0, 1.0]];
 // 1;2;3;4 - 2;1;3;4
 
 // Each face defined as 6 indices (2 triangles)
-pub const CUBE_FACES: [[u16; 6]; 6] = [
-    [0, 1, 2, 2, 3, 0], // Front face
-    [5, 4, 7, 7, 6, 5], // Back face
-    [3, 2, 6, 6, 7, 3], // Top face
-    [4, 5, 1, 1, 0, 4], // Bottom face
-    [1, 5, 6, 6, 2, 1], // Right face
-    [4, 0, 3, 3, 7, 4], // Left face
-                        // 1;2;3 - 3;4;1
+pub const CUBE_FACES: [[u16; 4]; 6] = [
+    [0, 1, 2, 3], // Front face
+    [5, 4, 7, 6], // Back face
+    [3, 2, 6, 7], // Top face
+    [4, 5, 1, 0], // Bottom face
+    [1, 5, 6, 2], // Right face
+    [4, 0, 3, 7], // Left face
 ];
+
+// --- Geometry Buffer (modified for chunk meshes) ---
+#[derive(Debug, Clone)]
+pub struct GeometryBuffer {
+    pub vertex_buffer: wgpu::Buffer,
+    pub index_buffer: wgpu::Buffer,
+    pub num_indices: u32,
+    pub num_vertices: u32,
+}
+
+impl GeometryBuffer {
+    pub fn new(device: &wgpu::Device, indices: &[u16], vertices: &[Vertex]) -> Self {
+        // Handle empty geometry case
+        if vertices.is_empty() && indices.is_empty() {
+            return Self::empty(device);
+        }
+
+        Self {
+            vertex_buffer: device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("Vertex Buffer"),
+                contents: bytemuck::cast_slice(vertices),
+                usage: wgpu::BufferUsages::VERTEX,
+            }),
+            index_buffer: device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("Index Buffer"),
+                contents: bytemuck::cast_slice(indices),
+                usage: wgpu::BufferUsages::INDEX,
+            }),
+            num_indices: indices.len() as u32,
+            num_vertices: vertices.len() as u32,
+        }
+    }
+
+    pub fn empty(device: &wgpu::Device) -> Self {
+        // Create minimal buffers that won't cause rendering issues
+        let vertex_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Empty Vertex Buffer"),
+            size: std::mem::size_of::<Vertex>() as wgpu::BufferAddress,
+            usage: wgpu::BufferUsages::VERTEX,
+            mapped_at_creation: false,
+        });
+
+        let index_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Empty Index Buffer"),
+            size: std::mem::size_of::<u16>() as wgpu::BufferAddress,
+            usage: wgpu::BufferUsages::INDEX,
+            mapped_at_creation: false,
+        });
+
+        Self {
+            vertex_buffer,
+            index_buffer,
+            num_indices: 0,
+            num_vertices: 0,
+        }
+    }
+}

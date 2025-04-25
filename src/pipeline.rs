@@ -21,7 +21,40 @@ impl Pipeline {
         let post_shader = create_post_shader(device);
         let inside_pipeline = create_inside_pipeline(device, layout, &inside_shader, config.format);
         let chunk_pipeline = create_chunk_pipeline(device, layout, &chunk_shader, config.format);
-        let post_pipeline = create_post_pipeline(device, layout, &post_shader, config.format);
+
+        // Create a dedicated bind group layout for post processing
+        let post_bind_group_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("Post Processing Bind Group Layout"),
+                entries: &[
+                    // Texture
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Texture {
+                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                            view_dimension: wgpu::TextureViewDimension::D2,
+                            multisampled: false,
+                        },
+                        count: None,
+                    },
+                    // Sampler
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 1,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                        count: None,
+                    },
+                ],
+            });
+
+        // Create pipeline layout
+        let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("Post Processing Pipeline Layout"),
+            bind_group_layouts: &[&post_bind_group_layout],
+            push_constant_ranges: &[],
+        });
+        let post_pipeline = create_post_pipeline(device, &layout, &post_shader, config.format);
         Self {
             inside_pipeline,
             chunk_pipeline,
@@ -96,42 +129,9 @@ fn create_post_pipeline(
     shader: &wgpu::ShaderModule,
     format: wgpu::TextureFormat,
 ) -> wgpu::RenderPipeline {
-    // Create a dedicated bind group layout for post processing
-    let post_bind_group_layout =
-        device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("Post Processing Bind Group Layout"),
-            entries: &[
-                // Texture
-                wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Texture {
-                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                        view_dimension: wgpu::TextureViewDimension::D2,
-                        multisampled: false,
-                    },
-                    count: None,
-                },
-                // Sampler
-                wgpu::BindGroupLayoutEntry {
-                    binding: 1,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                    count: None,
-                },
-            ],
-        });
-
-    // Create pipeline layout
-    let post_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-        label: Some("Post Processing Pipeline Layout"),
-        bind_group_layouts: &[&post_bind_group_layout],
-        push_constant_ranges: &[],
-    });
-
     device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
         label: Some("Post Processing Pipeline"),
-        layout: Some(&post_pipeline_layout), // Use our new layout
+        layout: Some(layout), // Use our new layout
         vertex: wgpu::VertexState {
             module: shader,
             entry_point: Some("vs_main"),

@@ -7,7 +7,6 @@ use cgmath::Vector3;
 use cgmath::Zero;
 use image::GenericImageView;
 use std::mem;
-use wgpu::util::DeviceExt;
 
 // --- Vertex & Buffer Layouts ---
 #[repr(C)]
@@ -45,66 +44,6 @@ impl Vertex {
     }
 }
 
-// --- Geometry Buffer (modified for chunk meshes) ---
-#[derive(Debug, Clone)]
-pub struct GeometryBuffer {
-    pub vertex_buffer: wgpu::Buffer,
-    pub index_buffer: wgpu::Buffer,
-    pub num_indices: u32,
-    pub num_vertices: u32,
-}
-
-impl GeometryBuffer {
-    pub fn new(device: &wgpu::Device, indices: &[u16], vertices: &[Vertex]) -> Self {
-        // Handle empty geometry case
-        if vertices.is_empty() && indices.is_empty() {
-            return Self::empty(device);
-        }
-
-        let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Vertex Buffer"),
-            contents: bytemuck::cast_slice(vertices),
-            usage: wgpu::BufferUsages::VERTEX,
-        });
-
-        let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Index Buffer"),
-            contents: bytemuck::cast_slice(indices),
-            usage: wgpu::BufferUsages::INDEX,
-        });
-
-        Self {
-            vertex_buffer,
-            index_buffer,
-            num_indices: indices.len() as u32,
-            num_vertices: vertices.len() as u32,
-        }
-    }
-
-    pub fn empty(device: &wgpu::Device) -> Self {
-        // Create minimal buffers that won't cause rendering issues
-        let vertex_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("Empty Vertex Buffer"),
-            size: std::mem::size_of::<Vertex>() as wgpu::BufferAddress,
-            usage: wgpu::BufferUsages::VERTEX,
-            mapped_at_creation: false,
-        });
-
-        let index_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("Empty Index Buffer"),
-            size: std::mem::size_of::<u16>() as wgpu::BufferAddress,
-            usage: wgpu::BufferUsages::INDEX,
-            mapped_at_creation: false,
-        });
-
-        Self {
-            vertex_buffer,
-            index_buffer,
-            num_indices: 0,
-            num_vertices: 0,
-        }
-    }
-}
 /// Parses a 4-character string into (x,y,z,value) for block point manipulation
 /// Format: "XYZV" where X,Y,Z are digits 0-2 and V is 0 or 1
 fn parse_block_point_input(raw_data: &str) -> Option<(u8, u8, u8, bool)> {
@@ -137,8 +76,8 @@ pub fn march_def_cube(raw_data: &str) -> bool {
         let pos = Vector3::zero();
 
         if let Some(block) = state.data_system.world.get_block_mut(pos) {
-            block.set_point((x, y, z, value));
-            // Update chunk mesh
+            block.set_point(x, y, z, value);
+
             let chunk_pos = ChunkCoord::from_world_pos(pos);
             if let Some(chunk) = state.data_system.world.get_chunk_mut(chunk_pos) {
                 chunk.make_mesh(super::get_state().device(), true);
@@ -156,10 +95,9 @@ pub fn place_default_cube() {
         let pos = Vector3::zero();
         state.data_system.world.set_block(pos, Block::new());
 
-        // Update chunk mesh
         let chunk_pos = ChunkCoord::from_world_pos(pos);
         if let Some(chunk) = state.data_system.world.get_chunk_mut(chunk_pos) {
-            chunk.make_mesh(super::get_state().device(), true);
+            chunk.make_mesh(super::get_state().device(), false);
         }
     }
 }
@@ -170,10 +108,9 @@ pub fn place_marched_cube() {
         let pos = Vector3::zero();
         state.data_system.world.set_block(pos, Block::new_dot());
 
-        // Update chunk mesh
         let chunk_pos = ChunkCoord::from_world_pos(pos);
         if let Some(chunk) = state.data_system.world.get_chunk_mut(chunk_pos) {
-            chunk.make_mesh(super::get_state().device(), true);
+            chunk.make_mesh(super::get_state().device(), false);
         }
     }
 }
@@ -181,27 +118,27 @@ pub fn place_marched_cube() {
 pub fn add_def_chunk() {
     unsafe {
         let state = super::get_state();
-        let chunk_pos =
-            ChunkCoord::from_world_pos(state.camera_system.camera.position.to_vec3_i32());
+        let pos = state.camera_system.camera.position.to_vec3_i32();
+        let chunk_pos = ChunkCoord::from_world_pos(pos);
 
         if state.data_system.world.loaded_chunks.contains(&chunk_pos) {
             return;
         }
+        if !state.data_system.world.load_chunk(chunk_pos) {
+            return;
+        }
 
-        if state.data_system.world.load_chunk(chunk_pos) {
-            // Update mesh for the new chunk
-            if let Some(chunk) = state.data_system.world.get_chunk_mut(chunk_pos) {
-                chunk.make_mesh(super::get_state().device(), true);
-            }
+        if let Some(chunk) = state.data_system.world.get_chunk_mut(chunk_pos) {
+            chunk.make_mesh(super::get_state().device(), true);
         }
     }
 }
 /// Loads chunks around the camera in a radius
-pub fn add_full_world(radius: u32) {
+pub fn add_full_world() {
     unsafe {
         let state = super::get_state();
         let center = state.camera_system.camera.position.to_vec3_i32();
-        state.data_system.world.update_loaded_chunks(center, radius);
+        state.data_system.world.update_loaded_chunks(center, 6u32);
         state
             .data_system
             .world
@@ -322,7 +259,7 @@ pub fn place_looked_cube() {
             // Update chunk mesh
             let chunk_pos = ChunkCoord::from_world_pos(placement_pos);
             if let Some(chunk) = state.data_system.world.get_chunk_mut(chunk_pos) {
-                chunk.make_mesh(super::get_state().device(), true);
+                chunk.make_mesh(super::get_state().device(), false);
             }
         }
     }
@@ -345,7 +282,7 @@ pub fn remove_targeted_block() {
             // Update chunk mesh
             let chunk_pos = ChunkCoord::from_world_pos(block_pos);
             if let Some(chunk) = state.data_system.world.get_chunk_mut(chunk_pos) {
-                chunk.make_mesh(super::get_state().device(), true);
+                chunk.make_mesh(super::get_state().device(), false);
             }
         }
     }
