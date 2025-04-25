@@ -1,25 +1,25 @@
 struct CameraUniform {
-    view_proj: mat4x4<f32>,
+    view_proj: mat4x4f,
 };
 struct ChunkUniform {
-    position: vec3<f32>,
+    position: vec3f,
 };
 
 @group(1) @binding(0) var<uniform> camera: CameraUniform;
 @group(2) @binding(0) var<uniform> chunk: ChunkUniform;
 
 struct VertexInput {
-    @location(0) position: vec3<f32>,
-    @location(1) normal: vec3<f32>,
-    @location(2) uv: vec2<f32>,
+    @location(0) position: vec3f,
+    @location(1) normal: vec3f,
+    @location(2) uv: vec2f,
 };
 
 @vertex
-fn vs_main(vertex: VertexInput) -> @builtin(position) vec4<f32> {
-    return camera.view_proj * vec4<f32>(vertex.position + chunk.position, 1.0);
+fn vs_main(vertex: VertexInput) -> @builtin(position) vec4f {
+    return camera.view_proj * vec4f(vertex.position + chunk.position, 1f);
 }
 
 @fragment
-fn fs_main() -> @location(0) vec4<f32> {
-    return vec4<f32>(0.3, 0.3, 0.3, 0.4);  // Default chunk color
+fn fs_main() -> @location(0) vec4f {
+    return vec4f(0.3, 0.3, 0.3, 0.4);  // Default chunk color
 }

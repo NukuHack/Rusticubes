@@ -826,6 +826,7 @@ pub const CUBE_VERTICES: [[f32; 3]; 8] = [
 ];
 
 const CUBE_UV: [[f32; 2]; 4] = [[1.0, 0.0], [0.0, 0.0], [0.0, 1.0], [1.0, 1.0]];
+// 1;2;3;4 - 2;1;3;4
 
 // Each face defined as 6 indices (2 triangles)
 pub const CUBE_FACES: [[u16; 6]; 6] = [

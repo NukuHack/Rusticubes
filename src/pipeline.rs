@@ -117,17 +117,13 @@ fn create_inside_pipeline(
 /// Creates default primitive state configuration
 fn default_primitive_state() -> wgpu::PrimitiveState {
     wgpu::PrimitiveState {
-        // Use strip topology if possible (reduces vertex processing)
-        topology: wgpu::PrimitiveTopology::TriangleList, // Keep if indexed geometry needs it
+        topology: wgpu::PrimitiveTopology::TriangleList,
         strip_index_format: None,
         front_face: wgpu::FrontFace::Ccw,
-        // Conservative culling - verify your mesh winding
         cull_mode: Some(wgpu::Face::Back),
         polygon_mode: wgpu::PolygonMode::Fill,
-        // Enable conservative rasterization if supported
         conservative: false,
         unclipped_depth: false,
-        // Keep other defaults
         ..Default::default()
     }
 }
