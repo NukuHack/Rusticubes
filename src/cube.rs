@@ -837,7 +837,7 @@ impl ChunkMeshBuilder {
             return;
         }
 
-        let start_vertex = self.current_vertex;
+        let start_vertex: u16 = self.current_vertex as u16;
 
         // Transform all vertices at once and store them
         let mut transformed_vertices = [[0.0f32; 3]; 8];
@@ -846,12 +846,12 @@ impl ChunkMeshBuilder {
             transformed_vertices[i] = [pos.x, pos.y, pos.z];
         }
 
-        // Add all vertices to the buffer with pre-calculated normals
+        // Add all vertices to the buffer with pre-calculated normals and proper UV mapping
         for (i, pos) in transformed_vertices.iter().enumerate() {
             self.vertices.push(Vertex {
                 position: *pos,
                 normal: CUBE_NORMALS[i],
-                uv: CUBE_UV[i % 4],
+                uv: CUBE_UV[i % 4], // This will cycle through the 4 UV coordinates
             });
         }
 
@@ -859,14 +859,13 @@ impl ChunkMeshBuilder {
         for (face_idx, &visible) in face_visibility.iter().enumerate() {
             if visible {
                 let face = &CUBE_FACES[face_idx];
-                let base = start_vertex as u16;
                 self.indices.extend_from_slice(&[
-                    base + face[0],
-                    base + face[1],
-                    base + face[2],
-                    base + face[2],
-                    base + face[3],
-                    base + face[0],
+                    start_vertex + face[0],
+                    start_vertex + face[1],
+                    start_vertex + face[2],
+                    start_vertex + face[2],
+                    start_vertex + face[3],
+                    start_vertex + face[0],
                 ]);
             }
         }
@@ -889,6 +888,7 @@ pub const CUBE_VERTICES: [[f32; 3]; 8] = [
     [LENG, LENG, 0.0],  // back-top-right
     [0.0, LENG, 0.0],   // back-top-left
 ];
+
 // Pre-calculated normals for each vertex (8 normals matching the cube vertices)
 const CUBE_NORMALS: [[f32; 3]; 8] = [
     [-0.577, -0.577, 0.577],  // front-bottom-left
@@ -901,10 +901,15 @@ const CUBE_NORMALS: [[f32; 3]; 8] = [
     [-0.577, 0.577, -0.577],  // back-top-left
 ];
 
-const CUBE_UV: [[f32; 2]; 4] = [[1.0, 0.0], [0.0, 0.0], [0.0, 1.0], [1.0, 1.0]];
-// 1;2;3;4 - 2;1;3;4
+// Corrected UV coordinates for each face (4 vertices per face)
+const CUBE_UV: [[f32; 2]; 4] = [
+    [0.0, 0.0], // bottom-left
+    [1.0, 0.0], // bottom-right
+    [1.0, 1.0], // top-right
+    [0.0, 1.0], // top-left
+];
 
-// Each face defined as 6 indices (2 triangles)
+// Each face defined as 4 indices (will be converted to 6 indices/triangles)
 pub const CUBE_FACES: [[u16; 4]; 6] = [
     [0, 1, 2, 3], // Front face
     [5, 4, 7, 6], // Back face
