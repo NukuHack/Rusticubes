@@ -1,10 +1,8 @@
 use super::cube::ChunkCoord;
-use super::traits::VectorTypeConversion;
 use crate::camera::Camera;
 use crate::cube::Block;
 use crate::cube::World;
-use cgmath::Vector3;
-use cgmath::Zero;
+use glam::Vec3;
 use image::GenericImageView;
 use std::mem;
 
@@ -73,7 +71,7 @@ pub fn march_def_cube(raw_data: &str) -> bool {
 
     unsafe {
         let state = super::get_state();
-        let pos = Vector3::zero();
+        let pos = Vec3::ZERO;
 
         if let Some(block) = state.data_system.world.get_block_mut(pos) {
             block.set_point(x, y, z, value);
@@ -93,7 +91,7 @@ pub fn march_def_cube(raw_data: &str) -> bool {
 pub fn place_default_cube() {
     unsafe {
         let state = super::get_state();
-        let pos = Vector3::zero();
+        let pos = Vec3::ZERO;
         state.data_system.world.set_block(pos, Block::new());
 
         let chunk_pos = ChunkCoord::from_world_pos(pos);
@@ -107,7 +105,7 @@ pub fn place_default_cube() {
 pub fn place_marched_cube() {
     unsafe {
         let state = super::get_state();
-        let pos = Vector3::zero();
+        let pos = Vec3::ZERO; // 3840u16 would be much better ... but who cares
         state.data_system.world.set_block(pos, Block::new_dot());
 
         let chunk_pos = ChunkCoord::from_world_pos(pos);
@@ -121,8 +119,7 @@ pub fn place_marched_cube() {
 pub fn add_def_chunk() {
     unsafe {
         let state = super::get_state();
-        let pos = state.camera_system.camera.position.to_vec3_i32();
-        let chunk_pos = ChunkCoord::from_world_pos(pos);
+        let chunk_pos = ChunkCoord::from_world_pos(state.camera_system.camera.position);
 
         if state.data_system.world.loaded_chunks.contains(&chunk_pos) {
             return;
@@ -141,8 +138,10 @@ pub fn add_def_chunk() {
 pub fn add_full_world() {
     unsafe {
         let state = super::get_state();
-        let center = state.camera_system.camera.position.to_vec3_i32();
-        state.data_system.world.update_loaded_chunks(center, 6u32);
+        state
+            .data_system
+            .world
+            .update_loaded_chunks(state.camera_system.camera.position, 6u32);
         let state_b = super::get_state();
         state
             .data_system
@@ -151,29 +150,25 @@ pub fn add_full_world() {
     }
 }
 /// Improved raycasting function that finds the first non-empty block and its face
-pub fn raycast_to_block(
-    camera: &Camera,
-    world: &World,
-    max_distance: f32,
-) -> Option<(Vector3<i32>, Vector3<i32>)> {
+pub fn raycast_to_block(camera: &Camera, world: &World, max_distance: f32) -> Option<(Vec3, Vec3)> {
     // Adjust ray origin to block center
     let ray_origin = camera.position;
     let ray_dir = camera.forward();
 
     // Initialize variables for DDA algorithm
-    let step = Vector3::new(
-        ray_dir.x.signum() as i32,
-        ray_dir.y.signum() as i32,
-        ray_dir.z.signum() as i32,
+    let step = Vec3::new(
+        (ray_dir.x.signum() as i32) as f32,
+        (ray_dir.y.signum() as i32) as f32,
+        (ray_dir.z.signum() as i32) as f32,
     );
 
-    let mut block_pos = Vector3::new(
-        ray_origin.x.floor() as i32,
-        ray_origin.y.floor() as i32,
-        ray_origin.z.floor() as i32,
+    let mut block_pos = Vec3::new(
+        (ray_origin.x.floor() as i32) as f32,
+        (ray_origin.y.floor() as i32) as f32,
+        (ray_origin.z.floor() as i32) as f32,
     );
 
-    let t_delta = Vector3::new(
+    let t_delta = Vec3::new(
         if ray_dir.x != 0.0 {
             1.0 / ray_dir.x.abs()
         } else {
@@ -191,20 +186,20 @@ pub fn raycast_to_block(
         },
     );
 
-    let mut t_max = Vector3::new(
-        if step.x > 0 {
+    let mut t_max = Vec3::new(
+        if step.x > 0.0 {
             (block_pos.x as f32 + 1.0 - ray_origin.x) / ray_dir.x
         } else {
             (block_pos.x as f32 - ray_origin.x) / ray_dir.x
         }
         .abs(),
-        if step.y > 0 {
+        if step.y > 0.0 {
             (block_pos.y as f32 + 1.0 - ray_origin.y) / ray_dir.y
         } else {
             (block_pos.y as f32 - ray_origin.y) / ray_dir.y
         }
         .abs(),
-        if step.z > 0 {
+        if step.z > 0.0 {
             (block_pos.z as f32 + 1.0 - ray_origin.z) / ray_dir.z
         } else {
             (block_pos.z as f32 - ray_origin.z) / ray_dir.z
@@ -213,7 +208,7 @@ pub fn raycast_to_block(
     );
 
     let mut traveled = 0.0f32;
-    let mut normal = Vector3::new(0, 0, 0);
+    let mut normal = Vec3::ZERO;
 
     while traveled < max_distance {
         // Check current block
@@ -225,17 +220,17 @@ pub fn raycast_to_block(
 
         // Move to next block boundary
         if t_max.x < t_max.y && t_max.x < t_max.z {
-            normal = Vector3::new(-step.x, 0, 0);
+            normal = Vec3::new(-step.x, 0.0, 0.0);
             block_pos.x += step.x;
             traveled = t_max.x;
             t_max.x += t_delta.x;
         } else if t_max.y < t_max.z {
-            normal = Vector3::new(0, -step.y, 0);
+            normal = Vec3::new(0.0, -step.y, 0.0);
             block_pos.y += step.y;
             traveled = t_max.y;
             t_max.y += t_delta.y;
         } else {
-            normal = Vector3::new(0, 0, -step.z);
+            normal = Vec3::new(0.0, 0.0, -step.z);
             block_pos.z += step.z;
             traveled = t_max.z;
             t_max.z += t_delta.z;

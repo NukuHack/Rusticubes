@@ -6,7 +6,6 @@ mod config;
 mod geometry;
 mod pipeline;
 mod user_interface;
-mod traits;
 
 use std::iter::Iterator;
 use winit::{
@@ -169,7 +168,7 @@ impl<'a> State<'a> {
         let camera_system: camera::CameraSystem = camera::CameraSystem::new(
             &device,
             &size,
-            cgmath::Vector3::new(0.5, 1.8, 2.0), // by default the camera is 1.8 meters tall
+            glam::Vec3::new(0.5, 1.8, 2.0), // by default the camera is 1.8 meters tall
         );
 
         surface.configure(&device, &config);
@@ -330,7 +329,7 @@ impl<'a> State<'a> {
                     state // ElementState::Released or ElementState::Pressed
                     , .. },..
             } => {
-                // allways handle the modifier keys
+                // always handle the modifier keys
                 self.input_system.modifier_keys.set_modify_kes(*key,*state);
 
                 // Handle UI input first if there's a focused element

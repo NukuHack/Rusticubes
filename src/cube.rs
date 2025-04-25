@@ -1,9 +1,9 @@
 use crate::geometry::{Vertex, EDGE_TABLE, TRI_TABLE};
-use crate::traits::VectorTypeConversion;
 use ahash::AHasher;
-use cgmath::{Deg, InnerSpace, Matrix4, Quaternion, Rotation3, Vector3, VectorSpace};
+use glam::{Mat4, Quat, Vec3, Vec3A};
 use std::{
     collections::{HashMap, HashSet},
+    f32::consts::{PI, TAU},
     hash::BuildHasherDefault,
 };
 use wgpu::util::DeviceExt;
@@ -73,10 +73,10 @@ impl Block {
 
     /// Creates a block from a quaternion rotation
     #[inline]
-    pub fn new_qua(rotation: Quaternion<f32>) -> Self {
+    pub fn new_quat(rotation: Quat) -> Self {
         Self::Simple {
             material: 1,
-            rotation: Self::quaternion_to_rotation(rotation),
+            rotation: Self::quat_to_rotation(rotation),
         }
     }
 
@@ -95,22 +95,22 @@ impl Block {
 
     /// Converts packed rotation to quaternion
     #[inline]
-    pub fn to_quaternion(&self) -> Quaternion<f32> {
+    pub fn to_quat(&self) -> Quat {
         self.get_rotation()
             .map(|(x, y, z)| {
-                // Convert to degrees (0, 90, 180, 270)
+                // Convert to radians (0, π/2, π, 3π/2)
                 let angles = [
-                    Deg(x as f32 * 90.0),
-                    Deg(y as f32 * 90.0),
-                    Deg(z as f32 * 90.0),
+                    x as f32 * PI / 2.0,
+                    y as f32 * PI / 2.0,
+                    z as f32 * PI / 2.0,
                 ];
 
                 // Apply rotations in ZYX order
-                Quaternion::from_angle_z(angles[2])
-                    * Quaternion::from_angle_y(angles[1])
-                    * Quaternion::from_angle_x(angles[0])
+                Quat::from_rotation_z(angles[2])
+                    * Quat::from_rotation_y(angles[1])
+                    * Quat::from_rotation_x(angles[0])
             })
-            .unwrap_or_else(|| Quaternion::new(1.0, 0.0, 0.0, 0.0)) // Identity quaternion
+            .unwrap_or_else(|| Quat::IDENTITY)
     }
 
     #[inline]
@@ -164,31 +164,18 @@ impl Block {
             let new_rot = (current + steps) % 4;
             *rotation = (*rotation & !mask) | (new_rot << shift);
         }
-        // Will implement one for marching ones too shouldn't be too hard
     }
 
     /// Converts quaternion to packed rotation format
     #[inline]
-    pub fn quaternion_to_rotation(rotation: Quaternion<f32>) -> u8 {
+    pub fn quat_to_rotation(rotation: Quat) -> u8 {
         // Extract Euler angles using efficient quaternion conversion
-        let angles = [
-            (2.0 * (rotation.s * rotation.v.x + rotation.v.y * rotation.v.z))
-                .atan2(1.0 - 2.0 * (rotation.v.x.powi(2) + rotation.v.y.powi(2))),
-            (2.0 * (rotation.s * rotation.v.y - rotation.v.z * rotation.v.x)).asin(),
-            (2.0 * (rotation.s * rotation.v.z + rotation.v.x * rotation.v.y))
-                .atan2(1.0 - 2.0 * (rotation.v.y.powi(2) + rotation.v.z.powi(2))),
-        ];
+        let (x, y, z) = rotation.to_euler(glam::EulerRot::ZYX);
 
         // Convert to 2-bit values (0-3) representing 90-degree increments
-        let x = ((angles[0].rem_euclid(std::f32::consts::TAU) / std::f32::consts::FRAC_PI_2).round()
-            as u8)
-            & 0x3;
-        let y = ((angles[1].rem_euclid(std::f32::consts::TAU) / std::f32::consts::FRAC_PI_2).round()
-            as u8)
-            & 0x3;
-        let z = ((angles[2].rem_euclid(std::f32::consts::TAU) / std::f32::consts::FRAC_PI_2).round()
-            as u8)
-            & 0x3;
+        let x = ((x.rem_euclid(TAU) / (PI / 2.0)).round() as u8) & 0x3;
+        let y = ((y.rem_euclid(TAU) / (PI / 2.0)).round() as u8) & 0x3;
+        let z = ((z.rem_euclid(TAU) / (PI / 2.0)).round() as u8) & 0x3;
 
         // Pack into a single byte
         x | (y << 2) | (z << 4)
@@ -231,28 +218,19 @@ impl Block {
 
 /// Edge vertices for marching cubes algorithm
 const HALF: f32 = 0.5;
-const EDGE_VERTICES: [[Vector3<f32>; 2]; 12] = [
-    [Vector3::new(0.0, 0.0, 0.0), Vector3::new(HALF, 0.0, 0.0)], // Edge 0
-    [Vector3::new(HALF, 0.0, 0.0), Vector3::new(HALF, 0.0, HALF)], // Edge 1
-    [Vector3::new(HALF, 0.0, HALF), Vector3::new(0.0, 0.0, HALF)], // Edge 2
-    [Vector3::new(0.0, 0.0, HALF), Vector3::new(0.0, 0.0, 0.0)], // Edge 3
-    [Vector3::new(0.0, HALF, 0.0), Vector3::new(HALF, HALF, 0.0)], // Edge 4
-    [
-        Vector3::new(HALF, HALF, 0.0),
-        Vector3::new(HALF, HALF, HALF),
-    ], // Edge 5
-    [
-        Vector3::new(HALF, HALF, HALF),
-        Vector3::new(0.0, HALF, HALF),
-    ], // Edge 6
-    [Vector3::new(0.0, HALF, HALF), Vector3::new(0.0, HALF, 0.0)], // Edge 7
-    [Vector3::new(0.0, 0.0, 0.0), Vector3::new(0.0, HALF, 0.0)], // Edge 8
-    [Vector3::new(HALF, 0.0, 0.0), Vector3::new(HALF, HALF, 0.0)], // Edge 9
-    [
-        Vector3::new(HALF, 0.0, HALF),
-        Vector3::new(HALF, HALF, HALF),
-    ], // Edge 10
-    [Vector3::new(0.0, 0.0, HALF), Vector3::new(0.0, HALF, HALF)], // Edge 11
+const EDGE_VERTICES: [[Vec3; 2]; 12] = [
+    [Vec3::ZERO, Vec3::new(HALF, 0.0, 0.0)], // Edge 0
+    [Vec3::new(HALF, 0.0, 0.0), Vec3::new(HALF, 0.0, HALF)], // Edge 1
+    [Vec3::new(HALF, 0.0, HALF), Vec3::new(0.0, 0.0, HALF)], // Edge 2
+    [Vec3::new(0.0, 0.0, HALF), Vec3::ZERO], // Edge 3
+    [Vec3::new(0.0, HALF, 0.0), Vec3::new(HALF, HALF, 0.0)], // Edge 4
+    [Vec3::new(HALF, HALF, 0.0), Vec3::new(HALF, HALF, HALF)], // Edge 5
+    [Vec3::new(HALF, HALF, HALF), Vec3::new(0.0, HALF, HALF)], // Edge 6
+    [Vec3::new(0.0, HALF, HALF), Vec3::new(0.0, HALF, 0.0)], // Edge 7
+    [Vec3::ZERO, Vec3::new(0.0, HALF, 0.0)], // Edge 8
+    [Vec3::new(HALF, 0.0, 0.0), Vec3::new(HALF, HALF, 0.0)], // Edge 9
+    [Vec3::new(HALF, 0.0, HALF), Vec3::new(HALF, HALF, HALF)], // Edge 10
+    [Vec3::new(0.0, 0.0, HALF), Vec3::new(0.0, HALF, HALF)], // Edge 11
 ];
 
 /// Axis enumeration for rotation
@@ -322,23 +300,23 @@ impl ChunkCoord {
 
     /// Converts to world position (chunk min corner)
     #[inline]
-    pub fn to_world_pos(self) -> Vector3<i32> {
+    pub fn to_world_pos(self) -> Vec3 {
         let chunk_size = Chunk::SIZE_I;
-        Vector3::new(
-            self.x() * chunk_size,
-            self.y() * chunk_size,
-            self.z() * chunk_size,
+        Vec3::new(
+            (self.x() * chunk_size) as f32,
+            (self.y() * chunk_size) as f32,
+            (self.z() * chunk_size) as f32,
         )
     }
 
     /// Creates from world position
     #[inline]
-    pub fn from_world_pos(world_pos: Vector3<i32>) -> Self {
+    pub fn from_world_pos(world_pos: Vec3) -> Self {
         let chunk_size = Chunk::SIZE_I;
         Self::new(
-            world_pos.x.div_euclid(chunk_size),
-            world_pos.y.div_euclid(chunk_size),
-            world_pos.z.div_euclid(chunk_size),
+            world_pos.x.div_euclid(chunk_size as f32) as i32,
+            world_pos.y.div_euclid(chunk_size as f32) as i32,
+            world_pos.z.div_euclid(chunk_size as f32) as i32,
         )
     }
 }
@@ -346,7 +324,7 @@ impl ChunkCoord {
 /// Represents a chunk of blocks in the world
 #[derive(Clone, Debug)]
 pub struct Chunk {
-    pub blocks: FastMap<u16, Block>, // Packed position -> Block
+    pub blocks: [Option<Block>; 4096], // Fixed-size array; None = air/empty
     pub dirty: bool,
     pub mesh: Option<GeometryBuffer>,
     pub bind_group: Option<wgpu::BindGroup>,
@@ -355,33 +333,31 @@ pub struct Chunk {
 impl Chunk {
     pub const SIZE: usize = 16;
     pub const SIZE_I: i32 = Self::SIZE as i32;
-    pub const VOLUME: usize = Self::SIZE.pow(3);
+    pub const VOLUME: usize = Self::SIZE.pow(3); // 4096
 
-    /// Creates an empty chunk
+    /// Creates an empty chunk (all blocks are `None` = air)
     #[inline]
     pub fn empty() -> Self {
         Self {
-            blocks: FastMap::with_capacity_and_hasher(
-                Self::VOLUME,
-                BuildHasherDefault::<AHasher>::default(),
-            ),
+            blocks: [None; Self::VOLUME], // Initialize all blocks as empty
             dirty: false,
             mesh: None,
             bind_group: None,
         }
     }
 
-    /// Creates a new filled chunk
+    /// Creates a new filled chunk (all blocks initialized to `Block::new()`)
+    #[inline]
     pub fn new() -> Self {
         let mut chunk = Self::empty();
-        chunk.blocks.reserve(Self::VOLUME);
         let new_block = Block::new();
 
+        // Iterate through all possible positions and set blocks
         for x in 0..Self::SIZE {
             for y in 0..Self::SIZE {
                 for z in 0..Self::SIZE {
-                    let pos = Self::pack_position(Vector3::new(x as u32, y as u32, z as u32));
-                    chunk.blocks.insert(pos, new_block);
+                    let idx = Self::xyz_to_index(x, y, z);
+                    chunk.blocks[idx] = Some(new_block.clone()); // Or your block logic
                 }
             }
         }
@@ -395,43 +371,66 @@ impl Chunk {
         Some(Self::new())
     }
 
+    /// Converts (x, y, z) to array index (0..4095)
     #[inline]
-    pub fn get_block(&self, local_pos: Vector3<u32>) -> Option<&Block> {
-        self.blocks.get(&Self::pack_position(local_pos))
+    pub fn xyz_to_index(x: usize, y: usize, z: usize) -> usize {
+        (x << 8) | (y << 4) | z // Equivalent to your `pack_position` but as an index
+    }
+    #[inline]
+    pub fn local_to_index(local_pos: Vec3) -> usize {
+        Chunk::xyz_to_index(
+            local_pos.x as usize,
+            local_pos.y as usize,
+            local_pos.z as usize,
+        ) // Equivalent to your `pack_position` but as an index
     }
 
+    /// Gets a block by local position (Vec3)
     #[inline]
-    pub fn get_block_mut(&mut self, local_pos: Vector3<u32>) -> Option<&mut Block> {
-        self.blocks.get_mut(&Self::pack_position(local_pos))
+    pub fn get_block(&self, local_pos: Vec3) -> Option<&Block> {
+        let (x, y, z) = (
+            local_pos.x as usize,
+            local_pos.y as usize,
+            local_pos.z as usize,
+        );
+        self.blocks[Self::xyz_to_index(x, y, z)].as_ref()
     }
 
-    pub fn set_block(&mut self, local_pos: Vector3<u32>, block: Block) {
-        let pos = Self::pack_position(local_pos);
-        if block.is_empty() {
-            self.blocks.remove(&pos);
-        } else {
-            self.blocks.insert(pos, block);
-        }
+    /// Gets a mutable block by local position
+    #[inline]
+    pub fn get_block_mut(&mut self, local_pos: Vec3) -> Option<&mut Block> {
+        let (x, y, z) = (
+            local_pos.x as usize,
+            local_pos.y as usize,
+            local_pos.z as usize,
+        );
+        self.blocks[Self::xyz_to_index(x, y, z)].as_mut()
+    }
+
+    /// Sets a block at a local position
+    pub fn set_block(&mut self, local_pos: Vec3, block: Block) {
+        self.blocks[Self::local_to_index(local_pos)] =
+            if block.is_empty() { None } else { Some(block) };
         self.dirty = true;
     }
 
     /// Converts world position to local chunk coordinates
     #[inline]
-    pub fn world_to_local_pos(world_pos: Vector3<i32>) -> Vector3<u32> {
-        Vector3::new(
-            world_pos.x.rem_euclid(Self::SIZE_I) as u32,
-            world_pos.y.rem_euclid(Self::SIZE_I) as u32,
-            world_pos.z.rem_euclid(Self::SIZE_I) as u32,
+    pub fn world_to_local_pos(world_pos: Vec3) -> Vec3 {
+        Vec3::new(
+            (world_pos.x.rem_euclid(Self::SIZE_I as f32) as u32) as f32,
+            (world_pos.y.rem_euclid(Self::SIZE_I as f32) as u32) as f32,
+            (world_pos.z.rem_euclid(Self::SIZE_I as f32) as u32) as f32,
         )
     }
 
     /// Packs local coordinates into u16
     #[inline]
-    pub fn pack_position(local_pos: Vector3<u32>) -> u16 {
+    pub fn pack_position(local_pos: Vec3) -> u16 {
         debug_assert!(
-            local_pos.x < Self::SIZE as u32
-                && local_pos.y < Self::SIZE as u32
-                && local_pos.z < Self::SIZE as u32,
+            local_pos.x < (Self::SIZE as u32) as f32
+                && local_pos.y < (Self::SIZE as u32) as f32
+                && local_pos.z < (Self::SIZE as u32) as f32,
             "Position out of bounds"
         );
         ((local_pos.x as u16) << 8) | ((local_pos.y as u16) << 4) | (local_pos.z as u16)
@@ -439,11 +438,11 @@ impl Chunk {
 
     /// Unpacks position key to local coordinates
     #[inline]
-    pub fn unpack_position(pos: u16) -> Vector3<u32> {
-        Vector3::new(
-            ((pos >> 8) & 0xF) as u32,
-            ((pos >> 4) & 0xF) as u32,
-            (pos & 0xF) as u32,
+    pub fn unpack_position(pos: u16) -> Vec3 {
+        Vec3::new(
+            (((pos >> 8) & 0xF) as u32) as f32,
+            (((pos >> 4) & 0xF) as u32) as f32,
+            ((pos & 0xF) as u32) as f32,
         )
     }
 
@@ -456,23 +455,26 @@ impl Chunk {
 
         let mut builder = ChunkMeshBuilder::new();
 
-        for (&pos, block) in &self.blocks {
+        for pos in 0..Self::VOLUME {
+            // Iterate through all possible u16 positions (0x0000..0xFFFF)
+            let block = match self.blocks[pos as usize] {
+                // Access array (convert u16 → usize once)
+                Some(b) => b,
+                None => continue, // Skip empty blocks
+            };
+
+            // Use your existing position logic
+            let local_pos = Self::unpack_position(pos as u16); // pos is already u16
             if block.is_empty() {
                 continue;
             }
 
-            let local_pos = Self::unpack_position(pos);
             match block {
                 Block::Marching { points, .. } => {
-                    builder.generate_marching_cubes_mesh(*points, local_pos);
+                    builder.generate_marching_cubes_mesh(points, local_pos);
                 }
                 _ => {
-                    builder.add_cube(
-                        local_pos.to_vec3_f32(),
-                        block.to_quaternion(),
-                        block.texture_coords(),
-                        self,
-                    );
+                    builder.add_cube(local_pos, block.to_quat(), block.texture_coords(), self);
                 }
             }
         }
@@ -494,20 +496,24 @@ impl Chunk {
 
     /// Checks if a block position is empty or outside the chunk
     #[inline]
-    fn is_block_cull(&self, pos: Vector3<i32>) -> bool {
+    fn is_block_cull(&self, pos: Vec3) -> bool {
         // Check if position is outside chunk bounds
-        if pos.x < 0
-            || pos.y < 0
-            || pos.z < 0
-            || pos.x >= Self::SIZE_I
-            || pos.y >= Self::SIZE_I
-            || pos.z >= Self::SIZE_I
+        if pos.x < 0.0
+            || pos.y < 0.0
+            || pos.z < 0.0
+            || pos.x >= Self::SIZE_I as f32
+            || pos.y >= Self::SIZE_I as f32
+            || pos.z >= Self::SIZE_I as f32
         {
             return true;
         }
         // Check if block is empty
-        let local_pos = Vector3::new(pos.x as u32, pos.y as u32, pos.z as u32);
-        match self.blocks.get(&Self::pack_position(local_pos)) {
+        let local_pos = Vec3::new(
+            (pos.x as u32) as f32,
+            (pos.y as u32) as f32,
+            (pos.z as u32) as f32,
+        );
+        match self.blocks[Self::pack_position(local_pos) as usize] {
             Some(block) => block.is_empty() || block.is_marching(),
             None => true,
         }
@@ -562,7 +568,7 @@ impl World {
     }
 
     #[inline]
-    pub fn get_block(&self, world_pos: Vector3<i32>) -> Option<&Block> {
+    pub fn get_block(&self, world_pos: Vec3) -> Option<&Block> {
         let chunk_coord = ChunkCoord::from_world_pos(world_pos);
         self.chunks.get(&chunk_coord).and_then(|chunk| {
             let local = Chunk::world_to_local_pos(world_pos);
@@ -571,7 +577,7 @@ impl World {
     }
 
     #[inline]
-    pub fn get_block_mut(&mut self, world_pos: Vector3<i32>) -> Option<&mut Block> {
+    pub fn get_block_mut(&mut self, world_pos: Vec3) -> Option<&mut Block> {
         let chunk_coord = ChunkCoord::from_world_pos(world_pos);
         self.chunks.get_mut(&chunk_coord).and_then(|chunk| {
             let local = Chunk::world_to_local_pos(world_pos);
@@ -579,7 +585,7 @@ impl World {
         })
     }
 
-    pub fn set_block(&mut self, world_pos: Vector3<i32>, block: Block) {
+    pub fn set_block(&mut self, world_pos: Vec3, block: Block) {
         let chunk_coord = ChunkCoord::from_world_pos(world_pos);
 
         if !self.chunks.contains_key(&chunk_coord) {
@@ -611,7 +617,7 @@ impl World {
             };
 
             // Create position buffer
-            let world_pos = chunk_coord.to_world_pos().to_vec3_f32();
+            let world_pos = chunk_coord.to_world_pos();
             let position_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: Some("Chunk Position Buffer"),
                 contents: bytemuck::cast_slice(&[world_pos.x, world_pos.y, world_pos.z, 0.0]),
@@ -640,7 +646,7 @@ impl World {
     }
 
     /// Updates loaded chunks based on player position
-    pub fn update_loaded_chunks(&mut self, center: Vector3<i32>, radius: u32) {
+    pub fn update_loaded_chunks(&mut self, center: Vec3, radius: u32) {
         let center_coord = ChunkCoord::from_world_pos(center);
         let (center_x, center_y, center_z) = center_coord.unpack();
         let radius_i32 = radius as i32;
@@ -732,13 +738,13 @@ impl ChunkMeshBuilder {
     }
 
     /// Generates marching cubes mesh for this block
-    pub fn generate_marching_cubes_mesh(&mut self, points: u32, position: Vector3<u32>) {
+    pub fn generate_marching_cubes_mesh(&mut self, points: u32, position: Vec3) {
         // Early exit if no points are set
         if points == 0 {
             return;
         }
 
-        let base_pos = position.to_vec3_f32();
+        let base_pos = position;
         let mut edge_vertex_cache = [None; 12];
         let mut case_cache = [0u8; 8]; // Cache case indices for each sub-cube
 
@@ -787,7 +793,7 @@ impl ChunkMeshBuilder {
                 ((i >> 1) & 1) as f32 * 0.5,
                 ((i >> 2) & 1) as f32 * 0.5,
             );
-            let sub_offset = Vector3::new(x, y, z);
+            let sub_offset = Vec3::new(x, y, z);
 
             // Calculate and cache edge vertices
             for edge in 0..12 {
@@ -821,7 +827,7 @@ impl ChunkMeshBuilder {
     }
 
     #[inline]
-    pub fn add_triangle(&mut self, vertices: &[Vector3<f32>; 3]) {
+    pub fn add_triangle(&mut self, vertices: &[Vec3; 3]) {
         // Calculate face normal
         let edge1 = vertices[1] - vertices[0];
         let edge2 = vertices[2] - vertices[0];
@@ -843,27 +849,24 @@ impl ChunkMeshBuilder {
     /// Adds a rotated cube to the mesh with face culling
     pub fn add_cube(
         &mut self,
-        position: Vector3<f32>,
-        rotation: Quaternion<f32>,
+        position: Vec3,
+        rotation: Quat,
         texture_map: [f32; 2],
         chunk: &Chunk,
     ) {
         let fs: f32 = texture_map[0];
         let fe: f32 = texture_map[1];
         // Pre-calculate the transform matrix once
-        let transform = Matrix4::from_translation(position) * Matrix4::from(rotation);
-
-        // Convert position to i32 for neighbor checks
-        let block_pos: Vector3<i32> = position.to_vec3_i32();
+        let transform = Mat4::from_rotation_translation(rotation, position);
 
         // Check face visibility first to avoid unnecessary vertex calculations
         let face_visibility = [
-            chunk.is_block_cull(block_pos + Vector3::unit_z()), // Front
-            chunk.is_block_cull(block_pos - Vector3::unit_z()), // Back
-            chunk.is_block_cull(block_pos + Vector3::unit_y()), // Top
-            chunk.is_block_cull(block_pos - Vector3::unit_y()), // Bottom
-            chunk.is_block_cull(block_pos + Vector3::unit_x()), // Right
-            chunk.is_block_cull(block_pos - Vector3::unit_x()), // Left
+            chunk.is_block_cull(position + Vec3::Z), // Front
+            chunk.is_block_cull(position - Vec3::Z), // Back
+            chunk.is_block_cull(position + Vec3::Y), // Top
+            chunk.is_block_cull(position - Vec3::Y), // Bottom
+            chunk.is_block_cull(position + Vec3::X), // Right
+            chunk.is_block_cull(position - Vec3::X), // Left
         ];
 
         // Early exit if no faces are visible
@@ -874,7 +877,7 @@ impl ChunkMeshBuilder {
         // Transform all vertices at once and store them
         let mut transformed_vertices = [[0.0f32; 3]; 8];
         for (i, vertex) in CUBE_VERTICES.iter().enumerate() {
-            let pos = transform * Vector3::from(*vertex).extend(1.0);
+            let pos = transform * Vec3::from(*vertex).extend(1.0);
             transformed_vertices[i] = [pos.x, pos.y, pos.z];
         }
 

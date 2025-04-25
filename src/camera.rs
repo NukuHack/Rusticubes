@@ -1,10 +1,8 @@
 ﻿
-use super::traits::PositionConversion;
 use winit::event::*;
-use cgmath::{InnerSpace, SquareMatrix};
 use wgpu::util::DeviceExt;
+use glam::{Vec3, Mat4, Quat};
 use winit::keyboard::{KeyCode as Key};
-
 
 pub struct CameraSystem {
     pub camera: Camera,
@@ -15,29 +13,32 @@ pub struct CameraSystem {
     pub bind_group: wgpu::BindGroup,
     pub bind_group_layout: wgpu::BindGroupLayout,
 }
+
 impl CameraSystem {
     pub fn new(
         device: &wgpu::Device,
         size: &winit::dpi::PhysicalSize<u32>,
-        position: cgmath::Vector3<f32>,
+        position: Vec3,
     ) -> Self {
-        let yaw: cgmath::Rad<f32>= cgmath::Rad::from(cgmath::Deg(-90.0)); // left-right (- is left; + is right) by default the camera faces left (90°)
-        let pitch: cgmath::Rad<f32>= cgmath::Rad(0.0); // up-down (- is down; + is up) by default it is 0
-        let fovy: cgmath::Rad<f32> = cgmath::Rad::from(cgmath::Deg(90.0)); // by default you can see the 1/4 of the world
-        let (znear, zfar):(f32,f32) = (0.01, 100.0); // idk what these are actually
-        let (camera_speed,sensitivity):(f32,f32) = (4.0,0.5); // speed (will put this into the player class) and sensitivity for mouse movement
+        let yaw = -90.0f32.to_radians(); // left-right (- is left; + is right)
+        let pitch = 0.0f32.to_radians(); // up-down (- is down; + is up)
+        let fovy = 90.0f32.to_radians(); // field of view
+        let (znear, zfar) = (0.01, 100.0);
+        let (camera_speed, sensitivity) = (4.0, 0.5);
 
-        let camera: Camera = Camera::new(position, yaw, pitch);
-        let projection: Projection = Projection::new(*size, fovy, znear, zfar);
-        let controller: CameraController = CameraController::new(camera_speed, sensitivity);
+        let camera = Camera::new(position, yaw, pitch);
+        let projection = Projection::new(*size, fovy, znear, zfar);
+        let controller = CameraController::new(camera_speed, sensitivity);
         let mut uniform = CameraUniform::default();
         uniform.update_view_proj(&camera, &projection);
-        let camera_buffer: wgpu::Buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        
+        let camera_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Camera Buffer"),
             contents: bytemuck::cast_slice(&[uniform]),
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         });
-        let bind_group_layout: wgpu::BindGroupLayout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+
+        let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             entries: &[wgpu::BindGroupLayoutEntry {
                 binding: 0,
                 visibility: wgpu::ShaderStages::VERTEX,
@@ -50,7 +51,8 @@ impl CameraSystem {
             }],
             label: Some("camera_bind_group_layout"),
         });
-        let bind_group: wgpu::BindGroup = device.create_bind_group(&wgpu::BindGroupDescriptor {
+
+        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             layout: &bind_group_layout,
             entries: &[wgpu::BindGroupEntry {
                 binding: 0,
@@ -58,6 +60,7 @@ impl CameraSystem {
             }],
             label: Some("camera_bind_group"),
         });
+
         Self {
             camera,
             projection,
@@ -68,6 +71,7 @@ impl CameraSystem {
             bind_group_layout,
         }
     }
+
     pub fn update(&mut self, queue: &wgpu::Queue, delta_time: f32) {
         self.controller.update_camera(&mut self.camera, &mut self.projection, delta_time);
         self.uniform.update_view_proj(&self.camera, &self.projection);
@@ -84,9 +88,11 @@ impl CameraSystem {
 pub struct CameraUniform {
     view_proj: [[f32; 4]; 4],
 }
+
 impl Default for CameraUniform {
+    #[inline]
     fn default() -> Self {
-        Self { view_proj: cgmath::Matrix4::identity().into() }
+        Self { view_proj: Mat4::IDENTITY.to_cols_array_2d() }
     }
 }
 
@@ -94,89 +100,89 @@ impl CameraUniform {
     pub fn update_view_proj(&mut self, camera: &Camera, projection: &Projection) {
         let view = camera.calc_matrix();
         let proj = projection.calc_matrix();
-        self.view_proj = (proj * view).into();
+        self.view_proj = (proj * view).to_cols_array_2d();
     }
 }
-
 
 pub const SAFE_FRAC_PI_2: f32 = std::f32::consts::FRAC_PI_2 - 0.0001;
+
 pub struct Camera {
-    pub position: cgmath::Vector3<f32>,
-    pub yaw: cgmath::Rad<f32>,
-    pub pitch: cgmath::Rad<f32>,
+    pub position: Vec3,
+    pub yaw: f32,    // Stored in radians
+    pub pitch: f32,   // Stored in radians
 }
+
 impl Camera {
-    pub fn new(position: cgmath::Vector3<f32>, yaw: cgmath::Rad<f32>, pitch: cgmath::Rad<f32>) -> Self{
-        Self {
-            position,
-            yaw,
-            pitch,
-        }
-    }
-    pub fn calc_matrix(&self) -> cgmath::Matrix4<f32> {
-        let (sin_pitch, cos_pitch) = self.pitch.0.sin_cos();
-        let (sin_yaw, cos_yaw) = self.yaw.0.sin_cos();
-        cgmath::Matrix4::look_to_rh(
-            self.position.to_point(),
-            cgmath::Vector3::new(
-                cos_pitch * cos_yaw,
-                sin_pitch,
-                cos_pitch * sin_yaw
-            ).normalize(),
-            cgmath::Vector3::unit_y(),
-        )
-    }
-    /// Get the forward vector
-    pub fn forward(&self) -> cgmath::Vector3<f32> {
-        let (sin_p, cos_p) = self.pitch.0.sin_cos(); // Convert to radians
-        let (sin_y, cos_y) = self.yaw.0.sin_cos(); // Convert to radians
-        
-        cgmath::Vector3::new(cos_p * cos_y, sin_p, cos_p * sin_y).normalize()
-    }
-    /// Get the right vector (perpendicular to forward)
-    pub fn right(&self) -> cgmath::Vector3<f32> {
-        self.forward().cross(cgmath::Vector3::unit_y()).normalize()
+    #[inline]
+    pub fn new(position: Vec3, yaw: f32, pitch: f32) -> Self {
+        Self { position, yaw, pitch }
     }
 
-    /// Get the up vector (perpendicular to both forward and right)
-    pub fn up(&self) -> cgmath::Vector3<f32> {
-        self.right().cross(self.forward())
+    pub fn calc_matrix(&self) -> Mat4 {
+        // Create rotation quaternion from yaw (around Y) and pitch (around X)
+        let yaw_rot = Quat::from_rotation_y(self.yaw);
+        let pitch_rot = Quat::from_rotation_x(self.pitch);
+        let rotation = yaw_rot * pitch_rot;
+        
+        Mat4::look_to_rh(
+            self.position,
+            rotation * Vec3::NEG_Z,  // Forward direction
+            Vec3::Y                  // Up direction
+        )
+    }
+
+    #[inline]
+    pub fn forward(&self) -> Vec3 {
+        let yaw_rot = Quat::from_rotation_y(self.yaw);
+        let pitch_rot = Quat::from_rotation_x(self.pitch);
+        yaw_rot * pitch_rot * Vec3::NEG_Z
+    }
+
+    #[inline]
+    pub fn right(&self) -> Vec3 {
+        let yaw_rot = Quat::from_rotation_y(self.yaw);
+        yaw_rot * Vec3::X
+    }
+
+    #[inline]
+    pub fn up(&self) -> Vec3 {
+        let yaw_rot = Quat::from_rotation_y(self.yaw);
+        let pitch_rot = Quat::from_rotation_x(self.pitch);
+        (yaw_rot * pitch_rot) * Vec3::Y
     }
 }
+
 pub struct Projection {
     aspect: f32,
-    fovy: cgmath::Rad<f32>,
+    fovy: f32,  // Stored in radians
     znear: f32,
     zfar: f32,
 }
+
 impl Projection {
-    pub fn new(
-        size: winit::dpi::PhysicalSize<u32>,
-        fovy: cgmath::Rad<f32>,
-        znear: f32,
-        zfar: f32,
-    ) -> Self {
+    pub fn new(size: winit::dpi::PhysicalSize<u32>, fovy: f32, znear: f32, zfar: f32) -> Self {
         Self {
-            aspect: size.height as f32 / size.width as f32,
+            aspect: size.width as f32 / size.height as f32,
             fovy,
             znear,
             zfar,
         }
     }
+
+    #[inline]
     pub fn resize(&mut self, width: u32, height: u32) {
         self.aspect = width as f32 / height as f32;
     }
-    pub fn calc_matrix(&self) -> cgmath::Matrix4<f32> {
-        Self::OPENGL_TO_WGPU_MATRIX * cgmath::perspective(self.fovy, self.aspect, self.znear, self.zfar)
+
+    #[inline]
+    pub fn calc_matrix(&self) -> Mat4 {
+        Mat4::perspective_rh(self.fovy, self.aspect, self.znear, self.zfar)
     }
-    
-    pub const OPENGL_TO_WGPU_MATRIX: cgmath::Matrix4<f32> = cgmath::Matrix4::new(
-        1.0, 0.0, 0.0, 0.0,
-        0.0, 1.0, 0.0, 0.0,
-        0.0, 0.0, 0.5, 0.5,
-        0.0, 0.0, 0.0, 1.0,
-    );
 }
+
+// Rest of the code (CameraController and related structs) remains largely the same,
+// just replace cgmath::Vector3 with glam::Vec3 where needed
+
 #[derive(Debug)]
 pub struct CameraController {
     movement: MovementInputs,
@@ -186,6 +192,7 @@ pub struct CameraController {
     speed: f32,
     sensitivity: f32,
 }
+
 #[derive(Debug, Default)]
 struct MovementInputs {
     forward: bool,
@@ -196,32 +203,13 @@ struct MovementInputs {
     down: bool,
     run: bool,
 }
-impl MovementInputs {
-    fn default() -> Self {
-        Self {
-            forward: false,
-            backward: false,
-            left: false,
-            right: false,
-            up: false,
-            down: false,
-            run: false,
-        }
-    }
-}
-#[derive(Debug)]
+
+#[derive(Debug, Default)]
 struct RotationInputs {
     horizontal: f32,
     vertical: f32,
 }
-impl Default for RotationInputs {
-    fn default() -> Self {
-        Self {
-            horizontal: 0.0,
-            vertical: 0.0,
-        }
-    }
-}
+
 impl CameraController {
     pub fn new(speed: f32, sensitivity: f32) -> Self {
         Self {
@@ -233,8 +221,9 @@ impl CameraController {
             sensitivity,
         }
     }
+
     pub fn process_keyboard(&mut self, key: &Key, state: &ElementState) -> bool {
-        let is_pressed: bool = state == &ElementState::Pressed;
+        let is_pressed = *state == ElementState::Pressed;
         match key {
             Key::KeyW | Key::ArrowUp => {
                 self.movement.forward = is_pressed;
@@ -257,7 +246,7 @@ impl CameraController {
                 true
             }
             Key::ShiftLeft => {
-                self.movement.run = is_pressed; // would be able to load this from the modifier keys but i don't really see a reason to actually do it
+                self.movement.run = is_pressed;
                 true
             }
             Key::ControlLeft => {
@@ -267,56 +256,58 @@ impl CameraController {
             _ => false,
         }
     }
+
+    #[inline]
     pub fn reset_keyboard(&mut self) {
-        self.movement.forward = false;
-        self.movement.backward = false;
-        self.movement.left = false;
-        self.movement.right = false;
-        self.movement.up = false;
-        self.movement.run = false;
-        self.movement.down = false;
+        self.movement = MovementInputs::default();
     }
+
+    #[inline]
     pub fn process_mouse(&mut self, delta_x: f32, delta_y: f32) {
-        self.rotation.horizontal = delta_x as f32;
-        self.rotation.vertical = -delta_y as f32; // because this is stupidly made in the opposite way AHH
+        self.rotation.horizontal = -delta_x;
+        self.rotation.vertical = -delta_y;
     }
+
+    #[inline]
     pub fn process_scroll(&mut self, delta: &MouseScrollDelta) {
         self.scroll = match delta {
             MouseScrollDelta::LineDelta(_, y) => y * 0.5,
             MouseScrollDelta::PixelDelta(pos) => pos.y as f32,
         };
     }
+
+    #[inline]
     pub fn update_camera(&mut self, camera: &mut Camera, projection: &mut Projection, delta_time: f32) {
-        { //this is the movement of the camera
-            let run_multiplier: f32 = if self.movement.run { self.run_multi } else { 1.0 };
-            // Calculating the actual angle to move towards
-            let (yaw_sin, yaw_cos): (f32, f32) = camera.yaw.0.sin_cos();
-            let forward_dir = cgmath::Vector3::new(yaw_cos, 0.0, yaw_sin).normalize();
-            let right_dir = cgmath::Vector3::new(-yaw_sin, 0.0, yaw_cos).normalize();
-            // Move with dynamic run multiplier
-            let forward_amount: f32 = ((self.movement.forward as i8 - self.movement.backward as i8) as f32) * run_multiplier;
-            let right_amount: f32 = ((self.movement.right as i8 - self.movement.left as i8) as f32) * run_multiplier;
-            let up_amount: f32 = ((self.movement.up as i8 - self.movement.down as i8) as f32) * run_multiplier;
-            // Setting the position to the desired point
-            camera.position += forward_dir * forward_amount * self.speed * delta_time;
-            camera.position += right_dir * right_amount * self.speed * delta_time;
-            camera.position.y += up_amount * self.speed * delta_time;
-        } { //this is the scrolling of the cam
-            // Field of view +/- (zoom)
-            let delta: f32 = self.scroll * self.sensitivity;
-            projection.fovy = cgmath::Rad(
-                (projection.fovy.0 - delta).clamp(0.001, 3.14) // pi = 3.1415926535 so leaving 0.001 for floating point inaccuracies is fine
-            );
-            self.scroll = 0.0; // null the value after using it
-        } { // this is the rotating of the cam
-            // Calculate rotation delta scaled by sensitivity and time
-            let delta: f32 = self.sensitivity * 0.05; // * delta_time // decided to remove delta-time 'cus it was bad for this thing
-            camera.yaw += cgmath::Rad(self.rotation.horizontal) * delta;
-            let pitch = (camera.pitch.0 + self.rotation.vertical * delta)
-                .clamp(-SAFE_FRAC_PI_2, SAFE_FRAC_PI_2);
-            camera.pitch = cgmath::Rad(pitch);
-            self.rotation.horizontal = 0.0; // null the value after using it
-            self.rotation.vertical = 0.0;   // null the value after using it
-        }
+        // Movement
+        let run_multiplier = if self.movement.run { self.run_multi } else { 1.0 };
+        
+        // Get the camera's actual forward and right vectors (already normalized)
+        let mut forward_dir = camera.forward();
+        forward_dir.y = 0.0;
+        let mut right_dir = camera.right();
+        right_dir.y = 0.0;
+        
+        let forward_amount = (self.movement.forward as i8 - self.movement.backward as i8) as f32 * run_multiplier;
+        let right_amount = (self.movement.right as i8 - self.movement.left as i8) as f32 * run_multiplier;
+        let up_amount = (self.movement.up as i8 - self.movement.down as i8) as f32 * run_multiplier;
+
+        // Movement should be relative to camera orientation
+        camera.position += forward_dir * forward_amount * self.speed * delta_time;
+        camera.position += right_dir * right_amount * self.speed * delta_time;
+        camera.position.y += up_amount * self.speed * delta_time;
+
+        // Zoom
+        let delta = self.scroll * self.sensitivity;
+        projection.fovy = (projection.fovy - delta).clamp(0.001, std::f32::consts::PI);
+        self.scroll = 0.0;
+
+        // Rotation
+        let delta = self.sensitivity * 0.05;
+        camera.yaw += self.rotation.horizontal * delta;
+        camera.pitch = (camera.pitch + self.rotation.vertical * delta)
+            .clamp(-SAFE_FRAC_PI_2, SAFE_FRAC_PI_2);
+        
+        self.rotation.horizontal = 0.0;
+        self.rotation.vertical = 0.0;
     }
 }
