@@ -3,8 +3,10 @@
 pub struct Pipeline {
     pub inside_pipeline: wgpu::RenderPipeline,
     pub chunk_pipeline: wgpu::RenderPipeline,
+    pub post_pipeline: wgpu::RenderPipeline,
     inside_shader: wgpu::ShaderModule,
     chunk_shader: wgpu::ShaderModule,
+    post_shader: wgpu::ShaderModule,
 }
 
 impl Pipeline {
@@ -16,13 +18,17 @@ impl Pipeline {
     ) -> Self {
         let inside_shader = create_inside_shader(device);
         let chunk_shader = create_chunk_shader(device);
+        let post_shader = create_post_shader(device);
         let inside_pipeline = create_inside_pipeline(device, layout, &inside_shader, config.format);
         let chunk_pipeline = create_chunk_pipeline(device, layout, &chunk_shader, config.format);
+        let post_pipeline = create_post_pipeline(device, layout, &post_shader, config.format);
         Self {
             inside_pipeline,
             chunk_pipeline,
+            post_pipeline,
             inside_shader,
             chunk_shader,
+            post_shader,
         }
     }
 }
@@ -44,6 +50,12 @@ fn create_inside_shader(device: &wgpu::Device) -> wgpu::ShaderModule {
         ))),
     })
 }
+fn create_post_shader(device: &wgpu::Device) -> wgpu::ShaderModule {
+    device.create_shader_module(wgpu::ShaderModuleDescriptor {
+        label: Some("Post Processing Shader"),
+        source: wgpu::ShaderSource::Wgsl(std::borrow::Cow::from(include_str!("fxaa.wgsl"))),
+    })
+}
 
 fn create_chunk_pipeline(
     device: &wgpu::Device,
@@ -58,7 +70,7 @@ fn create_chunk_pipeline(
             module: shader,
             entry_point: Some("vs_main"),
             compilation_options: Default::default(),
-            buffers: &[super::geometry::Vertex::desc()], // Only vertex buffer, no instance buffer
+            buffers: &[super::geometry::Vertex::desc()],
         },
         fragment: Some(wgpu::FragmentState {
             module: shader,
@@ -72,6 +84,72 @@ fn create_chunk_pipeline(
         }),
         primitive: default_primitive_state(),
         depth_stencil: Some(depth_stencil_state(true)),
+        multisample: wgpu::MultisampleState::default(),
+        multiview: None,
+        cache: None,
+    })
+}
+
+fn create_post_pipeline(
+    device: &wgpu::Device,
+    layout: &wgpu::PipelineLayout,
+    shader: &wgpu::ShaderModule,
+    format: wgpu::TextureFormat,
+) -> wgpu::RenderPipeline {
+    // Create a dedicated bind group layout for post processing
+    let post_bind_group_layout =
+        device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("Post Processing Bind Group Layout"),
+            entries: &[
+                // Texture
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled: false,
+                    },
+                    count: None,
+                },
+                // Sampler
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                    count: None,
+                },
+            ],
+        });
+
+    // Create pipeline layout
+    let post_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+        label: Some("Post Processing Pipeline Layout"),
+        bind_group_layouts: &[&post_bind_group_layout],
+        push_constant_ranges: &[],
+    });
+
+    device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        label: Some("Post Processing Pipeline"),
+        layout: Some(&post_pipeline_layout), // Use our new layout
+        vertex: wgpu::VertexState {
+            module: shader,
+            entry_point: Some("vs_main"),
+            compilation_options: Default::default(),
+            buffers: &[],
+        },
+        fragment: Some(wgpu::FragmentState {
+            module: shader,
+            entry_point: Some("fs_main"),
+            compilation_options: Default::default(),
+            targets: &[Some(wgpu::ColorTargetState {
+                format,
+                blend: None,
+                write_mask: wgpu::ColorWrites::ALL,
+            })],
+        }),
+        primitive: default_primitive_state(),
+        depth_stencil: None,
         multisample: wgpu::MultisampleState::default(),
         multiview: None,
         cache: None,
@@ -266,6 +344,32 @@ pub fn render_all(current_state: &mut super::State) -> Result<(), wgpu::SurfaceE
                 .for_each(|(i, g)| rpass.set_bind_group(i as u32, *g, &[]));
             current_state.data_system.world.render_chunks(&mut rpass);
         }
+    }
+
+    // Second pass: Apply FXAA to screen
+    {
+        let mut post_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("FXAA Pass"),
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view: &view,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Load,
+                    store: wgpu::StoreOp::Store,
+                },
+            })],
+            depth_stencil_attachment: None,
+            occlusion_query_set: None,
+            timestamp_writes: None,
+        });
+
+        post_pass.set_pipeline(&current_state.pipeline.post_pipeline);
+        post_pass.set_bind_group(
+            0,
+            &current_state.texture_manager().post_processing_bind_group,
+            &[],
+        );
+        post_pass.draw(0..3, 0..1); // Full-screen triangle
     }
 
     // UI Render Pass
