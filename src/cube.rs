@@ -13,6 +13,7 @@ type FastMap<K, V> = HashMap<K, V, BuildHasherDefault<AHasher>>;
 
 /// Represents a block in the world with optimized storage
 #[derive(Clone, Copy, Debug, PartialEq)]
+//#[repr(u8)]
 pub enum Block {
     /// Simple block with material and packed rotation
     Simple {
@@ -195,10 +196,7 @@ impl Block {
         if let Block::Marching { points, .. } = self {
             debug_assert!(x < 3 && y < 3 && z < 3, "Coordinates must be 0-2");
             let bit_pos = x as u32 + (y as u32) * 3 + (z as u32) * 9;
-            let mask = 1u32 << bit_pos;
-
-            // Use bitwise operations instead of branches
-            *points = (*points & !mask) | (if value { mask } else { 0 });
+            *points = (*points & !(1 << bit_pos)) | ((value as u32) << bit_pos);
         }
     }
 
@@ -247,12 +245,15 @@ pub enum Axis {
 pub struct ChunkCoord(u64);
 impl ChunkCoord {
     #[allow(dead_code)]
+    // Use bit shifts that are powers of 2 for better optimization
     const Z_SHIFT: u8 = 0;
     const Y_SHIFT: u8 = 26;
     const X_SHIFT: u8 = 38;
-    const Z_MASK: u64 = 0x03FF_FFFF; // 26 bits
-    const Y_MASK: u64 = 0x0FFF; // 12 bits
-    const X_MASK: u64 = 0x03FF_FFFF; // 26 bits
+
+    // Masks should match the shift counts
+    const Z_MASK: u64 = (1 << 26) - 1;
+    const Y_MASK: u64 = (1 << 12) - 1;
+    const X_MASK: u64 = (1 << 26) - 1;
 
     /// Creates a new chunk coordinate
     #[inline]
@@ -457,17 +458,14 @@ impl Chunk {
 
         for pos in 0..Self::VOLUME {
             // Iterate through all possible u16 positions (0x0000..0xFFFF)
-            let block = match self.blocks[pos as usize] {
-                // Access array (convert u16 → usize once)
-                Some(b) => b,
-                None => continue, // Skip empty blocks
+            let Some(block) = self.blocks[pos] else {
+                continue;
             };
 
-            // Use your existing position logic
-            let local_pos = Self::unpack_position(pos as u16); // pos is already u16
             if block.is_empty() {
                 continue;
             }
+            let local_pos = Self::unpack_position(pos as u16); // pos is already u16
 
             match block {
                 Block::Marching { points, .. } => {
@@ -731,8 +729,8 @@ impl ChunkMeshBuilder {
     #[inline]
     pub fn new() -> Self {
         Self {
-            vertices: Vec::with_capacity(4096),
-            indices: Vec::with_capacity(4096 * 3),
+            vertices: Vec::with_capacity(Chunk::VOLUME), // should be multiple times the chunk volume but most of it is culled so prop this is enough
+            indices: Vec::with_capacity(Chunk::VOLUME),
             current_vertex: 0,
         }
     }
