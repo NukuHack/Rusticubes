@@ -73,7 +73,7 @@ impl Block {
 
     /// Creates a block from a quaternion rotation
     #[inline]
-    pub fn from_quaternion(rotation: Quaternion<f32>) -> Self {
+    pub fn new_qua(rotation: Quaternion<f32>) -> Self {
         Self::Simple {
             material: 1,
             rotation: Self::quaternion_to_rotation(rotation),
@@ -95,7 +95,7 @@ impl Block {
 
     /// Converts packed rotation to quaternion
     #[inline]
-    pub fn rotation_to_quaternion(&self) -> Quaternion<f32> {
+    pub fn to_quaternion(&self) -> Quaternion<f32> {
         self.get_rotation()
             .map(|(x, y, z)| {
                 // Convert to degrees (0, 90, 180, 270)
@@ -126,7 +126,7 @@ impl Block {
     }
 
     #[inline]
-    pub fn texture(&self) -> [f32; 2] {
+    pub fn texture_coords(&self) -> [f32; 2] {
         if self.material() == 1 {
             [0.0, 1.0]
         } else {
@@ -164,6 +164,7 @@ impl Block {
             let new_rot = (current + steps) % 4;
             *rotation = (*rotation & !mask) | (new_rot << shift);
         }
+        // Will implement one for marching ones too shouldn't be too hard
     }
 
     /// Converts quaternion to packed rotation format
@@ -266,8 +267,8 @@ pub enum Axis {
 /// Format: [X:26 (signed), Y:12 (signed), Z:26 (signed)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct ChunkCoord(u64);
-#[allow(dead_code, unused)]
 impl ChunkCoord {
+    #[allow(dead_code)]
     const Z_SHIFT: u8 = 0;
     const Y_SHIFT: u8 = 26;
     const X_SHIFT: u8 = 38;
@@ -322,7 +323,7 @@ impl ChunkCoord {
     /// Converts to world position (chunk min corner)
     #[inline]
     pub fn to_world_pos(self) -> Vector3<i32> {
-        let chunk_size = Chunk::SIZE_I32;
+        let chunk_size = Chunk::SIZE_I;
         Vector3::new(
             self.x() * chunk_size,
             self.y() * chunk_size,
@@ -333,7 +334,7 @@ impl ChunkCoord {
     /// Creates from world position
     #[inline]
     pub fn from_world_pos(world_pos: Vector3<i32>) -> Self {
-        let chunk_size = Chunk::SIZE_I32;
+        let chunk_size = Chunk::SIZE_I;
         Self::new(
             world_pos.x.div_euclid(chunk_size),
             world_pos.y.div_euclid(chunk_size),
@@ -353,7 +354,7 @@ pub struct Chunk {
 
 impl Chunk {
     pub const SIZE: usize = 16;
-    pub const SIZE_I32: i32 = Self::SIZE as i32;
+    pub const SIZE_I: i32 = Self::SIZE as i32;
     pub const VOLUME: usize = Self::SIZE.pow(3);
 
     /// Creates an empty chunk
@@ -379,7 +380,7 @@ impl Chunk {
         for x in 0..Self::SIZE {
             for y in 0..Self::SIZE {
                 for z in 0..Self::SIZE {
-                    let pos = Self::local_to_block_pos(Vector3::new(x as u32, y as u32, z as u32));
+                    let pos = Self::pack_position(Vector3::new(x as u32, y as u32, z as u32));
                     chunk.blocks.insert(pos, new_block);
                 }
             }
@@ -396,16 +397,16 @@ impl Chunk {
 
     #[inline]
     pub fn get_block(&self, local_pos: Vector3<u32>) -> Option<&Block> {
-        self.blocks.get(&Self::local_to_block_pos(local_pos))
+        self.blocks.get(&Self::pack_position(local_pos))
     }
 
     #[inline]
     pub fn get_block_mut(&mut self, local_pos: Vector3<u32>) -> Option<&mut Block> {
-        self.blocks.get_mut(&Self::local_to_block_pos(local_pos))
+        self.blocks.get_mut(&Self::pack_position(local_pos))
     }
 
     pub fn set_block(&mut self, local_pos: Vector3<u32>, block: Block) {
-        let pos = Self::local_to_block_pos(local_pos);
+        let pos = Self::pack_position(local_pos);
         if block.is_empty() {
             self.blocks.remove(&pos);
         } else {
@@ -418,15 +419,15 @@ impl Chunk {
     #[inline]
     pub fn world_to_local_pos(world_pos: Vector3<i32>) -> Vector3<u32> {
         Vector3::new(
-            world_pos.x.rem_euclid(Self::SIZE_I32) as u32,
-            world_pos.y.rem_euclid(Self::SIZE_I32) as u32,
-            world_pos.z.rem_euclid(Self::SIZE_I32) as u32,
+            world_pos.x.rem_euclid(Self::SIZE_I) as u32,
+            world_pos.y.rem_euclid(Self::SIZE_I) as u32,
+            world_pos.z.rem_euclid(Self::SIZE_I) as u32,
         )
     }
 
     /// Packs local coordinates into u16
     #[inline]
-    pub fn local_to_block_pos(local_pos: Vector3<u32>) -> u16 {
+    pub fn pack_position(local_pos: Vector3<u32>) -> u16 {
         debug_assert!(
             local_pos.x < Self::SIZE as u32
                 && local_pos.y < Self::SIZE as u32
@@ -438,7 +439,7 @@ impl Chunk {
 
     /// Unpacks position key to local coordinates
     #[inline]
-    pub fn block_pos_to_local(pos: u16) -> Vector3<u32> {
+    pub fn unpack_position(pos: u16) -> Vector3<u32> {
         Vector3::new(
             ((pos >> 8) & 0xF) as u32,
             ((pos >> 4) & 0xF) as u32,
@@ -447,56 +448,81 @@ impl Chunk {
     }
 
     /// Generates the chunk mesh if dirty
-    pub fn make_mesh(&mut self, device: &wgpu::Device, force: bool) {
+    pub fn make_mesh(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, force: bool) {
+        let start = std::time::Instant::now();
         if !force && !self.dirty && self.mesh.is_some() {
             return;
         }
 
         let mut builder = ChunkMeshBuilder::new();
 
-        let start = std::time::Instant::now();
         for (&pos, block) in &self.blocks {
             if block.is_empty() {
                 continue;
             }
 
-            let local_pos = Self::block_pos_to_local(pos);
-            let Block::Marching { points, .. } = block else {
-                builder.add_cube(
-                    local_pos.to_vec3_f32(),
-                    block.rotation_to_quaternion(),
-                    block.texture(),
-                    self, // Pass chunk reference for face culling
-                );
-                continue;
-            };
-            builder.generate_marching_cubes_mesh(*points, local_pos);
+            let local_pos = Self::unpack_position(pos);
+            match block {
+                Block::Marching { points, .. } => {
+                    builder.generate_marching_cubes_mesh(*points, local_pos);
+                }
+                _ => {
+                    builder.add_cube(
+                        local_pos.to_vec3_f32(),
+                        block.to_quaternion(),
+                        block.texture_coords(),
+                        self,
+                    );
+                }
+            }
         }
-        println!("Mesh cost: {:?}", start.elapsed());
 
-        self.mesh = Some(builder.build(device));
+        if let Some(mesh) = &mut self.mesh {
+            // Reuse existing buffers
+            mesh.update(device, queue, &builder.indices, &builder.vertices);
+        } else {
+            // Create new buffers
+            self.mesh = Some(GeometryBuffer::new(
+                device,
+                &builder.indices,
+                &builder.vertices,
+            ));
+        }
         self.dirty = false;
+        println!("Mesh cost: {:?}", start.elapsed());
     }
 
     /// Checks if a block position is empty or outside the chunk
     #[inline]
-    fn is_block_null(&self, pos: Vector3<i32>) -> bool {
+    fn is_block_cull(&self, pos: Vector3<i32>) -> bool {
         // Check if position is outside chunk bounds
         if pos.x < 0
             || pos.y < 0
             || pos.z < 0
-            || pos.x >= Self::SIZE_I32
-            || pos.y >= Self::SIZE_I32
-            || pos.z >= Self::SIZE_I32
+            || pos.x >= Self::SIZE_I
+            || pos.y >= Self::SIZE_I
+            || pos.z >= Self::SIZE_I
         {
             return true;
         }
         // Check if block is empty
         let local_pos = Vector3::new(pos.x as u32, pos.y as u32, pos.z as u32);
-        match self.blocks.get(&Self::local_to_block_pos(local_pos)) {
+        match self.blocks.get(&Self::pack_position(local_pos)) {
             Some(block) => block.is_empty() || block.is_marching(),
             None => true,
         }
+    }
+
+    /// Returns a reference to the mesh if it exists
+    #[inline]
+    pub fn mesh(&self) -> Option<&GeometryBuffer> {
+        self.mesh.as_ref()
+    }
+
+    /// Returns a reference to the bind group if it exists
+    #[inline]
+    pub fn bind_group(&self) -> Option<&wgpu::BindGroup> {
+        self.bind_group.as_ref()
     }
 }
 
@@ -518,6 +544,11 @@ impl World {
             ),
             loaded_chunks: HashSet::with_capacity(10_000),
         }
+    }
+
+    #[inline]
+    pub fn chunk_count(&self) -> usize {
+        self.chunks.len()
     }
 
     #[inline]
@@ -558,7 +589,6 @@ impl World {
         if let Some(chunk) = self.chunks.get_mut(&chunk_coord) {
             let local = Chunk::world_to_local_pos(world_pos);
             if chunk.get_block(local) != Some(&block) {
-                println!(" equ ");
                 chunk.set_block(local, block);
             }
         }
@@ -664,9 +694,9 @@ impl World {
 
     /// Generates meshes for all dirty chunks
     #[inline]
-    pub fn make_chunk_meshes(&mut self, device: &wgpu::Device) {
+    pub fn make_chunk_meshes(&mut self, device: &wgpu::Device, queue: &wgpu::Queue) {
         for chunk in self.chunks.values_mut() {
-            chunk.make_mesh(device, false);
+            chunk.make_mesh(device, queue, false);
         }
     }
 
@@ -810,11 +840,6 @@ impl ChunkMeshBuilder {
         self.current_vertex += 3;
     }
 
-    #[inline]
-    pub fn build(self, device: &wgpu::Device) -> GeometryBuffer {
-        GeometryBuffer::new(device, &self.indices, &self.vertices)
-    }
-
     /// Adds a rotated cube to the mesh with face culling
     pub fn add_cube(
         &mut self,
@@ -829,16 +854,16 @@ impl ChunkMeshBuilder {
         let transform = Matrix4::from_translation(position) * Matrix4::from(rotation);
 
         // Convert position to i32 for neighbor checks
-        let block_pos = Vector3::new(position.x as i32, position.y as i32, position.z as i32);
+        let block_pos: Vector3<i32> = position.to_vec3_i32();
 
         // Check face visibility first to avoid unnecessary vertex calculations
         let face_visibility = [
-            chunk.is_block_null(block_pos + Vector3::unit_z()), // Front
-            chunk.is_block_null(block_pos - Vector3::unit_z()), // Back
-            chunk.is_block_null(block_pos + Vector3::unit_y()), // Top
-            chunk.is_block_null(block_pos - Vector3::unit_y()), // Bottom
-            chunk.is_block_null(block_pos + Vector3::unit_x()), // Right
-            chunk.is_block_null(block_pos - Vector3::unit_x()), // Left
+            chunk.is_block_cull(block_pos + Vector3::unit_z()), // Front
+            chunk.is_block_cull(block_pos - Vector3::unit_z()), // Back
+            chunk.is_block_cull(block_pos + Vector3::unit_y()), // Top
+            chunk.is_block_cull(block_pos - Vector3::unit_y()), // Bottom
+            chunk.is_block_cull(block_pos + Vector3::unit_x()), // Right
+            chunk.is_block_cull(block_pos - Vector3::unit_x()), // Left
         ];
 
         // Early exit if no faces are visible
@@ -887,30 +912,31 @@ impl ChunkMeshBuilder {
 }
 
 // Cube geometry constants
-const LENG: f32 = 1.0; // unit sized cube
+const CUBE_SIZE: f32 = 1.0; // unit sized cube
+const INV_SQRT_3: f32 = 0.577_350_269; // 1/sqrt(3) for normalized diagonals
 
 // Cube vertices (8 corners of a unit cube with left-bottom-front at origin)
-pub const CUBE_VERTICES: [[f32; 3]; 8] = [
-    [0.0, 0.0, LENG],   // front-bottom-left (origin)
-    [LENG, 0.0, LENG],  // front-bottom-right
-    [LENG, LENG, LENG], // front-top-right
-    [0.0, LENG, LENG],  // front-top-left
-    [0.0, 0.0, 0.0],    // back-bottom-left
-    [LENG, 0.0, 0.0],   // back-bottom-right
-    [LENG, LENG, 0.0],  // back-top-right
-    [0.0, LENG, 0.0],   // back-top-left
+const CUBE_VERTICES: [[f32; 3]; 8] = [
+    [0.0, 0.0, CUBE_SIZE],             // front-bottom-left (origin)
+    [CUBE_SIZE, 0.0, CUBE_SIZE],       // front-bottom-right
+    [CUBE_SIZE, CUBE_SIZE, CUBE_SIZE], // front-top-right
+    [0.0, CUBE_SIZE, CUBE_SIZE],       // front-top-left
+    [0.0, 0.0, 0.0],                   // back-bottom-left
+    [CUBE_SIZE, 0.0, 0.0],             // back-bottom-right
+    [CUBE_SIZE, CUBE_SIZE, 0.0],       // back-top-right
+    [0.0, CUBE_SIZE, 0.0],             // back-top-left
 ];
 
 // Pre-calculated normals for each vertex (8 normals matching the cube vertices)
 const CUBE_NORMALS: [[f32; 3]; 8] = [
-    [-0.577, -0.577, 0.577],  // front-bottom-left
-    [0.577, -0.577, 0.577],   // front-bottom-right
-    [0.577, 0.577, 0.577],    // front-top-right
-    [-0.577, 0.577, 0.577],   // front-top-left
-    [-0.577, -0.577, -0.577], // back-bottom-left
-    [0.577, -0.577, -0.577],  // back-bottom-right
-    [0.577, 0.577, -0.577],   // back-top-right
-    [-0.577, 0.577, -0.577],  // back-top-left
+    [-INV_SQRT_3, -INV_SQRT_3, INV_SQRT_3],  // front-bottom-left
+    [INV_SQRT_3, -INV_SQRT_3, INV_SQRT_3],   // front-bottom-right
+    [INV_SQRT_3, INV_SQRT_3, INV_SQRT_3],    // front-top-right
+    [-INV_SQRT_3, INV_SQRT_3, INV_SQRT_3],   // front-top-left
+    [-INV_SQRT_3, -INV_SQRT_3, -INV_SQRT_3], // back-bottom-left
+    [INV_SQRT_3, -INV_SQRT_3, -INV_SQRT_3],  // back-bottom-right
+    [INV_SQRT_3, INV_SQRT_3, -INV_SQRT_3],   // back-top-right
+    [-INV_SQRT_3, INV_SQRT_3, -INV_SQRT_3],  // back-top-left
 ];
 
 // Each face defined as 4 indices (will be converted to 6 indices/triangles)
@@ -930,11 +956,12 @@ pub struct GeometryBuffer {
     pub index_buffer: wgpu::Buffer,
     pub num_indices: u32,
     pub num_vertices: u32,
+    pub vertex_capacity: usize,
+    pub index_capacity: usize,
 }
 
 impl GeometryBuffer {
     pub fn new(device: &wgpu::Device, indices: &[u16], vertices: &[Vertex]) -> Self {
-        // Handle empty geometry case
         if vertices.is_empty() && indices.is_empty() {
             return Self::empty(device);
         }
@@ -943,31 +970,32 @@ impl GeometryBuffer {
             vertex_buffer: device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: Some("Vertex Buffer"),
                 contents: bytemuck::cast_slice(vertices),
-                usage: wgpu::BufferUsages::VERTEX,
+                usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
             }),
             index_buffer: device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: Some("Index Buffer"),
                 contents: bytemuck::cast_slice(indices),
-                usage: wgpu::BufferUsages::INDEX,
+                usage: wgpu::BufferUsages::INDEX | wgpu::BufferUsages::COPY_DST,
             }),
             num_indices: indices.len() as u32,
             num_vertices: vertices.len() as u32,
+            vertex_capacity: vertices.len(),
+            index_capacity: indices.len(),
         }
     }
 
     pub fn empty(device: &wgpu::Device) -> Self {
-        // Create minimal buffers that won't cause rendering issues
         let vertex_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Empty Vertex Buffer"),
             size: std::mem::size_of::<Vertex>() as wgpu::BufferAddress,
-            usage: wgpu::BufferUsages::VERTEX,
+            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
 
         let index_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Empty Index Buffer"),
             size: std::mem::size_of::<u16>() as wgpu::BufferAddress,
-            usage: wgpu::BufferUsages::INDEX,
+            usage: wgpu::BufferUsages::INDEX | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
 
@@ -976,6 +1004,47 @@ impl GeometryBuffer {
             index_buffer,
             num_indices: 0,
             num_vertices: 0,
+            vertex_capacity: 0,
+            index_capacity: 0,
         }
+    }
+
+    pub fn update(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        indices: &[u16],
+        vertices: &[Vertex],
+    ) {
+        // Update vertex buffer if needed
+        if vertices.len() > self.vertex_capacity {
+            // Create new buffer if capacity is insufficient
+            self.vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("Vertex Buffer"),
+                contents: bytemuck::cast_slice(vertices),
+                usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+            });
+            self.vertex_capacity = vertices.len();
+        } else if !vertices.is_empty() {
+            // Update existing buffer
+            queue.write_buffer(&self.vertex_buffer, 0, bytemuck::cast_slice(vertices));
+        }
+
+        // Update index buffer if needed
+        if indices.len() > self.index_capacity {
+            // Create new buffer if capacity is insufficient
+            self.index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("Index Buffer"),
+                contents: bytemuck::cast_slice(indices),
+                usage: wgpu::BufferUsages::INDEX | wgpu::BufferUsages::COPY_DST,
+            });
+            self.index_capacity = indices.len();
+        } else if !indices.is_empty() {
+            // Update existing buffer
+            queue.write_buffer(&self.index_buffer, 0, bytemuck::cast_slice(indices));
+        }
+
+        self.num_indices = indices.len() as u32;
+        self.num_vertices = vertices.len() as u32;
     }
 }

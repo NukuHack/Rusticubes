@@ -80,7 +80,8 @@ pub fn march_def_cube(raw_data: &str) -> bool {
 
             let chunk_pos = ChunkCoord::from_world_pos(pos);
             if let Some(chunk) = state.data_system.world.get_chunk_mut(chunk_pos) {
-                chunk.make_mesh(super::get_state().device(), true);
+                let state_b = super::get_state();
+                chunk.make_mesh(state_b.device(), state_b.queue(), true);
             }
             true
         } else {
@@ -97,7 +98,8 @@ pub fn place_default_cube() {
 
         let chunk_pos = ChunkCoord::from_world_pos(pos);
         if let Some(chunk) = state.data_system.world.get_chunk_mut(chunk_pos) {
-            chunk.make_mesh(super::get_state().device(), false);
+            let state_b = super::get_state();
+            chunk.make_mesh(state_b.device(), state_b.queue(), false);
         }
     }
 }
@@ -110,7 +112,8 @@ pub fn place_marched_cube() {
 
         let chunk_pos = ChunkCoord::from_world_pos(pos);
         if let Some(chunk) = state.data_system.world.get_chunk_mut(chunk_pos) {
-            chunk.make_mesh(super::get_state().device(), false);
+            let state_b = super::get_state();
+            chunk.make_mesh(state_b.device(), state_b.queue(), false);
         }
     }
 }
@@ -129,7 +132,8 @@ pub fn add_def_chunk() {
         }
 
         if let Some(chunk) = state.data_system.world.get_chunk_mut(chunk_pos) {
-            chunk.make_mesh(super::get_state().device(), true);
+            let state_b = super::get_state();
+            chunk.make_mesh(state_b.device(), state_b.queue(), true);
         }
     }
 }
@@ -139,10 +143,11 @@ pub fn add_full_world() {
         let state = super::get_state();
         let center = state.camera_system.camera.position.to_vec3_i32();
         state.data_system.world.update_loaded_chunks(center, 6u32);
+        let state_b = super::get_state();
         state
             .data_system
             .world
-            .make_chunk_meshes(super::get_state().device());
+            .make_chunk_meshes(state_b.device(), state_b.queue());
     }
 }
 /// Improved raycasting function that finds the first non-empty block and its face
@@ -152,7 +157,7 @@ pub fn raycast_to_block(
     max_distance: f32,
 ) -> Option<(Vector3<i32>, Vector3<i32>)> {
     // Adjust ray origin to block center
-    let ray_origin = camera.position + Vector3::new(0.0, 0.0, 1.0);
+    let ray_origin = camera.position;
     let ray_dir = camera.forward();
 
     // Initialize variables for DDA algorithm
@@ -259,7 +264,8 @@ pub fn place_looked_cube() {
             // Update chunk mesh
             let chunk_pos = ChunkCoord::from_world_pos(placement_pos);
             if let Some(chunk) = state.data_system.world.get_chunk_mut(chunk_pos) {
-                chunk.make_mesh(super::get_state().device(), false);
+                let state_b = super::get_state();
+                chunk.make_mesh(state_b.device(), state_b.queue(), false);
             }
         }
     }
@@ -282,7 +288,8 @@ pub fn remove_targeted_block() {
             // Update chunk mesh
             let chunk_pos = ChunkCoord::from_world_pos(block_pos);
             if let Some(chunk) = state.data_system.world.get_chunk_mut(chunk_pos) {
-                chunk.make_mesh(super::get_state().device(), false);
+                let state_b = super::get_state();
+                chunk.make_mesh(state_b.device(), state_b.queue(), false);
             }
         }
     }
