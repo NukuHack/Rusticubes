@@ -5,6 +5,11 @@ use std::{
     sync, task,
 };
 
+const FONT_MAP: &[u8] = include_bytes!("../resources/bescii-chars.png");
+const FONT_TTF: &[u8] = include_bytes!("../resources/calibri.ttf");
+const CUBE_TEXTURE: &[u8] = include_bytes!("../resources/cube-diffuse.jpg");
+const TREE_TEXTURE: &[u8] = include_bytes!("../resources/happy-tree.png");
+
 use test_app::run;
 
 /// Entry point of the application
