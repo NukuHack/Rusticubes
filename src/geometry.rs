@@ -424,9 +424,10 @@ impl TextureManager {
         queue: &wgpu::Queue,
         config: &wgpu::SurfaceConfiguration,
     ) -> Self {
-        let texture_path = "resources/cube-diffuse.jpg";
-        let bytes = std::fs::read(texture_path).expect("Texture not found");
-        let texture = Texture::from_bytes(device, queue, &bytes, texture_path).unwrap();
+        //let texture_path = "resources/cube-diffuse.jpg";
+        //let bytes = std::fs::read(texture_path).expect("Texture not found");
+        let texture =
+            Texture::from_bytes(device, queue, &super::CUBE_TEXTURE, "cube_texture").unwrap();
 
         let depth_texture = Texture::create_depth_texture(device, config, "Depth Texture");
 

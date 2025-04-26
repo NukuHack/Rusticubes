@@ -284,7 +284,7 @@ impl UIManager {
         queue: &wgpu::Queue,
     ) -> Self {
         // Load font texture
-        let (font_data, width, height) = Self::load_font_texture("resources/bescii-chars.png");
+        let (font_data, width, height) = Self::load_font_texture();
 
         let font_size = wgpu::Extent3d {
             width,
@@ -451,8 +451,8 @@ impl UIManager {
         }
     }
 
-    fn load_font_texture(path: &str) -> (Vec<u8>, u32, u32) {
-        let img = image::open(path).expect("Failed to load font atlas");
+    fn load_font_texture() -> (Vec<u8>, u32, u32) {
+        let img = image::load_from_memory(super::FONT_MAP).expect("Failed to load font atlas");
         let (width, height) = img.dimensions();
         let rgba = img.into_rgba8();
         (rgba.into_raw(), width, height)

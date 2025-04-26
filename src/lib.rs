@@ -6,6 +6,12 @@ mod config;
 mod geometry;
 mod pipeline;
 mod user_interface;
+mod debug;
+
+const FONT_MAP: &[u8] = include_bytes!("../resources/bescii-chars.png");
+//const FONT_TTF: &[u8] = include_bytes!("../resources/calibri.ttf");
+const CUBE_TEXTURE: &[u8] = include_bytes!("../resources/cube-diffuse.jpg");
+//const TREE_TEXTURE: &[u8] = include_bytes!("../resources/happy-tree.png");
 
 use std::iter::Iterator;
 use winit::{

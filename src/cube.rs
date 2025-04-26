@@ -1,6 +1,6 @@
 use crate::geometry::{Vertex, EDGE_TABLE, TRI_TABLE};
 use ahash::AHasher;
-use glam::{Mat4, Quat, Vec3, Vec3A};
+use glam::{Mat4, Quat, Vec3};
 use std::{
     collections::{HashMap, HashSet},
     f32::consts::{PI, TAU},
@@ -449,7 +449,6 @@ impl Chunk {
 
     /// Generates the chunk mesh if dirty
     pub fn make_mesh(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, force: bool) {
-        let start = std::time::Instant::now();
         if !force && !self.dirty && self.mesh.is_some() {
             return;
         }
@@ -489,7 +488,6 @@ impl Chunk {
             ));
         }
         self.dirty = false;
-        println!("Mesh cost: {:?}", start.elapsed());
     }
 
     /// Checks if a block position is empty or outside the chunk
@@ -699,9 +697,29 @@ impl World {
     /// Generates meshes for all dirty chunks
     #[inline]
     pub fn make_chunk_meshes(&mut self, device: &wgpu::Device, queue: &wgpu::Queue) {
+        let timer = std::time::Instant::now();
+        let mut slow_chunk_times = super::debug::RunningAverage::default();
+
         for chunk in self.chunks.values_mut() {
+            let chunk_timer = std::time::Instant::now();
             chunk.make_mesh(device, queue, false);
+            let elapsed_micros = chunk_timer.elapsed().as_micros() as f32;
+
+            if elapsed_micros > 20.0 {
+                slow_chunk_times.add(elapsed_micros.into());
+            }
         }
+
+        if timer.elapsed().as_micros() < 1000 {
+            println!(
+                "Chunk loading was really fast: {:?}µs",
+                timer.elapsed().as_micros()
+            );
+            return;
+        }
+        println!("World mesh generation stats:\nTotal time: {:.2}ms\nChunks avg: {:.2}µs\nTotal chunks: {}\nTotal cubes: {} (16³ x chunk_count)",
+            timer.elapsed().as_secs_f32() * 1000.0, slow_chunk_times.average(), self.loaded_chunks.len(), self.loaded_chunks.len() * Chunk::VOLUME
+        );
     }
 
     /// Renders all chunks with meshes
