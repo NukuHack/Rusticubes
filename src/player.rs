@@ -5,6 +5,7 @@ use winit::keyboard::KeyCode as Key;
 
 pub struct Player {
     pub position: Vec3,
+    pub config: CameraConfig,
     pub controller: PlayerController,
 }
 
@@ -12,15 +13,86 @@ impl Player {
     pub fn new(config: CameraConfig) -> Self {
         Self {
             position: Vec3::ZERO,
+            config,
             controller: PlayerController::new(config),
         }
+    }
+
+    pub fn update(
+        &mut self,
+        camera: &mut Camera,
+        projection: &mut Projection,
+        delta_time: f32,
+    ) -> Vec3 {
+        let dt = delta_time.min(0.1);
+
+        // Update rotation with smoothing
+        self.controller.target_rotation.x +=
+            self.controller.rotation.x * self.config.sensitivity * 0.05;
+        self.controller.target_rotation.y +=
+            self.controller.rotation.y * self.config.sensitivity * 0.05;
+        self.controller.target_rotation.z +=
+            self.controller.rotation.z * self.config.sensitivity * 0.05;
+        self.controller.target_rotation.y = self
+            .controller
+            .target_rotation
+            .y
+            .clamp(-SAFE_FRAC_PI_2, SAFE_FRAC_PI_2);
+
+        let smooth_factor = 1.0 - (-self.config.smoothness * dt).exp();
+        self.controller.current_rotation = self
+            .controller
+            .current_rotation
+            .lerp(self.controller.target_rotation, smooth_factor);
+
+        camera.rotation = self.controller.current_rotation;
+
+        self.controller.rotation = Vec3::ZERO;
+
+        // Movement calculations
+        let run_multiplier = if self.controller.movement.run {
+            self.config.run_multiplier
+        } else {
+            1.0
+        };
+        let speed = self.config.speed * run_multiplier;
+
+        let forward_amount = (self.controller.movement.forward as i8
+            - self.controller.movement.backward as i8) as f32;
+        let right_amount =
+            (self.controller.movement.right as i8 - self.controller.movement.left as i8) as f32;
+        let up_amount =
+            (self.controller.movement.up as i8 - self.controller.movement.down as i8) as f32;
+
+        let target_velocity = (camera.forward() * forward_amount
+            + camera.right() * right_amount
+            + camera.up() * up_amount)
+            * speed;
+
+        let acceleration = if target_velocity.length_squared() > 0.0 {
+            10.0
+        } else {
+            20.0
+        };
+        self.controller.velocity = self
+            .controller
+            .velocity
+            .lerp(target_velocity, acceleration * dt);
+
+        // Handle zoom
+        if self.controller.scroll.abs() > f32::EPSILON {
+            let delta = self.controller.scroll * self.config.sensitivity;
+            projection.set_fovy((projection.fovy - delta).clamp(0.001, std::f32::consts::PI));
+            self.controller.scroll = 0.0;
+        }
+
+        self.controller.velocity * dt
     }
 }
 
 pub struct PlayerController {
     pub movement: MovementInputs,
     pub rotation: Vec3,
-    pub config: CameraConfig,
     pub scroll: f32,
     pub velocity: Vec3,
     pub target_rotation: Vec3,
@@ -44,10 +116,9 @@ impl PlayerController {
             movement: MovementInputs::default(),
             rotation: Vec3::ZERO,
             scroll: 0.0,
-            config,
             velocity: Vec3::ZERO,
-            target_rotation: Vec3::new(config.yaw, config.pitch, 0.0),
-            current_rotation: Vec3::new(config.yaw, config.pitch, 0.0),
+            target_rotation: config.rotation,
+            current_rotation: config.rotation,
         }
     }
 
@@ -82,72 +153,10 @@ impl PlayerController {
         };
     }
 
-    pub fn update(
-        &mut self,
-        camera: &mut Camera,
-        projection: &mut Projection,
-        delta_time: f32,
-    ) -> Vec3 {
-        let dt = delta_time.min(0.1);
-
-        // Update rotation with smoothing
-        self.target_rotation.x += self.rotation.x * self.config.sensitivity * 0.05;
-        self.target_rotation.y += self.rotation.y * self.config.sensitivity * 0.05;
-        self.target_rotation.z += self.rotation.z * self.config.sensitivity * 0.05;
-        self.target_rotation.y = self
-            .target_rotation
-            .y
-            .clamp(-SAFE_FRAC_PI_2, SAFE_FRAC_PI_2);
-
-        let smooth_factor = 1.0 - (-self.config.smoothness * dt).exp();
-        self.current_rotation = self
-            .current_rotation
-            .lerp(self.target_rotation, smooth_factor);
-
-        camera.set_yaw(self.current_rotation.x);
-        camera.set_pitch(self.current_rotation.y);
-
-        self.rotation.x = 0.0;
-        self.rotation.y = 0.0;
-
-        // Movement calculations
-        let run_multiplier = if self.movement.run {
-            self.config.run_multiplier
-        } else {
-            1.0
-        };
-        let speed = self.config.speed * run_multiplier;
-
-        let forward_amount = (self.movement.forward as i8 - self.movement.backward as i8) as f32;
-        let right_amount = (self.movement.right as i8 - self.movement.left as i8) as f32;
-        let up_amount = (self.movement.up as i8 - self.movement.down as i8) as f32;
-
-        let target_velocity = (camera.forward() * forward_amount
-            + camera.right() * right_amount
-            + camera.up() * up_amount)
-            * speed;
-
-        let acceleration = if target_velocity.length_squared() > 0.0 {
-            10.0
-        } else {
-            20.0
-        };
-        self.velocity = self.velocity.lerp(target_velocity, acceleration * dt);
-
-        // Handle zoom
-        if self.scroll.abs() > f32::EPSILON {
-            let delta = self.scroll * self.config.sensitivity;
-            projection.set_fovy((projection.fovy - delta).clamp(0.001, std::f32::consts::PI));
-            self.scroll = 0.0;
-        }
-
-        self.velocity * dt
-    }
-
     pub fn reset(&mut self, camera: &mut Camera) {
         self.movement = MovementInputs::default();
         self.velocity = Vec3::ZERO;
-        self.target_rotation = Vec3::new(camera.yaw(), camera.pitch(), 0.0);
+        self.target_rotation = camera.rotation;
         self.current_rotation = self.target_rotation;
     }
 }

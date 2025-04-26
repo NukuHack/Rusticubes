@@ -40,7 +40,7 @@ impl CameraSystem {
         size: PhysicalSize<u32>,
         config: CameraConfig,
     ) -> Self {
-        let camera = Camera::new(config.position, config.yaw, config.pitch);
+        let camera = Camera::new(config.position, config.rotation);
         let projection = Projection::new(size, config.fovy, config.znear, config.zfar);
         let mut uniform = CameraUniform::default();
         uniform.update_view_proj(&camera, &projection);
@@ -105,13 +105,12 @@ impl CameraSystem {
 #[derive(Debug)]
 pub struct Camera {
     pub position: Vec3,
-    pub yaw: f32,
-    pub pitch: f32,
+    pub rotation: Vec3,
 }
 
 impl Camera {
-    pub fn new(position: Vec3, yaw: f32, pitch: f32) -> Self {
-        Self { position, yaw, pitch }
+    pub fn new(position: Vec3, rotation: Vec3) -> Self {
+        Self { position, rotation }
     }
 
     pub fn view_matrix(&self) -> Mat4 {
@@ -119,31 +118,15 @@ impl Camera {
     }
 
     pub fn forward(&self) -> Vec3 {
-        Quat::from_rotation_y(self.yaw) * Quat::from_rotation_x(self.pitch) * Vec3::NEG_Z
+        Quat::from_rotation_y(self.rotation.x) * Quat::from_rotation_x(self.rotation.y) * Vec3::NEG_Z
     }
 
     pub fn right(&self) -> Vec3 {
-        Quat::from_rotation_y(self.yaw) * Vec3::X
+        Quat::from_rotation_y(self.rotation.x) * Vec3::X
     }
 
     pub fn up(&self) -> Vec3 {
-        Quat::from_rotation_y(self.yaw) * Quat::from_rotation_x(self.pitch) * Vec3::Y
-    }
-
-    pub fn set_yaw(&mut self, yaw: f32) {
-        self.yaw = yaw;
-    }
-
-    pub fn set_pitch(&mut self, pitch: f32) {
-        self.pitch = pitch.clamp(-SAFE_FRAC_PI_2, SAFE_FRAC_PI_2);
-    }
-
-    pub fn yaw(&self) -> f32 {
-        self.yaw
-    }
-
-    pub fn pitch(&self) -> f32 {
-        self.pitch
+        Quat::from_rotation_y(self.rotation.x) * Quat::from_rotation_x(self.rotation.y) * Vec3::Y
     }
 }
 
@@ -183,8 +166,7 @@ pub const SAFE_FRAC_PI_2: f32 = std::f32::consts::FRAC_PI_2 - 0.0001;
 #[derive(Debug, Clone, Copy)]
 pub struct CameraConfig {
     pub position: Vec3,
-    pub yaw: f32,
-    pub pitch: f32,
+    pub rotation: Vec3,
     pub fovy: f32,
     pub znear: f32,
     pub zfar: f32,
@@ -198,8 +180,7 @@ impl CameraConfig {
     pub fn new(position: Vec3) -> Self {
         Self {
             position,
-            yaw: -90.0f32.to_radians(),
-            pitch: 0.0,
+            rotation: Vec3::new(-90.0f32.to_radians(),0.0,0.0),
             fovy: 90.0f32.to_radians(),
             znear: 0.01,
             zfar: 100.0,

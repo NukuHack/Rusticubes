@@ -497,7 +497,7 @@ impl<'a> State<'a> {
         let current_time: std::time::Instant = std::time::Instant::now();
         let delta_seconds: f32 = (current_time - self.previous_frame_time).as_secs_f32();
         self.previous_frame_time = current_time;
-        let movement_delta = self.player.controller.update(&mut self.camera_system.camera,&mut self.camera_system.projection,delta_seconds);
+        let movement_delta = self.player.update(&mut self.camera_system.camera,&mut self.camera_system.projection,delta_seconds);
         self.player.position += movement_delta;
         self.camera_system.camera.position+= movement_delta;
         self.camera_system.update(&self.render_context.queue);
