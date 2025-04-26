@@ -2,6 +2,7 @@
 
 mod camera;
 mod cube;
+mod player;
 mod config;
 mod geometry;
 mod pipeline;
@@ -13,6 +14,7 @@ const FONT_MAP: &[u8] = include_bytes!("../resources/bescii-chars.png");
 const CUBE_TEXTURE: &[u8] = include_bytes!("../resources/cube-diffuse.jpg");
 //const TREE_TEXTURE: &[u8] = include_bytes!("../resources/happy-tree.png");
 
+use glam::Vec3;
 use std::iter::Iterator;
 use winit::{
     event::{ElementState, Event, MouseButton, WindowEvent, KeyEvent},
@@ -25,6 +27,7 @@ pub struct State<'a> {
     render_context: RenderContext<'a>,
     previous_frame_time: std::time::Instant,
     camera_system: camera::CameraSystem,
+    player: player::Player,
     input_system: InputSubsystem,
     pipeline: pipeline::Pipeline,
     data_system: DataSubsystem,
@@ -170,12 +173,14 @@ impl<'a> State<'a> {
             desired_maximum_frame_latency: 2,
         };
 
+        let cam_config = camera::CameraConfig::new(Vec3::new(0.5, 1.8, 2.0));
         // Create camera system with advanced controls
         let camera_system: camera::CameraSystem = camera::CameraSystem::new(
             &device,
-            &size,
-            glam::Vec3::new(0.5, 1.8, 2.0), // by default the camera is 1.8 meters tall
+            size,
+            cam_config,
         );
+        let player: player::Player = player::Player::new(cam_config);
 
         surface.configure(&device, &config);
 
@@ -229,6 +234,7 @@ impl<'a> State<'a> {
             render_context,
             previous_frame_time: std::time::Instant::now(),
             camera_system,
+            player,
             input_system: InputSubsystem::default(),
             pipeline,
             data_system,
@@ -284,7 +290,7 @@ impl<'a> State<'a> {
             self.render_context.size = new_size;
             self.render_context.config.width = new_size.width;
             self.render_context.config.height = new_size.height;
-            self.camera_system.projection.resize(new_size.width, new_size.height);
+            self.camera_system.projection.resize(new_size);
             self.render_context.surface.configure(self.device(), self.config());
             self.data_system.texture_manager.depth_texture = geometry::Texture::create_depth_texture(
                 self.device(),
@@ -340,7 +346,7 @@ impl<'a> State<'a> {
 
                 // Handle UI input first if there's a focused element
                 if let Some(focused_idx) = self.ui_manager.focused_element {
-                    self.camera_system.controller.reset_keyboard(); // Temporary workaround
+                    self.player.controller.reset_keyboard(); // Temporary workaround
                     
                     if *state == ElementState::Pressed {
                         // Handle special keys for UI
@@ -348,15 +354,15 @@ impl<'a> State<'a> {
                             Key::Backspace => {
                                 self.ui_manager.handle_backspace(focused_idx);
                                 return true;
-                            }
+                            },
                             Key::Enter => {
                                 self.ui_manager.handle_enter(focused_idx);
                                 return true;
-                            }
+                            },
                             Key::Escape => {
                                 self.ui_manager.blur_current_element();
                                 return true;
-                            }
+                            },
                             _ => {
                                 if let Some(c) = user_interface::key_to_char(*key, self.modifier_keys().sift) {
                                     self.ui_manager.process_text_input(focused_idx, c);
@@ -371,15 +377,18 @@ impl<'a> State<'a> {
                 // Handle game controls if no UI element is focused
                 // `key` is of type `KeyCode` (e.g., KeyCode::W)
                 // `state` is of type `ElementState` (Pressed or Released)
-                self.camera_system.controller.process_keyboard(&key, &state);
+                self.player.controller.process_keyboard(&key, &state);
                 match key {
                     Key::AltLeft | Key::AltRight => {
                         self.center_mouse();
                         true
                     },
                     Key::Escape => {
-                        close_app();
-                        true
+                        if *state == ElementState::Pressed {
+                            close_app();
+                            return true;
+                        }
+                        false
                     },
                     Key::F1 => {
                         if *state == ElementState::Pressed {
@@ -464,7 +473,7 @@ impl<'a> State<'a> {
                     if let Some(prev) = self.input_system.previous_mouse {
                         let delta_x: f32 = (position.x - prev.x) as f32;
                         let delta_y: f32 = (position.y - prev.y) as f32;
-                        self.camera_system.controller.process_mouse(delta_x, delta_y);
+                        self.player.controller.process_mouse(delta_x, delta_y);
                     }
                 }
 
@@ -476,7 +485,7 @@ impl<'a> State<'a> {
                 true
             }
             WindowEvent::MouseWheel { delta, .. } => {
-                self.camera_system.controller.process_scroll(delta);
+                self.player.controller.process_scroll(delta);
                 true
             }
             _ => false,
@@ -488,7 +497,10 @@ impl<'a> State<'a> {
         let current_time: std::time::Instant = std::time::Instant::now();
         let delta_seconds: f32 = (current_time - self.previous_frame_time).as_secs_f32();
         self.previous_frame_time = current_time;
-        self.camera_system.update(&self.render_context.queue, delta_seconds);
+        let movement_delta = self.player.controller.update(&mut self.camera_system.camera,&mut self.camera_system.projection,delta_seconds);
+        self.player.position += movement_delta;
+        self.camera_system.camera.position+= movement_delta;
+        self.camera_system.update(&self.render_context.queue);
 
         if self.ui_manager.visibility {
             self.ui_manager.update(&self.render_context.queue);

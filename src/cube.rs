@@ -15,6 +15,7 @@ type FastMap<K, V> = HashMap<K, V, BuildHasherDefault<AHasher>>;
 #[derive(Clone, Copy, Debug, PartialEq)]
 //#[repr(u8)]
 pub enum Block {
+    None,
     /// Simple block with material and packed rotation
     Simple {
         material: u16,
@@ -118,6 +119,7 @@ impl Block {
     pub fn is_empty(&self) -> bool {
         match self {
             Block::Simple { material, .. } | Block::Marching { material, .. } => *material == 0,
+            Block::None => true,
         }
     }
 
@@ -139,6 +141,7 @@ impl Block {
     pub fn material(&self) -> u16 {
         match self {
             Block::Simple { material, .. } | Block::Marching { material, .. } => *material,
+            Block::None => 0,
         }
     }
 
@@ -148,6 +151,7 @@ impl Block {
             Block::Simple { material: m, .. } | Block::Marching { material: m, .. } => {
                 *m = material
             }
+            Block::None => {}
         }
     }
 
@@ -325,7 +329,7 @@ impl ChunkCoord {
 /// Represents a chunk of blocks in the world
 #[derive(Clone, Debug)]
 pub struct Chunk {
-    pub blocks: [Option<Block>; 4096], // Fixed-size array; None = air/empty
+    pub blocks: [Block; 4096], // Fixed-size array; None = air/empty
     pub dirty: bool,
     pub mesh: Option<GeometryBuffer>,
     pub bind_group: Option<wgpu::BindGroup>,
@@ -340,7 +344,7 @@ impl Chunk {
     #[inline]
     pub fn empty() -> Self {
         Self {
-            blocks: [None; Self::VOLUME], // Initialize all blocks as empty
+            blocks: [Block::None; Self::VOLUME], // Initialize all blocks as empty
             dirty: false,
             mesh: None,
             bind_group: None,
@@ -358,7 +362,7 @@ impl Chunk {
             for y in 0..Self::SIZE {
                 for z in 0..Self::SIZE {
                     let idx = Self::xyz_to_index(x, y, z);
-                    chunk.blocks[idx] = Some(new_block.clone()); // Or your block logic
+                    chunk.blocks[idx] = new_block.clone();
                 }
             }
         }
@@ -388,30 +392,30 @@ impl Chunk {
 
     /// Gets a block by local position (Vec3)
     #[inline]
-    pub fn get_block(&self, local_pos: Vec3) -> Option<&Block> {
+    pub fn get_block(&self, local_pos: Vec3) -> &Block {
         let (x, y, z) = (
             local_pos.x as usize,
             local_pos.y as usize,
             local_pos.z as usize,
         );
-        self.blocks[Self::xyz_to_index(x, y, z)].as_ref()
+        &self.blocks[Self::xyz_to_index(x, y, z)]
     }
 
     /// Gets a mutable block by local position
     #[inline]
-    pub fn get_block_mut(&mut self, local_pos: Vec3) -> Option<&mut Block> {
+    pub fn get_block_mut(&mut self, local_pos: Vec3) -> &mut Block {
         let (x, y, z) = (
             local_pos.x as usize,
             local_pos.y as usize,
             local_pos.z as usize,
         );
-        self.blocks[Self::xyz_to_index(x, y, z)].as_mut()
+        &mut self.blocks[Self::xyz_to_index(x, y, z)]
     }
 
     /// Sets a block at a local position
     pub fn set_block(&mut self, local_pos: Vec3, block: Block) {
         self.blocks[Self::local_to_index(local_pos)] =
-            if block.is_empty() { None } else { Some(block) };
+            if block.is_empty() { Block::None } else { block };
         self.dirty = true;
     }
 
@@ -457,9 +461,7 @@ impl Chunk {
 
         for pos in 0..Self::VOLUME {
             // Iterate through all possible u16 positions (0x0000..0xFFFF)
-            let Some(block) = self.blocks[pos] else {
-                continue;
-            };
+            let block = self.blocks[pos];
 
             if block.is_empty() {
                 continue;
@@ -510,8 +512,8 @@ impl Chunk {
             (pos.z as u32) as f32,
         );
         match self.blocks[Self::pack_position(local_pos) as usize] {
-            Some(block) => block.is_empty() || block.is_marching(),
-            None => true,
+            Block::None => true,
+            block => block.is_empty() || block.is_marching(),
         }
     }
 
@@ -564,12 +566,14 @@ impl World {
     }
 
     #[inline]
-    pub fn get_block(&self, world_pos: Vec3) -> Option<&Block> {
+    pub fn get_block(&self, world_pos: Vec3) -> &Block {
         let chunk_coord = ChunkCoord::from_world_pos(world_pos);
-        self.chunks.get(&chunk_coord).and_then(|chunk| {
-            let local = Chunk::world_to_local_pos(world_pos);
-            chunk.get_block(local)
-        })
+        self.get_chunk(chunk_coord)
+            .and_then(|chunk| {
+                let local = Chunk::world_to_local_pos(world_pos);
+                Some(chunk.get_block(local))
+            })
+            .unwrap_or(&Block::None) // Changed or_else to unwrap_or
     }
 
     #[inline]
@@ -577,7 +581,7 @@ impl World {
         let chunk_coord = ChunkCoord::from_world_pos(world_pos);
         self.chunks.get_mut(&chunk_coord).and_then(|chunk| {
             let local = Chunk::world_to_local_pos(world_pos);
-            chunk.get_block_mut(local)
+            Some(chunk.get_block_mut(local))
         })
     }
 
@@ -590,7 +594,7 @@ impl World {
 
         if let Some(chunk) = self.chunks.get_mut(&chunk_coord) {
             let local = Chunk::world_to_local_pos(world_pos);
-            if chunk.get_block(local) != Some(&block) {
+            if chunk.get_block(local) != &block {
                 chunk.set_block(local, block);
             }
         }
@@ -913,8 +917,10 @@ impl ChunkMeshBuilder {
 
                 let base = self.current_vertex as u16;
                 for (i, &vertex_idx) in face.iter().enumerate() {
+                    // pushing 24 Vertex in case of a fully visible cube
                     let pos = transformed_vertices[vertex_idx as usize];
                     self.vertices.push(Vertex {
+                        // each vertex have 8 f32 as storage making it 256 bits - so 6144 bits per cube
                         position: pos,
                         normal: CUBE_NORMALS[vertex_idx as usize],
                         uv: uv[i],
@@ -922,7 +928,7 @@ impl ChunkMeshBuilder {
                 }
 
                 self.indices
-                    .extend(&[base, base + 1, base + 2, base + 2, base + 3, base]);
+                    .extend(&[base, base + 1, base + 2, base + 2, base + 3, base]); // 6 u16 int (96 bits) - so 576 for each cube
 
                 self.current_vertex += 4;
             }

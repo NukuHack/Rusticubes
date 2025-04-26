@@ -72,19 +72,25 @@ pub fn march_def_cube(raw_data: &str) -> bool {
     unsafe {
         let state = super::get_state();
         let pos = Vec3::ZERO;
+        let vaild_block = &mut Block::None;
 
-        if let Some(block) = state.data_system.world.get_block_mut(pos) {
-            block.set_point(x, y, z, value);
+        let block = state
+            .data_system
+            .world
+            .get_block_mut(pos)
+            .unwrap_or(vaild_block);
 
-            let chunk_pos = ChunkCoord::from_world_pos(pos);
-            if let Some(chunk) = state.data_system.world.get_chunk_mut(chunk_pos) {
-                let state_b = super::get_state();
-                chunk.make_mesh(state_b.device(), state_b.queue(), true);
-            }
-            true
-        } else {
-            false
+        if block.is_empty() {
+            return false;
         }
+        block.set_point(x, y, z, value);
+
+        let chunk_pos = ChunkCoord::from_world_pos(pos);
+        if let Some(chunk) = state.data_system.world.get_chunk_mut(chunk_pos) {
+            let state_b = super::get_state();
+            chunk.make_mesh(state_b.device(), state_b.queue(), true);
+        }
+        true
     }
 }
 /// Places a simple cube at (0,0,0)
@@ -212,10 +218,10 @@ pub fn raycast_to_block(camera: &Camera, world: &World, max_distance: f32) -> Op
 
     while traveled < max_distance {
         // Check current block
-        if let Some(block) = world.get_block(block_pos) {
-            if !block.is_empty() {
-                return Some((block_pos, normal));
-            }
+        let block = world.get_block(block_pos);
+
+        if !block.is_empty() {
+            return Some((block_pos, normal));
         }
 
         // Move to next block boundary
