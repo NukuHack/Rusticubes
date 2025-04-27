@@ -112,13 +112,13 @@ if errorlevel 1 (
     exit /b 1
 )
 
-echo [[34mSTATUS[0m] It is suggested to install the default MVSC linker (stupid shit made by microsoft) ... but i hate microsoft, so i made it not needed :
-echo [[34mCONFIG[0m] Setting LLD linker...
-(
-    echo [build]
-    echo rustflags = ["-C", "linker=rust-lld"]
-) >> "%USERPROFILE%\.cargo\config.toml"
-
+if not "%TARGET_TRIPLE%"== "x86_64-pc-windows-gnu" (
+    echo [[34mCONFIG[0m] Setting LLD linker...
+    (
+        echo [build]
+        echo rustflags = ["-C", "linker=rust-lld"]
+    ) >> "%USERPROFILE%\.cargo\config.toml"
+)
 rustup component add cargo rustc 2>nul
 
 echo [[32mOK[0m] Rust installed successfully
