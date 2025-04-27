@@ -65,22 +65,28 @@ impl Pipeline {
         }
     }
 }
-
+const TEXTURE_SHADER: &str = concat!(
+    include_str!("chunk_shader.wgsl"),
+    "\n",
+    include_str!("texture_shader.wgsl")
+);
 /// Creates the main shader module for texturing
 fn create_chunk_shader(device: &wgpu::Device) -> wgpu::ShaderModule {
     device.create_shader_module(wgpu::ShaderModuleDescriptor {
         label: Some("Chunk Shader"),
-        source: wgpu::ShaderSource::Wgsl(std::borrow::Cow::from(include_str!("chunk_shader.wgsl"))),
+        source: wgpu::ShaderSource::Wgsl(std::borrow::Cow::from(TEXTURE_SHADER)),
     })
 }
-
+const INSIDE_SHADER: &str = concat!(
+    include_str!("chunk_shader.wgsl"),
+    "\n",
+    include_str!("inside_shader.wgsl")
+);
 /// Creates the inside shader module for solid color rendering
 fn create_inside_shader(device: &wgpu::Device) -> wgpu::ShaderModule {
     device.create_shader_module(wgpu::ShaderModuleDescriptor {
         label: Some("Inside Solid Color Shader"),
-        source: wgpu::ShaderSource::Wgsl(std::borrow::Cow::from(include_str!(
-            "inside_shader.wgsl"
-        ))),
+        source: wgpu::ShaderSource::Wgsl(std::borrow::Cow::from(INSIDE_SHADER)),
     })
 }
 fn create_post_shader(device: &wgpu::Device) -> wgpu::ShaderModule {

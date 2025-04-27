@@ -247,6 +247,11 @@ pub enum Axis {
 /// Format: [X:26 (signed), Y:12 (signed), Z:26 (signed)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct ChunkCoord(u64);
+impl Into<u64> for ChunkCoord {
+    fn into(self) -> u64 {
+        self.0 // Access the inner u64 value
+    }
+}
 impl ChunkCoord {
     #[allow(dead_code)]
     // Use bit shifts that are powers of 2 for better optimization
@@ -617,10 +622,12 @@ impl World {
             };
 
             // Create position buffer
-            let world_pos = chunk_coord.to_world_pos();
             let position_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: Some("Chunk Position Buffer"),
-                contents: bytemuck::cast_slice(&[world_pos.x, world_pos.y, world_pos.z, 0.0]),
+                contents: bytemuck::cast_slice(&[
+                    <ChunkCoord as Into<u64>>::into(chunk_coord) as u64,
+                    0.0 as u64,
+                ]), // needs a dummy padding to be 16 bytes long :/ because stupid GPU
                 usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             });
 

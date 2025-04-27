@@ -140,7 +140,7 @@ impl<'a> State<'a> {
         let (device, queue): (wgpu::Device, wgpu::Queue) = adapter
             .request_device(
                 &wgpu::DeviceDescriptor {
-                    required_features: wgpu::Features::empty(),
+                    required_features: wgpu::Features::SHADER_INT64,
                     required_limits: if cfg!(target_arch = "wasm32") {
                         wgpu::Limits::downlevel_webgl2_defaults()
                     } else {
@@ -194,7 +194,7 @@ impl<'a> State<'a> {
                     ty: wgpu::BindingType::Buffer {
                         ty: wgpu::BufferBindingType::Uniform,
                         has_dynamic_offset: false,
-                        min_binding_size: wgpu::BufferSize::new(16), // Specify minimum size
+                        min_binding_size: wgpu::BufferSize::new(16), // stupid gpu has to make it 16 at least ... 8 byte would be enough tho ..
                     },
                     count: None,
                 },
