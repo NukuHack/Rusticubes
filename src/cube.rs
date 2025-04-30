@@ -329,12 +329,24 @@ impl ChunkCoord {
 }
 
 /// Represents a chunk of blocks in the world
-#[derive(Clone, Debug)]
+#[derive(Clone, PartialEq)]
 pub struct Chunk {
     pub blocks: [Block; 4096], // Fixed-size array; None = air/empty
     pub dirty: bool,
     pub mesh: Option<GeometryBuffer>,
     pub bind_group: Option<wgpu::BindGroup>,
+}
+
+impl std::fmt::Debug for Chunk {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Chunk")
+            .field("dirty", &self.dirty)
+            .field("is_empty", &self.is_empty())
+            .field("blocks", &self.blocks.len())
+            .field("has_bind_group", &self.bind_group.is_some())
+            .field("has_mesh", &self.mesh.is_some())
+            .finish()
+    }
 }
 
 impl Chunk {
@@ -610,18 +622,21 @@ impl World {
             let device = &state.render_context.device;
             let chunk_bind_group_layout = &state.render_context.chunk_bind_group_layout;
 
+            // First check if we already have this chunk loaded with the same contents
             let mut chunk = Chunk::empty();
-            // Unload existing chunk first
             if force {
-                if self.get_chunk(chunk_coord).is_some() {
-                    self.unload_chunk(chunk_coord);
-                }
+                // Load new chunk data
                 chunk = match Chunk::load() {
                     Some(c) => c,
                     None => return false,
                 };
-            } else {
-                // nothing
+            }
+
+            if let Some(existing_chunk) = self.get_chunk(chunk_coord) {
+                // If the chunk exists and isn't different form the existing one, no need to reload
+                if existing_chunk.blocks == chunk.blocks {
+                    return false;
+                }
             }
 
             // Create position buffer
@@ -630,7 +645,7 @@ impl World {
                 contents: bytemuck::cast_slice(&[
                     <ChunkCoord as Into<u64>>::into(chunk_coord) as u64,
                     0.0 as u64,
-                ]), // needs a dummy padding to be 16 bytes long :/ because stupid GPU
+                ]),
                 usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             });
 
@@ -644,13 +659,12 @@ impl World {
                 label: Some("chunk_bind_group"),
             });
 
-            self.set_chunk(
-                chunk_coord,
-                Chunk {
-                    bind_group: Some(bind_group),
-                    ..chunk
-                },
-            );
+            self.chunks.insert(chunk_coord, Chunk {
+                        bind_group: Some(bind_group),
+                        ..chunk
+                    });
+            self.loaded_chunks.insert(chunk_coord);
+
             true
         }
     }
@@ -738,13 +752,13 @@ impl World {
 
     pub fn render_chunks<'a>(&'a self, render_pass: &mut wgpu::RenderPass<'a>) {
         for chunk in self.chunks.values() {
-            // Skip empty chunks
+            // Skip empty chunks entirely - no mesh or bind group needed
             if chunk.is_empty() {
                 continue;
             }
             
             if let (Some(mesh), Some(bind_group)) = (&chunk.mesh, &chunk.bind_group) {
-                // Skip if mesh has no indices
+                // Skip if mesh has no indices (shouldn't happen but good to check)
                 if mesh.num_indices == 0 {
                     continue;
                 }
@@ -994,7 +1008,7 @@ pub const CUBE_FACES: [[u16; 4]; 6] = [
 ];
 
 // --- Geometry Buffer (modified for chunk meshes) ---
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone,PartialEq)]
 pub struct GeometryBuffer {
     pub vertex_buffer: wgpu::Buffer,
     pub index_buffer: wgpu::Buffer,
