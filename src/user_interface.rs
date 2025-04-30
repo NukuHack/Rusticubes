@@ -594,15 +594,7 @@ pub fn setup_ui(state: &mut super::State) {
     let elements = vec![
         UIElement::new(
             0,
-            (0.45, 0.55),
-            (0.5, 0.2),
-            [0.7, 0.3, 0.3],
-            Some("Add single chunk".to_string()),
-            Some(Box::new(|| super::cube_extra::add_def_chunk())),
-        ),
-        UIElement::new(
-            0,
-            (0.45, 0.2),
+            (0.45, 0.4),
             (0.5, 0.25),
             [0.7, 0.3, 0.3],
             Some("fill world w* chunks".to_string()),

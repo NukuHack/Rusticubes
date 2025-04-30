@@ -406,20 +406,6 @@ impl<'a> State<'a> {
                         }
                         false
                     },
-                    Key::KeyH => {
-                        if *state == ElementState::Pressed {
-                            cube_extra::place_marched_cube();
-                            return true
-                        }
-                        false
-                    },
-                    Key::KeyG => {
-                        if *state == ElementState::Pressed {
-                            cube_extra::place_default_cube();
-                            return true
-                        }
-                        false
-                    },
                     Key::KeyR => {
                         if *state == ElementState::Pressed {
                             cube_extra::remove_targeted_block();
@@ -430,6 +416,13 @@ impl<'a> State<'a> {
                     Key::KeyE => {
                         if *state == ElementState::Pressed {
                             cube_extra::toggle_looked_point();
+                            return true
+                        }
+                        false
+                    },
+                    Key::KeyL => {
+                        if *state == ElementState::Pressed {
+                            cube_extra::add_full_chunk();
                             return true
                         }
                         false

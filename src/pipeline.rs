@@ -340,6 +340,7 @@ fn begin_ui_render_pass<'a>(
 // --- Main Rendering Function ---
 
 pub fn render_all(current_state: &mut super::State) -> Result<(), wgpu::SurfaceError> {
+    let timer = std::time::Instant::now();
     let output = current_state.surface().get_current_texture()?;
     let view = output.texture.create_view(&Default::default());
     let mut encoder = current_state
@@ -354,6 +355,10 @@ pub fn render_all(current_state: &mut super::State) -> Result<(), wgpu::SurfaceE
         render_ui_pass(&mut encoder, &view, current_state);
     }
 
+    println!(
+        "Rendering took: {:.2}ms",
+        timer.elapsed().as_secs_f32() * 1000.0
+    );
     submit_and_present(current_state, encoder, output)
 }
 

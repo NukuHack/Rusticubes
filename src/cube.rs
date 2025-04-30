@@ -14,19 +14,11 @@ type FastMap<K, V> = HashMap<K, V, BuildHasherDefault<AHasher>>;
 
 /// Represents a block in the world with optimized storage
 #[derive(Clone, Copy, Debug, PartialEq)]
-//#[repr(u8)]
+#[repr(u8)]
 pub enum Block {
-    None,
-    /// Simple block with material and packed rotation
-    Simple {
-        material: u16,
-        rotation: u8, // Packed as [X:2, Y:2, Z:2, _:2]
-    },
-    /// Marching cubes block with material and density field
-    Marching {
-        material: u16,
-        points: u32, // 3x3x3 density field (27 bits)
-    },
+    None = 0,
+    Simple(u16, u8),  // material, packed rotation
+    Marching(u16, u32), // material, density field (27 bits in 4 bytes)
 }
 
 impl Block {
@@ -41,71 +33,53 @@ impl Block {
     /// Creates a default empty block
     #[inline]
     pub const fn default() -> Self {
-        Self::Simple {
-            material: 0,
-            rotation: 0,
-        }
+        Self::Simple(0,0)
     }
 
     /// Creates a new simple block with default material
     #[inline]
     pub const fn new() -> Self {
-        Self::Simple {
-            material: 1,
-            rotation: 0,
-        }
+        Self::Simple(1,0)
     }
 
     /// Creates a new simple block with default material
     #[inline]
     pub const fn new_conf(material: u16, rotation: u8) -> Self {
-        Self::Simple { material, rotation }
+        Self::Simple(material,rotation)
     }
 
     /// Creates a new marching cubes block with center point set
     #[inline]
     pub const fn new_dot() -> Self {
-        Self::Marching {
-            material: 1,
-            points: 0x20_00, // Center point set
-        }
+        Self::Marching(1,0x20_00)
     }
 
     /// Creates a new marching cubes block with no point set
     #[inline]
     pub const fn new_march(material: u16, points: u32) -> Self {
-        Self::Marching {
-            material,
-            points, // no point set
-        }
+        Self::Marching(material,points)
     }
 
     /// Creates a new block with specified rotation
     #[inline]
     pub const fn new_rot(rotation: u8) -> Self {
-        Self::Simple {
-            material: 1,
-            rotation,
-        }
+        Self::Simple(1,rotation)
     }
 
     /// Creates a block from a quaternion rotation
     #[inline]
     pub fn new_quat(rotation: Quat) -> Self {
-        Self::Simple {
-            material: 1,
-            rotation: Self::quat_to_rotation(rotation),
-        }
+        Self::Simple(1,Self::quat_to_rotation(rotation))
     }
 
     /// Extracts rotation components (0-3)
     #[inline]
     pub fn get_rotation(&self) -> Option<(u8, u8, u8)> {
         match self {
-            Block::Simple { rotation, .. } => Some((
-                (rotation & Self::ROT_MASK_X) >> Self::ROT_SHIFT_X,
-                (rotation & Self::ROT_MASK_Y) >> Self::ROT_SHIFT_Y,
-                (rotation & Self::ROT_MASK_Z) >> Self::ROT_SHIFT_Z,
+            Block::Simple(_,rot) => Some((
+                (rot & Self::ROT_MASK_X) >> Self::ROT_SHIFT_X,
+                (rot & Self::ROT_MASK_Y) >> Self::ROT_SHIFT_Y,
+                (rot & Self::ROT_MASK_Z) >> Self::ROT_SHIFT_Z,
             )),
             _ => None,
         }
@@ -134,7 +108,7 @@ impl Block {
     #[inline]
     pub fn is_empty(&self) -> bool {
         match self {
-            Block::Simple { material, .. } | Block::Marching { material, .. } => *material == 0,
+            Block::Simple (material, _) | Block::Marching (material, _) => *material == 0,
             Block::None => true,
         }
     }
@@ -146,17 +120,17 @@ impl Block {
 
     #[inline]
     pub fn texture_coords(&self) -> [f32; 2] {
-        if self.material() == 1 {
-            [0.0, 1.0]
-        } else {
-            [0.0, 0.0]
+        let material = self.material();
+        match material {
+            1 => [0.0, 1.0],
+            _ => [0.0, 0.0],
         }
     }
 
     #[inline]
     pub fn material(&self) -> u16 {
         match self {
-            Block::Simple { material, .. } | Block::Marching { material, .. } => *material,
+            Block::Simple (material,_) | Block::Marching (material,_) => *material,
             Block::None => 0,
         }
     }
@@ -164,8 +138,8 @@ impl Block {
     #[inline]
     pub fn set_material(&mut self, material: u16) {
         match self {
-            Block::Simple { material: m, .. } | Block::Marching { material: m, .. } => {
-                *m = material
+            Block::Simple (mat,_)| Block::Marching (mat,_) => {
+                *mat = material
             }
             Block::None => {}
         }
@@ -174,7 +148,7 @@ impl Block {
     /// Rotates the block around an axis by N 90° steps
     #[inline]
     pub fn rotate(&mut self, axis: Axis, steps: u8) {
-        if let Block::Simple { rotation, .. } = self {
+        if let Block::Simple (_,rotation) = self {
             let (mask, shift) = match axis {
                 Axis::X => (Self::ROT_MASK_X, Self::ROT_SHIFT_X),
                 Axis::Y => (Self::ROT_MASK_Y, Self::ROT_SHIFT_Y),
@@ -205,7 +179,7 @@ impl Block {
     /// Sets all rotation axes at once
     #[inline]
     pub fn set_rotation(&mut self, x: u8, y: u8, z: u8) {
-        if let Block::Simple { rotation, .. } = self {
+        if let Block::Simple(_,rotation) = self {
             *rotation = (x & 0x3) | ((y & 0x3) << 2) | ((z & 0x3) << 4);
         }
     }
@@ -213,7 +187,7 @@ impl Block {
     /// Sets a point in the 3x3x3 density field
     #[inline]
     pub fn set_point(&mut self, x: u8, y: u8, z: u8, value: bool) {
-        if let Block::Marching { points, .. } = self {
+        if let Block::Marching(_,points) = self {
             debug_assert!(x < 3 && y < 3 && z < 3, "Coordinates must be 0-2");
             let bit_pos = x as u32 + (y as u32) * 3 + (z as u32) * 9;
             *points = (*points & !(1 << bit_pos)) | ((value as u32) << bit_pos);
@@ -224,7 +198,7 @@ impl Block {
     #[inline]
     pub fn get_point(&self, x: u8, y: u8, z: u8) -> Option<bool> {
         match self {
-            Block::Marching { points, .. } => {
+            Block::Marching(_,points) => {
                 debug_assert!(x < 3 && y < 3 && z < 3, "Coordinates must be 0-2");
                 let bit_pos = x as u32 + (y as u32) * 3 + (z as u32) * 9;
                 Some((*points & (1u32 << bit_pos)) != 0)
@@ -235,7 +209,7 @@ impl Block {
 
     pub fn get_march(&mut self) -> Option<Block> {
         match self {
-            Block::Marching { material: _, .. } => None,
+            Block::Marching(_,_) => None,
             _ => Some(Self::new_march(self.material(), 0)),
         }
     }
@@ -275,8 +249,8 @@ impl Into<u64> for ChunkCoord {
         self.0 // Access the inner u64 value
     }
 }
+#[allow(dead_code)]
 impl ChunkCoord {
-    #[allow(dead_code)]
     // Use bit shifts that are powers of 2 for better optimization
     const Z_SHIFT: u8 = 0;
     const Y_SHIFT: u8 = 26;
@@ -411,38 +385,38 @@ impl Chunk {
     }
     #[inline]
     pub fn local_to_index(local_pos: Vec3) -> usize {
-        Chunk::xyz_to_index(
-            local_pos.x as usize,
-            local_pos.y as usize,
-            local_pos.z as usize,
-        ) // Equivalent to your `pack_position` but as an index
+        debug_assert!(
+            local_pos.x >= 0.0 && local_pos.x < Self::SIZE as f32 &&
+            local_pos.y >= 0.0 && local_pos.y < Self::SIZE as f32 &&
+            local_pos.z >= 0.0 && local_pos.z < Self::SIZE as f32,
+            "Local position out of bounds: {:?}",
+            local_pos
+        );
+        let x = local_pos.x as usize;
+        let y = local_pos.y as usize;
+        let z = local_pos.z as usize;
+        Self::xyz_to_index(x, y, z)
     }
 
-    /// Gets a block by local position (Vec3)
     #[inline]
-    pub fn get_block(&self, local_pos: Vec3) -> &Block {
-        let (x, y, z) = (
-            local_pos.x as usize,
-            local_pos.y as usize,
-            local_pos.z as usize,
-        );
-        &self.blocks[Self::xyz_to_index(x, y, z)]
+    pub fn get_block(&self, index: usize) -> &Block {
+        &self.blocks[index]
     }
 
-    /// Gets a mutable block by local position
     #[inline]
-    pub fn get_block_mut(&mut self, local_pos: Vec3) -> &mut Block {
-        let (x, y, z) = (
-            local_pos.x as usize,
-            local_pos.y as usize,
-            local_pos.z as usize,
-        );
-        &mut self.blocks[Self::xyz_to_index(x, y, z)]
+    pub fn get_block_mut(&mut self, index: usize) -> &mut Block {
+        &mut self.blocks[index]
+    }
+
+    /// Checks if the chunk is completely empty (all blocks are None or empty)
+    #[inline]
+    pub fn is_empty(&self) -> bool {
+        self.blocks.iter().all(|b| b.is_empty())
     }
 
     /// Sets a block at a local position
-    pub fn set_block(&mut self, local_pos: Vec3, block: Block) {
-        self.blocks[Self::local_to_index(local_pos)] =
+    pub fn set_block(&mut self, index: usize, block: Block) {
+        self.blocks[index] =
             if block.is_empty() { Block::None } else { block };
         self.dirty = true;
     }
@@ -451,9 +425,9 @@ impl Chunk {
     #[inline]
     pub fn world_to_local_pos(world_pos: Vec3) -> Vec3 {
         Vec3::new(
-            (world_pos.x.rem_euclid(Self::SIZE_I as f32) as u32) as f32,
-            (world_pos.y.rem_euclid(Self::SIZE_I as f32) as u32) as f32,
-            (world_pos.z.rem_euclid(Self::SIZE_I as f32) as u32) as f32,
+            world_pos.x.rem_euclid(Self::SIZE as f32),
+            world_pos.y.rem_euclid(Self::SIZE as f32),
+            world_pos.z.rem_euclid(Self::SIZE as f32),
         )
     }
 
@@ -479,25 +453,32 @@ impl Chunk {
         )
     }
 
-    /// Generates the chunk mesh if dirty
     pub fn make_mesh(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, force: bool) {
         if !force && !self.dirty && self.mesh.is_some() {
+            return;
+        }
+
+        // Early return if chunk is empty
+        if self.is_empty() {
+            // If we have an existing mesh but the chunk is now empty, clear it
+            if self.mesh.is_some() {
+                self.mesh = Some(GeometryBuffer::empty(device));
+                self.dirty = false;
+            }
             return;
         }
 
         let mut builder = ChunkMeshBuilder::new();
 
         for pos in 0..Self::VOLUME {
-            // Iterate through all possible u16 positions (0x0000..0xFFFF)
             let block = self.blocks[pos];
-
             if block.is_empty() {
                 continue;
             }
-            let local_pos = Self::unpack_position(pos as u16); // pos is already u16
-
+            
+            let local_pos = Self::unpack_position(pos as u16);
             match block {
-                Block::Marching { points, .. } => {
+                Block::Marching(_,points) => {
                     builder.generate_marching_cubes_mesh(points, local_pos);
                 }
                 _ => {
@@ -507,10 +488,8 @@ impl Chunk {
         }
 
         if let Some(mesh) = &mut self.mesh {
-            // Reuse existing buffers
             mesh.update(device, queue, &builder.indices, &builder.vertices);
         } else {
-            // Create new buffers
             self.mesh = Some(GeometryBuffer::new(
                 device,
                 &builder.indices,
@@ -524,22 +503,16 @@ impl Chunk {
     #[inline]
     fn is_block_cull(&self, pos: Vec3) -> bool {
         // Check if position is outside chunk bounds
-        if pos.x < 0.0
-            || pos.y < 0.0
-            || pos.z < 0.0
-            || pos.x >= Self::SIZE_I as f32
-            || pos.y >= Self::SIZE_I as f32
-            || pos.z >= Self::SIZE_I as f32
+        if pos.x < 0.0 || pos.y < 0.0 || pos.z < 0.0 ||
+           pos.x >= Self::SIZE_I as f32 || 
+           pos.y >= Self::SIZE_I as f32 || 
+           pos.z >= Self::SIZE_I as f32 
         {
             return true;
         }
-        // Check if block is empty
-        let local_pos = Vec3::new(
-            (pos.x as u32) as f32,
-            (pos.y as u32) as f32,
-            (pos.z as u32) as f32,
-        );
-        match self.blocks[Self::pack_position(local_pos) as usize] {
+        
+        let idx = Chunk::local_to_index(pos);
+        match self.blocks[idx] {
             Block::None => true,
             block => block.is_empty() || block.is_marching(),
         }
@@ -596,20 +569,21 @@ impl World {
     #[inline]
     pub fn get_block(&self, world_pos: Vec3) -> &Block {
         let chunk_coord = ChunkCoord::from_world_pos(world_pos);
-        self.get_chunk(chunk_coord)
-            .and_then(|chunk| {
-                let local = Chunk::world_to_local_pos(world_pos);
-                Some(chunk.get_block(local))
-            })
-            .unwrap_or(&Block::None) // Changed or_else to unwrap_or
+        let local_pos = Chunk::world_to_local_pos(world_pos);
+        let idx = Chunk::local_to_index(local_pos);
+
+        self.chunks.get(&chunk_coord)
+            .map(|chunk| chunk.get_block(idx))
+            .unwrap_or(&Block::None)
     }
 
     #[inline]
     pub fn get_block_mut(&mut self, world_pos: Vec3) -> Option<&mut Block> {
         let chunk_coord = ChunkCoord::from_world_pos(world_pos);
+        let local_pos = Chunk::world_to_local_pos(world_pos);
+            let index = Chunk::local_to_index(local_pos);
         self.chunks.get_mut(&chunk_coord).and_then(|chunk| {
-            let local = Chunk::world_to_local_pos(world_pos);
-            Some(chunk.get_block_mut(local))
+            Some(chunk.get_block_mut(index))
         })
     }
 
@@ -621,28 +595,34 @@ impl World {
         }
 
         if let Some(chunk) = self.chunks.get_mut(&chunk_coord) {
-            let local = Chunk::world_to_local_pos(world_pos);
-            if chunk.get_block(local) != &block {
-                chunk.set_block(local, block);
+        let local_pos = Chunk::world_to_local_pos(world_pos);
+            let index = Chunk::local_to_index(local_pos);
+            if chunk.get_block(index) != &block {
+                chunk.set_block(index, block);
             }
         }
     }
 
     /// Loads a chunk from storage
-    pub fn load_chunk(&mut self, chunk_coord: ChunkCoord) -> bool {
+    pub fn load_chunk(&mut self, chunk_coord: ChunkCoord, force: bool) -> bool {
         unsafe {
             let state = super::get_state();
             let device = &state.render_context.device;
             let chunk_bind_group_layout = &state.render_context.chunk_bind_group_layout;
 
+            let mut chunk = Chunk::empty();
             // Unload existing chunk first
-            if self.get_chunk(chunk_coord).is_some() {
-                self.unload_chunk(chunk_coord);
+            if force {
+                if self.get_chunk(chunk_coord).is_some() {
+                    self.unload_chunk(chunk_coord);
+                }
+                chunk = match Chunk::load() {
+                    Some(c) => c,
+                    None => return false,
+                };
+            } else {
+                // nothing
             }
-
-            let Some(chunk) = Chunk::load() else {
-                return false;
-            };
 
             // Create position buffer
             let position_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -676,7 +656,7 @@ impl World {
     }
 
     /// Updates loaded chunks based on player position
-    pub fn update_loaded_chunks(&mut self, center: Vec3, radius: u32) {
+    pub fn update_loaded_chunks(&mut self, center: Vec3, radius: f32) {
         let center_coord = ChunkCoord::from_world_pos(center);
         let (center_x, center_y, center_z) = center_coord.unpack();
         let radius_i32 = radius as i32;
@@ -709,7 +689,7 @@ impl World {
 
                     let coord = ChunkCoord::new(center_x + dx, center_y + dy, center_z + dz);
                     if !self.loaded_chunks.contains(&coord) {
-                        self.load_chunk(coord);
+                        self.load_chunk(coord, false);
                     }
                 }
             }
@@ -732,34 +712,43 @@ impl World {
     #[inline]
     pub fn make_chunk_meshes(&mut self, device: &wgpu::Device, queue: &wgpu::Queue) {
         let timer = std::time::Instant::now();
-        let mut slow_chunk_times = super::debug::RunningAverage::default();
+        let mut chunk_times = super::debug::RunningAverage::default();
+        let mut empty_chunks = 0;
 
         for chunk in self.chunks.values_mut() {
+            // Skip empty chunks entirely
+            if chunk.is_empty() {
+                empty_chunks += 1;
+                continue;
+            }
+
             let chunk_timer = std::time::Instant::now();
             chunk.make_mesh(device, queue, false);
             let elapsed_micros = chunk_timer.elapsed().as_micros() as f32;
 
-            if elapsed_micros > 20.0 {
-                slow_chunk_times.add(elapsed_micros.into());
-            }
+            chunk_times.add(elapsed_micros.into());
         }
 
-        if timer.elapsed().as_micros() < 1000 {
-            println!(
-                "Chunk loading was really fast: {:?}µs",
-                timer.elapsed().as_micros()
-            );
-            return;
-        }
-        println!("World mesh generation stats:\nTotal time: {:.2}ms\nChunks avg: {:.2}µs\nTotal chunks: {}\nTotal cubes: {} (16³ x chunk_count)",
-            timer.elapsed().as_secs_f32() * 1000.0, slow_chunk_times.average(), self.loaded_chunks.len(), self.loaded_chunks.len() * Chunk::VOLUME
+        println!("World mesh generation stats:\nTotal time: {:.2}ms\nChunks avg: {:.2}µs\nTotal cubes: {} (16³ x chunk_count)",
+            timer.elapsed().as_secs_f32() * 1000.0, 
+            chunk_times.average(), 
+            (self.loaded_chunks.len() - empty_chunks) * Chunk::VOLUME
         );
     }
 
-    /// Renders all chunks with meshes
     pub fn render_chunks<'a>(&'a self, render_pass: &mut wgpu::RenderPass<'a>) {
         for chunk in self.chunks.values() {
+            // Skip empty chunks
+            if chunk.is_empty() {
+                continue;
+            }
+            
             if let (Some(mesh), Some(bind_group)) = (&chunk.mesh, &chunk.bind_group) {
+                // Skip if mesh has no indices
+                if mesh.num_indices == 0 {
+                    continue;
+                }
+                
                 render_pass.set_bind_group(2, bind_group, &[]);
                 render_pass.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
                 render_pass
