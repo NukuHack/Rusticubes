@@ -8,6 +8,8 @@ mod geometry;
 mod pipeline;
 mod user_interface;
 mod debug;
+mod cube_extra;
+mod cube_tables;
 
 const FONT_MAP: &[u8] = include_bytes!("../resources/bescii-chars.png");
 //const FONT_TTF: &[u8] = include_bytes!("../resources/calibri.ttf");
@@ -399,28 +401,35 @@ impl<'a> State<'a> {
                     },
                     Key::KeyF => {
                         if *state == ElementState::Pressed {
-                            geometry::place_looked_cube();
+                            cube_extra::place_looked_cube();
                             return true
                         }
                         false
                     },
                     Key::KeyH => {
                         if *state == ElementState::Pressed {
-                            geometry::place_marched_cube();
+                            cube_extra::place_marched_cube();
                             return true
                         }
                         false
                     },
                     Key::KeyG => {
                         if *state == ElementState::Pressed {
-                            geometry::place_default_cube();
+                            cube_extra::place_default_cube();
                             return true
                         }
                         false
                     },
                     Key::KeyR => {
                         if *state == ElementState::Pressed {
-                            geometry::remove_targeted_block();
+                            cube_extra::remove_targeted_block();
+                            return true
+                        }
+                        false
+                    },
+                    Key::KeyE => {
+                        if *state == ElementState::Pressed {
+                            cube_extra::toggle_looked_point();
                             return true
                         }
                         false

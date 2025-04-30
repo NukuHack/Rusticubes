@@ -1,4 +1,5 @@
-use crate::geometry::{Vertex, EDGE_TABLE, TRI_TABLE};
+use super::cube_tables::{EDGE_TABLE, TRI_TABLE};
+use super::geometry::Vertex;
 use ahash::AHasher;
 use glam::{Mat4, Quat, Vec3};
 use std::{
@@ -55,12 +56,27 @@ impl Block {
         }
     }
 
+    /// Creates a new simple block with default material
+    #[inline]
+    pub const fn new_conf(material: u16, rotation: u8) -> Self {
+        Self::Simple { material, rotation }
+    }
+
     /// Creates a new marching cubes block with center point set
     #[inline]
     pub const fn new_dot() -> Self {
         Self::Marching {
             material: 1,
             points: 0x20_00, // Center point set
+        }
+    }
+
+    /// Creates a new marching cubes block with no point set
+    #[inline]
+    pub const fn new_march(material: u16, points: u32) -> Self {
+        Self::Marching {
+            material,
+            points, // no point set
         }
     }
 
@@ -214,6 +230,13 @@ impl Block {
                 Some((*points & (1u32 << bit_pos)) != 0)
             }
             _ => None,
+        }
+    }
+
+    pub fn get_march(&mut self) -> Option<Block> {
+        match self {
+            Block::Marching { material: _, .. } => None,
+            _ => Some(Self::new_march(self.material(), 0)),
         }
     }
 }
@@ -1048,6 +1071,11 @@ impl GeometryBuffer {
         indices: &[u16],
         vertices: &[Vertex],
     ) {
+        // Helper function to align sizes
+        fn align_size(size: usize, alignment: usize) -> usize {
+            ((size + alignment - 1) / alignment) * alignment
+        }
+
         // Update vertex buffer if needed
         if vertices.len() > self.vertex_capacity {
             // Create new buffer if capacity is insufficient
@@ -1058,8 +1086,12 @@ impl GeometryBuffer {
             });
             self.vertex_capacity = vertices.len();
         } else if !vertices.is_empty() {
-            // Update existing buffer
-            queue.write_buffer(&self.vertex_buffer, 0, bytemuck::cast_slice(vertices));
+            // Update existing buffer with proper alignment
+            let vertex_slice = bytemuck::cast_slice(vertices);
+            let aligned_size = align_size(vertex_slice.len(), wgpu::COPY_BUFFER_ALIGNMENT as usize);
+            let mut aligned_data = vertex_slice.to_vec();
+            aligned_data.resize(aligned_size, 0); // Pad with zeros if needed
+            queue.write_buffer(&self.vertex_buffer, 0, &aligned_data);
         }
 
         // Update index buffer if needed
@@ -1072,8 +1104,12 @@ impl GeometryBuffer {
             });
             self.index_capacity = indices.len();
         } else if !indices.is_empty() {
-            // Update existing buffer
-            queue.write_buffer(&self.index_buffer, 0, bytemuck::cast_slice(indices));
+            // Update existing buffer with proper alignment
+            let index_slice = bytemuck::cast_slice(indices);
+            let aligned_size = align_size(index_slice.len(), wgpu::COPY_BUFFER_ALIGNMENT as usize);
+            let mut aligned_data = index_slice.to_vec();
+            aligned_data.resize(aligned_size, 0); // Pad with zeros if needed
+            queue.write_buffer(&self.index_buffer, 0, &aligned_data);
         }
 
         self.num_indices = indices.len() as u32;

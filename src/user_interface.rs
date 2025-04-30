@@ -592,44 +592,21 @@ pub fn handle_ui_click(state: &mut super::State) {
 
 pub fn setup_ui(state: &mut super::State) {
     let elements = vec![
-        UIElement::new_input(
-            123,
-            (-0.9, 0.2),
-            (0.4, 0.2),
-            [0.3, 0.3, 0.3],
-            Some("type".to_string()),
-            None,
-        ),
         UIElement::new(
             0,
-            (-0.9, -0.5),
-            (0.4, 0.2),
-            [0.3, 0.3, 0.3],
-            Some("March cube".to_string()),
-            Some(Box::new(|| unsafe {
-                let state = super::get_state();
-                let raw_data: &str = state
-                    .ui_manager()
-                    .get_input_text(123)
-                    .expect("Input needs to be defined");
-                super::geometry::march_def_cube(raw_data);
-            })),
+            (0.45, 0.55),
+            (0.5, 0.2),
+            [0.7, 0.3, 0.3],
+            Some("Add single chunk".to_string()),
+            Some(Box::new(|| super::cube_extra::add_def_chunk())),
         ),
         UIElement::new(
             0,
             (0.45, 0.2),
-            (0.5, 0.2),
-            [0.7, 0.3, 0.3],
-            Some("Add single chunk".to_string()),
-            Some(Box::new(|| super::geometry::add_def_chunk())),
-        ),
-        UIElement::new(
-            0,
-            (0.45, -0.1),
             (0.5, 0.25),
             [0.7, 0.3, 0.3],
             Some("fill world w* chunks".to_string()),
-            Some(Box::new(|| super::geometry::add_full_world())),
+            Some(Box::new(|| super::cube_extra::add_full_world())),
         ),
         UIElement::new(
             0,
