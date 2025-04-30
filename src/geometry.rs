@@ -1,49 +1,6 @@
 //! Vertex and texture utilities for wgpu rendering.
 
 use image::GenericImageView;
-use std::mem;
-
-// --- Vertex Definition ---
-
-/// Vertex structure with position, normal, and UV coordinates
-#[repr(C)]
-#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable, Default)]
-pub struct Vertex {
-    pub position: [f32; 3],
-    pub normal: [f32; 3],
-    pub uv: [f32; 2],
-}
-
-impl Vertex {
-    /// Describes the vertex buffer layout for wgpu
-    pub fn desc() -> wgpu::VertexBufferLayout<'static> {
-        use wgpu::VertexAttribute;
-
-        wgpu::VertexBufferLayout {
-            array_stride: mem::size_of::<Self>() as wgpu::BufferAddress,
-            step_mode: wgpu::VertexStepMode::Vertex,
-            attributes: &[
-                VertexAttribute {
-                    offset: 0,
-                    shader_location: 0,
-                    format: wgpu::VertexFormat::Float32x3,
-                },
-                VertexAttribute {
-                    offset: mem::size_of::<[f32; 3]>() as wgpu::BufferAddress,
-                    shader_location: 1,
-                    format: wgpu::VertexFormat::Float32x3,
-                },
-                VertexAttribute {
-                    offset: mem::size_of::<[f32; 6]>() as wgpu::BufferAddress,
-                    shader_location: 2,
-                    format: wgpu::VertexFormat::Float32x2,
-                },
-            ],
-        }
-    }
-}
-
-// --- Texture Implementation ---
 
 /// Wrapper for wgpu texture resources
 pub struct Texture {

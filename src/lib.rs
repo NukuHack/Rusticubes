@@ -8,6 +8,7 @@ mod geometry;
 mod pipeline;
 mod user_interface;
 mod debug;
+mod cube_render;
 mod cube_extra;
 mod cube_tables;
 
