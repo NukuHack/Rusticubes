@@ -110,6 +110,7 @@ pub struct MovementInputs {
     pub run: bool,
 }
 
+#[allow(dead_code)]
 impl PlayerController {
     pub fn new(config: CameraConfig) -> Self {
         Self {
