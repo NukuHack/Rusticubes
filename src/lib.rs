@@ -1,14 +1,18 @@
 ﻿
 
 mod camera;
-mod cube;
 mod player;
+
+mod user_interface;
 mod config;
 mod geometry;
 mod pipeline;
-mod user_interface;
+
 mod debug;
+
+mod cube;
 mod cube_render;
+mod cube_math;
 mod cube_extra;
 mod cube_tables;
 

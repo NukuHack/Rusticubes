@@ -1,3 +1,4 @@
+use super::cube_math;
 use super::cube_render::{ChunkMeshBuilder, GeometryBuffer};
 #[allow(unused_imports)]
 use super::debug;
@@ -146,12 +147,12 @@ impl Block {
 
     /// Rotates the block around an axis by N 90° steps
     #[inline]
-    pub fn rotate(&mut self, axis: Axis, steps: u8) {
+    pub fn rotate(&mut self, axis: cube_math::Axis, steps: u8) {
         if let Block::Simple(_, rotation) = self {
             let (mask, shift) = match axis {
-                Axis::X => (Self::ROT_MASK_X, Self::ROT_SHIFT_X),
-                Axis::Y => (Self::ROT_MASK_Y, Self::ROT_SHIFT_Y),
-                Axis::Z => (Self::ROT_MASK_Z, Self::ROT_SHIFT_Z),
+                cube_math::Axis::X => (Self::ROT_MASK_X, Self::ROT_SHIFT_X),
+                cube_math::Axis::Y => (Self::ROT_MASK_Y, Self::ROT_SHIFT_Y),
+                cube_math::Axis::Z => (Self::ROT_MASK_Z, Self::ROT_SHIFT_Z),
             };
 
             let current = (*rotation & mask) >> shift;
@@ -212,14 +213,6 @@ impl Block {
             _ => Some(Self::new_march(self.material(), 0)),
         }
     }
-}
-
-/// Axis enumeration for rotation
-#[derive(Debug, Clone, Copy)]
-pub enum Axis {
-    X,
-    Y,
-    Z,
 }
 
 /// Compact chunk coordinate representation (64 bits)
