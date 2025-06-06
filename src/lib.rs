@@ -428,13 +428,6 @@ impl<'a> State<'a> {
                         }
                         false
                     },
-                    Key::KeyK => {
-                        if *state == ElementState::Pressed {
-                            cube_extra::add_full_world();
-                            return true
-                        }
-                        false
-                    },
                     _ => false,
                 }
             },
@@ -571,6 +564,7 @@ pub async fn run() {
         match &event {
             Event::WindowEvent { event, window_id } if *window_id == state.window().id() => {
                 state.handle_events(event);
+                cube_extra::update_full_world();
             }
             _ => {}
         }

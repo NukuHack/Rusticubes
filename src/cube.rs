@@ -1,5 +1,6 @@
-
-use super::cube_render::{GeometryBuffer,ChunkMeshBuilder};
+use super::cube_render::{ChunkMeshBuilder, GeometryBuffer};
+#[allow(unused_imports)]
+use super::debug;
 use ahash::AHasher;
 use glam::{Quat, Vec3};
 use std::{
@@ -17,7 +18,7 @@ type FastMap<K, V> = HashMap<K, V, BuildHasherDefault<AHasher>>;
 #[repr(u8)]
 pub enum Block {
     None = 0,
-    Simple(u16, u8),  // material, packed rotation
+    Simple(u16, u8),    // material, packed rotation
     Marching(u16, u32), // material, density field (27 bits in 4 bytes)
 }
 
@@ -33,50 +34,50 @@ impl Block {
     /// Creates a default empty block
     #[inline]
     pub const fn default() -> Self {
-        Self::Simple(0,0)
+        Self::Simple(0, 0)
     }
 
     /// Creates a new simple block with default material
     #[inline]
     pub const fn new() -> Self {
-        Self::Simple(1,0)
+        Self::Simple(1, 0)
     }
 
     /// Creates a new simple block with default material
     #[inline]
     pub const fn new_conf(material: u16, rotation: u8) -> Self {
-        Self::Simple(material,rotation)
+        Self::Simple(material, rotation)
     }
 
     /// Creates a new marching cubes block with center point set
     #[inline]
     pub const fn new_dot() -> Self {
-        Self::Marching(1,0x20_00)
+        Self::Marching(1, 0x20_00)
     }
 
     /// Creates a new marching cubes block with no point set
     #[inline]
     pub const fn new_march(material: u16, points: u32) -> Self {
-        Self::Marching(material,points)
+        Self::Marching(material, points)
     }
 
     /// Creates a new block with specified rotation
     #[inline]
     pub const fn new_rot(rotation: u8) -> Self {
-        Self::Simple(1,rotation)
+        Self::Simple(1, rotation)
     }
 
     /// Creates a block from a quaternion rotation
     #[inline]
     pub fn new_quat(rotation: Quat) -> Self {
-        Self::Simple(1,Self::quat_to_rotation(rotation))
+        Self::Simple(1, Self::quat_to_rotation(rotation))
     }
 
     /// Extracts rotation components (0-3)
     #[inline]
     pub fn get_rotation(&self) -> Option<(u8, u8, u8)> {
         match self {
-            Block::Simple(_,rot) => Some((
+            Block::Simple(_, rot) => Some((
                 (rot & Self::ROT_MASK_X) >> Self::ROT_SHIFT_X,
                 (rot & Self::ROT_MASK_Y) >> Self::ROT_SHIFT_Y,
                 (rot & Self::ROT_MASK_Z) >> Self::ROT_SHIFT_Z,
@@ -108,7 +109,7 @@ impl Block {
     #[inline]
     pub fn is_empty(&self) -> bool {
         match self {
-            Block::Simple (material, _) | Block::Marching (material, _) => *material == 0,
+            Block::Simple(material, _) | Block::Marching(material, _) => *material == 0,
             Block::None => true,
         }
     }
@@ -130,7 +131,7 @@ impl Block {
     #[inline]
     pub fn material(&self) -> u16 {
         match self {
-            Block::Simple (material,_) | Block::Marching (material,_) => *material,
+            Block::Simple(material, _) | Block::Marching(material, _) => *material,
             Block::None => 0,
         }
     }
@@ -138,9 +139,7 @@ impl Block {
     #[inline]
     pub fn set_material(&mut self, material: u16) {
         match self {
-            Block::Simple (mat,_)| Block::Marching (mat,_) => {
-                *mat = material
-            }
+            Block::Simple(mat, _) | Block::Marching(mat, _) => *mat = material,
             Block::None => {}
         }
     }
@@ -148,7 +147,7 @@ impl Block {
     /// Rotates the block around an axis by N 90° steps
     #[inline]
     pub fn rotate(&mut self, axis: Axis, steps: u8) {
-        if let Block::Simple (_,rotation) = self {
+        if let Block::Simple(_, rotation) = self {
             let (mask, shift) = match axis {
                 Axis::X => (Self::ROT_MASK_X, Self::ROT_SHIFT_X),
                 Axis::Y => (Self::ROT_MASK_Y, Self::ROT_SHIFT_Y),
@@ -179,7 +178,7 @@ impl Block {
     /// Sets all rotation axes at once
     #[inline]
     pub fn set_rotation(&mut self, x: u8, y: u8, z: u8) {
-        if let Block::Simple(_,rotation) = self {
+        if let Block::Simple(_, rotation) = self {
             *rotation = (x & 0x3) | ((y & 0x3) << 2) | ((z & 0x3) << 4);
         }
     }
@@ -187,7 +186,7 @@ impl Block {
     /// Sets a point in the 3x3x3 density field
     #[inline]
     pub fn set_point(&mut self, x: u8, y: u8, z: u8, value: bool) {
-        if let Block::Marching(_,points) = self {
+        if let Block::Marching(_, points) = self {
             debug_assert!(x < 3 && y < 3 && z < 3, "Coordinates must be 0-2");
             let bit_pos = x as u32 + (y as u32) * 3 + (z as u32) * 9;
             *points = (*points & !(1 << bit_pos)) | ((value as u32) << bit_pos);
@@ -198,7 +197,7 @@ impl Block {
     #[inline]
     pub fn get_point(&self, x: u8, y: u8, z: u8) -> Option<bool> {
         match self {
-            Block::Marching(_,points) => {
+            Block::Marching(_, points) => {
                 debug_assert!(x < 3 && y < 3 && z < 3, "Coordinates must be 0-2");
                 let bit_pos = x as u32 + (y as u32) * 3 + (z as u32) * 9;
                 Some((*points & (1u32 << bit_pos)) != 0)
@@ -209,12 +208,11 @@ impl Block {
 
     pub fn get_march(&mut self) -> Option<Block> {
         match self {
-            Block::Marching(_,_) => None,
+            Block::Marching(_, _) => None,
             _ => Some(Self::new_march(self.material(), 0)),
         }
     }
 }
-
 
 /// Axis enumeration for rotation
 #[derive(Debug, Clone, Copy)]
@@ -315,18 +313,17 @@ impl ChunkCoord {
 /// Represents a chunk of blocks in the world
 #[derive(Clone, PartialEq)]
 pub struct Chunk {
-    pub palette: Vec<Block>,        // Max 256 entries (index 0 = air, indices 1-255 = blocks)
-    pub storage: BlockStorage,      // Palette indices for each block position
+    pub palette: Vec<Block>, // Max 256 entries (index 0 = air, indices 1-255 = blocks)
+    pub storage: BlockStorage, // Palette indices for each block position
     pub dirty: bool,
     pub mesh: Option<GeometryBuffer>,
     pub bind_group: Option<wgpu::BindGroup>,
 }
 
-
 #[derive(Debug, Clone, PartialEq)]
 pub enum BlockStorage {
-    Uniform(u8),               // Single palette index for all blocks
-    Sparse(Box<[u8; 4096]>),   // Full index array
+    Uniform(u8),             // Single palette index for all blocks
+    Sparse(Box<[u8; 4096]>), // Full index array
 }
 
 impl BlockStorage {
@@ -380,7 +377,6 @@ impl std::fmt::Debug for Chunk {
     }
 }
 
-
 impl Chunk {
     pub const SIZE: usize = 16;
     pub const SIZE_I: i32 = Self::SIZE as i32;
@@ -391,7 +387,7 @@ impl Chunk {
     #[inline]
     pub fn empty() -> Self {
         Self {
-            palette: vec![Block::None], // Index 0 is always air
+            palette: vec![Block::None],        // Index 0 is always air
             storage: BlockStorage::Uniform(0), // All blocks point to air
             dirty: false,
             mesh: None,
@@ -445,7 +441,7 @@ impl Chunk {
                 BlockStorage::Uniform(idx) => idx,
                 _ => unreachable!(),
             };
-            
+
             if used_idx == 0 {
                 // Only air is used
                 self.palette = vec![Block::None];
@@ -508,9 +504,12 @@ impl Chunk {
     #[inline]
     pub fn local_to_index(local_pos: Vec3) -> usize {
         debug_assert!(
-            local_pos.x >= 0.0 && local_pos.x < Self::SIZE as f32 &&
-            local_pos.y >= 0.0 && local_pos.y < Self::SIZE as f32 &&
-            local_pos.z >= 0.0 && local_pos.z < Self::SIZE as f32,
+            local_pos.x >= 0.0
+                && local_pos.x < Self::SIZE as f32
+                && local_pos.y >= 0.0
+                && local_pos.y < Self::SIZE as f32
+                && local_pos.z >= 0.0
+                && local_pos.z < Self::SIZE as f32,
             "Local position out of bounds: {:?}",
             local_pos
         );
@@ -606,7 +605,7 @@ impl Chunk {
             if block.is_empty() {
                 continue;
             }
-            
+
             let local_pos = Self::unpack_position(pos as u16);
             match block {
                 Block::Marching(_, points) => {
@@ -634,14 +633,16 @@ impl Chunk {
     #[inline]
     pub fn is_block_cull(&self, pos: Vec3) -> bool {
         // Check if position is outside chunk bounds
-        if pos.x < 0.0 || pos.y < 0.0 || pos.z < 0.0 ||
-           pos.x >= Self::SIZE_I as f32 || 
-           pos.y >= Self::SIZE_I as f32 || 
-           pos.z >= Self::SIZE_I as f32 
+        if pos.x < 0.0
+            || pos.y < 0.0
+            || pos.z < 0.0
+            || pos.x >= Self::SIZE_I as f32
+            || pos.y >= Self::SIZE_I as f32
+            || pos.z >= Self::SIZE_I as f32
         {
             return true;
         }
-        
+
         let idx = Chunk::local_to_index(pos);
         let block = *self.get_block(idx);
         block.is_empty() || block.is_marching()
@@ -703,7 +704,8 @@ impl World {
         let local_pos = Chunk::world_to_local_pos(world_pos);
         let idx = Chunk::local_to_index(local_pos);
 
-        self.chunks.get(&chunk_coord)
+        self.chunks
+            .get(&chunk_coord)
             .map(|chunk| chunk.get_block(idx))
             .unwrap_or(&Block::None)
     }
@@ -718,7 +720,7 @@ impl World {
         if let Some(chunk) = self.chunks.get_mut(&chunk_coord) {
             let local_pos = Chunk::world_to_local_pos(world_pos);
             let index = Chunk::local_to_index(local_pos);
-            
+
             // Only set if the block is actually different
             if chunk.get_block(index) != &block {
                 chunk.set_block(index, block);
@@ -744,7 +746,9 @@ impl World {
             // For palette-based chunks, we need a more sophisticated comparison
             if let Some(existing_chunk) = self.get_chunk(chunk_coord) {
                 // Compare palette and storage instead of individual blocks
-                if existing_chunk.palette == chunk.palette && existing_chunk.storage == chunk.storage {
+                if existing_chunk.palette == chunk.palette
+                    && existing_chunk.storage == chunk.storage
+                {
                     return false;
                 }
             }
@@ -769,10 +773,13 @@ impl World {
                 label: Some("chunk_bind_group"),
             });
 
-            self.chunks.insert(chunk_coord, Chunk {
-                bind_group: Some(bind_group),
-                ..chunk
-            });
+            self.chunks.insert(
+                chunk_coord,
+                Chunk {
+                    bind_group: Some(bind_group),
+                    ..chunk
+                },
+            );
             self.loaded_chunks.insert(chunk_coord);
 
             true
@@ -780,7 +787,7 @@ impl World {
     }
 
     /// Updates loaded chunks based on player position
-    pub fn update_loaded_chunks(&mut self, center: Vec3, radius: f32) {
+    pub fn update_loaded_chunks(&mut self, center: Vec3, radius: f32, force: bool) {
         let center_coord = ChunkCoord::from_world_pos(center);
         let (center_x, center_y, center_z) = center_coord.unpack();
         let radius_i32 = radius as i32;
@@ -812,7 +819,7 @@ impl World {
                     }
 
                     let coord = ChunkCoord::new(center_x + dx, center_y + dy, center_z + dz);
-                    if !self.loaded_chunks.contains(&coord) {
+                    if force || !self.loaded_chunks.contains(&coord) {
                         self.load_chunk(coord, false);
                     }
                 }
@@ -836,27 +843,23 @@ impl World {
     #[inline]
     pub fn make_chunk_meshes(&mut self, device: &wgpu::Device, queue: &wgpu::Queue) {
         let timer = std::time::Instant::now();
-        let mut chunk_times = super::debug::RunningAverage::default();
-        let mut empty_chunks = 0;
+        //let mut chunk_times = debug::RunningAverage::default();
 
         for chunk in self.chunks.values_mut() {
             // Skip empty chunks entirely
             if chunk.is_empty() {
-                empty_chunks += 1;
                 continue;
             }
 
-            let chunk_timer = std::time::Instant::now();
+            //let chunk_timer = std::time::Instant::now();
             chunk.make_mesh(device, queue, false);
-            let elapsed_micros = chunk_timer.elapsed().as_micros() as f32;
-
-            chunk_times.add(elapsed_micros.into());
+            //let elapsed_micros = chunk_timer.elapsed().as_micros() as f32;
+            //chunk_times.add(elapsed_micros.into());
         }
 
-        println!("World mesh generation stats:\nTotal time: {:.2}ms\nChunks avg: {:.2}µs\nTotal cubes: {} (16³ x chunk_count)",
-            timer.elapsed().as_secs_f32() * 1000.0, 
-            chunk_times.average(), 
-            (self.loaded_chunks.len() - empty_chunks) * Chunk::VOLUME
+        println!(
+            "World mesh_gen_time: {:.2}ms",
+            timer.elapsed().as_secs_f32() * 1000.0
         );
     }
 
@@ -866,13 +869,13 @@ impl World {
             if chunk.is_empty() {
                 continue;
             }
-            
+
             if let (Some(mesh), Some(bind_group)) = (&chunk.mesh, &chunk.bind_group) {
                 // Skip if mesh has no indices (shouldn't happen but good to check)
                 if mesh.num_indices == 0 {
                     continue;
                 }
-                
+
                 render_pass.set_bind_group(2, bind_group, &[]);
                 render_pass.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
                 render_pass

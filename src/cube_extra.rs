@@ -142,13 +142,14 @@ pub fn add_full_chunk() {
 }
 
 /// Loads chunks around the camera in a radius
-pub fn add_full_world() {
+pub fn update_full_world() {
     unsafe {
         let state = super::get_state();
-        state
-            .data_system
-            .world
-            .update_loaded_chunks(state.camera_system.camera.position, REACH * 2.0);
+        state.data_system.world.update_loaded_chunks(
+            state.camera_system.camera.position,
+            REACH * 2.0,
+            false,
+        );
 
         let state_b = super::get_state();
         state
@@ -158,6 +159,23 @@ pub fn add_full_world() {
     }
 }
 
+/// Fill chunks around the camera in a radius
+pub fn add_full_world() {
+    unsafe {
+        let state = super::get_state();
+        state.data_system.world.update_loaded_chunks(
+            state.camera_system.camera.position,
+            REACH * 2.0,
+            true,
+        );
+
+        let state_b = super::get_state();
+        state
+            .data_system
+            .world
+            .make_chunk_meshes(state_b.device(), state_b.queue());
+    }
+}
 /// Performs ray tracing to a cube and determines which of the 27 points (3x3x3 grid) was hit
 pub fn raycast_to_cube_point(
     camera: &Camera,
