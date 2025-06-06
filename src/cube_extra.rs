@@ -1,3 +1,4 @@
+use super::cube;
 use super::cube::ChunkCoord;
 use crate::camera::Camera;
 use crate::cube::{Block, World};
@@ -205,14 +206,14 @@ pub fn raycast_to_cube_point(
 }
 
 /// Toggles a point in the marching cube that the player is looking at
-pub fn toggle_looked_point() -> Option<(Option<bool>, (u8, u8, u8))> {
+pub fn toggle_looked_point() -> Option<(bool, (u8, u8, u8))> {
     unsafe {
         let state = super::get_state();
         let camera = &state.camera_system.camera;
         let world = &mut state.data_system.world;
 
         let (block_pos, (x, y, z)) = raycast_to_cube_point(camera, world, REACH)?;
-        let block = world.get_block_mut(block_pos)?;
+        let mut block: cube::Block = *world.get_block(block_pos);
 
         if block.is_empty() {
             return None;
@@ -222,12 +223,13 @@ pub fn toggle_looked_point() -> Option<(Option<bool>, (u8, u8, u8))> {
             let marched_block = block.get_march()?;
             world.set_block(block_pos, marched_block);
         }
-        let block = world.get_block_mut(block_pos)?;
+        let mut block: cube::Block = *world.get_block(block_pos);
 
-        let current = block.get_point(x, y, z);
-        block.set_point(x, y, z, !current.unwrap_or(false));
+        let is_dot = block.get_point(x, y, z).unwrap_or(false);
+        block.set_point(x, y, z, !is_dot);
+        world.set_block(block_pos, block);
 
         update_chunk_mesh(world, block_pos);
-        Some((current, (x, y, z)))
+        Some((is_dot, (x, y, z)))
     }
 }

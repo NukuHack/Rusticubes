@@ -315,10 +315,58 @@ impl ChunkCoord {
 /// Represents a chunk of blocks in the world
 #[derive(Clone, PartialEq)]
 pub struct Chunk {
-    pub blocks: [Block; 4096], // Fixed-size array; None = air/empty
+    pub palette: Vec<Block>,        // Max 256 entries (index 0 = air, indices 1-255 = blocks)
+    pub storage: BlockStorage,      // Palette indices for each block position
     pub dirty: bool,
     pub mesh: Option<GeometryBuffer>,
     pub bind_group: Option<wgpu::BindGroup>,
+}
+
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum BlockStorage {
+    Uniform(u8),               // Single palette index for all blocks
+    Sparse(Box<[u8; 4096]>),   // Full index array
+}
+
+impl BlockStorage {
+    /// Gets the palette index at the given position
+    #[inline]
+    fn get(&self, index: usize) -> u8 {
+        match self {
+            BlockStorage::Uniform(palette_idx) => *palette_idx,
+            BlockStorage::Sparse(indices) => indices[index],
+        }
+    }
+
+    /// Sets the palette index at the given position, converting to sparse if needed
+    #[inline]
+    fn set(&mut self, index: usize, palette_idx: u8) {
+        match self {
+            BlockStorage::Uniform(current_idx) => {
+                if *current_idx != palette_idx {
+                    // Convert to sparse storage
+                    let mut indices = Box::new([*current_idx; 4096]);
+                    indices[index] = palette_idx;
+                    *self = BlockStorage::Sparse(indices);
+                }
+            }
+            BlockStorage::Sparse(indices) => {
+                indices[index] = palette_idx;
+            }
+        }
+    }
+
+    /// Attempts to optimize storage back to uniform if all indices are the same
+    #[inline]
+    fn try_optimize(&mut self) {
+        if let BlockStorage::Sparse(indices) = self {
+            let first = indices[0];
+            if indices.iter().all(|&idx| idx == first) {
+                *self = BlockStorage::Uniform(first);
+            }
+        }
+    }
 }
 
 impl std::fmt::Debug for Chunk {
@@ -326,23 +374,25 @@ impl std::fmt::Debug for Chunk {
         f.debug_struct("Chunk")
             .field("dirty", &self.dirty)
             .field("is_empty", &self.is_empty())
-            .field("blocks", &self.blocks.len())
             .field("has_bind_group", &self.bind_group.is_some())
             .field("has_mesh", &self.mesh.is_some())
             .finish()
     }
 }
 
+
 impl Chunk {
     pub const SIZE: usize = 16;
     pub const SIZE_I: i32 = Self::SIZE as i32;
     pub const VOLUME: usize = Self::SIZE.pow(3); // 4096
+    const MAX_PALETTE_SIZE: usize = 256; // Index 0 = air, indices 1-255 = blocks
 
-    /// Creates an empty chunk (all blocks are `None` = air)
+    /// Creates an empty chunk (all blocks are air)
     #[inline]
     pub fn empty() -> Self {
         Self {
-            blocks: [Block::None; Self::VOLUME], // Initialize all blocks as empty
+            palette: vec![Block::None], // Index 0 is always air
+            storage: BlockStorage::Uniform(0), // All blocks point to air
             dirty: false,
             mesh: None,
             bind_group: None,
@@ -354,19 +404,94 @@ impl Chunk {
     pub fn new() -> Self {
         let mut chunk = Self::empty();
         let new_block = Block::new();
+        let idx = chunk.palette_add(new_block);
+        chunk.storage = BlockStorage::Uniform(idx);
+        chunk.dirty = true;
+        chunk
+    }
 
-        // Iterate through all possible positions and set blocks
-        for x in 0..Self::SIZE {
-            for y in 0..Self::SIZE {
-                for z in 0..Self::SIZE {
-                    let idx = Self::xyz_to_index(x, y, z);
-                    chunk.blocks[idx] = new_block.clone();
-                }
+    /// Adds a block to the palette, returning its index
+    /// Returns existing index if block already exists
+    #[inline]
+    fn palette_add(&mut self, block: Block) -> u8 {
+        // Air blocks always map to index 0
+        if block.is_empty() {
+            return 0;
+        }
+
+        // Check if block already exists in palette
+        if let Some(idx) = self.palette.iter().position(|&b| b == block) {
+            return idx as u8;
+        }
+
+        // Add new block to palette if there's space
+        if self.palette.len() < Self::MAX_PALETTE_SIZE {
+            let idx = self.palette.len();
+            self.palette.push(block);
+            idx as u8
+        } else {
+            // Palette is full, could implement LRU eviction here
+            // For now, just return index 1 (first non-air block)
+            eprintln!("Warning: Chunk palette is full, using fallback block");
+            1
+        }
+    }
+
+    /// Removes unused blocks from the palette and updates indices
+    fn palette_compact(&mut self) {
+        if matches!(self.storage, BlockStorage::Uniform(_)) {
+            // For uniform storage, we only need the one block type
+            let used_idx = match self.storage {
+                BlockStorage::Uniform(idx) => idx,
+                _ => unreachable!(),
+            };
+            
+            if used_idx == 0 {
+                // Only air is used
+                self.palette = vec![Block::None];
+            } else if used_idx < self.palette.len() as u8 {
+                // Compact to just air + the used block
+                let used_block = self.palette[used_idx as usize];
+                self.palette = vec![Block::None, used_block];
+                self.storage = BlockStorage::Uniform(1);
+            }
+            return;
+        }
+
+        // For sparse storage, find all used palette indices
+        let mut used_indices = std::collections::HashSet::new();
+        if let BlockStorage::Sparse(indices) = &self.storage {
+            for &idx in indices.iter() {
+                used_indices.insert(idx);
             }
         }
 
-        chunk.dirty = true;
-        chunk
+        // Create new compact palette
+        let mut new_palette = Vec::new();
+        let mut index_mapping = std::collections::HashMap::new();
+
+        // Air always stays at index 0
+        new_palette.push(Block::None);
+        index_mapping.insert(0u8, 0u8);
+
+        // Add used blocks in order
+        for old_idx in 1..self.palette.len() as u8 {
+            if used_indices.contains(&old_idx) {
+                let new_idx = new_palette.len() as u8;
+                new_palette.push(self.palette[old_idx as usize]);
+                index_mapping.insert(old_idx, new_idx);
+            }
+        }
+
+        // Update storage with new indices
+        if let BlockStorage::Sparse(indices) = &mut self.storage {
+            for idx in indices.iter_mut() {
+                *idx = index_mapping[idx];
+            }
+        }
+
+        self.palette = new_palette;
+        self.storage.try_optimize();
     }
 
     #[inline]
@@ -377,8 +502,9 @@ impl Chunk {
     /// Converts (x, y, z) to array index (0..4095)
     #[inline]
     pub fn xyz_to_index(x: usize, y: usize, z: usize) -> usize {
-        (x << 8) | (y << 4) | z // Equivalent to your `pack_position` but as an index
+        (x << 8) | (y << 4) | z
     }
+
     #[inline]
     pub fn local_to_index(local_pos: Vec3) -> usize {
         debug_assert!(
@@ -396,25 +522,35 @@ impl Chunk {
 
     #[inline]
     pub fn get_block(&self, index: usize) -> &Block {
-        &self.blocks[index]
+        let palette_idx = self.storage.get(index);
+        &self.palette[palette_idx as usize]
     }
 
     #[inline]
     pub fn get_block_mut(&mut self, index: usize) -> &mut Block {
-        &mut self.blocks[index]
+        let palette_idx = self.storage.get(index);
+        &mut self.palette[palette_idx as usize]
     }
 
-    /// Checks if the chunk is completely empty (all blocks are None or empty)
+    /// Checks if the chunk is completely empty (all blocks are air)
     #[inline]
     pub fn is_empty(&self) -> bool {
-        self.blocks.iter().all(|b| b.is_empty())
+        match &self.storage {
+            BlockStorage::Uniform(idx) => *idx == 0, // Index 0 is air
+            BlockStorage::Sparse(indices) => indices.iter().all(|&idx| idx == 0),
+        }
     }
 
-    /// Sets a block at a local position
+    /// Sets a block at the given index
     pub fn set_block(&mut self, index: usize, block: Block) {
-        self.blocks[index] =
-            if block.is_empty() { Block::None } else { block };
+        let palette_idx = self.palette_add(block);
+        self.storage.set(index, palette_idx);
         self.dirty = true;
+
+        // Periodically compact the palette to avoid bloat
+        if self.palette.len() > 64 {
+            self.palette_compact();
+        }
     }
 
     /// Converts world position to local chunk coordinates
@@ -456,7 +592,6 @@ impl Chunk {
 
         // Early return if chunk is empty
         if self.is_empty() {
-            // If we have an existing mesh but the chunk is now empty, clear it
             if self.mesh.is_some() {
                 self.mesh = Some(GeometryBuffer::empty(device));
                 self.dirty = false;
@@ -467,14 +602,14 @@ impl Chunk {
         let mut builder = ChunkMeshBuilder::new();
 
         for pos in 0..Self::VOLUME {
-            let block = self.blocks[pos];
+            let block = *self.get_block(pos);
             if block.is_empty() {
                 continue;
             }
             
             let local_pos = Self::unpack_position(pos as u16);
             match block {
-                Block::Marching(_,points) => {
+                Block::Marching(_, points) => {
                     builder.add_marching_cube(points, local_pos);
                 }
                 _ => {
@@ -508,10 +643,8 @@ impl Chunk {
         }
         
         let idx = Chunk::local_to_index(pos);
-        match self.blocks[idx] {
-            Block::None => true,
-            block => block.is_empty() || block.is_marching(),
-        }
+        let block = *self.get_block(idx);
+        block.is_empty() || block.is_marching()
     }
 
     /// Returns a reference to the mesh if it exists
@@ -526,6 +659,8 @@ impl Chunk {
         self.bind_group.as_ref()
     }
 }
+
+/// Represents the game world containing chunks
 
 /// Represents the game world containing chunks
 #[derive(Debug, Clone)]
@@ -573,16 +708,6 @@ impl World {
             .unwrap_or(&Block::None)
     }
 
-    #[inline]
-    pub fn get_block_mut(&mut self, world_pos: Vec3) -> Option<&mut Block> {
-        let chunk_coord = ChunkCoord::from_world_pos(world_pos);
-        let local_pos = Chunk::world_to_local_pos(world_pos);
-            let index = Chunk::local_to_index(local_pos);
-        self.chunks.get_mut(&chunk_coord).and_then(|chunk| {
-            Some(chunk.get_block_mut(index))
-        })
-    }
-
     pub fn set_block(&mut self, world_pos: Vec3, block: Block) {
         let chunk_coord = ChunkCoord::from_world_pos(world_pos);
 
@@ -591,8 +716,10 @@ impl World {
         }
 
         if let Some(chunk) = self.chunks.get_mut(&chunk_coord) {
-        let local_pos = Chunk::world_to_local_pos(world_pos);
+            let local_pos = Chunk::world_to_local_pos(world_pos);
             let index = Chunk::local_to_index(local_pos);
+            
+            // Only set if the block is actually different
             if chunk.get_block(index) != &block {
                 chunk.set_block(index, block);
             }
@@ -606,19 +733,18 @@ impl World {
             let device = &state.render_context.device;
             let chunk_bind_group_layout = &state.render_context.chunk_bind_group_layout;
 
-            // First check if we already have this chunk loaded with the same contents
             let mut chunk = Chunk::empty();
             if force {
-                // Load new chunk data
                 chunk = match Chunk::load() {
                     Some(c) => c,
                     None => return false,
                 };
             }
 
+            // For palette-based chunks, we need a more sophisticated comparison
             if let Some(existing_chunk) = self.get_chunk(chunk_coord) {
-                // If the chunk exists and isn't different form the existing one, no need to reload
-                if existing_chunk.blocks == chunk.blocks {
+                // Compare palette and storage instead of individual blocks
+                if existing_chunk.palette == chunk.palette && existing_chunk.storage == chunk.storage {
                     return false;
                 }
             }
@@ -644,9 +770,9 @@ impl World {
             });
 
             self.chunks.insert(chunk_coord, Chunk {
-                        bind_group: Some(bind_group),
-                        ..chunk
-                    });
+                bind_group: Some(bind_group),
+                ..chunk
+            });
             self.loaded_chunks.insert(chunk_coord);
 
             true

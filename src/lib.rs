@@ -428,6 +428,13 @@ impl<'a> State<'a> {
                         }
                         false
                     },
+                    Key::KeyK => {
+                        if *state == ElementState::Pressed {
+                            cube_extra::add_full_world();
+                            return true
+                        }
+                        false
+                    },
                     _ => false,
                 }
             },
