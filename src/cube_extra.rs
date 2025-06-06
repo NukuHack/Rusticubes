@@ -231,23 +231,25 @@ pub fn toggle_looked_point() -> Option<(bool, (u8, u8, u8))> {
         let world = &mut state.data_system.world;
 
         let (block_pos, (x, y, z)) = raycast_to_cube_point(camera, world, REACH)?;
-        let mut block: cube::Block = *world.get_block(block_pos);
 
+        let block = world.get_block(block_pos);
         if block.is_empty() {
             return None;
         }
 
-        if !block.is_marching() {
-            let marched_block = block.get_march()?;
-            world.set_block(block_pos, marched_block);
-        }
-        let mut block: cube::Block = *world.get_block(block_pos);
+        let mut new_block = *block;
 
-        let is_dot = block.get_point(x, y, z).unwrap_or(false);
-        block.set_point(x, y, z, !is_dot);
-        world.set_block(block_pos, block);
+        if !new_block.is_marching() {
+            new_block = new_block.get_march()?;
+        }
+
+        let is_dot = new_block.get_point(x, y, z).unwrap_or(false);
+        new_block.set_point(x, y, z, !is_dot);
+
+        world.set_block(block_pos, new_block);
 
         update_chunk_mesh(world, block_pos);
+
         Some((is_dot, (x, y, z)))
     }
 }
