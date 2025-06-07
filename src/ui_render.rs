@@ -298,9 +298,9 @@ impl UIRenderer {
         }
 
         let index = code - 32;
-        let grid_wid = 16;
-        let (cell_wid, cell_hei) = (15.0, 16.0);
-        let (texture_wid, texture_hei) = (240.0, 768.0);
+        let (grid_wid, grid_hei) = (24, 32);
+        let (cell_wid, cell_hei) = (30.0, 32.0);
+        let (texture_wid, texture_hei) = (grid_wid as f32 * cell_wid, grid_hei as f32 * cell_hei);
 
         let x = (index % grid_wid) as f32;
         let y = (index / grid_wid) as f32;
