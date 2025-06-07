@@ -122,11 +122,8 @@ impl Block {
 
     #[inline]
     pub fn texture_coords(&self) -> [f32; 2] {
-        let material = self.material();
-        match material {
-            1 => [0.0, 1.0],
-            _ => [0.0, 0.0],
-        }
+        let material: f32 = self.material() as f32;
+        [(material - 1.0).max(0.0), material]
     }
 
     #[inline]

@@ -417,7 +417,7 @@ pub fn render_all(current_state: &mut super::State) -> Result<(), wgpu::SurfaceE
     }
 
     // UI pass if needed
-    if current_state.ui_manager.visibility {
+    {
         let mut ui_rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("UI Render Pass"),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -433,14 +433,8 @@ pub fn render_all(current_state: &mut super::State) -> Result<(), wgpu::SurfaceE
             timestamp_writes: None,
         });
 
-        ui_rpass.set_pipeline(&current_state.ui_manager.pipeline);
-        ui_rpass.set_bind_group(0, &current_state.ui_manager.bind_group, &[]);
-        ui_rpass.set_vertex_buffer(0, current_state.ui_manager.vertex_buffer.slice(..));
-        ui_rpass.set_index_buffer(
-            current_state.ui_manager.index_buffer.slice(..),
-            wgpu::IndexFormat::Uint32,
-        );
-        ui_rpass.draw_indexed(0..current_state.ui_manager.num_indices, 0, 0..1);
+        // Use the UIManager's render method instead of manual rendering
+        current_state.ui_manager.render(&mut ui_rpass);
     }
 
     // Submit commands

@@ -1,3 +1,4 @@
+#[allow(unused_imports)]
 use super::cube;
 use super::cube::ChunkCoord;
 use crate::camera::Camera;

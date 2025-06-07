@@ -3,7 +3,6 @@
 mod camera;
 mod player;
 
-mod user_interface;
 mod config;
 mod geometry;
 mod pipeline;
@@ -11,10 +10,14 @@ mod pipeline;
 mod debug;
 
 mod cube;
-mod cube_render;
 mod cube_math;
 mod cube_extra;
+mod cube_render;
 mod cube_tables;
+
+mod ui_element;
+mod ui_render;
+mod ui_manager;
 
 const FONT_MAP: &[u8] = include_bytes!("../resources/bescii-chars.png");
 //const FONT_TTF: &[u8] = include_bytes!("../resources/calibri.ttf");
@@ -38,7 +41,7 @@ pub struct State<'a> {
     input_system: InputSubsystem,
     pipeline: pipeline::Pipeline,
     data_system: DataSubsystem,
-    ui_manager: user_interface::UIManager,
+    ui_manager: ui_manager::UIManager,
 }
 pub struct RenderContext<'a> {
     surface: wgpu::Surface<'a>,
@@ -221,7 +224,8 @@ impl<'a> State<'a> {
 
         let pipeline: pipeline::Pipeline = pipeline::Pipeline::new(&device, &config, &render_pipeline_layout);
 
-        let ui_manager:user_interface::UIManager = user_interface::UIManager::new(&device, &config, &queue);
+        let mut ui_manager:ui_manager::UIManager = ui_manager::UIManager::new(&device, &config, &queue);
+        ui_manager::setup_ui(&mut ui_manager);
         
         let data_system: DataSubsystem = DataSubsystem{
             texture_manager,
@@ -288,7 +292,7 @@ impl<'a> State<'a> {
     pub fn world(&self) -> &cube::World {
         &self.data_system.world
     }
-    pub fn ui_manager(&self) -> &user_interface::UIManager {
+    pub fn ui_manager(&self) -> &ui_manager::UIManager {
         &self.ui_manager
     }
 
@@ -352,18 +356,18 @@ impl<'a> State<'a> {
                 self.input_system.modifier_keys.set_modify_kes(*key,*state);
 
                 // Handle UI input first if there's a focused element
-                if let Some(focused_idx) = self.ui_manager.focused_element {
+                if let Some(_focused_idx) = self.ui_manager.focused_element {
                     self.player.controller.reset_keyboard(); // Temporary workaround
                     
                     if *state == ElementState::Pressed {
                         // Handle special keys for UI
                         match key {
                             Key::Backspace => {
-                                self.ui_manager.handle_backspace(focused_idx);
+                                self.ui_manager.handle_backspace();
                                 return true;
                             },
                             Key::Enter => {
-                                self.ui_manager.handle_enter(focused_idx);
+                                self.ui_manager.handle_enter();
                                 return true;
                             },
                             Key::Escape => {
@@ -371,8 +375,8 @@ impl<'a> State<'a> {
                                 return true;
                             },
                             _ => {
-                                if let Some(c) = user_interface::key_to_char(*key, self.modifier_keys().sift) {
-                                    self.ui_manager.process_text_input(focused_idx, c);
+                                if let Some(c) = ui_element::key_to_char(*key, self.modifier_keys().sift) {
+                                    self.ui_manager.process_text_input(c);
                                     return true;
                                 }
                             }
@@ -456,7 +460,10 @@ impl<'a> State<'a> {
                     (MouseButton::Left, ElementState::Pressed) => {
                         self.input_system.mouse_button_state.left = true;
                         if self.ui_manager.visibility!=false{
-                            user_interface::handle_ui_click(self);
+                        // Use the stored current mouse position
+                        if let Some(current_position) = self.input_system.previous_mouse {
+                            ui_manager::handle_ui_click(&mut self.ui_manager, self.render_context.size.into(), &current_position);
+                        }
                         }
                         true
                     }
@@ -486,7 +493,7 @@ impl<'a> State<'a> {
 
                 //if self.ui_manager.visibility!=false{
                 // decided to comment it out -> if the user re-enables the ui while hovering it, it will still be colored correctly
-                    user_interface::handle_ui_hover(self, position);
+                    ui_manager::handle_ui_hover(&mut self.ui_manager,self.render_context.size.into(), position);
                 //}
                 self.input_system.previous_mouse = Some(*position);
                 true
@@ -545,8 +552,7 @@ pub async fn run() {
     }
     let window: &mut winit::window::Window = unsafe { &mut *WINDOW_PTR };
         
-    let mut state_raw: State = State::new(window).await;
-    user_interface::setup_ui(&mut state_raw);
+    let state_raw: State = State::new(window).await;
 
     unsafe {   // Store the pointer in the static variable
         STATE_PTR = Box::into_raw(Box::new(state_raw));
