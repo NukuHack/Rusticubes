@@ -1,6 +1,5 @@
-use super::ui_element::{
-    handle_backspace, key_to_char, process_text_input, UIElement, UIElementType, Vertex,
-};
+use super::ui_element;
+use super::ui_element::{UIElement, Vertex};
 use super::ui_render::UIRenderer;
 use winit::keyboard::KeyCode as Key;
 
@@ -185,8 +184,8 @@ impl UIManager {
     pub fn get_input_text(&self, id: usize) -> Option<&str> {
         self.elements
             .iter()
-            .find(|e| e.id == id && e.is_input)
-            .and_then(|e| e.text.as_deref())
+            .find(|e| e.id == id && e.is_input())
+            .and_then(|e| e.get_text())
     }
 
     pub fn set_element_visibility(&mut self, id: usize, visible: bool) {
@@ -203,7 +202,9 @@ impl UIManager {
 
     pub fn set_element_text(&mut self, id: usize, text: String) {
         if let Some(element) = self.get_element_mut(id) {
-            element.text = Some(text);
+            if let Some(text_mut) = element.get_text_mut() {
+                *text_mut = text;
+            }
         }
     }
 
@@ -216,14 +217,12 @@ impl UIManager {
     pub fn process_text_input(&mut self, c: char) {
         if let Some(focused_idx) = self.focused_element {
             if let Some(element) = self.elements.get_mut(focused_idx) {
-                if !element.is_input || !element.enabled {
+                if !element.is_input() || !element.enabled {
                     return;
                 }
 
-                if let Some(ref mut input_text) = element.text {
-                    process_text_input(input_text, c);
-                } else {
-                    element.text = Some(c.to_string());
+                if let Some(text_mut) = element.get_text_mut() {
+                    ui_element::process_text_input(text_mut, c);
                 }
             }
         }
@@ -232,9 +231,9 @@ impl UIManager {
     pub fn handle_backspace(&mut self) {
         if let Some(focused_idx) = self.focused_element {
             if let Some(element) = self.elements.get_mut(focused_idx) {
-                if element.is_input && element.enabled {
-                    if let Some(ref mut text) = element.text {
-                        handle_backspace(text);
+                if element.is_input() && element.enabled {
+                    if let Some(text_mut) = element.get_text_mut() {
+                        ui_element::handle_backspace(text_mut);
                     }
                 }
             }
@@ -251,7 +250,7 @@ impl UIManager {
             Key::Enter => self.handle_enter(),
             Key::Escape => self.blur_current_element(),
             _ => {
-                if let Some(c) = key_to_char(key, shift) {
+                if let Some(c) = ui_element::key_to_char(key, shift) {
                     self.process_text_input(c);
                 }
             }
@@ -286,33 +285,27 @@ impl UIManager {
             let element = &mut self.elements[index];
 
             if element.contains_point(norm_x, norm_y) && element.visible && element.enabled {
-                match element.element_type {
-                    UIElementType::InputField => {
+                match &element.data {
+                    super::ui_element::UIElementData::InputField { .. } => {
                         self.focused_element = Some(index);
                         handled = true;
                         break;
                     }
-                    UIElementType::Checkbox => {
+                    super::ui_element::UIElementData::Checkbox { .. } => {
                         element.toggle_checked();
-                        if let Some(ref mut callback) = element.on_click {
-                            callback();
-                        }
+                        element.trigger_click();
                         handled = true;
                         break;
                     }
-                    UIElementType::Button => {
-                        if let Some(ref mut callback) = element.on_click {
-                            callback();
-                        }
+                    super::ui_element::UIElementData::Button { .. } => {
+                        element.trigger_click();
                         handled = true;
                         break;
                     }
                     _ => {
-                        if let Some(ref mut callback) = element.on_click {
-                            callback();
-                            handled = true;
-                            break;
-                        }
+                        element.trigger_click();
+                        handled = true;
+                        break;
                     }
                 }
             }
@@ -322,20 +315,6 @@ impl UIManager {
     }
 
     // Utility methods
-    pub fn get_elements_by_type(&self, element_type: UIElementType) -> Vec<&UIElement> {
-        self.elements
-            .iter()
-            .filter(|e| e.element_type == element_type)
-            .collect()
-    }
-
-    pub fn get_elements_by_type_mut(&mut self, element_type: UIElementType) -> Vec<&mut UIElement> {
-        self.elements
-            .iter_mut()
-            .filter(|e| e.element_type == element_type)
-            .collect()
-    }
-
     pub fn is_any_element_hovered(&self) -> bool {
         self.elements
             .iter()
@@ -399,10 +378,10 @@ pub fn setup_ui(ui_manager: &mut UIManager) {
         (0.5, 0.25),
         [0.7, 0.3, 0.3],
         "Clean World".to_string(),
-        Box::new(|| {
+        || {
             println!("Clean world button clicked!");
             super::cube_extra::add_full_world();
-        }),
+        },
     )
     .with_border([0.8, 0.4, 0.4, 1.0], 0.005);
     ui_manager.add_element(button);
@@ -414,39 +393,13 @@ pub fn setup_ui(ui_manager: &mut UIManager) {
         (0.2, 0.1),
         [1.0, 0.2, 0.1],
         "Close".to_string(),
-        Box::new(|| {
+        || {
             println!("Close button clicked!");
             super::close_app();
-        }),
+        },
     )
     .with_border([0.2, 0.2, 0.2, 1.0], 0.003);
     ui_manager.add_element(close_button);
-    /*
-        // Add input field
-        let input_field = UIElement::new_input(
-            3,
-            (-0.5, 0.4),
-            (0.3, 0.1),
-            [0.9, 0.9, 0.9],
-            Some("Enter text...".to_string()),
-        )
-        .with_border([0.6, 0.6, 0.6, 1.0], 0.001);
-        ui_manager.add_element(input_field);
-    */
-    /*
-        // Add checkbox
-        let checkbox = UIElement::new_checkbox(
-            4,
-            (-0.5, 0.2),
-            (0.05, 0.05),
-            Some("Enable feature".to_string()),
-            false,
-            Some(Box::new(|| {
-                println!("Checkbox toggled!");
-            })),
-        );
-        ui_manager.add_element(checkbox);
-    */
 
     // Add some dividers/panels
     let crosshair_v = UIElement::new_divider(5, (0.0, -0.02), (0.02, 0.06), [0.1, 0.1, 0.1]);

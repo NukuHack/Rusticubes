@@ -22,6 +22,7 @@ const FONT_MAP: &[u8] = include_bytes!("../resources/bescii-chars.png");
 //const FONT_TTF: &[u8] = include_bytes!("../resources/calibri.ttf");
 const CUBE_TEXTURE: &[u8] = include_bytes!("../resources/cube-diffuse.jpg");
 //const TREE_TEXTURE: &[u8] = include_bytes!("../resources/happy-tree.png");
+const MAIN_ICON: &[u8] = include_bytes!("../resources/icon.png");
 
 use glam::Vec3;
 use std::iter::Iterator;
@@ -161,6 +162,10 @@ impl<'a> State<'a> {
             )
             .await
             .unwrap();
+
+        //println!("max_texture_array_layers {}",device.limits().max_texture_array_layers);
+        // this is 256 so i can load up to 256 textures into one binding of the shader
+        //most shader support up to 16 bindings but using too much stuff can make it slow or really V-ram consuming
 
         let surface_caps: wgpu::SurfaceCapabilities = surface.get_capabilities(&adapter);
         let surface_format: wgpu::TextureFormat = surface_caps.formats.iter()
@@ -541,6 +546,7 @@ pub async fn run() {
         .with_title(&config.window_title)
         .with_inner_size(config.initial_window_size)
         .with_position(config.initial_window_position)
+        .with_window_icon(load_icon_from_bytes())
         .build(&event_loop)
         .unwrap();
 
@@ -596,4 +602,41 @@ pub fn close_app() {
 }
 pub fn closed() -> bool{
     unsafe{CLOSED}
+}
+
+
+use winit::window::Icon;
+use image::io::Reader as ImageReader;
+use std::io::Cursor;
+
+fn load_icon_from_bytes() -> Option<Icon> {
+    // Create a cursor to read from memory
+    let reader = match ImageReader::new(Cursor::new(MAIN_ICON))
+        .with_guessed_format()
+        .map_err(|e| {
+            println!("Failed to guess image format: {}", e);
+            e
+        }) {
+        Ok(reader) => reader,
+        Err(_) => return None,
+    };
+
+    let image = match reader.decode().map_err(|e| {
+        println!("Failed to decode image: {}", e);
+        e
+    }) {
+        Ok(img) => img,
+        Err(_) => return None,
+    };
+    
+    let rgba = image.into_rgba8();
+    let (width, height) = rgba.dimensions();
+    
+    match Icon::from_rgba(rgba.into_raw(), width, height) {
+        Ok(icon) => Some(icon),
+        Err(e) => {
+            println!("Failed to create icon from RGBA data: {}", e);
+            None
+        }
+    }
 }

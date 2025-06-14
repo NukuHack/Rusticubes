@@ -1,9 +1,14 @@
+use std::cell::RefCell;
+use std::fmt;
+use std::sync::Arc;
 use winit::keyboard::KeyCode as Key;
 
 // Constants for common values
 const DEFAULT_ALPHA: f32 = 0.9;
 const HOVER_ALPHA: f32 = 0.5;
 const MAX_INPUT_LENGTH: usize = 120;
+
+type Callback = Arc<RefCell<dyn FnMut()>>;
 
 #[repr(C)]
 #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
@@ -13,28 +18,67 @@ pub struct Vertex {
     pub color: [f32; 4],
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum UIElementType {
+#[derive(Clone)]
+pub enum UIElementData {
     Panel,
-    Label,
-    Button,
-    InputField,
-    Checkbox,
+    Label {
+        text: String,
+    },
+    Button {
+        text: String,
+        on_click: Callback,
+    },
+    InputField {
+        text: String,
+        placeholder: Option<String>,
+    },
+    Checkbox {
+        label: Option<String>,
+        checked: bool,
+        on_click: Option<Callback>,
+    },
     Image,
     Divider,
+}
+
+impl Default for UIElementData {
+    fn default() -> Self {
+        UIElementData::Panel
+    }
+}
+
+impl fmt::Debug for UIElementData {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            UIElementData::Panel => write!(f, "Panel"),
+            UIElementData::Label { text } => f.debug_struct("Label").field("text", text).finish(),
+            UIElementData::Button { text, .. } => {
+                f.debug_struct("Button").field("text", text).finish()
+            }
+            UIElementData::InputField { text, placeholder } => f
+                .debug_struct("InputField")
+                .field("text", text)
+                .field("placeholder", placeholder)
+                .finish(),
+            UIElementData::Checkbox { label, checked, .. } => f
+                .debug_struct("Checkbox")
+                .field("label", label)
+                .field("checked", checked)
+                .finish(),
+            UIElementData::Image => write!(f, "Image"),
+            UIElementData::Divider => write!(f, "Divider"),
+        }
+    }
 }
 
 #[derive(Default)]
 pub struct UIElement {
     pub id: usize,
-    pub element_type: UIElementType,
+    pub data: UIElementData,
     pub position: (f32, f32),
     pub size: (f32, f32),
     pub color: [f32; 4],
-    pub text: Option<String>,
     pub hovered: bool,
-    pub is_input: bool,
-    pub on_click: Option<Box<dyn FnMut()>>,
 
     // Enhanced features
     pub z_index: i32,
@@ -42,13 +86,6 @@ pub struct UIElement {
     pub border_color: [f32; 4],
     pub border_width: f32,
     pub enabled: bool,
-    pub checked: bool, // For checkboxes
-}
-
-impl Default for UIElementType {
-    fn default() -> Self {
-        UIElementType::Panel
-    }
 }
 
 impl UIElement {
@@ -58,21 +95,17 @@ impl UIElement {
 
     pub fn new(
         id: usize,
-        element_type: UIElementType,
+        data: UIElementData,
         position: (f32, f32),
         size: (f32, f32),
         color: [f32; 3],
-        text: Option<String>,
-        on_click: Option<Box<dyn FnMut()>>,
     ) -> Self {
         Self {
             id,
-            element_type,
+            data,
             position,
             size,
             color: [color[0], color[1], color[2], DEFAULT_ALPHA],
-            text,
-            on_click,
             visible: true,
             enabled: true,
             border_color: Self::DEFAULT_BORDER_COLOR,
@@ -88,16 +121,17 @@ impl UIElement {
         size: (f32, f32),
         color: [f32; 3],
         text: String,
-        on_click: Box<dyn FnMut()>,
+        on_click: impl FnMut() + 'static,
     ) -> Self {
         Self::new(
             id,
-            UIElementType::Button,
+            UIElementData::Button {
+                text,
+                on_click: Arc::new(RefCell::new(on_click)),
+            },
             position,
             size,
             color,
-            Some(text),
-            Some(on_click),
         )
     }
 
@@ -108,15 +142,7 @@ impl UIElement {
         color: [f32; 3],
         text: String,
     ) -> Self {
-        Self::new(
-            id,
-            UIElementType::Label,
-            position,
-            size,
-            color,
-            Some(text),
-            None,
-        )
+        Self::new(id, UIElementData::Label { text }, position, size, color)
     }
 
     pub fn new_input(
@@ -128,14 +154,14 @@ impl UIElement {
     ) -> Self {
         let mut element = Self::new(
             id,
-            UIElementType::InputField,
+            UIElementData::InputField {
+                text: String::new(),
+                placeholder,
+            },
             position,
             size,
             color,
-            placeholder,
-            None,
         );
-        element.is_input = true;
         element.border_width = 0.002;
         element
     }
@@ -146,40 +172,35 @@ impl UIElement {
         size: (f32, f32),
         label: Option<String>,
         checked: bool,
-        on_click: Option<Box<dyn FnMut()>>,
+        on_click: Option<impl FnMut() + 'static>,
     ) -> Self {
         let mut element = Self::new(
             id,
-            UIElementType::Checkbox,
+            UIElementData::Checkbox {
+                label,
+                checked,
+                on_click: on_click
+                    .map(|f| Arc::new(RefCell::new(f)))
+                    .map(|arc| arc as Callback),
+            },
             position,
             size,
             [0.9, 0.9, 0.9],
-            label,
-            on_click,
         );
-        element.checked = checked;
         element.border_width = 0.001;
         element.border_color = [0.3, 0.3, 0.3, 1.0];
         element
     }
 
     pub fn new_panel(id: usize, position: (f32, f32), size: (f32, f32), color: [f32; 3]) -> Self {
-        Self::new(id, UIElementType::Panel, position, size, color, None, None)
+        Self::new(id, UIElementData::Panel, position, size, color)
     }
 
     pub fn new_divider(id: usize, position: (f32, f32), size: (f32, f32), color: [f32; 3]) -> Self {
-        Self::new(
-            id,
-            UIElementType::Divider,
-            position,
-            size,
-            color,
-            None,
-            None,
-        )
+        Self::new(id, UIElementData::Divider, position, size, color)
     }
 
-    // Builder pattern methods for enhanced customization
+    // Builder pattern methods remain the same...
     pub fn with_border(mut self, color: [f32; 4], width: f32) -> Self {
         self.border_color = color;
         self.border_width = width;
@@ -217,7 +238,7 @@ impl UIElement {
 
     pub fn update_hover_state(&mut self, is_hovered: bool) {
         self.hovered = is_hovered && self.enabled;
-        if self.element_type == UIElementType::Button {
+        if matches!(self.data, UIElementData::Button { .. }) {
             self.color[3] = if self.hovered && self.enabled {
                 HOVER_ALPHA
             } else if !self.enabled {
@@ -229,33 +250,92 @@ impl UIElement {
     }
 
     pub fn toggle_checked(&mut self) {
-        if self.element_type == UIElementType::Checkbox {
-            self.checked = !self.checked;
+        if let UIElementData::Checkbox { checked, .. } = &mut self.data {
+            *checked = !*checked;
+        }
+    }
+
+    pub fn get_text(&self) -> Option<&str> {
+        match &self.data {
+            UIElementData::Label { text } => Some(text),
+            UIElementData::Button { text, .. } => Some(text),
+            UIElementData::InputField { text, .. } => Some(text),
+            UIElementData::Checkbox { label, .. } => label.as_deref(),
+            _ => None,
+        }
+    }
+
+    pub fn get_text_mut(&mut self) -> Option<&mut String> {
+        match &mut self.data {
+            UIElementData::Label { text } => Some(text),
+            UIElementData::Button { text, .. } => Some(text),
+            UIElementData::InputField { text, .. } => Some(text),
+            UIElementData::Checkbox { label, .. } => label.as_mut(),
+            _ => None,
+        }
+    }
+
+    pub fn is_input(&self) -> bool {
+        matches!(self.data, UIElementData::InputField { .. })
+    }
+
+    pub fn is_checked(&self) -> Option<bool> {
+        if let UIElementData::Checkbox { checked, .. } = &self.data {
+            Some(*checked)
+        } else {
+            None
+        }
+    }
+
+    pub fn trigger_click(&mut self) {
+        match &mut self.data {
+            UIElementData::Button { on_click, .. } => on_click.borrow_mut()(),
+            UIElementData::Checkbox { on_click, .. } => {
+                if let Some(callback) = on_click {
+                    callback.borrow_mut()();
+                }
+            }
+            _ => {}
         }
     }
 }
 
-impl std::fmt::Debug for UIElement {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Debug for UIElement {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("UIElement")
             .field("id", &self.id)
-            .field("element_type", &self.element_type)
+            .field("data", &self.data)
             .field("position", &self.position)
             .field("size", &self.size)
             .field("color", &self.color)
-            .field("text", &self.text)
             .field("hovered", &self.hovered)
             .field("visible", &self.visible)
             .field("enabled", &self.enabled)
             .field("z_index", &self.z_index)
-            .field("has_on_click", &self.on_click.is_some())
             .field("border_width", &self.border_width)
-            .field("checked", &self.checked)
             .finish()
     }
 }
 
-// Input handling utilities
+// Input validation and processing (unchanged)
+pub fn process_text_input(text: &mut String, c: char) -> bool {
+    if text.len() >= MAX_INPUT_LENGTH || c.is_control() {
+        return false;
+    }
+    text.push(c);
+    true
+}
+
+pub fn handle_backspace(text: &mut String) -> bool {
+    if !text.is_empty() {
+        text.pop();
+        true
+    } else {
+        false
+    }
+}
+
+// Input handling utilities (unchanged)
 pub fn key_to_char(key: Key, shift: bool) -> Option<char> {
     match key {
         Key::KeyA => Some(if shift { 'A' } else { 'a' }),
@@ -306,23 +386,5 @@ pub fn key_to_char(key: Key, shift: bool) -> Option<char> {
         Key::Period => Some(if shift { '>' } else { '.' }),
         Key::Slash => Some(if shift { '?' } else { '/' }),
         _ => None,
-    }
-}
-
-// Input validation and processing
-pub fn process_text_input(text: &mut String, c: char) -> bool {
-    if text.len() >= MAX_INPUT_LENGTH || c.is_control() {
-        return false;
-    }
-    text.push(c);
-    true
-}
-
-pub fn handle_backspace(text: &mut String) -> bool {
-    if !text.is_empty() {
-        text.pop();
-        true
-    } else {
-        false
     }
 }

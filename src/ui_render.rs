@@ -1,4 +1,4 @@
-use super::ui_element::{UIElement, UIElementType, Vertex};
+use super::ui_element::{UIElement, UIElementData, Vertex};
 use image::GenericImageView;
 
 pub struct UIRenderer {
@@ -98,7 +98,6 @@ impl UIRenderer {
     }
 
     fn load_font_texture() -> (Vec<u8>, u32, u32) {
-        // Assuming FONT_MAP is available in the parent module
         let img = image::load_from_memory(super::FONT_MAP).expect("Failed to load font atlas");
         let (width, height) = img.dimensions();
         let rgba = img.into_rgba8();
@@ -106,27 +105,24 @@ impl UIRenderer {
     }
 
     pub fn process_elements(&self, elements: &[UIElement]) -> (Vec<Vertex>, Vec<u32>) {
-        // Sort elements by z-index for proper rendering order
         let mut sorted_elements: Vec<&UIElement> = elements.iter().filter(|e| e.visible).collect();
         sorted_elements.sort_by_key(|e| e.z_index);
 
-        let mut vertices = Vec::with_capacity(sorted_elements.len() * 8); // Account for borders
+        let mut vertices = Vec::with_capacity(sorted_elements.len() * 8);
         let mut indices = Vec::with_capacity(sorted_elements.len() * 12);
         let mut current_index = 0u32;
 
         for element in sorted_elements {
-            // Render border first (if it exists) so it appears behind the element
             if element.border_width > 0.0 {
                 self.process_border(element, &mut vertices, &mut indices, &mut current_index);
             }
 
-            // Render the main element
-            match element.element_type {
-                UIElementType::Checkbox => {
+            match &element.data {
+                UIElementData::Checkbox { .. } => {
                     self.process_checkbox(element, &mut vertices, &mut indices, &mut current_index);
                 }
                 _ => {
-                    if element.text.is_some() {
+                    if element.get_text().is_some() {
                         self.process_text_element(
                             element,
                             &mut vertices,
@@ -159,7 +155,6 @@ impl UIRenderer {
         let (w, h) = element.size;
         let border_width = element.border_width;
 
-        // Create border as a larger rectangle behind the main element
         let border_x = x - border_width;
         let border_y = y - border_width;
         let border_w = w + 2.0 * border_width;
@@ -182,40 +177,40 @@ impl UIRenderer {
         indices: &mut Vec<u32>,
         current_index: &mut u32,
     ) {
-        // Render checkbox background
         self.process_rect_element(element, vertices, indices, current_index);
 
-        // Render checkmark if checked
-        if element.checked {
-            let (x, y) = element.position;
-            let (w, h) = element.size;
-            let padding = 0.2;
-            let check_x = x + w * padding;
-            let check_y = y + h * padding;
-            let check_w = w * (1.0 - 2.0 * padding);
-            let check_h = h * (1.0 - 2.0 * padding);
+        if let UIElementData::Checkbox { checked, .. } = &element.data {
+            if *checked {
+                let (x, y) = element.position;
+                let (w, h) = element.size;
+                let padding = 0.2;
+                let check_x = x + w * padding;
+                let check_y = y + h * padding;
+                let check_w = w * (1.0 - 2.0 * padding);
+                let check_h = h * (1.0 - 2.0 * padding);
 
-            self.add_rectangle(
-                vertices,
-                (check_x, check_y),
-                (check_w, check_h),
-                [0.2, 0.7, 0.2, 1.0], // Green checkmark
-            );
-            indices.extend(self.rectangle_indices(*current_index));
-            *current_index += 4;
+                self.add_rectangle(
+                    vertices,
+                    (check_x, check_y),
+                    (check_w, check_h),
+                    [0.2, 0.7, 0.2, 1.0],
+                );
+                indices.extend(self.rectangle_indices(*current_index));
+                *current_index += 4;
+            }
         }
 
-        // Render label if present
-        if let Some(text) = &element.text {
+        if let Some(text) = element.get_text() {
             let label_element = UIElement {
                 position: (
                     element.position.0 + element.size.0 + 0.01,
                     element.position.1,
                 ),
                 size: (text.len() as f32 * 0.01, element.size.1),
-                text: Some(text.clone()),
-                color: [0.0, 0.0, 0.0, 1.0], // Black text
-                on_click: None,
+                data: UIElementData::Label {
+                    text: text.to_string(),
+                },
+                color: [0.0, 0.0, 0.0, 1.0],
                 ..*element
             };
             self.process_text_element(&label_element, vertices, indices, current_index);
@@ -229,9 +224,8 @@ impl UIRenderer {
         indices: &mut Vec<u32>,
         current_index: &mut u32,
     ) {
-        // Add background rectangle for input fields and buttons
-        match element.element_type {
-            UIElementType::InputField | UIElementType::Button => {
+        match &element.data {
+            UIElementData::InputField { .. } | UIElementData::Button { .. } => {
                 self.add_rectangle(vertices, element.position, element.size, element.color);
                 indices.extend(self.rectangle_indices(*current_index));
                 *current_index += 4;
@@ -239,8 +233,7 @@ impl UIRenderer {
             _ => {}
         }
 
-        // Process text if present
-        if let Some(text) = &element.text {
+        if let Some(text) = element.get_text() {
             let (x, y) = element.position;
             let (w, h) = element.size;
             let char_count = text.chars().count() as f32;
@@ -250,12 +243,11 @@ impl UIRenderer {
             let (overhang_w, overhang_h) = (w - padded_w, h - padded_h);
             let char_size = (padded_w / char_count).min(padded_h);
 
-            // Determine text color based on element type
-            let text_color = match element.element_type {
-                UIElementType::InputField => [0.0, 0.0, 0.0, 1.0], // Black text for input
-                UIElementType::Button => [1.0, 1.0, 1.0, 1.0],     // White text for buttons
-                UIElementType::Label => element.color,             // Use element color for labels
-                _ => [0.0, 0.0, 0.0, 1.0],                         // Default black
+            let text_color = match &element.data {
+                UIElementData::InputField { .. } => [0.0, 0.0, 0.0, 1.0],
+                UIElementData::Button { .. } => [1.0, 1.0, 1.0, 1.0],
+                UIElementData::Label { .. } => element.color,
+                _ => [0.0, 0.0, 0.0, 1.0],
             };
 
             for (i, c) in text.chars().enumerate() {
