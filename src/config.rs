@@ -5,15 +5,17 @@ pub struct AppConfig {
     pub initial_window_size: winit::dpi::PhysicalSize<f32>,
     pub min_window_size: winit::dpi::PhysicalSize<f32>,
     pub initial_window_position: winit::dpi::PhysicalPosition<f32>,
+    pub theme: Option<winit::window::Theme>
 }
 
 impl Default for AppConfig {
      fn default() -> Self {
         Self {
-            window_title: "WGPU App".into(),
+            window_title: "Default App".into(),
             initial_window_size: winit::dpi::PhysicalSize::new(1280.0, 720.0),
             min_window_size: winit::dpi::PhysicalSize::new(600.0, 400.0),
             initial_window_position: winit::dpi::PhysicalPosition::new(100.0,100.0),
+            theme: Some(winit::window::Theme::Dark),
         }
     }
 }
@@ -27,6 +29,7 @@ impl AppConfig {
             initial_window_size: winit::dpi::PhysicalSize::new(width, height),
             min_window_size: winit::dpi::PhysicalSize::new(width/3.0, height/3.0),
             initial_window_position: winit::dpi::PhysicalPosition::new(x,y),
+            ..Self::default()
         }
     }
 }

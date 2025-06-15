@@ -422,6 +422,25 @@ impl<'a> State<'a> {
                         }
                         false
                     },
+                    Key::F11 => {
+                        if *state == ElementState::Pressed {
+                            let window = self.window();
+                            
+                            if window.fullscreen().is_some() {
+                                // If already fullscreen, exit fullscreen
+                                window.set_fullscreen(None);
+                            } else {
+                                // Otherwise enter fullscreen
+                                let current_monitor = window.current_monitor().unwrap_or_else(|| {
+                                    window.available_monitors().next().expect("No monitors available")
+                                });
+                                
+                                window.set_fullscreen(Some(winit::window::Fullscreen::Borderless(Some(current_monitor))));
+                            }
+                            return true;
+                        }
+                        false
+                    },
                     Key::KeyF => {
                         if *state == ElementState::Pressed {
                             cube_extra::place_looked_cube();
@@ -597,11 +616,15 @@ pub async fn run() {
         .with_min_inner_size(config.min_window_size)
         .with_position(config.initial_window_position)
         .with_window_icon(load_icon_from_bytes())
+        .with_theme(config.theme)
+        .with_active(true)
         .build(&event_loop)
         .unwrap();
 
     // Set the window to be focused immediately
-    window_raw.has_focus();
+    window_raw.focus_window();
+    window_raw.set_visible(true);
+
     unsafe {
         WINDOW_PTR = Box::into_raw(Box::new(window_raw));
     }
