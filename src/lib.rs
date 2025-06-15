@@ -7,6 +7,8 @@ mod geometry;
 mod pipeline;
 
 mod debug;
+mod resources;
+mod input;
 
 mod cube;
 mod cube_math;
@@ -18,11 +20,6 @@ mod ui_element;
 mod ui_render;
 mod ui_manager;
 
-const FONT_MAP: &[u8] = include_bytes!("../resources/bescii-chars.png");
-//const FONT_TTF: &[u8] = include_bytes!("../resources/calibri.ttf");
-const CUBE_TEXTURE: &[u8] = include_bytes!("../resources/cube-diffuse.jpg");
-//const TREE_TEXTURE: &[u8] = include_bytes!("../resources/happy-tree.png");
-const MAIN_ICON: &[u8] = include_bytes!("../resources/icon.png");
 
 use glam::Vec3;
 use std::iter::Iterator;
@@ -38,7 +35,7 @@ pub struct State<'a> {
     previous_frame_time: std::time::Instant,
     camera_system: camera::CameraSystem,
     player: player::Player,
-    input_system: InputSystem,
+    input_system: input::InputSystem,
     pipeline: pipeline::Pipeline,
     data_system: DataSubsystem,
     ui_manager: ui_manager::UIManager,
@@ -50,80 +47,6 @@ pub struct RenderContext<'a> {
     config: wgpu::SurfaceConfiguration,
     size: winit::dpi::PhysicalSize<u32>,
     chunk_bind_group_layout:  wgpu::BindGroupLayout,
-}
-
-pub struct InputSystem {
-    previous_mouse: Option<winit::dpi::PhysicalPosition<f64>>,
-    mouse_button_state: MouseButtonState,
-    modifier_keys: ModifierKeys,
-    mouse_captured: bool,
-}
-impl Default for InputSystem{
-     fn default() -> Self{
-        Self{
-            previous_mouse: None,
-            mouse_button_state: MouseButtonState::default(),
-            modifier_keys: ModifierKeys::default(),
-            mouse_captured: false,
-        }
-    }
-}
-
-#[derive(Default)]
-pub struct MouseButtonState {
-    pub left: bool,
-    pub right: bool,
-}
-#[derive(Default)]
-pub struct ModifierKeys {
-    pub sift: bool,
-    pub alt: bool,
-    pub ctr: bool,
-    pub altgr: bool,
-    pub caps: bool,
-}
-impl ModifierKeys {
-    pub fn set_modify_kes(&mut self,key : winit::keyboard::KeyCode, state: ElementState){
-        if state == ElementState::Pressed {
-            match key {
-                Key::AltLeft => {
-                    self.alt = true;
-                },
-                Key::ShiftLeft | Key::ShiftRight => {
-                    self.sift = true;
-                },
-                Key::AltRight => {
-                    self.altgr = true;
-                },
-                Key::CapsLock => {
-                    self.caps = true;
-                },
-                Key::ControlLeft | Key::ControlRight => {
-                    self.ctr = true;
-                }
-                _ => {}
-            }
-        } else {
-            match key {
-                Key::AltLeft => {
-                    self.alt = false;
-                },
-                Key::ShiftLeft | Key::ShiftRight => {
-                    self.sift = false;
-                },
-                Key::AltRight => {
-                    self.altgr = false;
-                },
-                Key::CapsLock => {
-                    self.caps = false;
-                },
-                Key::ControlLeft | Key::ControlRight => {
-                    self.ctr = false;
-                }
-                _ => {}
-            }
-        }
-    }
 }
 
 pub struct DataSubsystem {
@@ -252,7 +175,7 @@ impl<'a> State<'a> {
             previous_frame_time: std::time::Instant::now(),
             camera_system,
             player,
-            input_system: InputSystem::default(),
+            input_system: input::InputSystem::default(),
             pipeline,
             data_system,
             ui_manager,
@@ -277,10 +200,10 @@ impl<'a> State<'a> {
     pub fn size(&self) -> &winit::dpi::PhysicalSize<u32> {
         &self.render_context.size
     }
-    pub fn modifier_keys(&self) -> &ModifierKeys {
+    pub fn modifier_keys(&self) -> &input::ModifierKeys {
         &self.input_system.modifier_keys
     }
-    pub fn mouse_states(&self) -> &MouseButtonState {
+    pub fn mouse_states(&self) -> &input::MouseButtonState {
         &self.input_system.mouse_button_state
     }
     pub fn previous_frame_time(&self) -> &std::time::Instant {
@@ -516,7 +439,7 @@ impl<'a> State<'a> {
                 }
             }
             WindowEvent::CursorMoved { position, .. } => {
-                if self.is_mouse_captured() {
+                if self.input_system.mouse_captured == true {
                     // Calculate relative movement from center
                     let size = self.size();
                     let center_x = size.width as f64 / 2.0;
@@ -592,10 +515,6 @@ impl<'a> State<'a> {
             self.window().set_cursor_grab(winit::window::CursorGrabMode::None).unwrap();
         }
     }
-
-    pub fn is_mouse_captured(&self) -> bool {
-        self.input_system.mouse_captured
-    }
 }
 
 static mut WINDOW_PTR: *mut winit::window::Window = std::ptr::null_mut();
@@ -615,7 +534,7 @@ pub async fn run() {
         .with_inner_size(config.initial_window_size)
         .with_min_inner_size(config.min_window_size)
         .with_position(config.initial_window_position)
-        .with_window_icon(load_icon_from_bytes())
+        .with_window_icon(resources::load_icon_from_bytes())
         .with_theme(config.theme)
         .with_active(true)
         .build(&event_loop)
@@ -677,39 +596,3 @@ pub fn closed() -> bool{
     unsafe{CLOSED}
 }
 
-
-use winit::window::Icon;
-use image::io::Reader as ImageReader;
-use std::io::Cursor;
-
-fn load_icon_from_bytes() -> Option<Icon> {
-    // Create a cursor to read from memory
-    let reader = match ImageReader::new(Cursor::new(MAIN_ICON))
-        .with_guessed_format()
-        .map_err(|e| {
-            println!("Failed to guess image format: {}", e);
-            e
-        }) {
-        Ok(reader) => reader,
-        Err(_) => return None,
-    };
-
-    let image = match reader.decode().map_err(|e| {
-        println!("Failed to decode image: {}", e);
-        e
-    }) {
-        Ok(img) => img,
-        Err(_) => return None,
-    };
-    
-    let rgba = image.into_rgba8();
-    let (width, height) = rgba.dimensions();
-    
-    match Icon::from_rgba(rgba.into_raw(), width, height) {
-        Ok(icon) => Some(icon),
-        Err(e) => {
-            println!("Failed to create icon from RGBA data: {}", e);
-            None
-        }
-    }
-}

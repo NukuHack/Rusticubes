@@ -1,4 +1,5 @@
 use super::ui_element::{UIElement, UIElementData, Vertex};
+use crate::get_bytes;
 use image::GenericImageView;
 
 pub struct UIRenderer {
@@ -98,7 +99,8 @@ impl UIRenderer {
     }
 
     fn load_font_texture() -> (Vec<u8>, u32, u32) {
-        let img = image::load_from_memory(super::FONT_MAP).expect("Failed to load font atlas");
+        let img = image::load_from_memory(get_bytes!("bescii-chars.png"))
+            .expect("Failed to load font atlas");
         let (width, height) = img.dimensions();
         let rgba = img.into_rgba8();
         (rgba.into_raw(), width, height)

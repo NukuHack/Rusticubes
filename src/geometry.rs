@@ -1,5 +1,5 @@
 //! Vertex and texture utilities for wgpu rendering.
-
+use crate::get_bytes;
 use image::GenericImageView;
 
 /// Wrapper for wgpu texture resources
@@ -143,8 +143,13 @@ impl TextureManager {
         queue: &wgpu::Queue,
         config: &wgpu::SurfaceConfiguration,
     ) -> Self {
-        let texture = Texture::from_bytes(device, queue, &super::CUBE_TEXTURE, "cube_texture")
-            .expect("Failed to create cube texture");
+        let texture = Texture::from_bytes(
+            device,
+            queue,
+            get_bytes!("cube-diffuse.jpg"),
+            "cube_texture",
+        )
+        .expect("Failed to create cube texture");
 
         let depth_texture = Texture::create_depth_texture(device, config, "Depth Texture");
 
