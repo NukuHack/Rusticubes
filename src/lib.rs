@@ -38,7 +38,7 @@ pub struct State<'a> {
     previous_frame_time: std::time::Instant,
     camera_system: camera::CameraSystem,
     player: player::Player,
-    input_system: InputSubsystem,
+    input_system: InputSystem,
     pipeline: pipeline::Pipeline,
     data_system: DataSubsystem,
     ui_manager: ui_manager::UIManager,
@@ -52,17 +52,19 @@ pub struct RenderContext<'a> {
     chunk_bind_group_layout:  wgpu::BindGroupLayout,
 }
 
-pub struct InputSubsystem {
+pub struct InputSystem {
     previous_mouse: Option<winit::dpi::PhysicalPosition<f64>>,
     mouse_button_state: MouseButtonState,
     modifier_keys: ModifierKeys,
+    mouse_captured: bool,
 }
-impl Default for InputSubsystem{
+impl Default for InputSystem{
      fn default() -> Self{
         Self{
             previous_mouse: None,
             mouse_button_state: MouseButtonState::default(),
             modifier_keys: ModifierKeys::default(),
+            mouse_captured: false,
         }
     }
 }
@@ -250,7 +252,7 @@ impl<'a> State<'a> {
             previous_frame_time: std::time::Instant::now(),
             camera_system,
             player,
-            input_system: InputSubsystem::default(),
+            input_system: InputSystem::default(),
             pipeline,
             data_system,
             ui_manager,
@@ -356,7 +358,7 @@ impl<'a> State<'a> {
                     state // ElementState::Released or ElementState::Pressed
                     , .. },..
             } => {
-                // always handle the modifier keys
+                // always handle the modifier keys first
                 self.input_system.modifier_keys.set_modify_kes(*key,*state);
 
                 // Handle UI input first if there's a focused element
@@ -385,6 +387,14 @@ impl<'a> State<'a> {
                                 }
                             }
                         }
+                    }
+                    return true;
+                }
+
+                // Toggle mouse capture when ALT is pressed
+                if *key == Key::AltLeft || *key == Key::AltRight {
+                    if *state == ElementState::Pressed {
+                        self.toggle_mouse_capture();
                     }
                     return true;
                 }
@@ -487,20 +497,38 @@ impl<'a> State<'a> {
                 }
             }
             WindowEvent::CursorMoved { position, .. } => {
-                if self.input_system.mouse_button_state.right == true {
-                    if let Some(prev) = self.input_system.previous_mouse {
-                        let delta_x: f32 = (position.x - prev.x) as f32;
-                        let delta_y: f32 = (position.y - prev.y) as f32;
-                        self.player.controller.process_mouse(delta_x, delta_y);
+                if self.is_mouse_captured() {
+                    // Calculate relative movement from center
+                    let size = self.size();
+                    let center_x = size.width as f64 / 2.0;
+                    let center_y = size.height as f64 / 2.0;
+                    
+                    let delta_x = (position.x - center_x) as f32;
+                    let delta_y = (position.y - center_y) as f32;
+                    
+                    // Process mouse movement for camera control
+                    self.player.controller.process_mouse(delta_x, delta_y);
+                    
+                    // Reset cursor to center
+                    self.center_mouse();
+                    self.input_system.previous_mouse = Some(winit::dpi::PhysicalPosition::new(center_x, center_y));
+                    return true;
+                } else {
+                    // Handle normal mouse movement for UI
+                    if self.input_system.mouse_button_state.right {
+                        if let Some(prev) = self.input_system.previous_mouse {
+                            let delta_x = (position.x - prev.x) as f32;
+                            let delta_y = (position.y - prev.y) as f32;
+                            self.player.controller.process_mouse(delta_x, delta_y);
+                        }
                     }
+                    
+                    // Handle UI hover
+                    ui_manager::handle_ui_hover(&mut self.ui_manager, self.render_context.size.into(), position);
+                    self.input_system.previous_mouse = Some(*position);
+                    return true;
                 }
 
-                //if self.ui_manager.visibility!=false{
-                // decided to comment it out -> if the user re-enables the ui while hovering it, it will still be colored correctly
-                    ui_manager::handle_ui_hover(&mut self.ui_manager,self.render_context.size.into(), position);
-                //}
-                self.input_system.previous_mouse = Some(*position);
-                true
             }
             WindowEvent::MouseWheel { delta, .. } => {
                 self.player.controller.process_scroll(delta);
@@ -528,6 +556,27 @@ impl<'a> State<'a> {
     pub fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
         pipeline::render_all(self)
     }
+
+    pub fn toggle_mouse_capture(&mut self) {
+        self.input_system.mouse_captured = !self.input_system.mouse_captured;
+        
+        if self.input_system.mouse_captured {
+            // Hide cursor and lock to center
+            self.window().set_cursor_visible(false);
+            self.window().set_cursor_grab(winit::window::CursorGrabMode::Confined)
+                .or_else(|_| self.window().set_cursor_grab(winit::window::CursorGrabMode::Locked))
+                .unwrap();
+            self.center_mouse();
+        } else {
+            // Show cursor and release
+            self.window().set_cursor_visible(true);
+            self.window().set_cursor_grab(winit::window::CursorGrabMode::None).unwrap();
+        }
+    }
+
+    pub fn is_mouse_captured(&self) -> bool {
+        self.input_system.mouse_captured
+    }
 }
 
 static mut WINDOW_PTR: *mut winit::window::Window = std::ptr::null_mut();
@@ -545,6 +594,7 @@ pub async fn run() {
     let window_raw: winit::window::Window = winit::window::WindowBuilder::new()
         .with_title(&config.window_title)
         .with_inner_size(config.initial_window_size)
+        .with_min_inner_size(config.min_window_size)
         .with_position(config.initial_window_position)
         .with_window_icon(load_icon_from_bytes())
         .build(&event_loop)
