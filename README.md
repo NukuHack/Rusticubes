@@ -1,9 +1,9 @@
-<h1 align="center">rusTry</h1>
+<h1 align="center">ticubes</h1>
 <p align="center">Behold corrosion...</p>
 
 ---
 
-### 🚀 A Rusty Experiment 🦀  
+### 🚀 A ty Experiment 🦀  
 A playful repo for learning Rust by building a game (no promises tho).
 
 ---
@@ -57,6 +57,6 @@ MIT License - Borrow, tinker, or get inspired!
 ---
 
 ### 🛠️ Tech Stack  
-- **Rust**: Chaos with memory safety.  
+- **t**: Chaos with memory safety.  
 - **Game crates**: `wgpu`, `winit`, `log`, `glam`.  
 - **Batch file**: Automation for life.
