@@ -99,7 +99,7 @@ impl UIRenderer {
     }
 
     fn load_font_texture() -> (Vec<u8>, u32, u32) {
-        let img = image::load_from_memory(get_bytes!("bescii-chars.png"))
+        let img = image::load_from_memory(&get_bytes!("bescii-chars.png"))
             .expect("Failed to load font atlas");
         let (width, height) = img.dimensions();
         let rgba = img.into_rgba8();

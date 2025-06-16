@@ -1,34 +1,45 @@
 use include_dir::include_dir;
-// Include the assets directory at compile time
-pub const RESOURCE_DIR: include_dir::Dir = include_dir!("$CARGO_MANIFEST_DIR/resources");
 
-// Macro to mimic include_bytes! but using include_dir
+// Include the assets directory at compile time
+pub const RESOURCE_DIR: include_dir::Dir = include_dir!("$CARGO_MANIFEST_DIR/comp_resources");
+
+// Macro to get raw bytes from included resources (equivalent to your old get_bytes!)
+#[macro_export]
+macro_rules! get_raw_data {
+    ($path:expr) => {{
+        use crate::resources::RESOURCE_DIR;
+        RESOURCE_DIR
+            .get_file($path)
+            .map(|file| file.contents())
+            .unwrap_or_else(|| panic!("File {} not found in embedded resources", $path))
+    }};
+}
+
+// Updated get_bytes! macro that adds compression support while maintaining backward compatibility
 #[macro_export]
 macro_rules! get_bytes {
     ($path:expr) => {{
-        // Get the file at compile time
-        match crate::resources::RESOURCE_DIR.get_file($path) {
-            Some(file) => file.contents(),
-            None => panic!("File {} not found in embedded resources", $path),
+        use crate::resources::RESOURCE_DIR;
+        // First try to find a compressed version
+        if let Some(file) = RESOURCE_DIR.get_file(concat!($path, ".lz4")) {
+            lz4_flex::decompress_size_prepended(file.contents())
+                .unwrap_or_else(|e| panic!("Failed to decompress {}: {}", $path, e))
+        } else {
+            // Fall back to uncompressed version (original behavior)
+            crate::get_raw_data!($path).to_vec()
         }
     }};
 }
 
+// Updated get_string! macro that works with both compressed and uncompressed resources
 #[macro_export]
 macro_rules! get_string {
     ($path:expr) => {{
-        match std::str::from_utf8(match crate::resources::RESOURCE_DIR.get_file($path) {
-            Some(file) => file.contents(),
-            None => panic!("File {} not found in embedded resources", $path),
-        }) {
-            Ok(s) => s,
-            Err(e) => panic!("File {} contents are not valid UTF-8: {}", $path, e),
-        }
+        let bytes = $crate::get_bytes!($path);
+        String::from_utf8(bytes)
+            .unwrap_or_else(|e| panic!("File {} is not valid UTF-8: {}", $path, e))
     }};
 }
-
-//get_bytes!("calibri.ttf");
-//get_bytes!("happy-tree.png");
 
 use image::io::Reader as ImageReader;
 use std::io::Cursor;

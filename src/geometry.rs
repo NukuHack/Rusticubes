@@ -146,7 +146,7 @@ impl TextureManager {
         let texture = Texture::from_bytes(
             device,
             queue,
-            get_bytes!("cube-diffuse.jpg"),
+            &get_bytes!("cube-diffuse.jpg"),
             "cube_texture",
         )
         .expect("Failed to create cube texture");
