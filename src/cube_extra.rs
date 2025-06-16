@@ -1,6 +1,6 @@
 #[allow(unused_imports)]
 use super::cube;
-use super::cube::ChunkCoord;
+use super::cube_math::ChunkCoord;
 use crate::camera::Camera;
 use crate::cube::{Block, World};
 use glam::Vec3;
