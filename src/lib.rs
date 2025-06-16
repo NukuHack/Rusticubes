@@ -26,11 +26,13 @@ use std::iter::Iterator;
 use winit::{
     event::{ElementState, Event, MouseButton, WindowEvent, KeyEvent},
     keyboard::KeyCode as Key,
+    window::Window
 };
+//use std::sync::{Arc, Mutex, atomic::{AtomicBool, Ordering}};
 
 
 pub struct State<'a> {
-    window: &'a winit::window::Window,
+    window: &'a Window,
     render_context: RenderContext<'a>,
     previous_frame_time: std::time::Instant,
     camera_system: camera::CameraSystem,
@@ -55,7 +57,7 @@ pub struct DataSubsystem {
 }
 
 impl<'a> State<'a> {
-    async fn new(window: &'a winit::window::Window) -> Self {
+    async fn new(window: &'a Window) -> Self {
         let size: winit::dpi::PhysicalSize<u32> = window.inner_size();
         let instance: wgpu::Instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
             #[cfg(not(target_arch = "wasm32"))]
@@ -182,7 +184,7 @@ impl<'a> State<'a> {
         }
     }
 
-    pub fn window(&self) -> &winit::window::Window {
+    pub fn window(&self) -> &Window {
         self.window
     }
     pub fn surface(&self) -> &wgpu::Surface<'a> {
@@ -517,7 +519,7 @@ impl<'a> State<'a> {
     }
 }
 
-static mut WINDOW_PTR: *mut winit::window::Window = std::ptr::null_mut();
+static mut WINDOW_PTR: *mut Window = std::ptr::null_mut();
 pub static mut STATE_PTR: *mut State = std::ptr::null_mut();
 
 //#[cfg_attr(target_arch = "wasm32", wasm_bindgen(start))]
@@ -529,7 +531,7 @@ pub async fn run() {
     let monitor_size: winit::dpi::PhysicalSize<u32> = monitor.size(); // Monitor size in physical pixels
     
     let config: config::AppConfig = config::AppConfig::new(monitor_size);
-    let window_raw: winit::window::Window = winit::window::WindowBuilder::new()
+    let window_raw: Window = winit::window::WindowBuilder::new()
         .with_title(&config.window_title)
         .with_inner_size(config.initial_window_size)
         .with_min_inner_size(config.min_window_size)
@@ -547,7 +549,7 @@ pub async fn run() {
     unsafe {
         WINDOW_PTR = Box::into_raw(Box::new(window_raw));
     }
-    let window: &mut winit::window::Window = unsafe { &mut *WINDOW_PTR };
+    let window: &mut Window = unsafe { &mut *WINDOW_PTR };
         
     let state_raw: State = State::new(window).await;
 

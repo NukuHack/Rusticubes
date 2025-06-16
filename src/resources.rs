@@ -14,6 +14,19 @@ macro_rules! get_bytes {
     }};
 }
 
+#[macro_export]
+macro_rules! get_string {
+    ($path:expr) => {{
+        match std::str::from_utf8(match crate::resources::RESOURCE_DIR.get_file($path) {
+            Some(file) => file.contents(),
+            None => panic!("File {} not found in embedded resources", $path),
+        }) {
+            Ok(s) => s,
+            Err(e) => panic!("File {} contents are not valid UTF-8: {}", $path, e),
+        }
+    }};
+}
+
 //get_bytes!("calibri.ttf");
 //get_bytes!("happy-tree.png");
 

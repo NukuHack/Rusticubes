@@ -1,6 +1,7 @@
 use super::ui_element;
 use super::ui_element::{UIElement, Vertex};
 use super::ui_render::UIRenderer;
+use crate::get_string;
 use winit::keyboard::KeyCode as Key;
 
 pub struct UIManager {
@@ -52,9 +53,7 @@ impl UIManager {
 
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("UI Shader"),
-            source: wgpu::ShaderSource::Wgsl(std::borrow::Cow::from(include_str!(
-                "ui_shader.wgsl"
-            ))),
+            source: wgpu::ShaderSource::Wgsl(std::borrow::Cow::from(get_string!("ui_shader.wgsl"))),
         });
 
         let ui_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {

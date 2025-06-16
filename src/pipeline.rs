@@ -1,3 +1,4 @@
+use crate::get_string;
 use wgpu;
 
 /// Struct holding all render pipelines and their associated shaders
@@ -76,12 +77,22 @@ struct Shaders {
 
 impl Shaders {
     fn new(device: &wgpu::Device) -> Self {
-        // Pre-compile shader source combinations
+        // Load shader sources first
+        let chunk_shader = get_string!("chunk_shader.wgsl");
+        let inside_shader = get_string!("inside_shader.wgsl");
+        let texture_shader = get_string!("texture_shader.wgsl");
+        let sky_shader = get_string!("sky_shader.wgsl");
+        let fxaa_shader = get_string!("fxaa.wgsl");
+
+        // Combine shader sources using string concatenation
+        let inside_source = format!("{}\n{}", chunk_shader, inside_shader);
+        let chunk_source = format!("{}\n{}", chunk_shader, texture_shader);
+
         Self {
-            inside: create_shader(device, "Inside Solid Color Shader", INSIDE_SHADER),
-            chunk: create_shader(device, "Chunk Shader", TEXTURE_SHADER),
-            post: create_shader(device, "Post Processing Shader", include_str!("fxaa.wgsl")),
-            sky: create_shader(device, "Sky Shader", include_str!("sky_shader.wgsl")),
+            inside: create_shader(device, "Inside Solid Color Shader", &inside_source),
+            chunk: create_shader(device, "Chunk Shader", &chunk_source),
+            post: create_shader(device, "Post Processing Shader", &fxaa_shader),
+            sky: create_shader(device, "Sky Shader", &sky_shader),
         }
     }
 }
@@ -93,19 +104,6 @@ fn create_shader(device: &wgpu::Device, label: &str, source: &str) -> wgpu::Shad
         source: wgpu::ShaderSource::Wgsl(std::borrow::Cow::from(source)),
     })
 }
-
-// Shader source combinations
-const TEXTURE_SHADER: &str = concat!(
-    include_str!("chunk_shader.wgsl"),
-    "\n",
-    include_str!("texture_shader.wgsl")
-);
-
-const INSIDE_SHADER: &str = concat!(
-    include_str!("chunk_shader.wgsl"),
-    "\n",
-    include_str!("inside_shader.wgsl")
-);
 
 /// Common pipeline creation helper
 fn create_base_pipeline(
