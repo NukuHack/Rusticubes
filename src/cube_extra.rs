@@ -12,8 +12,8 @@ fn update_chunk_mesh(world: &mut World, pos: Vec3) {
     let chunk_pos = ChunkCoord::from_world_pos(pos);
     if let Some(chunk) = world.get_chunk_mut(chunk_pos) {
         chunk.make_mesh(
-            unsafe { super::get_state().device() },
-            unsafe { super::get_state().queue() },
+            super::config::get_state().device(),
+            super::config::get_state().queue(),
             true,
         );
     }
@@ -85,7 +85,7 @@ pub fn raycast_to_block(camera: &Camera, world: &World, max_distance: f32) -> Op
 
 /// Places a cube on the face of the block the player is looking at
 pub fn place_looked_cube() {
-    let state = unsafe { super::get_state() };
+    let state = super::config::get_state();
     let camera = &state.camera_system.camera;
     let world = &mut state.data_system.world;
 
@@ -98,7 +98,7 @@ pub fn place_looked_cube() {
 
 /// Removes the block the player is looking at
 pub fn remove_targeted_block() {
-    let state = unsafe { super::get_state() };
+    let state = super::config::get_state();
     let camera = &state.camera_system.camera;
     let world = &mut state.data_system.world;
 
@@ -111,71 +111,63 @@ pub fn remove_targeted_block() {
 /// Loads a chunk at the camera's position if not already loaded
 #[allow(dead_code)]
 pub fn add_def_chunk() {
-    unsafe {
-        let state = super::get_state();
-        let chunk_pos = ChunkCoord::from_world_pos(state.camera_system.camera.position);
+    let state = super::config::get_state();
+    let chunk_pos = ChunkCoord::from_world_pos(state.camera_system.camera.position);
 
-        if state.data_system.world.loaded_chunks.contains(&chunk_pos) {
-            return;
-        }
+    if state.data_system.world.loaded_chunks.contains(&chunk_pos) {
+        return;
+    }
 
-        if state.data_system.world.load_chunk(chunk_pos, false) {
-            if let Some(chunk) = state.data_system.world.get_chunk_mut(chunk_pos) {
-                let state_b = super::get_state();
-                chunk.make_mesh(state_b.device(), state_b.queue(), true);
-            }
+    if state.data_system.world.load_chunk(chunk_pos, false) {
+        if let Some(chunk) = state.data_system.world.get_chunk_mut(chunk_pos) {
+            let state_b = super::config::get_state();
+            chunk.make_mesh(state_b.device(), state_b.queue(), true);
         }
     }
 }
 /// Loads a chunk at the camera's position if not already loaded
 pub fn add_full_chunk() {
-    unsafe {
-        let state = super::get_state();
-        let chunk_pos = ChunkCoord::from_world_pos(state.camera_system.camera.position);
+    let state = super::config::get_state();
+    let chunk_pos = ChunkCoord::from_world_pos(state.camera_system.camera.position);
 
-        if state.data_system.world.load_chunk(chunk_pos, true) {
-            if let Some(chunk) = state.data_system.world.get_chunk_mut(chunk_pos) {
-                let state_b = super::get_state();
-                chunk.make_mesh(state_b.device(), state_b.queue(), true);
-            }
+    if state.data_system.world.load_chunk(chunk_pos, true) {
+        if let Some(chunk) = state.data_system.world.get_chunk_mut(chunk_pos) {
+            let state_b = super::config::get_state();
+            chunk.make_mesh(state_b.device(), state_b.queue(), true);
         }
     }
 }
 
 /// Loads chunks around the camera in a radius
 pub fn update_full_world() {
-    unsafe {
-        let state = super::get_state();
-        state.data_system.world.update_loaded_chunks(
-            state.camera_system.camera.position,
-            REACH * 2.0,
-            false,
-        );
+    let state = super::config::get_state();
+    state.data_system.world.update_loaded_chunks(
+        state.camera_system.camera.position,
+        REACH * 2.0,
+        false,
+    );
 
-        let state_b = super::get_state();
-        state
-            .data_system
-            .world
-            .make_chunk_meshes(state_b.device(), state_b.queue());
-    }
+    let state_b = super::config::get_state();
+    state
+        .data_system
+        .world
+        .make_chunk_meshes(state_b.device(), state_b.queue());
 }
 
 /// Fill chunks around the camera in a radius
 pub fn add_full_world() {
-    unsafe {
-        let state = super::get_state();
-        state.data_system.world.update_loaded_chunks(
-            state.camera_system.camera.position,
-            REACH * 2.0,
-            true,
-        );
+    let state = super::config::get_state();
+    state.data_system.world.update_loaded_chunks(
+        state.camera_system.camera.position,
+        REACH * 2.0,
+        true,
+    );
 
-        let state_b = super::get_state();
-        state
-            .data_system
-            .world
-            .make_chunk_meshes(state_b.device(), state_b.queue());
-    }
+    let state_b = super::config::get_state();
+    state
+        .data_system
+        .world
+        .make_chunk_meshes(state_b.device(), state_b.queue());
 }
 /// Performs ray tracing to a cube and determines which of the 27 points (3x3x3 grid) was hit
 pub fn raycast_to_cube_point(
@@ -226,31 +218,29 @@ pub fn raycast_to_cube_point(
 
 /// Toggles a point in the marching cube that the player is looking at
 pub fn toggle_looked_point() -> Option<(bool, (u8, u8, u8))> {
-    unsafe {
-        let state = super::get_state();
-        let camera = &state.camera_system.camera;
-        let world = &mut state.data_system.world;
+    let state = super::config::get_state();
+    let camera = &state.camera_system.camera;
+    let world = &mut state.data_system.world;
 
-        let (block_pos, (x, y, z)) = raycast_to_cube_point(camera, world, REACH)?;
+    let (block_pos, (x, y, z)) = raycast_to_cube_point(camera, world, REACH)?;
 
-        let block = world.get_block(block_pos);
-        if block.is_empty() {
-            return None;
-        }
-
-        let mut new_block = *block;
-
-        if !new_block.is_marching() {
-            new_block = new_block.get_march()?;
-        }
-
-        let is_dot = new_block.get_point(x, y, z).unwrap_or(false);
-        new_block.set_point(x, y, z, !is_dot);
-
-        world.set_block(block_pos, new_block);
-
-        update_chunk_mesh(world, block_pos);
-
-        Some((is_dot, (x, y, z)))
+    let block = world.get_block(block_pos);
+    if block.is_empty() {
+        return None;
     }
+
+    let mut new_block = *block;
+
+    if !new_block.is_marching() {
+        new_block = new_block.get_march()?;
+    }
+
+    let is_dot = new_block.get_point(x, y, z).unwrap_or(false);
+    new_block.set_point(x, y, z, !is_dot);
+
+    world.set_block(block_pos, new_block);
+
+    update_chunk_mesh(world, block_pos);
+
+    Some((is_dot, (x, y, z)))
 }

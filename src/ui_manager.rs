@@ -394,7 +394,7 @@ pub fn setup_ui(ui_manager: &mut UIManager) {
         "Close".to_string(),
         || {
             println!("Close button clicked!");
-            super::close_app();
+            super::config::close_app();
         },
     )
     .with_border([0.2, 0.2, 0.2, 1.0], 0.003);

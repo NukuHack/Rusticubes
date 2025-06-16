@@ -21,6 +21,7 @@ mod ui_render;
 mod ui_manager;
 
 
+use std::sync::atomic::Ordering;
 use glam::Vec3;
 use std::iter::Iterator;
 use winit::{
@@ -28,7 +29,6 @@ use winit::{
     keyboard::KeyCode as Key,
     window::Window
 };
-//use std::sync::{Arc, Mutex, atomic::{AtomicBool, Ordering}};
 
 
 pub struct State<'a> {
@@ -245,7 +245,7 @@ impl<'a> State<'a> {
     }
     pub fn handle_events(&mut self,event: &WindowEvent) -> bool{
         match event {
-            WindowEvent::CloseRequested => {close_app(); true},
+            WindowEvent::CloseRequested => {config::close_app(); true},
             WindowEvent::Resized(physical_size) => self.resize(*physical_size),
             WindowEvent::RedrawRequested => {
                 self.window().request_redraw();
@@ -257,7 +257,7 @@ impl<'a> State<'a> {
                     },
                     Err(wgpu::SurfaceError::OutOfMemory | wgpu::SurfaceError::Other) => {
                         log::error!("Surface error");
-                        close_app(); true
+                        config::close_app(); true
                     }
                     Err(wgpu::SurfaceError::Timeout) => {
                         log::warn!("Surface timeout");
@@ -335,7 +335,7 @@ impl<'a> State<'a> {
                     },
                     Key::Escape => {
                         if *state == ElementState::Pressed {
-                            close_app();
+                            config::close_app();
                             return true;
                         }
                         false
@@ -519,9 +519,6 @@ impl<'a> State<'a> {
     }
 }
 
-static mut WINDOW_PTR: *mut Window = std::ptr::null_mut();
-pub static mut STATE_PTR: *mut State = std::ptr::null_mut();
-
 //#[cfg_attr(target_arch = "wasm32", wasm_bindgen(start))]
 pub async fn run() {
     env_logger::init();
@@ -546,33 +543,24 @@ pub async fn run() {
     window_raw.focus_window();
     window_raw.set_visible(true);
 
-    unsafe {
-        WINDOW_PTR = Box::into_raw(Box::new(window_raw));
-    }
-    let window: &mut Window = unsafe { &mut *WINDOW_PTR };
+    // Store the window pointer
+    config::WINDOW_PTR.store(Box::into_raw(Box::new(window_raw)), Ordering::Release);
+    let window_ref = config::get_window();
         
-    let state_raw: State = State::new(window).await;
+    let state = State::new(window_ref).await;
 
-    unsafe {   // Store the pointer in the static variable
-        STATE_PTR = Box::into_raw(Box::new(state_raw));
-    }
-
-    let state = unsafe{get_state()};
+    // Store the state pointer
+    config::STATE_PTR.store(Box::into_raw(Box::new(state)), Ordering::Release);
 
     event_loop.run(move |event, control_flow| {
-        if closed() {
-            unsafe {
-                if !STATE_PTR.is_null() {
-                    let _ = Box::from_raw(STATE_PTR); // Drops the State
-                    STATE_PTR = std::ptr::null_mut();
-                }
-            }
+        if config::is_closed() {
+            config::cleanup_resources();
             control_flow.exit();
             return;
         }
         match &event {
-            Event::WindowEvent { event, window_id } if *window_id == state.window().id() => {
-                state.handle_events(event);
+            Event::WindowEvent { event, window_id } if *window_id == config::get_state().window().id() => {
+                config::get_state().handle_events(event);
                 cube_extra::update_full_world();
             }
             _ => {}
@@ -580,21 +568,4 @@ pub async fn run() {
     }).expect("Event loop error");
 }
 
-
-// Add this new unsafe function to retrieve the State
-pub unsafe fn get_state() -> &'static mut State<'static> { unsafe {
-    if STATE_PTR.is_null() {
-        panic!("State not initialized or already dropped");
-    }
-    &mut *STATE_PTR
-}}
-
-
-pub static mut CLOSED:bool = false;
-pub fn close_app() {
-    unsafe{CLOSED = true;};
-}
-pub fn closed() -> bool{
-    unsafe{CLOSED}
-}
 

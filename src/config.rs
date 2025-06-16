@@ -33,3 +33,54 @@ impl AppConfig {
         }
     }
 }
+
+
+use super::State;
+use std::sync::atomic::{AtomicBool,AtomicPtr, Ordering};
+
+// Replace your static mut variables with these:
+pub static WINDOW_PTR: AtomicPtr<winit::window::Window> = AtomicPtr::new(std::ptr::null_mut());
+pub static STATE_PTR: AtomicPtr<State<'static>> = AtomicPtr::new(std::ptr::null_mut());
+pub static CLOSED: AtomicBool = AtomicBool::new(false);
+
+// Safe accessor functions
+pub fn get_window() -> &'static mut winit::window::Window {
+    let ptr = WINDOW_PTR.load(Ordering::Acquire);
+    if ptr.is_null() {
+        panic!("Window not initialized");
+    }
+    unsafe { &mut *ptr }
+}
+
+pub fn get_state() -> &'static mut State<'static> {
+    let ptr = STATE_PTR.load(Ordering::Acquire);
+    if ptr.is_null() {
+        panic!("State not initialized");
+    }
+    unsafe { &mut *ptr }
+}
+
+pub fn close_app() {
+    CLOSED.store(true, Ordering::Release);
+}
+
+pub fn is_closed() -> bool {
+    CLOSED.load(Ordering::Acquire)
+}
+
+// In your cleanup code (like when closing the app):
+pub fn cleanup_resources() {
+    // 1. Take ownership of the state pointer (atomically setting it to null)
+    let state_ptr = STATE_PTR.swap(std::ptr::null_mut(), Ordering::AcqRel);
+    
+    // 2. If we got a non-null pointer, convert it back to Box to drop it
+    if !state_ptr.is_null() {
+        unsafe { let _ = Box::from_raw(state_ptr); }; // Drops when goes out of scope
+    }
+
+    // 3. Do the same for the window
+    let window_ptr = WINDOW_PTR.swap(std::ptr::null_mut(), Ordering::AcqRel);
+    if !window_ptr.is_null() {
+        unsafe { let _ = Box::from_raw(window_ptr); };
+    }
+}

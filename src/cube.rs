@@ -720,60 +720,56 @@ impl World {
 
     /// Loads a chunk from storage
     pub fn load_chunk(&mut self, chunk_coord: ChunkCoord, force: bool) -> bool {
-        unsafe {
-            let state = super::get_state();
-            let device = &state.render_context.device;
-            let chunk_bind_group_layout = &state.render_context.chunk_bind_group_layout;
+        let state = super::config::get_state();
+        let device = &state.render_context.device;
+        let chunk_bind_group_layout = &state.render_context.chunk_bind_group_layout;
 
-            let mut chunk = Chunk::empty();
-            if force {
-                chunk = match Chunk::load() {
-                    Some(c) => c,
-                    None => return false,
-                };
-            }
-
-            // For palette-based chunks, we need a more sophisticated comparison
-            if let Some(existing_chunk) = self.get_chunk(chunk_coord) {
-                // Compare palette and storage instead of individual blocks
-                if existing_chunk.palette == chunk.palette
-                    && existing_chunk.storage == chunk.storage
-                {
-                    return false;
-                }
-            }
-
-            // Create position buffer
-            let position_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("Chunk Position Buffer"),
-                contents: bytemuck::cast_slice(&[
-                    <ChunkCoord as Into<u64>>::into(chunk_coord) as u64,
-                    0.0 as u64,
-                ]),
-                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-            });
-
-            // Create bind group
-            let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-                layout: chunk_bind_group_layout,
-                entries: &[wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: position_buffer.as_entire_binding(),
-                }],
-                label: Some("chunk_bind_group"),
-            });
-
-            self.chunks.insert(
-                chunk_coord,
-                Chunk {
-                    bind_group: Some(bind_group),
-                    ..chunk
-                },
-            );
-            self.loaded_chunks.insert(chunk_coord);
-
-            true
+        let mut chunk = Chunk::empty();
+        if force {
+            chunk = match Chunk::load() {
+                Some(c) => c,
+                None => return false,
+            };
         }
+
+        // For palette-based chunks, we need a more sophisticated comparison
+        if let Some(existing_chunk) = self.get_chunk(chunk_coord) {
+            // Compare palette and storage instead of individual blocks
+            if existing_chunk.palette == chunk.palette && existing_chunk.storage == chunk.storage {
+                return false;
+            }
+        }
+
+        // Create position buffer
+        let position_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Chunk Position Buffer"),
+            contents: bytemuck::cast_slice(&[
+                <ChunkCoord as Into<u64>>::into(chunk_coord) as u64,
+                0.0 as u64,
+            ]),
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        });
+
+        // Create bind group
+        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            layout: chunk_bind_group_layout,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: position_buffer.as_entire_binding(),
+            }],
+            label: Some("chunk_bind_group"),
+        });
+
+        self.chunks.insert(
+            chunk_coord,
+            Chunk {
+                bind_group: Some(bind_group),
+                ..chunk
+            },
+        );
+        self.loaded_chunks.insert(chunk_coord);
+
+        true
     }
 
     /// Updates loaded chunks based on player position
