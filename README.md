@@ -58,5 +58,5 @@ MIT License - Borrow, tinker, or get inspired!
 
 ### 🛠️ Tech Stack  
 - **Rust**: Chaos with memory safety.  
-- **Game crates**: `wgpu`, `winit`, `log`, `cgmath`.  
+- **Game crates**: `wgpu`, `winit`, `log`, `glam`.  
 - **Batch file**: Automation for life.
