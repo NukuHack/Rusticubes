@@ -1,7 +1,14 @@
 [package]
-name = "test_app"
-version = "0.1.0"
+name = "rusticubes"
+version = "0.3.0"
 edition = "2024"
+authors = ["NukuHack", "nukuhack@gmail.com"] # might not be able to answer too quickly
+description = "3D voxel sandbox game"
+readme = true
+repository = "https://github.com/NukuHack/Rusticubes"
+license = "MIT"
+keywords = ["gamedev", "graphics"]
+include = ["/src", "LICENSE"]
 build = "build.rs"
 
 

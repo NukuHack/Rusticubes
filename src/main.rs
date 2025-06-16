@@ -6,7 +6,7 @@ use std::{
     sync, task,
 };
 
-use test_app::run;
+use rusticubes::run;
 
 /// Entry point of the application
 fn main() {
