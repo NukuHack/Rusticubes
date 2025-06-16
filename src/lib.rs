@@ -256,11 +256,11 @@ impl<'a> State<'a> {
                         self.resize(*self.size())
                     },
                     Err(wgpu::SurfaceError::OutOfMemory | wgpu::SurfaceError::Other) => {
-                        log::error!("Surface error");
+                        println!("Surface error");
                         config::close_app(); true
                     }
                     Err(wgpu::SurfaceError::Timeout) => {
-                        log::warn!("Surface timeout");
+                        println!("Surface timeout");
                         true
                     },
                 }
@@ -520,9 +520,7 @@ impl<'a> State<'a> {
 }
 
 //#[cfg_attr(target_arch = "wasm32", wasm_bindgen(start))]
-pub async fn run() {
-    env_logger::init();
-    
+pub async fn run() {    
     let event_loop: winit::event_loop::EventLoop<()> = winit::event_loop::EventLoop::new().unwrap();
     let monitor: winit::monitor::MonitorHandle = event_loop.primary_monitor().expect("No primary monitor found!");
     let monitor_size: winit::dpi::PhysicalSize<u32> = monitor.size(); // Monitor size in physical pixels

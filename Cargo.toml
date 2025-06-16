@@ -6,19 +6,17 @@ build = "build.rs"
 
 
 [dependencies]
-# core lib for events and orhet utility stuff
+# core lib for events and other utility stuff
 winit = { version = "^0.29", features = ["rwh_05"] }
 # core lib used to make windows and display stuff on them
-wgpu = { version = "^24", features = ["dx12", "metal"] } # not sure how to add vulkan to this ...
+wgpu = "^24" # not sure how to add vulkan to this ...
 # advanced lib for math and extra complex stuff
 bytemuck = { version = "1.16", features = [ "derive" ] }
-# pretty logging
-log = "^0.4"
-# pretty errors
-env_logger = "^0.10"
 # just the basic math : 3d points vectors rotation etc...
 glam = "^0.30"
-# better hashmap acces 
+# image load lib
+image = { version = "0.24", features = ["png", "jpeg"], default-features = false}
+# better hashmap access
 ahash = "^0.8"
 # just to compile the resources
 include_dir = "0.7"
@@ -37,23 +35,19 @@ opt-level = 1       # Light optimizations
 incremental = true  # Faster recompiles
 codegen-units = 16   # Parallel compilation
 
-
 [profile.dev.package."*"]
 opt-level = 1       # Apply to dependencies too
 
 
 [profile.release]
-opt-level = 3
-incremental = false
-codegen-units = 4   # Parallel compilation
-lto = true
-
+opt-level = 3       # Optimize for speed (not size)
+incremental = false # Disabled (good for release)
+codegen-units = 4   # Balance compile time/optimization
+lto = true          # Link-time optimization (good)
+panic = "abort"     # Reduces binary size (good)
+strip = true        # Removes debug symbols (good)
 
 [profile.release.package."*"]
 opt-level = 3       # Apply to dependencies too
 
 
-[dependencies.image]
-version = "0.24"
-default-features = false
-features = ["png", "jpeg"]
