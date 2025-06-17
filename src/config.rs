@@ -35,6 +35,7 @@ impl AppConfig {
 }
 
 
+use crate::GameState;
 use super::State;
 use std::sync::atomic::{AtomicBool,AtomicPtr, Ordering};
 
@@ -42,6 +43,7 @@ use std::sync::atomic::{AtomicBool,AtomicPtr, Ordering};
 pub static WINDOW_PTR: AtomicPtr<winit::window::Window> = AtomicPtr::new(std::ptr::null_mut());
 pub static STATE_PTR: AtomicPtr<State<'static>> = AtomicPtr::new(std::ptr::null_mut());
 pub static CLOSED: AtomicBool = AtomicBool::new(false);
+pub static GAMESTATE_PTR: AtomicPtr<GameState> = AtomicPtr::new(std::ptr::null_mut());
 
 // Safe accessor functions
 pub fn get_window() -> &'static mut winit::window::Window {
@@ -59,6 +61,13 @@ pub fn get_state() -> &'static mut State<'static> {
     }
     unsafe { &mut *ptr }
 }
+pub fn get_gamestate() -> &'static mut GameState {
+    let ptr = GAMESTATE_PTR.load(Ordering::Acquire);
+    if ptr.is_null() {
+        panic!("GameState not initialized");
+    }
+    unsafe { &mut *ptr }
+}
 
 pub fn close_app() {
     CLOSED.store(true, Ordering::Release);
@@ -72,15 +81,23 @@ pub fn is_closed() -> bool {
 pub fn cleanup_resources() {
     // 1. Take ownership of the state pointer (atomically setting it to null)
     let state_ptr = STATE_PTR.swap(std::ptr::null_mut(), Ordering::AcqRel);
-    
     // 2. If we got a non-null pointer, convert it back to Box to drop it
     if !state_ptr.is_null() {
         unsafe { let _ = Box::from_raw(state_ptr); }; // Drops when goes out of scope
     }
-
+    drop_gamestate();
     // 3. Do the same for the window
     let window_ptr = WINDOW_PTR.swap(std::ptr::null_mut(), Ordering::AcqRel);
     if !window_ptr.is_null() {
-        unsafe { let _ = Box::from_raw(window_ptr); };
+        unsafe { let _ = Box::from_raw(window_ptr); }; // Drops when goes out of scope
     }
+}
+
+pub fn drop_gamestate() {
+
+    let gamestate_ptr = GAMESTATE_PTR.swap(std::ptr::null_mut(), Ordering::AcqRel);
+    if !gamestate_ptr.is_null() {
+        unsafe { let _ = Box::from_raw(gamestate_ptr); }; // Drops when goes out of scope
+    }
+
 }

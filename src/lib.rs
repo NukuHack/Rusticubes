@@ -9,6 +9,7 @@ mod pipeline;
 mod debug;
 mod resources;
 mod input;
+mod file_manager;
 
 mod cube;
 mod cube_math;
@@ -21,6 +22,7 @@ mod ui_render;
 mod ui_manager;
 
 
+use crate::ui_manager::UIState;
 use std::sync::atomic::Ordering;
 use glam::Vec3;
 use std::iter::Iterator;
@@ -35,13 +37,15 @@ pub struct State<'a> {
     window: &'a Window,
     render_context: RenderContext<'a>,
     previous_frame_time: std::time::Instant,
-    camera_system: camera::CameraSystem,
-    player: player::Player,
     input_system: input::InputSystem,
     pipeline: pipeline::Pipeline,
-    data_system: DataSubsystem,
     ui_manager: ui_manager::UIManager,
+    camera_system: camera::CameraSystem,
+    texture_manager: geometry::TextureManager,
+    is_world_running: bool,
 }
+
+
 pub struct RenderContext<'a> {
     surface: wgpu::Surface<'a>,
     device: wgpu::Device,
@@ -50,11 +54,23 @@ pub struct RenderContext<'a> {
     size: winit::dpi::PhysicalSize<u32>,
     chunk_bind_group_layout:  wgpu::BindGroupLayout,
 }
-
-pub struct DataSubsystem {
-    texture_manager: geometry::TextureManager,
+#[allow(dead_code)]
+pub struct GameState {
+    player: player::Player,
     world: cube::World, // lol main data storage :)
 }
+
+impl GameState {
+    fn new(camera_system: &camera::CameraSystem) -> Self {
+        let player: player::Player = player::Player::new(camera::CameraConfig::new(Vec3::new(0.5, 1.8, 2.0)));
+
+        Self {
+            player,
+            world: cube::World::empty(),
+        }
+    }
+}
+
 
 impl<'a> State<'a> {
     async fn new(window: &'a Window) -> Self {
@@ -121,7 +137,6 @@ impl<'a> State<'a> {
             size,
             cam_config,
         );
-        let player: player::Player = player::Player::new(cam_config);
 
         surface.configure(&device, &config);
 
@@ -156,12 +171,8 @@ impl<'a> State<'a> {
         let pipeline: pipeline::Pipeline = pipeline::Pipeline::new(&device, &config, &render_pipeline_layout);
 
         let mut ui_manager:ui_manager::UIManager = ui_manager::UIManager::new(&device, &config, &queue);
-        ui_manager::setup_ui(&mut ui_manager);
+        ui_manager.setup_ui();
         
-        let data_system: DataSubsystem = DataSubsystem{
-            texture_manager,
-            world: cube::World::empty(),
-        };
         let render_context: RenderContext = RenderContext{
             surface,
             device,
@@ -176,11 +187,11 @@ impl<'a> State<'a> {
             render_context,
             previous_frame_time: std::time::Instant::now(),
             camera_system,
-            player,
             input_system: input::InputSystem::default(),
             pipeline,
-            data_system,
+            texture_manager,
             ui_manager,
+            is_world_running: false,
         }
     }
 
@@ -218,10 +229,7 @@ impl<'a> State<'a> {
         &self.pipeline
     }
     pub fn texture_manager(&self) -> &geometry::TextureManager {
-        &self.data_system.texture_manager
-    }
-    pub fn world(&self) -> &cube::World {
-        &self.data_system.world
+        &self.texture_manager
     }
     pub fn ui_manager(&self) -> &ui_manager::UIManager {
         &self.ui_manager
@@ -234,7 +242,7 @@ impl<'a> State<'a> {
             self.render_context.config.height = new_size.height;
             self.camera_system.projection.resize(new_size);
             self.render_context.surface.configure(self.device(), self.config());
-            self.data_system.texture_manager.depth_texture = geometry::Texture::create_depth_texture(
+            self.texture_manager.depth_texture = geometry::Texture::create_depth_texture(
                 self.device(),
                 self.config(),
                 "depth_texture",
@@ -288,7 +296,9 @@ impl<'a> State<'a> {
 
                 // Handle UI input first if there's a focused element
                 if let Some(_focused_idx) = self.ui_manager.focused_element {
-                    self.player.controller.reset_keyboard(); // Temporary workaround
+                    if self.is_world_running {
+                        config::get_gamestate().player.controller.reset_keyboard(); // Temporary workaround
+                    }
                     
                     if *state == ElementState::Pressed {
                         // Handle special keys for UI
@@ -327,7 +337,40 @@ impl<'a> State<'a> {
                 // Handle game controls if no UI element is focused
                 // `key` is of type `KeyCode` (e.g., KeyCode::W)
                 // `state` is of type `ElementState` (Pressed or Released)
-                self.player.controller.process_keyboard(&key, &state);
+                if self.is_world_running {
+                    config::get_gamestate().player.controller.process_keyboard(&key, &state);
+                    match key {
+                        Key::KeyF => {
+                            if *state == ElementState::Pressed {
+                                cube_extra::place_looked_cube();
+                                return true
+                            }
+                            return false;
+                        },
+                        Key::KeyR => {
+                            if *state == ElementState::Pressed {
+                                cube_extra::remove_targeted_block();
+                                return true
+                            }
+                            return false;
+                        },
+                        Key::KeyE => {
+                            if *state == ElementState::Pressed {
+                                cube_extra::toggle_looked_point();
+                                return true
+                            }
+                            return false;
+                        },
+                        Key::KeyL => {
+                            if *state == ElementState::Pressed {
+                                cube_extra::add_full_chunk();
+                                return true
+                            }
+                            return false;
+                        },
+                        _ => false,
+                    };
+                }
                 match key {
                     Key::AltLeft | Key::AltRight => {
                         self.center_mouse();
@@ -335,7 +378,7 @@ impl<'a> State<'a> {
                     },
                     Key::Escape => {
                         if *state == ElementState::Pressed {
-                            config::close_app();
+                            close_pressed();
                             return true;
                         }
                         false
@@ -363,34 +406,6 @@ impl<'a> State<'a> {
                                 window.set_fullscreen(Some(winit::window::Fullscreen::Borderless(Some(current_monitor))));
                             }
                             return true;
-                        }
-                        false
-                    },
-                    Key::KeyF => {
-                        if *state == ElementState::Pressed {
-                            cube_extra::place_looked_cube();
-                            return true
-                        }
-                        false
-                    },
-                    Key::KeyR => {
-                        if *state == ElementState::Pressed {
-                            cube_extra::remove_targeted_block();
-                            return true
-                        }
-                        false
-                    },
-                    Key::KeyE => {
-                        if *state == ElementState::Pressed {
-                            cube_extra::toggle_looked_point();
-                            return true
-                        }
-                        false
-                    },
-                    Key::KeyL => {
-                        if *state == ElementState::Pressed {
-                            cube_extra::add_full_chunk();
-                            return true
                         }
                         false
                     },
@@ -451,8 +466,10 @@ impl<'a> State<'a> {
                     let delta_y = (position.y - center_y) as f32;
                     
                     // Process mouse movement for camera control
-                    self.player.controller.process_mouse(delta_x, delta_y);
-                    
+
+                    if self.is_world_running {
+                        config::get_gamestate().player.controller.process_mouse(delta_x, delta_y);
+                    }
                     // Reset cursor to center
                     self.center_mouse();
                     self.input_system.previous_mouse = Some(winit::dpi::PhysicalPosition::new(center_x, center_y));
@@ -463,7 +480,9 @@ impl<'a> State<'a> {
                         if let Some(prev) = self.input_system.previous_mouse {
                             let delta_x = (position.x - prev.x) as f32;
                             let delta_y = (position.y - prev.y) as f32;
-                            self.player.controller.process_mouse(delta_x, delta_y);
+                            if self.is_world_running {
+                                config::get_gamestate().player.controller.process_mouse(delta_x, delta_y);
+                            }
                         }
                     }
                     
@@ -475,7 +494,9 @@ impl<'a> State<'a> {
 
             }
             WindowEvent::MouseWheel { delta, .. } => {
-                self.player.controller.process_scroll(delta);
+                if self.is_world_running {
+                    config::get_gamestate().player.controller.process_scroll(delta);
+                }
                 true
             }
             _ => false,
@@ -487,11 +508,13 @@ impl<'a> State<'a> {
         let current_time: std::time::Instant = std::time::Instant::now();
         let delta_seconds: f32 = (current_time - self.previous_frame_time).as_secs_f32();
         self.previous_frame_time = current_time;
-        let movement_delta = self.player.update(&mut self.camera_system.camera,&mut self.camera_system.projection,delta_seconds);
-        self.player.position += movement_delta;
-        self.camera_system.camera.position+= movement_delta;
-        self.camera_system.update(&self.render_context.queue);
-
+        
+        if self.is_world_running {
+            let movement_delta = config::get_gamestate().player.update(&mut self.camera_system.camera,&mut self.camera_system.projection,delta_seconds);
+            config::get_gamestate().player.position += movement_delta;
+            self.camera_system.camera.position+= movement_delta;
+            self.camera_system.update(&self.render_context.queue);
+        }
         if self.ui_manager.visibility {
             self.ui_manager.update(&self.render_context.queue);
         }
@@ -559,7 +582,10 @@ pub async fn run() {
         match &event {
             Event::WindowEvent { event, window_id } if *window_id == config::get_state().window().id() => {
                 config::get_state().handle_events(event);
-                cube_extra::update_full_world();
+
+                if config::get_state().is_world_running {
+                    cube_extra::update_full_world();
+                }
             }
             _ => {}
         }
@@ -567,3 +593,33 @@ pub async fn run() {
 }
 
 
+pub fn start_world() {
+    let game_state = GameState::new(config::get_state().camera_system());
+    config::GAMESTATE_PTR.store(Box::into_raw(Box::new(game_state)), Ordering::Release);
+    config::get_state().is_world_running= true;
+}
+
+pub fn close_pressed() {
+    match config::get_state().ui_manager.state {
+        UIState::WorldSelection => {
+            config::get_state().ui_manager.state = UIState::BootScreen;
+            config::get_state().ui_manager.setup_ui();
+        },
+        UIState::BootScreen => {
+            config::close_app();
+        },
+        UIState::InGame => {
+            config::get_state().is_world_running = false;
+            config::get_state().ui_manager.state = UIState::BootScreen;
+            config::get_state().ui_manager.setup_ui();
+
+            config::drop_gamestate();
+        },
+        UIState::Loading => {
+            return; // hell nah- exiting while loading it like Bruh
+        },
+        UIState::None => {
+            return; // why ???
+        },
+    }
+}

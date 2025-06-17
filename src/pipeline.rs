@@ -346,7 +346,7 @@ pub fn render_all(current_state: &mut super::State) -> Result<(), wgpu::SurfaceE
     drop(sky_pass);
 
     // 3D pass
-    {
+    if current_state.is_world_running {
         let depth_view = &current_state.texture_manager().depth_texture.view;
         let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("3D Render Pass"),
@@ -379,13 +379,17 @@ pub fn render_all(current_state: &mut super::State) -> Result<(), wgpu::SurfaceE
         rpass.set_pipeline(&current_state.pipeline.chunk_pipeline);
         rpass.set_bind_group(0, bind_groups[0], &[]);
         rpass.set_bind_group(1, bind_groups[1], &[]);
-        current_state.data_system.world.render_chunks(&mut rpass);
+        super::config::get_gamestate()
+            .world
+            .render_chunks(&mut rpass);
 
         // Render inside surfaces
         rpass.set_pipeline(&current_state.pipeline.inside_pipeline);
         rpass.set_bind_group(0, bind_groups[0], &[]);
         rpass.set_bind_group(1, bind_groups[1], &[]);
-        current_state.data_system.world.render_chunks(&mut rpass);
+        super::config::get_gamestate()
+            .world
+            .render_chunks(&mut rpass);
     }
 
     // Post processing pass

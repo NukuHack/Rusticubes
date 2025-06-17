@@ -4,7 +4,18 @@ use super::ui_render::UIRenderer;
 use crate::get_string;
 use winit::keyboard::KeyCode as Key;
 
+#[derive(Default, PartialEq)]
+pub enum UIState {
+    BootScreen,     // Initial boot screen
+    WorldSelection, // World selection screen
+    InGame,         // Normal game UI
+    Loading,        // Loading screen
+    #[default]
+    None, // Baiscally not yet initialized
+}
+
 pub struct UIManager {
+    pub state: UIState,
     pub vertex_buffer: wgpu::Buffer,
     pub index_buffer: wgpu::Buffer,
     pub pipeline: wgpu::RenderPipeline,
@@ -117,6 +128,7 @@ impl UIManager {
         });
 
         Self {
+            state: UIState::default(),
             vertex_buffer,
             index_buffer,
             pipeline: ui_pipeline,
@@ -367,43 +379,195 @@ pub fn handle_ui_click(
     let (norm_x, norm_y) = convert_mouse_position(window_size, mouse_pos);
     ui_manager.handle_click(norm_x, norm_y)
 }
+impl UIManager {
+    // ... existing code ...
 
-// Example UI setup function
-pub fn setup_ui(ui_manager: &mut UIManager) {
-    // Add a button
-    let button = UIElement::new_button(
-        1,
-        (0.45, 0.4),
-        (0.5, 0.25),
-        [0.7, 0.3, 0.3],
-        "Clean World".to_string(),
-        || {
-            println!("Clean world button clicked!");
-            super::cube_extra::add_full_world();
-        },
-    )
-    .with_border([0.8, 0.4, 0.4, 1.0], 0.005);
-    ui_manager.add_element(button);
+    pub fn setup_ui(&mut self) {
+        self.clear_elements();
 
-    // Add a close button
-    let close_button = UIElement::new_button(
-        2,
-        (0.6, -0.7),
-        (0.2, 0.1),
-        [1.0, 0.2, 0.1],
-        "Close".to_string(),
-        || {
-            println!("Close button clicked!");
-            super::config::close_app();
-        },
-    )
-    .with_border([0.2, 0.2, 0.2, 1.0], 0.003);
-    ui_manager.add_element(close_button);
+        match self.state {
+            UIState::None => {
+                // Initial state - transition to boot screen
+                self.state = UIState::BootScreen;
+                self.setup_ui(); // Recursively call to setup boot screen
+            }
+            UIState::BootScreen => {
+                self.setup_boot_screen_ui();
+            }
+            UIState::WorldSelection => {
+                self.setup_world_selection_ui();
+            }
+            UIState::Loading => {
+                self.setup_loading_screen_ui();
+            }
+            UIState::InGame => {
+                self.setup_in_game_ui();
+            }
+        }
+    }
 
-    // Add some dividers/panels
-    let crosshair_v = UIElement::new_divider(5, (0.0, -0.02), (0.02, 0.06), [0.1, 0.1, 0.1]);
-    let crosshair_h = UIElement::new_divider(6, (-0.02, 0.0), (0.06, 0.02), [0.1, 0.1, 0.1]);
+    fn setup_boot_screen_ui(&mut self) {
+        // Title
+        let title = UIElement::new_label(
+            self.next_id(),
+            (-0.5, 0.3),
+            (0.8, 0.2),
+            [1.0, 1.0, 1.0],
+            "Rusticubes".to_string(),
+        )
+        .with_z_index(10);
+        self.add_element(title);
 
-    ui_manager.add_element(crosshair_v);
-    ui_manager.add_element(crosshair_h);
+        // Start button
+        let start_button = UIElement::new_button(
+            self.next_id(),
+            (-0.3, 0.0),
+            (0.3, 0.1),
+            [0.2, 0.5, 0.8],
+            "Start".to_string(),
+            || {
+                let state = super::config::get_state();
+                state.ui_manager.state = UIState::WorldSelection;
+                state.ui_manager.setup_ui();
+            },
+        )
+        .with_border([0.3, 0.6, 0.9, 1.0], 0.005)
+        .with_z_index(5);
+        self.add_element(start_button);
+
+        // Exit button
+        let exit_button = UIElement::new_button(
+            self.next_id(),
+            (-0.3, -0.15),
+            (0.3, 0.1),
+            [0.8, 0.2, 0.2],
+            "Exit".to_string(),
+            || {
+                super::close_pressed();
+            },
+        )
+        .with_border([0.9, 0.3, 0.3, 1.0], 0.005)
+        .with_z_index(5);
+        self.add_element(exit_button);
+    }
+
+    fn setup_world_selection_ui(&mut self) {
+        // Title
+        let title = UIElement::new_label(
+            self.next_id(),
+            (-0.5, 0.4),
+            (0.8, 0.2),
+            [1.0, 1.0, 1.0],
+            "Select World".to_string(),
+        )
+        .with_z_index(10);
+        self.add_element(title);
+
+        // Example world list - in a real app you would scan a directory
+        let worlds = super::file_manager::WORDS;
+
+        // Add world buttons
+        for (i, name) in worlds.iter().enumerate() {
+            let y_pos = 0.2 - (i as f32 * 0.12);
+            let world_button = UIElement::new_button(
+                self.next_id(),
+                (-0.3, y_pos),
+                (0.4, 0.1),
+                [0.3, 0.3, 0.5],
+                name.to_string(),
+                || {
+                    let state = super::config::get_state();
+                    state.ui_manager.state = UIState::Loading;
+                    state.ui_manager.setup_ui();
+                    // println!("Loading world: {}", worlds[i]);
+                    // set a listener or some kind of stuff that would load stuff and change the ui if needed
+                    super::start_world();
+                    state.ui_manager.state = UIState::InGame;
+                    state.ui_manager.setup_ui();
+                },
+            )
+            .with_border([0.4, 0.4, 0.6, 1.0], 0.003)
+            .with_z_index(5);
+            self.add_element(world_button);
+        }
+
+        // Back button
+        let back_button = UIElement::new_button(
+            self.next_id(),
+            (-0.3, -0.4),
+            (0.2, 0.08),
+            [0.5, 0.5, 0.5],
+            "Back".to_string(),
+            || {
+                let state = super::config::get_state();
+                state.ui_manager.state = UIState::BootScreen;
+                state.ui_manager.setup_ui();
+            },
+        )
+        .with_z_index(5);
+        self.add_element(back_button);
+    }
+
+    fn setup_loading_screen_ui(&mut self) {
+        let loading_text = UIElement::new_label(
+            self.next_id(),
+            (0.0, 0.0),
+            (0.8, 0.2),
+            [1.0, 1.0, 1.0],
+            "Loading...".to_string(),
+        )
+        .with_z_index(10);
+        self.add_element(loading_text);
+    }
+
+    fn setup_in_game_ui(&mut self) {
+        // Clean world button
+        let button = UIElement::new_button(
+            self.next_id(),
+            (0.45, 0.4),
+            (0.5, 0.25),
+            [0.7, 0.3, 0.3],
+            "Clean World".to_string(),
+            || {
+                println!("Clean world button clicked!");
+                super::cube_extra::add_full_world();
+            },
+        )
+        .with_border([0.8, 0.4, 0.4, 1.0], 0.005)
+        .with_z_index(5);
+        self.add_element(button);
+
+        // Close button
+        let close_button = UIElement::new_button(
+            self.next_id(),
+            (0.6, -0.7),
+            (0.2, 0.1),
+            [1.0, 0.2, 0.1],
+            "Close".to_string(),
+            || {
+                println!("Close button clicked!");
+                super::close_pressed();
+            },
+        )
+        .with_border([0.2, 0.2, 0.2, 1.0], 0.003)
+        .with_z_index(5);
+        self.add_element(close_button);
+
+        // Add some dividers/panels
+        let crosshair_v =
+            UIElement::new_divider(self.next_id(), (0.0, -0.02), (0.02, 0.06), [0.1, 0.1, 0.1])
+                .with_z_index(1);
+        let crosshair_h =
+            UIElement::new_divider(self.next_id(), (-0.02, 0.0), (0.06, 0.02), [0.1, 0.1, 0.1])
+                .with_z_index(1);
+
+        self.add_element(crosshair_v);
+        self.add_element(crosshair_h);
+    }
+
+    fn next_id(&mut self) -> usize {
+        let id = self.next_id;
+        self.next_id += 1;
+        id
+    }
 }
