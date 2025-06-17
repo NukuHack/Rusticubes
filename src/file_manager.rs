@@ -136,8 +136,26 @@ impl Clone for FileSaver {
     }
 }
 
-// Example world list - in a real app you would scan a directory
-pub const WORDS: &[&str] = &["World 1", "Adventure World", "Test World"];
+pub fn get_world_names() -> std::io::Result<Vec<String>> {
+    let path = super::config::get_save_path().join("saves");
+
+    let mut folders = Vec::new();
+
+    for entry in fs::read_dir(path)? {
+        let entry = entry?;
+        let path = entry.path();
+
+        if path.is_dir() {
+            if let Some(folder_name) = path.file_name() {
+                if let Some(name_str) = folder_name.to_str() {
+                    folders.push(name_str.to_string());
+                }
+            }
+        }
+    }
+
+    Ok(folders)
+}
 
 #[allow(dead_code)]
 fn main() {

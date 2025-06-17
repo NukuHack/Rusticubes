@@ -22,7 +22,6 @@ mod ui_render;
 mod ui_manager;
 
 
-use crate::ui_manager::UIState;
 use std::sync::atomic::Ordering;
 use glam::Vec3;
 use std::iter::Iterator;
@@ -43,6 +42,7 @@ pub struct State<'a> {
     camera_system: camera::CameraSystem,
     texture_manager: geometry::TextureManager,
     is_world_running: bool,
+    save_path: std::path::PathBuf,
 }
 
 
@@ -56,17 +56,32 @@ pub struct RenderContext<'a> {
 }
 #[allow(dead_code)]
 pub struct GameState {
+    worldname: String,
     player: player::Player,
     world: cube::World, // lol main data storage :)
+    save_path: std::path::PathBuf,
 }
 
 impl GameState {
-    fn new(camera_system: &camera::CameraSystem) -> Self {
-        let player: player::Player = player::Player::new(camera::CameraConfig::new(Vec3::new(0.5, 1.8, 2.0)));
+    fn new(worldname: &str) -> Self {
+        let player = player::Player::new(camera::CameraConfig::new(Vec3::new(0.5, 1.8, 2.0)));
+        
+        // Create the save path
+        let save_path = std::path::PathBuf::from(&config::get_state().save_path)
+            .join("saves")
+            .join(worldname);
+        
+        // Create directories if they don't exist
+        if let Err(e) = std::fs::create_dir_all(&save_path) {
+            eprintln!("Failed to create save directory at {:?}: {}", save_path, e);
+            // You might want to handle this error differently depending on your needs
+        }
 
         Self {
+            worldname: worldname.to_string(),
             player,
             world: cube::World::empty(),
+            save_path,
         }
     }
 }
@@ -182,6 +197,11 @@ impl<'a> State<'a> {
             chunk_bind_group_layout,
         };
 
+
+        // has to make the error handling better , make the error quit from world
+        let _ = config::ensure_save_dir();
+        let save_path = config::get_save_path();
+
         Self {
             window,
             render_context,
@@ -192,6 +212,7 @@ impl<'a> State<'a> {
             texture_manager,
             ui_manager,
             is_world_running: false,
+            save_path,
         }
     }
 
@@ -302,26 +323,8 @@ impl<'a> State<'a> {
                     
                     if *state == ElementState::Pressed {
                         // Handle special keys for UI
-                        match key {
-                            Key::Backspace => {
-                                self.ui_manager.handle_backspace();
-                                return true;
-                            },
-                            Key::Enter => {
-                                self.ui_manager.handle_enter();
-                                return true;
-                            },
-                            Key::Escape => {
-                                self.ui_manager.blur_current_element();
-                                return true;
-                            },
-                            _ => {
-                                if let Some(c) = ui_element::key_to_char(*key, self.modifier_keys().sift) {
-                                    self.ui_manager.process_text_input(c);
-                                    return true;
-                                }
-                            }
-                        }
+                        self.ui_manager.handle_key_input(*key,self.modifier_keys().sift);
+                        return true;
                     }
                     return true;
                 }
@@ -378,7 +381,7 @@ impl<'a> State<'a> {
                     },
                     Key::Escape => {
                         if *state == ElementState::Pressed {
-                            close_pressed();
+                            ui_manager::close_pressed();
                             return true;
                         }
                         false
@@ -525,9 +528,8 @@ impl<'a> State<'a> {
     }
 
     pub fn toggle_mouse_capture(&mut self) {
-        self.input_system.mouse_captured = !self.input_system.mouse_captured;
-        
-        if self.input_system.mouse_captured {
+        if !self.input_system.mouse_captured || self.is_world_running {
+            self.input_system.mouse_captured = true;
             // Hide cursor and lock to center
             self.window().set_cursor_visible(false);
             self.window().set_cursor_grab(winit::window::CursorGrabMode::Confined)
@@ -535,6 +537,7 @@ impl<'a> State<'a> {
                 .unwrap();
             self.center_mouse();
         } else {
+            self.input_system.mouse_captured = false;
             // Show cursor and release
             self.window().set_cursor_visible(true);
             self.window().set_cursor_grab(winit::window::CursorGrabMode::None).unwrap();
@@ -593,33 +596,8 @@ pub async fn run() {
 }
 
 
-pub fn start_world() {
-    let game_state = GameState::new(config::get_state().camera_system());
+pub fn start_world(worldname: &str) {
+    let game_state = GameState::new(worldname);
     config::GAMESTATE_PTR.store(Box::into_raw(Box::new(game_state)), Ordering::Release);
     config::get_state().is_world_running= true;
-}
-
-pub fn close_pressed() {
-    match config::get_state().ui_manager.state {
-        UIState::WorldSelection => {
-            config::get_state().ui_manager.state = UIState::BootScreen;
-            config::get_state().ui_manager.setup_ui();
-        },
-        UIState::BootScreen => {
-            config::close_app();
-        },
-        UIState::InGame => {
-            config::get_state().is_world_running = false;
-            config::get_state().ui_manager.state = UIState::BootScreen;
-            config::get_state().ui_manager.setup_ui();
-
-            config::drop_gamestate();
-        },
-        UIState::Loading => {
-            return; // hell nah- exiting while loading it like Bruh
-        },
-        UIState::None => {
-            return; // why ???
-        },
-    }
 }

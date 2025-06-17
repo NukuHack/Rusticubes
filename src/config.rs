@@ -1,4 +1,9 @@
 ﻿
+use crate::GameState;
+use super::State;
+use std::sync::atomic::{AtomicBool,AtomicPtr, Ordering};
+use std::path::PathBuf;
+
 //#[derive(Default)]
 pub struct AppConfig {
     pub window_title: String,
@@ -35,9 +40,6 @@ impl AppConfig {
 }
 
 
-use crate::GameState;
-use super::State;
-use std::sync::atomic::{AtomicBool,AtomicPtr, Ordering};
 
 // Replace your static mut variables with these:
 pub static WINDOW_PTR: AtomicPtr<winit::window::Window> = AtomicPtr::new(std::ptr::null_mut());
@@ -100,4 +102,30 @@ pub fn drop_gamestate() {
         unsafe { let _ = Box::from_raw(gamestate_ptr); }; // Drops when goes out of scope
     }
 
+}
+
+
+pub fn get_save_path() -> PathBuf {
+    let mut path = if cfg!(windows) {
+        dirs::document_dir()
+            .unwrap_or_else(|| PathBuf::from("."))
+            .join("My Games")
+    } else if cfg!(target_os = "macos") {
+        dirs::home_dir()
+            .unwrap_or_else(|| PathBuf::from("."))
+            .join("Library/Application Support")
+    } else {
+        // Linux and others
+        dirs::data_local_dir()
+            .unwrap_or_else(|| PathBuf::from("."))
+    };
+
+    path.push("Rusticubes");
+    path
+}
+
+pub fn ensure_save_dir() -> std::io::Result<PathBuf> {
+    let path = get_save_path();
+    std::fs::create_dir_all(&path)?;
+    Ok(path)
 }

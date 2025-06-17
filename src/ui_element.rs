@@ -152,11 +152,14 @@ impl UIElement {
         color: [f32; 3],
         placeholder: Option<String>,
     ) -> Self {
+        // Initialize text with placeholder if it exists, otherwise empty string
+        let text = placeholder.clone().unwrap_or_default();
+
         let mut element = Self::new(
             id,
             UIElementData::InputField {
-                text: String::new(),
-                placeholder,
+                text,        // Use the initialized text
+                placeholder, // Keep the original placeholder
             },
             position,
             size,

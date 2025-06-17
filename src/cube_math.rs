@@ -1,7 +1,8 @@
-use super::cube::Chunk;
-use crate::cube::Block;
-use crate::cube::BlockStorage;
+use super::cube::{Block, BlockStorage, Chunk};
+
 use glam::Vec3;
+use std::io::{Error, ErrorKind};
+use std::path::PathBuf;
 
 /// Axis enumeration for rotation
 #[derive(Debug, Clone, Copy)]
@@ -99,146 +100,220 @@ impl ChunkCoord {
     }
 }
 
-impl Chunk {
-    /// Serializes the chunk into a compact byte representation
-    pub fn to_bytes(&self) -> Vec<u8> {
-        let mut output = Vec::with_capacity(1024); // Initial reasonable capacity
+const CHUNK_HEADER: [u8; 4] = *b"CHNK";
+const CURRENT_VERSION: u8 = 1;
 
-        // 1. Write palette (variable length)
-        output.push(self.palette.len() as u8); // Palette size (1 byte)
-        for block in &self.palette {
-            match block {
-                Block::None => {
-                    output.push(0); // Type marker for None
-                }
-                Block::Simple(material, rotation) => {
-                    output.push(1); // Type marker for Simple
-                    output.extend_from_slice(&material.to_le_bytes());
-                    output.push(*rotation);
-                }
-                Block::Marching(material, points) => {
-                    output.push(2); // Type marker for Marching
-                    output.extend_from_slice(&material.to_le_bytes());
-                    output.extend_from_slice(&points.to_le_bytes());
-                }
-            }
-        }
+pub struct ChunkSerializer;
 
-        // 2. Write storage type (1 byte)
-        match &self.storage {
-            BlockStorage::Uniform(idx) => {
-                output.push(0); // Storage type marker for Uniform
-                output.push(*idx);
-            }
-            BlockStorage::Sparse(indices) => {
-                output.push(1); // Storage type marker for Sparse
+impl ChunkSerializer {
+    pub fn save(chunk: &Chunk, world_path: &PathBuf, coord: ChunkCoord) -> std::io::Result<()> {
+        let chunk_dir = world_path.join("chunks");
+        std::fs::create_dir_all(&chunk_dir)?;
 
-                // Use RLE (Run-Length Encoding) for sparse data since there are often runs of air
-                let mut rle_count = 1u8;
-                let mut current = indices[0];
+        let filename = format!("c.{}.{}.{}.dat", coord.x(), coord.y(), coord.z());
+        let path = chunk_dir.join(filename);
 
-                for &idx in indices.iter().skip(1) {
-                    if idx == current && rle_count < 255 {
-                        rle_count += 1;
-                    } else {
-                        output.push(current);
-                        output.push(rle_count);
-                        current = idx;
-                        rle_count = 1;
-                    }
-                }
-                // Write the last run
-                output.push(current);
-                output.push(rle_count);
-            }
-        }
-
-        output
+        let data = Self::serialize(chunk)?;
+        std::fs::write(path, data)
     }
 
-    /// Deserializes a chunk from bytes
-    pub fn from_bytes(bytes: &[u8]) -> Result<Self, &'static str> {
-        let mut cursor = 0;
+    pub fn load(world_path: &PathBuf, coord: ChunkCoord) -> std::io::Result<Chunk> {
+        let filename = format!("c.{}.{}.{}.dat", coord.x(), coord.y(), coord.z());
+        let path = world_path.join("chunks").join(filename);
 
-        // 1. Read palette
-        let palette_size = bytes.get(cursor).ok_or("Missing palette size")?;
-        cursor += 1;
+        let data = std::fs::read(path)?;
+        Self::deserialize(&data)
+    }
 
-        let mut palette = Vec::with_capacity(*palette_size as usize);
-        for _ in 0..*palette_size {
-            let block_type = bytes.get(cursor).ok_or("Missing block type")?;
-            cursor += 1;
+    // Simple checksum algorithm (Fletcher-16 variant)
+    fn calculate_checksum(data: &[u8]) -> u32 {
+        let mut sum1: u32 = 0;
+        let mut sum2: u32 = 0;
+
+        for &byte in data {
+            sum1 = (sum1 + byte as u32) % 255;
+            sum2 = (sum2 + sum1) % 255;
+        }
+
+        (sum2 << 8) | sum1
+    }
+
+    fn serialize(chunk: &Chunk) -> std::io::Result<Vec<u8>> {
+        let mut buffer = Vec::new();
+
+        // Header
+        buffer.extend_from_slice(&CHUNK_HEADER);
+        buffer.push(CURRENT_VERSION);
+
+        // Palette
+        buffer.push(chunk.palette.len() as u8);
+        for block in &chunk.palette {
+            match block {
+                Block::None => buffer.push(0),
+                Block::Simple(mat, rot) => {
+                    buffer.push(1);
+                    buffer.extend_from_slice(&mat.to_le_bytes());
+                    buffer.push(*rot);
+                }
+                Block::Marching(mat, points) => {
+                    buffer.push(2);
+                    buffer.extend_from_slice(&mat.to_le_bytes());
+                    buffer.extend_from_slice(&points.to_le_bytes());
+                }
+            }
+        }
+
+        // Block Data
+        match &chunk.storage {
+            BlockStorage::Uniform(idx) => {
+                buffer.push(0); // Uniform marker
+                buffer.push(*idx);
+            }
+            BlockStorage::Sparse(indices) => {
+                buffer.push(1); // Sparse marker
+
+                // RLE compression
+                let mut current = indices[0];
+                let mut count = 1u16;
+
+                for &val in indices.iter().skip(1) {
+                    if val == current && count < u16::MAX {
+                        count += 1;
+                    } else {
+                        buffer.push(current);
+                        buffer.extend_from_slice(&count.to_le_bytes());
+                        current = val;
+                        count = 1;
+                    }
+                }
+                // Write last run
+                buffer.push(current);
+                buffer.extend_from_slice(&count.to_le_bytes());
+            }
+        }
+
+        // Checksum
+        let checksum = Self::calculate_checksum(&buffer);
+        buffer.extend_from_slice(&checksum.to_le_bytes());
+
+        Ok(buffer)
+    }
+
+    fn deserialize(data: &[u8]) -> std::io::Result<Chunk> {
+        if data.len() < 4 || &data[0..4] != CHUNK_HEADER {
+            return Err(Error::new(ErrorKind::InvalidData, "Invalid chunk header"));
+        }
+
+        let version = data[4];
+        if version != CURRENT_VERSION {
+            return Err(Error::new(ErrorKind::InvalidData, "Unsupported version"));
+        }
+
+        let data_len = data.len();
+        if data_len < 8 {
+            // Minimum viable chunk size (header + version + minimal data + checksum)
+            return Err(Error::new(ErrorKind::InvalidData, "Data too short"));
+        }
+
+        // Verify checksum
+        let checksum_data = &data[..data_len - 4];
+        let calculated_checksum = Self::calculate_checksum(checksum_data);
+        let stored_checksum = u32::from_le_bytes([
+            data[data_len - 4],
+            data[data_len - 3],
+            data[data_len - 2],
+            data[data_len - 1],
+        ]);
+
+        if calculated_checksum != stored_checksum {
+            return Err(Error::new(ErrorKind::InvalidData, "Checksum mismatch"));
+        }
+
+        let mut pos = 5; // Skip header (4) + version (1)
+
+        // Read palette
+        let palette_size = data[pos] as usize;
+        pos += 1;
+
+        let mut palette = Vec::with_capacity(palette_size);
+        for _ in 0..palette_size {
+            let block_type = data[pos];
+            pos += 1;
 
             let block = match block_type {
                 0 => Block::None,
                 1 => {
-                    if cursor + 3 > bytes.len() {
-                        return Err("Invalid Simple block data");
+                    if pos + 3 > data_len - 4 {
+                        return Err(Error::new(ErrorKind::InvalidData, "Invalid block data"));
                     }
-                    let material = u16::from_le_bytes([bytes[cursor], bytes[cursor + 1]]);
-                    let rotation = bytes[cursor + 2];
-                    cursor += 3;
-                    Block::Simple(material, rotation)
+                    let mat = u16::from_le_bytes([data[pos], data[pos + 1]]);
+                    let rot = data[pos + 2];
+                    pos += 3;
+                    Block::Simple(mat, rot)
                 }
                 2 => {
-                    if cursor + 6 > bytes.len() {
-                        return Err("Invalid Marching block data");
+                    if pos + 6 > data_len - 4 {
+                        return Err(Error::new(ErrorKind::InvalidData, "Invalid block data"));
                     }
-                    let material = u16::from_le_bytes([bytes[cursor], bytes[cursor + 1]]);
+                    let mat = u16::from_le_bytes([data[pos], data[pos + 1]]);
                     let points = u32::from_le_bytes([
-                        bytes[cursor + 2],
-                        bytes[cursor + 3],
-                        bytes[cursor + 4],
-                        bytes[cursor + 5],
+                        data[pos + 2],
+                        data[pos + 3],
+                        data[pos + 4],
+                        data[pos + 5],
                     ]);
-                    cursor += 6;
-                    Block::Marching(material, points)
+                    pos += 6;
+                    Block::Marching(mat, points)
                 }
-                _ => return Err("Unknown block type"),
+                _ => return Err(Error::new(ErrorKind::InvalidData, "Unknown block type")),
             };
             palette.push(block);
         }
 
-        // 2. Read storage
-        let storage_type = bytes.get(cursor).ok_or("Missing storage type")?;
-        cursor += 1;
-
-        let storage = match storage_type {
-            0 => {
-                // Uniform storage
-                let idx = bytes.get(cursor).ok_or("Missing uniform index")?;
-                cursor += 1;
-                BlockStorage::Uniform(*idx)
-            }
-            1 => {
-                // Sparse storage with RLE
-                let mut indices = Box::new([0u8; 4096]);
-                let mut pos = 0;
-
-                while pos < 4096 && cursor + 1 < bytes.len() {
-                    let value = bytes[cursor];
-                    let count = bytes[cursor + 1] as usize;
-                    cursor += 2;
-
-                    let end = (pos + count).min(4096);
-                    indices[pos..end].fill(value);
-                    pos = end;
+        // Read storage
+        let storage = if pos >= data_len - 4 {
+            return Err(Error::new(ErrorKind::InvalidData, "Missing storage data"));
+        } else {
+            match data[pos] {
+                0 => {
+                    // Uniform storage
+                    pos += 1;
+                    if pos >= data_len - 4 {
+                        return Err(Error::new(ErrorKind::InvalidData, "Missing uniform index"));
+                    }
+                    BlockStorage::Uniform(data[pos])
                 }
+                1 => {
+                    // Sparse storage
+                    pos += 1;
+                    let mut indices = Box::new([0u8; 4096]);
+                    let mut idx = 0;
 
-                // If we didn't fill the entire array (corrupt data?), fill rest with air
-                if pos < 4096 {
-                    indices[pos..].fill(0);
+                    while idx < 4096 && pos + 2 < data_len - 4 {
+                        let val = data[pos];
+                        let count = u16::from_le_bytes([data[pos + 1], data[pos + 2]]) as usize;
+                        pos += 3;
+
+                        let end = (idx + count).min(4096);
+                        indices[idx..end].fill(val);
+                        idx = end;
+                    }
+
+                    // Fill remaining with air if incomplete
+                    if idx < 4096 {
+                        indices[idx..].fill(0);
+                    }
+
+                    BlockStorage::Sparse(indices)
                 }
-
-                BlockStorage::Sparse(indices)
+                _ => return Err(Error::new(ErrorKind::InvalidData, "Unknown storage type")),
             }
-            _ => return Err("Unknown storage type"),
         };
 
         Ok(Chunk {
             palette,
             storage,
-            dirty: true, // Mark as dirty to regenerate mesh
+            dirty: true,
             mesh: None,
             bind_group: None,
         })
