@@ -528,7 +528,7 @@ impl<'a> State<'a> {
     }
 
     pub fn toggle_mouse_capture(&mut self) {
-        if !self.input_system.mouse_captured || self.is_world_running {
+        if !self.input_system.mouse_captured && self.is_world_running {
             self.input_system.mouse_captured = true;
             // Hide cursor and lock to center
             self.window().set_cursor_visible(false);
