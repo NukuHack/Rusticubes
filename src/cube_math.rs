@@ -5,6 +5,7 @@ use std::io::{Error, ErrorKind};
 use std::path::PathBuf;
 
 /// Axis enumeration for rotation
+#[allow(dead_code)]
 #[derive(Debug, Clone, Copy)]
 pub enum Axis {
     X,
@@ -100,11 +101,15 @@ impl ChunkCoord {
     }
 }
 
+#[allow(dead_code)]
 const CHUNK_HEADER: [u8; 4] = *b"CHNK";
+#[allow(dead_code)]
 const CURRENT_VERSION: u8 = 1;
 
+#[allow(dead_code)]
 pub struct ChunkSerializer;
 
+#[allow(dead_code)]
 impl ChunkSerializer {
     pub fn save(chunk: &Chunk, world_path: &PathBuf, coord: ChunkCoord) -> std::io::Result<()> {
         let chunk_dir = world_path.join("chunks");

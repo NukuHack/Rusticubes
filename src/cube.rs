@@ -23,7 +23,7 @@ pub enum Block {
     Simple(u16, u8),    // material, packed rotation (6 bits - 2)
     Marching(u16, u32), // material, density field (27 bits - 4)
 }
-
+#[allow(dead_code)]
 impl Block {
     // Rotation bit masks and shifts
     const ROT_MASK_X: u8 = 0b0000_0011;
@@ -280,6 +280,7 @@ impl std::fmt::Debug for Chunk {
     }
 }
 
+#[allow(dead_code)]
 impl Chunk {
     pub const SIZE: usize = 16;
     pub const SIZE_I: i32 = Self::SIZE as i32;
@@ -573,6 +574,7 @@ pub struct World {
     pub loaded_chunks: HashSet<ChunkCoord>,
 }
 
+#[allow(dead_code)]
 impl World {
     /// Creates an empty world
     #[inline]

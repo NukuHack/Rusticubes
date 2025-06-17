@@ -519,7 +519,7 @@ impl<'a> State<'a> {
             self.camera_system.update(&self.render_context.queue);
         }
         if self.ui_manager.visibility {
-            self.ui_manager.update(&self.render_context.queue);
+            self.ui_manager.update(&self.render_context.device,&self.render_context.queue);
         }
     }
 

@@ -144,8 +144,10 @@ impl UIManager {
         }
     }
 
-    pub fn update(&mut self, queue: &wgpu::Queue) {
-        let (vertices, indices) = self.renderer.process_elements(&self.elements);
+    pub fn update(&mut self, device: &wgpu::Device, queue: &wgpu::Queue) {
+        let (vertices, indices) = self
+            .renderer
+            .process_elements(device, queue, &self.elements);
 
         if !vertices.is_empty() {
             queue.write_buffer(&self.vertex_buffer, 0, bytemuck::cast_slice(&vertices));

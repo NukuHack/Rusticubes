@@ -106,7 +106,12 @@ impl UIRenderer {
         (rgba.into_raw(), width, height)
     }
 
-    pub fn process_elements(&self, elements: &[UIElement]) -> (Vec<Vertex>, Vec<u32>) {
+    pub fn process_elements(
+        &self,
+        _device: &wgpu::Device,
+        _queue: &wgpu::Queue,
+        elements: &[UIElement],
+    ) -> (Vec<Vertex>, Vec<u32>) {
         let mut sorted_elements: Vec<&UIElement> = elements.iter().filter(|e| e.visible).collect();
         sorted_elements.sort_by_key(|e| e.z_index);
 
