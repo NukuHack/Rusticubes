@@ -2,6 +2,7 @@ use super::ui_element;
 use super::ui_element::{UIElement, Vertex};
 use super::ui_render::UIRenderer;
 use crate::get_string;
+use crate::ui_element::UIElementData;
 use winit::keyboard::KeyCode as Key;
 
 #[derive(Default, PartialEq)]
@@ -286,43 +287,27 @@ impl UIManager {
 
     pub fn handle_click(&mut self, norm_x: f32, norm_y: f32) -> bool {
         self.focused_element = None;
-        let mut handled = false;
 
-        // Process elements in reverse z-order (highest z-index first)
-        let mut sorted_indices: Vec<usize> = (0..self.elements.len()).collect();
-        sorted_indices.sort_by_key(|&i| std::cmp::Reverse(self.elements[i].z_index));
-
-        for &index in &sorted_indices {
-            let element = &mut self.elements[index];
-
-            if element.contains_point(norm_x, norm_y) && element.visible && element.enabled {
+        // Find topmost clickable element
+        self.elements
+            .iter_mut()
+            .rev() // Process from top to bottom (higher z-index first)
+            .filter(|e| e.visible && e.enabled && e.contains_point(norm_x, norm_y))
+            .next()
+            .map(|element| {
                 match &element.data {
-                    super::ui_element::UIElementData::InputField { .. } => {
-                        self.focused_element = Some(index);
-                        handled = true;
-                        break;
+                    UIElementData::InputField { .. } => {
+                        self.focused_element = Some(element.id);
                     }
-                    super::ui_element::UIElementData::Checkbox { .. } => {
+                    UIElementData::Checkbox { .. } => {
                         element.toggle_checked();
-                        element.trigger_click();
-                        handled = true;
-                        break;
                     }
-                    super::ui_element::UIElementData::Button { .. } => {
-                        element.trigger_click();
-                        handled = true;
-                        break;
-                    }
-                    _ => {
-                        element.trigger_click();
-                        handled = true;
-                        break;
-                    }
+                    _ => {}
                 }
-            }
-        }
-
-        handled
+                element.trigger_click();
+                true
+            })
+            .unwrap_or(false)
     }
 
     // Utility methods
