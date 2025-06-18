@@ -61,7 +61,7 @@ impl UIManager {
         });
 
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            bind_group_layouts: &[&bind_group_layout],
+            bind_group_layouts: &[&renderer.bind_group_layout], // Use the renderer's layout
             ..Default::default()
         });
 
@@ -144,10 +144,10 @@ impl UIManager {
         }
     }
 
-    pub fn update(&mut self, device: &wgpu::Device, queue: &wgpu::Queue) {
+    pub fn update(&mut self, _device: &wgpu::Device, queue: &wgpu::Queue) {
         let (vertices, indices) = self
             .renderer
-            .process_elements(device, queue, &self.elements);
+            .process_elements(&self.elements);
 
         if !vertices.is_empty() {
             queue.write_buffer(&self.vertex_buffer, 0, bytemuck::cast_slice(&vertices));
@@ -328,11 +328,8 @@ impl UIManager {
             return;
         }
 
-        render_pass.set_pipeline(&self.pipeline);
-        render_pass.set_bind_group(0, &self.renderer.bind_group, &[]);
-        render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
-        render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
-        render_pass.draw_indexed(0..self.num_indices, 0, 0..1);
+        self.renderer.render(self,render_pass);
+
     }
 
     fn next_id(&mut self) -> usize {
