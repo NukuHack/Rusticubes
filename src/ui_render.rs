@@ -9,7 +9,8 @@ pub struct UIRenderer {
     pub font_sampler: wgpu::Sampler,
     font: Font<'static>,
     text_textures: HashMap<String, (wgpu::Texture, wgpu::BindGroup)>,
-    default_bind_group: wgpu::BindGroup, // Add this
+    default_bind_group: wgpu::BindGroup,
+    pixel_ratio: f32, // For high DPI support
 }
 
 impl UIRenderer {
@@ -18,11 +19,13 @@ impl UIRenderer {
         let font_data = include_bytes!("../resources/calibri.ttf");
         let font = Font::try_from_bytes(font_data).expect("Failed to load font");
 
+        // Create a high-quality sampler for font rendering
         let font_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
             address_mode_u: wgpu::AddressMode::ClampToEdge,
             address_mode_v: wgpu::AddressMode::ClampToEdge,
             mag_filter: wgpu::FilterMode::Linear,
             min_filter: wgpu::FilterMode::Linear,
+            mipmap_filter: wgpu::FilterMode::Linear,
             ..Default::default()
         });
 
@@ -98,17 +101,19 @@ impl UIRenderer {
             font_sampler,
             font,
             text_textures: HashMap::new(),
-            default_bind_group, // Add this
+            default_bind_group,
+            pixel_ratio: 4.0, // Default to 4x because the ration scaling is incorrect (this fixes it)
         }
+    }
+
+    pub fn set_pixel_ratio(&mut self, ratio: f32) {
+        self.pixel_ratio = ratio.max(1.0);
     }
 
     pub fn process_elements(
         &mut self,
         elements: &[UIElement],
     ) -> (Vec<Vertex>, Vec<u32>) {
-        let state = super::config::get_state();
-        let device: &wgpu::Device = state.device();
-        let queue: &wgpu::Queue = state.queue();
         let mut sorted_elements: Vec<&UIElement> = elements.iter().filter(|e| e.visible).collect();
         sorted_elements.sort_by_key(|e| e.z_index);
 
@@ -148,8 +153,6 @@ impl UIRenderer {
         (vertices, indices)
     }
 
-    // ... [keep other helper methods the same until process_text_element]
-
     fn process_text_element(
         &mut self,
         element: &UIElement,
@@ -158,9 +161,8 @@ impl UIRenderer {
         current_index: &mut u32,
     ) {
         let state = super::config::get_state();
-        let device: &wgpu::Device = state.device();
-        let queue: &wgpu::Queue = state.queue();
-
+        
+        // First process the background if needed
         match &element.data {
             UIElementData::InputField { .. } | UIElementData::Button { .. } => {
                 self.add_rectangle(vertices, element.position, element.size, element.color);
@@ -171,30 +173,19 @@ impl UIRenderer {
         }
 
         if let Some(text) = element.get_text() {
-            // Create a unique key for this text element
             let texture_key = format!("{}_{}_{:?}", text, element.z_index, element.color);
             
-            // Check if we already have a texture for this text
             if !self.text_textures.contains_key(&texture_key) {
-                let (x, y) = element.position;
-                let (w, h) = element.size;
-                
-                // Calculate text scale in pixels with minimum size
-                let scale_pixels = (h * 100.0).max(10.0);
-                let pixel_to_unit = 1.0 / 100.0;
-                
-                // Render text to texture
                 let texture = self.render_text_to_texture(
-                    device,
-                    queue,
+                    state.device(),
+                    state.queue(),
                     text,
-                    scale_pixels,
+                    element.size.1 * 100.0 * self.pixel_ratio, // Scale based on height and pixel ratio
                     element.color,
                 );
                 
-                // Store the texture and bind group
                 let texture_view = texture.create_view(&Default::default());
-                let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+                let bind_group = state.device().create_bind_group(&wgpu::BindGroupDescriptor {
                     layout: &self.bind_group_layout,
                     entries: &[
                         wgpu::BindGroupEntry {
@@ -215,37 +206,32 @@ impl UIRenderer {
             if let Some((texture, _)) = self.text_textures.get(&texture_key) {
                 let (x, y) = element.position;
                 let (w, h) = element.size;
-                let pixel_to_unit = 1.0 / 100.0;
+                let pixel_to_unit = 1.0 / (100.0 * self.pixel_ratio);
                 
-                // Get texture dimensions in pixels
-                let texture_width_px = texture.width() as f32;
-                let texture_height_px = texture.height() as f32;
-                
-                // Convert to UI units
-                let texture_width = texture_width_px * pixel_to_unit;
-                let texture_height = texture_height_px * pixel_to_unit;
+                let texture_width = texture.width() as f32 * pixel_to_unit;
+                let texture_height = texture.height() as f32 * pixel_to_unit;
                 
                 // Center the text in the element
                 let text_x = x + (w - texture_width) / 2.0;
                 let text_y = y + (h - texture_height) / 2.0;
                 
-                // Add vertices with proper UVs
+                // Correct vertex positions and UVs
                 let positions = [
-                    [text_x, text_y + texture_height],
-                    [text_x + texture_width, text_y + texture_height],
-                    [text_x, text_y],
-                    [text_x + texture_width, text_y],
+                    [text_x, text_y],                      // top-left
+                    [text_x + texture_width, text_y],      // top-right
+                    [text_x, text_y + texture_height],     // bottom-left
+                    [text_x + texture_width, text_y + texture_height], // bottom-right
                 ];
                 
                 let uvs = [
-                    [0.0, 0.0], [1.0, 0.0], [0.0, 1.0], [1.0, 1.0],
+                     [0.0, 1.0], [1.0, 1.0],[0.0, 0.0], [1.0, 0.0],
                 ];
                 
                 for j in 0..4 {
                     vertices.push(Vertex {
                         position: positions[j],
                         uv: uvs[j],
-                        color: [1.0, 1.0, 1.0, 1.0], // White color multiplied by texture
+                        color: [1.0, 1.0, 1.0, 1.0], // Use white color and let texture provide the color
                     });
                 }
                 
@@ -269,8 +255,9 @@ impl UIRenderer {
         // Layout the text
         let glyphs: Vec<_> = self.font.layout(text, scale, point(0.0, v_metrics.ascent)).collect();
 
-        // Calculate text dimensions
-        let width = glyphs.iter().rev()
+        // Calculate text dimensions with padding
+        let padding = (scale.x * 0.2).ceil() as u32;
+        let width = (glyphs.iter().rev()
             .map(|g| {
                 let pos = g.position().x;
                 let advance = g.unpositioned().h_metrics().advance_width;
@@ -278,46 +265,57 @@ impl UIRenderer {
             })
             .next()
             .unwrap_or(0.0)
-            .ceil() as u32;
+            .ceil() as u32) + padding * 2;
         
-        let height = (v_metrics.ascent - v_metrics.descent).ceil() as u32;
+        let height = ((v_metrics.ascent - v_metrics.descent).ceil() as u32) + padding * 2;
 
         // Ensure minimum size
         let width = width.max(1);
         let height = height.max(1);
 
-        // Create an image buffer
+        // Create an image buffer with transparency
         let mut image = ImageBuffer::from_pixel(width, height, Rgba([0, 0, 0, 0]));
         
-        // Convert color
+        // Convert color to u8
         let [r, g, b, a] = color;
         let r = (r * 255.0) as u8;
         let g = (g * 255.0) as u8;
         let b = (b * 255.0) as u8;
         let a = (a * 255.0) as u8;
 
-        // Render each glyph
+        // Render each glyph with padding offset
         for glyph in glyphs {
             if let Some(bounding_box) = glyph.pixel_bounding_box() {
                 glyph.draw(|x, y, v| {
-                    let x = x as i32 + bounding_box.min.x;
-                    let y = y as i32 + bounding_box.min.y;
+                    let x = x as i32 + bounding_box.min.x + padding as i32;
+                    let y = y as i32 + bounding_box.min.y + padding as i32;
                     if x >= 0 && x < width as i32 && y >= 0 && y < height as i32 {
                         let alpha = (v * a as f32) as u8;
-                        image.put_pixel(x as u32, y as u32, Rgba([r, g, b, alpha]));
+                        // Use premultiplied alpha for better quality
+                        let premultiplied = |c: u8| ((c as f32 * v).round() as u8);
+                        image.put_pixel(
+                            x as u32, 
+                            y as u32, 
+                            Rgba([
+                                premultiplied(r),
+                                premultiplied(g),
+                                premultiplied(b),
+                                alpha,
+                            ])
+                        );
                     }
                 });
             }
         }
 
-        // Create texture
+        // Create texture with mipmaps for better quality at small sizes
         let texture = device.create_texture(&wgpu::TextureDescriptor {
             label: Some("Text Texture"),
             size: wgpu::Extent3d { width, height, depth_or_array_layers: 1 },
-            mip_level_count: 1,
+            mip_level_count: 1, // Consider increasing for better quality at small sizes
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba8Unorm,
+            format: wgpu::TextureFormat::Rgba8UnormSrgb, // Use sRGB for better color handling
             usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
             view_formats: &[],
         });
@@ -344,30 +342,59 @@ impl UIRenderer {
         texture
     }
 
+
     pub fn render<'a>(
         &'a self,
         ui_manager: &super::ui_manager::UIManager,
         render_pass: &mut wgpu::RenderPass<'a>,
     ) {
-        let sorted_elements: Vec<&UIElement> = ui_manager.elements.iter().filter(|e| e.visible).collect();
-        
         render_pass.set_pipeline(&ui_manager.pipeline);
         render_pass.set_vertex_buffer(0, ui_manager.vertex_buffer.slice(..));
         render_pass.set_index_buffer(ui_manager.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
 
-        for element in sorted_elements {
+        let mut index_offset = 0;
+        
+        for element in ui_manager.elements.iter().filter(|e| e.visible) {
+            // First draw the background/border (if any)
+            render_pass.set_bind_group(0, &self.default_bind_group, &[]);
+            
+            // Calculate how many indices this element uses
+            let mut element_index_count = 6; // base rectangle
+            
+            // Add border indices if needed
+            if element.border_width > 0.0 {
+                element_index_count += 6;
+            }
+            
+            // Add checkbox mark indices if needed
+            if let UIElementData::Checkbox { checked, .. } = &element.data {
+                if *checked {
+                    element_index_count += 6;
+                }
+            }
+            
+            // Draw the background/border parts
+            render_pass.draw_indexed(
+                index_offset..(index_offset + element_index_count),
+                0, 
+                0..1
+            );
+            
+            // If this is a text element, draw the text part
             if let Some(text) = element.get_text() {
                 let texture_key = format!("{}_{}_{:?}", text, element.z_index, element.color);
                 if let Some((_, bind_group)) = self.text_textures.get(&texture_key) {
                     render_pass.set_bind_group(0, bind_group, &[]);
-                } else {
-                    render_pass.set_bind_group(0, &self.default_bind_group, &[]);
+                    render_pass.draw_indexed(
+                        (index_offset + element_index_count)..(index_offset + element_index_count + 6),
+                        0,
+                        0..1
+                    );
+                    element_index_count += 6;
                 }
-            } else {
-                // For non-text elements, use the default bind group
-                render_pass.set_bind_group(0, &self.default_bind_group, &[]);
             }
-            render_pass.draw_indexed(0..ui_manager.num_indices, 0, 0..1);
+            
+            index_offset += element_index_count;
         }
     }
 }
