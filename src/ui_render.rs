@@ -248,91 +248,107 @@ impl UIRenderer {
             }
         }
     }
-fn render_text_to_texture(
-    &self,
-    device: &wgpu::Device,
-    queue: &wgpu::Queue,
-    text: &str,
-    scale: f32,
-    color: [f32; 4],
-) -> wgpu::Texture {
-    let scale = Scale::uniform(scale);
-    let v_metrics = self.font.v_metrics(scale);
-    let glyphs: Vec<_> = self.font.layout(text, scale, point(0.0, v_metrics.ascent)).collect();
 
-    // Calculate text dimensions with padding
-    let padding = (scale.x * 0.2).ceil() as u32;
-    let width = glyphs.iter().rev()
-        .map(|g| {
-            let pos = g.position().x;
-            let advance = g.unpositioned().h_metrics().advance_width;
-            pos + advance
-        })
-        .next()
-        .unwrap_or(0.0)
-        .ceil() as u32 + padding * 2;
-    
-    let height = ((v_metrics.ascent - v_metrics.descent).ceil() as u32) + padding * 2;
-    let width = width.max(1);
-    let height = height.max(1);
+    fn render_text_to_texture(
+        &self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        text: &str,
+        scale: f32,
+        color: [f32; 4],
+    ) -> wgpu::Texture {        
+        let scale = Scale::uniform(scale);
+        let v_metrics = self.font.v_metrics(scale);
 
-    // Create image buffer
-    let mut image = ImageBuffer::from_pixel(width, height, Rgba([0, 0, 0, 0]));
-    let [r, g, b, a] = color;
-    let r = (r * 255.0) as u8;
-    let g = (g * 255.0) as u8;
-    let b = (b * 255.0) as u8;
-    let a = (a * 255.0) as u8;
+        // Layout the text
+        let glyphs: Vec<_> = self.font.layout(text, scale, point(0.0, v_metrics.ascent)).collect();
 
-    // Render glyphs
-    for glyph in glyphs {
-        if let Some(bounding_box) = glyph.pixel_bounding_box() {
-            glyph.draw(|x, y, v| {
-                let x = x as i32 + bounding_box.min.x + padding as i32;
-                let y = y as i32 + bounding_box.min.y + padding as i32;
-                if x >= 0 && x < width as i32 && y >= 0 && y < height as i32 {
-                    let alpha = (v * a as f32) as u8;
-                    image.put_pixel(
-                        x as u32, 
-                        y as u32, 
-                        Rgba([r, g, b, alpha])
-                    );
-                }
-            });
+        // Calculate text dimensions with padding
+        let padding = (scale.x * 0.2).ceil() as u32;
+        let width = (glyphs.iter().rev()
+            .map(|g| {
+                let pos = g.position().x;
+                let advance = g.unpositioned().h_metrics().advance_width;
+                pos + advance
+            })
+            .next()
+            .unwrap_or(0.0)
+            .ceil() as u32) + padding * 2;
+        
+        let height = ((v_metrics.ascent - v_metrics.descent).ceil() as u32) + padding * 2;
+
+        // Ensure minimum size
+        let width = width.max(1);
+        let height = height.max(1);
+
+        // Create an image buffer with transparency
+        let mut image = ImageBuffer::from_pixel(width, height, Rgba([0, 0, 0, 0]));
+        
+        // Convert color to u8
+        let [r, g, b, a] = color;
+        let r = (r * 255.0) as u8;
+        let g = (g * 255.0) as u8;
+        let b = (b * 255.0) as u8;
+        let a = (a * 255.0) as u8;
+
+        // Render each glyph with padding offset
+        for glyph in glyphs {
+            if let Some(bounding_box) = glyph.pixel_bounding_box() {
+                glyph.draw(|x, y, v| {
+                    let x = x as i32 + bounding_box.min.x + padding as i32;
+                    let y = y as i32 + bounding_box.min.y + padding as i32;
+                    if x >= 0 && x < width as i32 && y >= 0 && y < height as i32 {
+                        let alpha = (v * a as f32) as u8;
+                        // Use premultiplied alpha for better quality
+                        let premultiplied = |c: u8| ((c as f32 * v).round() as u8);
+                        image.put_pixel(
+                            x as u32, 
+                            y as u32, 
+                            Rgba([
+                                premultiplied(r),
+                                premultiplied(g),
+                                premultiplied(b),
+                                alpha,
+                            ])
+                        );
+                    }
+                });
+            }
         }
+
+        // Create texture with mipmaps for better quality at small sizes
+        let texture = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("Text Texture"),
+            size: wgpu::Extent3d { width, height, depth_or_array_layers: 1 },
+            mip_level_count: 1, // Consider increasing for better quality at small sizes
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8UnormSrgb, // Use sRGB for better color handling
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+            view_formats: &[],
+        });
+
+        // Upload texture data
+        let raw_data = image.into_raw();
+        
+        queue.write_texture(
+            wgpu::TexelCopyTextureInfo {
+                texture: &texture,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            &raw_data,
+            wgpu::TexelCopyBufferLayout {
+                offset: 0,
+                bytes_per_row: Some(4 * width),
+                rows_per_image: Some(height),
+            },
+            wgpu::Extent3d { width, height, depth_or_array_layers: 1 },
+        );
+
+        texture
     }
-
-    // Create texture
-    let texture = device.create_texture(&wgpu::TextureDescriptor {
-        label: Some("Text Texture"),
-        size: wgpu::Extent3d { width, height, depth_or_array_layers: 1 },
-        mip_level_count: 1,
-        sample_count: 1,
-        dimension: wgpu::TextureDimension::D2,
-        format: wgpu::TextureFormat::Rgba8Unorm,
-        usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-        view_formats: &[],
-    });
-
-    // Upload texture data
-    queue.write_texture(
-        wgpu::ImageCopyTexture {
-            texture: &texture,
-            mip_level: 0,
-            origin: wgpu::Origin3d::ZERO,
-            aspect: wgpu::TextureAspect::All,
-        },
-        &image.into_raw(),
-        wgpu::ImageDataLayout {
-            offset: 0,
-            bytes_per_row: Some(4 * width),
-            rows_per_image: Some(height),
-        },
-        wgpu::Extent3d { width, height, depth_or_array_layers: 1 },
-    );
-
-    texture
-}
 
 
     pub fn render<'a>(
