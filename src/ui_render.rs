@@ -1,8 +1,15 @@
 use rusttype::{Font, Scale, point};
-use image::ImageBuffer;
-use image::Rgba;
+use image::{ImageBuffer,Rgba};
 use std::collections::HashMap;
-use super::ui_element::{UIElement, UIElementData, Vertex};
+use super::ui_element::{UIElement, UIElementData};
+
+#[repr(C)]
+#[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct Vertex {
+    pub position: [f32; 2],
+    pub uv: [f32; 2],
+    pub color: [f32; 4],
+}
 
 pub struct UIRenderer {
     pub bind_group_layout: wgpu::BindGroupLayout,
@@ -19,7 +26,7 @@ impl UIRenderer {
         let font_data = include_bytes!("../resources/calibri.ttf");
         let font = Font::try_from_bytes(font_data).expect("Failed to load font");
 
-        // Create a high-quality sampler for font rendering
+        // Create sampler for font rendering
         let font_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
             address_mode_u: wgpu::AddressMode::ClampToEdge,
             address_mode_v: wgpu::AddressMode::ClampToEdge,
@@ -51,7 +58,7 @@ impl UIRenderer {
             label: Some("font_bind_group_layout"),
         });
 
-        // Create a default 1x1 white texture
+        // Create default texture
         let default_texture = device.create_texture(&wgpu::TextureDescriptor {
             label: Some("Default Texture"),
             size: wgpu::Extent3d { width: 1, height: 1, depth_or_array_layers: 1 },
@@ -102,9 +109,10 @@ impl UIRenderer {
             font,
             text_textures: HashMap::new(),
             default_bind_group,
-            pixel_ratio: 4.0, // Default to 4x because the ration scaling is incorrect (this fixes it)
+            pixel_ratio: 4.0,
         }
     }
+
 
     pub fn set_pixel_ratio(&mut self, ratio: f32) {
         self.pixel_ratio = ratio.max(1.0);
@@ -173,7 +181,7 @@ impl UIRenderer {
         }
 
         if let Some(text) = element.get_text() {
-            let texture_key = format!("{}_{}_{:?}", text, element.z_index, element.color);
+            let texture_key = format!("{}_{}_{}", text, element.z_index, element.position.0);
             
             if !self.text_textures.contains_key(&texture_key) {
                 let texture = self.render_text_to_texture(
@@ -240,107 +248,91 @@ impl UIRenderer {
             }
         }
     }
+fn render_text_to_texture(
+    &self,
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    text: &str,
+    scale: f32,
+    color: [f32; 4],
+) -> wgpu::Texture {
+    let scale = Scale::uniform(scale);
+    let v_metrics = self.font.v_metrics(scale);
+    let glyphs: Vec<_> = self.font.layout(text, scale, point(0.0, v_metrics.ascent)).collect();
 
-    fn render_text_to_texture(
-        &self,
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
-        text: &str,
-        scale: f32,
-        color: [f32; 4],
-    ) -> wgpu::Texture {        
-        let scale = Scale::uniform(scale);
-        let v_metrics = self.font.v_metrics(scale);
+    // Calculate text dimensions with padding
+    let padding = (scale.x * 0.2).ceil() as u32;
+    let width = glyphs.iter().rev()
+        .map(|g| {
+            let pos = g.position().x;
+            let advance = g.unpositioned().h_metrics().advance_width;
+            pos + advance
+        })
+        .next()
+        .unwrap_or(0.0)
+        .ceil() as u32 + padding * 2;
+    
+    let height = ((v_metrics.ascent - v_metrics.descent).ceil() as u32) + padding * 2;
+    let width = width.max(1);
+    let height = height.max(1);
 
-        // Layout the text
-        let glyphs: Vec<_> = self.font.layout(text, scale, point(0.0, v_metrics.ascent)).collect();
+    // Create image buffer
+    let mut image = ImageBuffer::from_pixel(width, height, Rgba([0, 0, 0, 0]));
+    let [r, g, b, a] = color;
+    let r = (r * 255.0) as u8;
+    let g = (g * 255.0) as u8;
+    let b = (b * 255.0) as u8;
+    let a = (a * 255.0) as u8;
 
-        // Calculate text dimensions with padding
-        let padding = (scale.x * 0.2).ceil() as u32;
-        let width = (glyphs.iter().rev()
-            .map(|g| {
-                let pos = g.position().x;
-                let advance = g.unpositioned().h_metrics().advance_width;
-                pos + advance
-            })
-            .next()
-            .unwrap_or(0.0)
-            .ceil() as u32) + padding * 2;
-        
-        let height = ((v_metrics.ascent - v_metrics.descent).ceil() as u32) + padding * 2;
-
-        // Ensure minimum size
-        let width = width.max(1);
-        let height = height.max(1);
-
-        // Create an image buffer with transparency
-        let mut image = ImageBuffer::from_pixel(width, height, Rgba([0, 0, 0, 0]));
-        
-        // Convert color to u8
-        let [r, g, b, a] = color;
-        let r = (r * 255.0) as u8;
-        let g = (g * 255.0) as u8;
-        let b = (b * 255.0) as u8;
-        let a = (a * 255.0) as u8;
-
-        // Render each glyph with padding offset
-        for glyph in glyphs {
-            if let Some(bounding_box) = glyph.pixel_bounding_box() {
-                glyph.draw(|x, y, v| {
-                    let x = x as i32 + bounding_box.min.x + padding as i32;
-                    let y = y as i32 + bounding_box.min.y + padding as i32;
-                    if x >= 0 && x < width as i32 && y >= 0 && y < height as i32 {
-                        let alpha = (v * a as f32) as u8;
-                        // Use premultiplied alpha for better quality
-                        let premultiplied = |c: u8| ((c as f32 * v).round() as u8);
-                        image.put_pixel(
-                            x as u32, 
-                            y as u32, 
-                            Rgba([
-                                premultiplied(r),
-                                premultiplied(g),
-                                premultiplied(b),
-                                alpha,
-                            ])
-                        );
-                    }
-                });
-            }
+    // Render glyphs
+    for glyph in glyphs {
+        if let Some(bounding_box) = glyph.pixel_bounding_box() {
+            glyph.draw(|x, y, v| {
+                let x = x as i32 + bounding_box.min.x + padding as i32;
+                let y = y as i32 + bounding_box.min.y + padding as i32;
+                if x >= 0 && x < width as i32 && y >= 0 && y < height as i32 {
+                    let alpha = (v * a as f32) as u8;
+                    image.put_pixel(
+                        x as u32, 
+                        y as u32, 
+                        Rgba([r, g, b, alpha])
+                    );
+                }
+            });
         }
-
-        // Create texture with mipmaps for better quality at small sizes
-        let texture = device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("Text Texture"),
-            size: wgpu::Extent3d { width, height, depth_or_array_layers: 1 },
-            mip_level_count: 1, // Consider increasing for better quality at small sizes
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba8UnormSrgb, // Use sRGB for better color handling
-            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-            view_formats: &[],
-        });
-
-        // Upload texture data
-        let raw_data = image.into_raw();
-        
-        queue.write_texture(
-            wgpu::TexelCopyTextureInfo {
-                texture: &texture,
-                mip_level: 0,
-                origin: wgpu::Origin3d::ZERO,
-                aspect: wgpu::TextureAspect::All,
-            },
-            &raw_data,
-            wgpu::TexelCopyBufferLayout {
-                offset: 0,
-                bytes_per_row: Some(4 * width),
-                rows_per_image: Some(height),
-            },
-            wgpu::Extent3d { width, height, depth_or_array_layers: 1 },
-        );
-
-        texture
     }
+
+    // Create texture
+    let texture = device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("Text Texture"),
+        size: wgpu::Extent3d { width, height, depth_or_array_layers: 1 },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: wgpu::TextureFormat::Rgba8Unorm,
+        usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+        view_formats: &[],
+    });
+
+    // Upload texture data
+    queue.write_texture(
+        wgpu::ImageCopyTexture {
+            texture: &texture,
+            mip_level: 0,
+            origin: wgpu::Origin3d::ZERO,
+            aspect: wgpu::TextureAspect::All,
+        },
+        &image.into_raw(),
+        wgpu::ImageDataLayout {
+            offset: 0,
+            bytes_per_row: Some(4 * width),
+            rows_per_image: Some(height),
+        },
+        wgpu::Extent3d { width, height, depth_or_array_layers: 1 },
+    );
+
+    texture
+}
 
 
     pub fn render<'a>(
@@ -365,14 +357,14 @@ impl UIRenderer {
             if element.border_width > 0.0 {
                 element_index_count += 6;
             }
-            
+            /*
             // Add checkbox mark indices if needed
             if let UIElementData::Checkbox { checked, .. } = &element.data {
                 if *checked {
                     element_index_count += 6;
                 }
             }
-            
+            */
             // Draw the background/border parts
             render_pass.draw_indexed(
                 index_offset..(index_offset + element_index_count),
@@ -380,21 +372,21 @@ impl UIRenderer {
                 0..1
             );
             
+            index_offset += element_index_count;
+
             // If this is a text element, draw the text part
             if let Some(text) = element.get_text() {
-                let texture_key = format!("{}_{}_{:?}", text, element.z_index, element.color);
+                let texture_key = format!("{}_{}_{}", text, element.z_index, element.position.0);
                 if let Some((_, bind_group)) = self.text_textures.get(&texture_key) {
                     render_pass.set_bind_group(0, bind_group, &[]);
                     render_pass.draw_indexed(
-                        (index_offset + element_index_count)..(index_offset + element_index_count + 6),
+                        (index_offset + 0)..(index_offset + 6),
                         0,
                         0..1
                     );
-                    element_index_count += 6;
                 }
             }
-            
-            index_offset += element_index_count;
+            index_offset += 6;
         }
     }
 }

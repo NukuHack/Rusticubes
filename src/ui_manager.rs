@@ -1,6 +1,6 @@
 use super::ui_element;
-use super::ui_element::{UIElement, Vertex};
-use super::ui_render::UIRenderer;
+use super::ui_element::UIElement;
+use super::ui_render::{UIRenderer,Vertex};
 use crate::get_string;
 use crate::ui_element::UIElementData;
 use winit::keyboard::KeyCode as Key;
@@ -24,7 +24,6 @@ pub struct UIManager {
     pub pipeline: wgpu::RenderPipeline,
     pub elements: Vec<UIElement>,
     pub focused_element: Option<usize>,
-    pub num_indices: u32,
     pub visibility: bool,
     pub renderer: UIRenderer,
     next_id: usize,
@@ -115,27 +114,25 @@ impl UIManager {
             pipeline: ui_pipeline,
             elements: Vec::new(),
             focused_element: None,
-            num_indices: 0,
             visibility: true,
             renderer,
             next_id: 1,
         }
     }
 
+
     pub fn update(&mut self, _device: &wgpu::Device, queue: &wgpu::Queue) {
-        let (vertices, indices) = self
-            .renderer
-            .process_elements(&self.elements);
+        let (vertices, indices) = self.renderer.process_elements(&self.elements);
 
         if !vertices.is_empty() {
+            // Write vertices, overwriting old data (no explicit clear needed)
             queue.write_buffer(&self.vertex_buffer, 0, bytemuck::cast_slice(&vertices));
         }
 
         if !indices.is_empty() {
+            // Write indices, overwriting old data
             queue.write_buffer(&self.index_buffer, 0, bytemuck::cast_slice(&indices));
         }
-
-        self.num_indices = indices.len() as u32;
     }
 
     // Element management methods
@@ -302,7 +299,7 @@ impl UIManager {
     }
 
     pub fn render<'a>(&'a self, render_pass: &mut wgpu::RenderPass<'a>) {
-        if !self.visibility || self.num_indices == 0 {
+        if !self.visibility {
             return;
         }
 

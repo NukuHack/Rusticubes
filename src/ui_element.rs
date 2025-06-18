@@ -10,13 +10,6 @@ const MAX_INPUT_LENGTH: usize = 120;
 
 type Callback = Arc<RefCell<dyn FnMut()>>;
 
-#[repr(C)]
-#[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
-pub struct Vertex {
-    pub position: [f32; 2],
-    pub uv: [f32; 2],
-    pub color: [f32; 4],
-}
 
 #[derive(Clone)]
 pub enum UIElementData {
