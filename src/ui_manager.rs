@@ -366,7 +366,7 @@ impl UIManager {
         let button_panel =
             UIElement::new_panel(self.next_id(), (-0.35, -0.2), (0.7, 0.5), [0.15, 0.15, 0.2])
                 .with_border([0.3, 0.3, 0.4, 1.0], 0.005)
-                .with_z_index(4);
+                .with_z_index(1);
         self.add_element(button_panel);
 
         // Start button with hover effects
@@ -383,7 +383,7 @@ impl UIManager {
             },
         )
         .with_border([0.3, 0.6, 0.9, 1.0], 0.005)
-        .with_z_index(5);
+        .with_z_index(6);
         self.add_element(start_button);
 
         // Exit button with hover effects
@@ -410,7 +410,7 @@ impl UIManager {
             format!("v{}", env!("CARGO_PKG_VERSION")),
         )
         .with_border([0.5, 0.5, 0.5, 0.5], 0.002)
-        .with_z_index(10);
+        .with_z_index(8);
         self.add_element(version);
     }
 
@@ -431,7 +431,7 @@ impl UIManager {
         let list_panel =
             UIElement::new_panel(self.next_id(), (-0.5, -0.4), (1.0, 1.0), [0.15, 0.15, 0.2])
                 .with_border([0.25, 0.25, 0.35, 1.0], 0.01)
-                .with_z_index(5);
+                .with_z_index(1);
         self.add_element(list_panel);
 
         // New World button
@@ -448,7 +448,7 @@ impl UIManager {
             },
         )
         .with_border([0.4, 0.5, 0.7, 1.0], 0.005)
-        .with_z_index(10);
+        .with_z_index(8);
         self.add_element(new_w_button);
 
         let worlds = match super::file_manager::get_world_names() {
@@ -482,7 +482,7 @@ impl UIManager {
                 },
             )
             .with_border([0.35, 0.35, 0.5, 1.0], 0.003)
-            .with_z_index(10);
+            .with_z_index(5);
             self.add_element(world_button);
         }
 
@@ -500,7 +500,7 @@ impl UIManager {
             },
         )
         .with_border([0.6, 0.6, 0.6, 1.0], 0.005)
-        .with_z_index(10);
+        .with_z_index(8);
         self.add_element(back_button);
     }
 
@@ -521,7 +521,7 @@ impl UIManager {
         let form_panel =
             UIElement::new_panel(self.next_id(), (-0.4, -0.3), (0.8, 0.7), [0.15, 0.15, 0.2])
                 .with_border([0.25, 0.25, 0.35, 1.0], 0.01)
-                .with_z_index(5);
+                .with_z_index(1);
         self.add_element(form_panel);
 
         // World name label
@@ -532,7 +532,7 @@ impl UIManager {
             [0.9, 0.9, 0.9],
             "World Name:".to_string(),
         )
-        .with_z_index(10);
+        .with_z_index(3);
         self.add_element(w_name_label);
 
         // World Name input
@@ -545,7 +545,7 @@ impl UIManager {
             Some("New World".to_string()),
         )
         .with_border([0.4, 0.4, 0.6, 1.0], 0.005)
-        .with_z_index(10);
+        .with_z_index(5);
         self.add_element(world_name_input);
 
         // Generate button
@@ -572,7 +572,7 @@ impl UIManager {
             },
         )
         .with_border([0.4, 0.5, 0.7, 1.0], 0.005)
-        .with_z_index(10);
+        .with_z_index(6);
         self.add_element(gen_button);
 
         // Back button
@@ -589,7 +589,7 @@ impl UIManager {
             },
         )
         .with_border([0.6, 0.6, 0.6, 1.0], 0.005)
-        .with_z_index(10);
+        .with_z_index(8);
         self.add_element(back_button);
     }
 
@@ -609,7 +609,7 @@ impl UIManager {
             [1.0, 1.0, 1.0],
             "Loading...".to_string(),
         )
-        .with_z_index(11);
+        .with_z_index(15);
         self.add_element(loading_text);
 
         // Progress bar background
@@ -620,7 +620,7 @@ impl UIManager {
             [0.05, 0.05, 0.1],
         )
         .with_border([0.2, 0.2, 0.3, 1.0], 0.003)
-        .with_z_index(11);
+        .with_z_index(8);
         self.add_element(progress_bg);
 
         // Progress bar (animated)
@@ -630,7 +630,7 @@ impl UIManager {
             (0.01, 0.02), // Will be animated
             [0.3, 0.5, 0.8],
         )
-        .with_z_index(12);
+        .with_z_index(8);
         self.add_element(progress_bar);
     }
 
@@ -639,7 +639,7 @@ impl UIManager {
         let side_panel =
             UIElement::new_panel(self.next_id(), (0.4, -0.9), (0.6, 1.8), [0.1, 0.1, 0.15])
                 .with_border([0.2, 0.2, 0.3, 1.0], 0.01)
-                .with_z_index(5);
+                .with_z_index(1);
         self.add_element(side_panel);
 
         // Panel title
@@ -667,7 +667,7 @@ impl UIManager {
             },
         )
         .with_border([0.7, 0.4, 0.4, 1.0], 0.005)
-        .with_z_index(10);
+        .with_z_index(8);
         self.add_element(clean_button);
 
         // Help text
@@ -679,7 +679,7 @@ impl UIManager {
             "Press ALT to lock".to_string(),
         )
         .with_border([0.5, 0.5, 0.6, 1.0], 0.003)
-        .with_z_index(7);
+        .with_z_index(5);
         self.add_element(help_text_1);
 
         let help_text_2 = UIElement::new_label(
@@ -690,7 +690,7 @@ impl UIManager {
             "Press L to fill chunk".to_string(),
         )
         .with_border([0.5, 0.5, 0.6, 1.0], 0.003)
-        .with_z_index(7);
+        .with_z_index(5);
         self.add_element(help_text_2);
 
         let help_text_3 = UIElement::new_label(
@@ -701,7 +701,7 @@ impl UIManager {
             "Press R to break".to_string(),
         )
         .with_border([0.5, 0.5, 0.6, 1.0], 0.003)
-        .with_z_index(7);
+        .with_z_index(5);
         self.add_element(help_text_3);
 
         let help_text_4 = UIElement::new_label(
@@ -712,7 +712,7 @@ impl UIManager {
             "Press F to place".to_string(),
         )
         .with_border([0.5, 0.5, 0.6, 1.0], 0.003)
-        .with_z_index(7);
+        .with_z_index(5);
         self.add_element(help_text_4);
 
         let help_text_5 = UIElement::new_label(
@@ -723,7 +723,7 @@ impl UIManager {
             "Press ESC to leave".to_string(),
         )
         .with_border([0.5, 0.5, 0.6, 1.0], 0.003)
-        .with_z_index(7);
+        .with_z_index(5);
         self.add_element(help_text_5);
 
         // Close button
@@ -739,7 +739,7 @@ impl UIManager {
             },
         )
         .with_border([0.9, 0.3, 0.3, 1.0], 0.005)
-        .with_z_index(10);
+        .with_z_index(8);
         self.add_element(close_button);
 
         // Crosshair with better visibility
@@ -752,24 +752,6 @@ impl UIManager {
 
         self.add_element(crosshair_v);
         self.add_element(crosshair_h);
-        /*
-                // Status bar at bottom
-                let status_bar =
-                    UIElement::new_panel(self.next_id(), (-1.0, -0.96), (1.4, 0.06), [0.1, 0.1, 0.15])
-                        .with_border([0.2, 0.2, 0.3, 1.0], 0.005)
-                        .with_z_index(10);
-                self.add_element(status_bar);
-
-                let coord_text = UIElement::new_label(
-                    self.next_id(),
-                    (-0.95, -0.93),
-                    (0.3, 0.05),
-                    [0.8, 0.8, 0.8],
-                    "X: 0, Y: 0, Z: 0".to_string(),
-                )
-                .with_z_index(11);
-                self.add_element(coord_text);
-        */
     }
 }
 

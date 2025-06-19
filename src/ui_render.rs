@@ -23,8 +23,8 @@ pub struct UIRenderer {
 impl UIRenderer {
     pub fn new(device: &wgpu::Device, queue: &wgpu::Queue) -> Self {
         // Load font from embedded bytes or file
-        let font_data = include_bytes!("../resources/calibri.ttf");
-        let font = Font::try_from_bytes(font_data).expect("Failed to load font");
+        let font_data = crate::get_bytes!("calibri.ttf");
+        let font = Font::try_from_vec(font_data.clone()).expect("Failed to load font");
 
         // Create sampler for font rendering
         let font_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
@@ -350,61 +350,6 @@ impl UIRenderer {
         texture
     }
 
-
-    pub fn render<'a>(
-        &'a self,
-        ui_manager: &super::ui_manager::UIManager,
-        render_pass: &mut wgpu::RenderPass<'a>,
-    ) {
-        render_pass.set_pipeline(&ui_manager.pipeline);
-        render_pass.set_vertex_buffer(0, ui_manager.vertex_buffer.slice(..));
-        render_pass.set_index_buffer(ui_manager.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
-
-        let mut index_offset = 0;
-        
-        for element in ui_manager.elements.iter().filter(|e| e.visible) {
-            // First draw the background/border (if any)
-            render_pass.set_bind_group(0, &self.default_bind_group, &[]);
-            
-            // Calculate how many indices this element uses
-            let mut element_index_count = 6; // base rectangle
-            
-            // Add border indices if needed
-            if element.border_width > 0.0 {
-                element_index_count += 6;
-            }
-            /*
-            // Add checkbox mark indices if needed
-            if let UIElementData::Checkbox { checked, .. } = &element.data {
-                if *checked {
-                    element_index_count += 6;
-                }
-            }
-            */
-            // Draw the background/border parts
-            render_pass.draw_indexed(
-                index_offset..(index_offset + element_index_count),
-                0, 
-                0..1
-            );
-            
-            index_offset += element_index_count;
-
-            // If this is a text element, draw the text part
-            if let Some(text) = element.get_text() {
-                let texture_key = format!("{}_{}_{}", text, element.z_index, element.position.0);
-                if let Some((_, bind_group)) = self.text_textures.get(&texture_key) {
-                    render_pass.set_bind_group(0, bind_group, &[]);
-                    render_pass.draw_indexed(
-                        (index_offset + 0)..(index_offset + 6),
-                        0,
-                        0..1
-                    );
-                }
-            }
-            index_offset += 6;
-        }
-    }
 }
 
 impl UIRenderer {
@@ -529,4 +474,119 @@ impl UIRenderer {
         [base, base + 1, base + 2, base + 1, base + 3, base + 2]
     }
 
+}
+
+
+impl UIRenderer {
+    // insainly long rendering function made by "https://claude.ai/chat/" 4.0 to be exact
+    pub fn render<'a>(
+        &'a self,
+        ui_manager: &super::ui_manager::UIManager,
+        render_pass: &mut wgpu::RenderPass<'a>,
+    ) {
+        render_pass.set_pipeline(&ui_manager.pipeline);
+        render_pass.set_vertex_buffer(0, ui_manager.vertex_buffer.slice(..));
+        render_pass.set_index_buffer(ui_manager.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
+
+        let mut index_offset = 0;
+        
+        // Get sorted elements (same as in process_elements)
+        let mut sorted_elements: Vec<&UIElement> = ui_manager.elements.iter().filter(|e| e.visible).collect();
+        sorted_elements.sort_by_key(|e| e.z_index);
+        
+        for element in sorted_elements {
+            // Draw border first (if it exists)
+            if element.border_width > 0.0 {
+                render_pass.set_bind_group(0, &self.default_bind_group, &[]);
+                render_pass.draw_indexed(
+                    index_offset..(index_offset + 6),
+                    0, 
+                    0..1
+                );
+                index_offset += 6;
+            }
+            
+            // Draw background/element body
+            match &element.data {
+                UIElementData::Checkbox { checked, .. } => {
+                    // Draw checkbox background
+                    render_pass.set_bind_group(0, &self.default_bind_group, &[]);
+                    render_pass.draw_indexed(
+                        index_offset..(index_offset + 6),
+                        0, 
+                        0..1
+                    );
+                    index_offset += 6;
+                    
+                    // Draw checkmark if checked
+                    if *checked {
+                        render_pass.draw_indexed(
+                            index_offset..(index_offset + 6),
+                            0, 
+                            0..1
+                        );
+                        index_offset += 6;
+                    }
+                    
+                    // Draw checkbox label text (if any)
+                    if element.get_text().is_some() {
+                        let texture_key = format!("{}_{}_{}", 
+                            element.get_text().unwrap(), 
+                            element.z_index, 
+                            element.position.0
+                        );
+                        if let Some((_, bind_group)) = self.text_textures.get(&texture_key) {
+                            render_pass.set_bind_group(0, bind_group, &[]);
+                            render_pass.draw_indexed(
+                                index_offset..(index_offset + 6),
+                                0,
+                                0..1
+                            );
+                        }
+                        index_offset += 6;
+                    }
+                }
+                _ => {
+                    // For text elements (Button, InputField, Label), draw background first if needed
+                    match &element.data {
+                        UIElementData::InputField { .. } | UIElementData::Button { .. } => {
+                            // Draw background rectangle
+                            render_pass.set_bind_group(0, &self.default_bind_group, &[]);
+                            render_pass.draw_indexed(
+                                index_offset..(index_offset + 6),
+                                0, 
+                                0..1
+                            );
+                            index_offset += 6;
+                        }
+                        UIElementData::Panel { .. } | UIElementData::Divider { .. } => {
+                            // Draw the panel/divider rectangle
+                            render_pass.set_bind_group(0, &self.default_bind_group, &[]);
+                            render_pass.draw_indexed(
+                                index_offset..(index_offset + 6),
+                                0, 
+                                0..1
+                            );
+                            index_offset += 6;
+                        }
+                        _ => {}
+                    }
+                    
+                    // Draw text if element has text
+                    if let Some(text) = element.get_text() {
+                        let texture_key = format!("{}_{}_{}", text, element.z_index, element.position.0);
+                        if let Some((_, bind_group)) = self.text_textures.get(&texture_key) {
+                            render_pass.set_bind_group(0, bind_group, &[]);
+                            render_pass.draw_indexed(
+                                index_offset..(index_offset + 6),
+                                0,
+                                0..1
+                            );
+                        }
+                        index_offset += 6;
+                    }
+                }
+            }
+        }
+    }
 }
