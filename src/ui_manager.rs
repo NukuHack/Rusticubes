@@ -275,6 +275,7 @@ impl UIManager {
         // Find topmost clickable element
         for (index, element) in self.elements.iter_mut().enumerate().rev() {
             if element.visible && element.enabled && element.contains_point(norm_x, norm_y) {
+                super::sound::play_sound("click.ogg".to_string());
                 match &element.data {
                     UIElementData::InputField { .. } => {
                         self.focused_element = Some(index); // Store the vector index
@@ -289,6 +290,7 @@ impl UIManager {
                 return true;
             }
         }
+
         false
     }
 

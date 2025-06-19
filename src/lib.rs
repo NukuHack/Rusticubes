@@ -8,6 +8,7 @@ mod pipeline;
 
 mod debug;
 mod resources;
+mod sound;
 mod input;
 mod file_manager;
 
