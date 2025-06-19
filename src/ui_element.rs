@@ -4,9 +4,14 @@ use std::sync::Arc;
 use winit::keyboard::KeyCode as Key;
 
 // Constants for common values
-const DEFAULT_ALPHA: f32 = 0.9;
-const HOVER_ALPHA: f32 = 0.5;
-const MAX_INPUT_LENGTH: usize = 120;
+impl UIElement {
+    const DEFAULT_ALPHA: f32 = 0.9;
+    const HOVER_ALPHA: f32 = 0.5;
+    const DEFAULT_COLOR: [f32; 4] = [1.0, 1.0, 1.0, Self::DEFAULT_ALPHA];
+    const DEFAULT_SIZE: (f32, f32) = (0.0, 0.0);
+    const DEFAULT_POSITION: (f32, f32) = (0.0, 0.0);
+    const MAX_INPUT_LENGTH: usize = 255; // was only used when text was rendered by char now could be removed
+}
 
 type Callback = Arc<RefCell<dyn FnMut()>>;
 
@@ -30,7 +35,10 @@ pub enum UIElementData {
         checked: bool,
         on_click: Option<Callback>,
     },
-    Image,
+    Image {
+        // Store raw path (only name and extension)
+        path: String
+    },
     Divider,
 }
 
@@ -43,28 +51,28 @@ impl Default for UIElementData {
 impl fmt::Debug for UIElementData {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            UIElementData::Panel => write!(f, "Panel"),
-            UIElementData::Label { text } => f.debug_struct("Label").field("text", text).finish(),
-            UIElementData::Button { text, .. } => {
-                f.debug_struct("Button").field("text", text).finish()
-            }
-            UIElementData::InputField { text, placeholder } => f
+            Self::Panel => f.debug_struct("Panel").finish(),
+            Self::Label { text } => f.debug_struct("Label").field("text", text).finish(),
+            Self::Button { text, .. } => f.debug_struct("Button").field("text", text).finish(),
+            Self::InputField { text, placeholder } => f
                 .debug_struct("InputField")
                 .field("text", text)
                 .field("placeholder", placeholder)
                 .finish(),
-            UIElementData::Checkbox { label, checked, .. } => f
+            Self::Checkbox { label, checked, .. } => f
                 .debug_struct("Checkbox")
                 .field("label", label)
                 .field("checked", checked)
                 .finish(),
-            UIElementData::Image => write!(f, "Image"),
-            UIElementData::Divider => write!(f, "Divider"),
+            Self::Image { path } => f
+                .debug_struct("Image")
+                .field("path", path)
+                .finish(),
+            Self::Divider => write!(f, "Divider"),
         }
     }
 }
 
-#[derive(Default)]
 pub struct UIElement {
     pub id: usize,
     pub data: UIElementData,
@@ -72,7 +80,6 @@ pub struct UIElement {
     pub size: (f32, f32),
     pub color: [f32; 4],
     pub hovered: bool,
-
     // Enhanced features
     pub z_index: i32,
     pub visible: bool,
@@ -81,11 +88,42 @@ pub struct UIElement {
     pub enabled: bool,
 }
 
+impl Default for UIElement {
+    fn default() -> Self {
+        Self {
+            id: 0,
+            data: UIElementData::default(),
+            position: Self::DEFAULT_POSITION,
+            size: Self::DEFAULT_SIZE,
+            color: Self::DEFAULT_COLOR,
+            hovered: false,
+            z_index: 0,
+            visible: true,
+            border_color: Self::DEFAULT_COLOR,
+            border_width: 0.0,
+            enabled: true,
+        }
+    }
+}
+impl fmt::Debug for UIElement {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("UIElement")
+            .field("id", &self.id)
+            .field("data", &self.data)
+            .field("position", &self.position)
+            .field("size", &self.size)
+            .field("color", &self.color)
+            .field("hovered", &self.hovered)
+            // Enhanced features
+            .field("z_index", &self.z_index)
+            .field("visible", &self.visible)
+            .field("border_color", &self.border_color)
+            .field("border_width", &self.border_width)
+            .field("enabled", &self.enabled)
+            .finish()
+    }
+}
 impl UIElement {
-    pub const DEFAULT_COLOR: [f32; 4] = [1.0, 1.0, 1.0, DEFAULT_ALPHA];
-    pub const DEFAULT_SIZE: (f32, f32) = (0.2, 0.2);
-    pub const DEFAULT_BORDER_COLOR: [f32; 4] = [0.5, 0.5, 0.5, 1.0];
-
     pub fn new(
         id: usize,
         data: UIElementData,
@@ -98,13 +136,8 @@ impl UIElement {
             data,
             position,
             size,
-            color: [color[0], color[1], color[2], DEFAULT_ALPHA],
-            visible: true,
-            enabled: true,
-            border_color: Self::DEFAULT_BORDER_COLOR,
-            border_width: 0.0,
-            z_index: 0,
-            ..Default::default()
+            color: [color[0], color[1], color[2], Self::DEFAULT_ALPHA],
+            ..Self::default()
         }
     }
 
@@ -148,7 +181,7 @@ impl UIElement {
         // Initialize text with placeholder if it exists, otherwise empty string
         let text = placeholder.clone().unwrap_or_default();
 
-        let mut element = Self::new(
+        Self::new(
             id,
             UIElementData::InputField {
                 text,        // Use the initialized text
@@ -157,20 +190,19 @@ impl UIElement {
             position,
             size,
             color,
-        );
-        element.border_width = 0.002;
-        element
+        )
     }
 
     pub fn new_checkbox(
         id: usize,
         position: (f32, f32),
         size: (f32, f32),
+        color: [f32; 3],
         label: Option<String>,
         checked: bool,
         on_click: Option<impl FnMut() + 'static>,
     ) -> Self {
-        let mut element = Self::new(
+        Self::new(
             id,
             UIElementData::Checkbox {
                 label,
@@ -181,11 +213,8 @@ impl UIElement {
             },
             position,
             size,
-            [0.9, 0.9, 0.9],
-        );
-        element.border_width = 0.001;
-        element.border_color = [0.3, 0.3, 0.3, 1.0];
-        element
+            color,
+        )
     }
 
     pub fn new_panel(id: usize, position: (f32, f32), size: (f32, f32), color: [f32; 3]) -> Self {
@@ -196,25 +225,51 @@ impl UIElement {
         Self::new(id, UIElementData::Divider, position, size, color)
     }
 
-    // Builder pattern methods remain the same...
-    pub fn with_border(mut self, color: [f32; 4], width: f32) -> Self {
-        self.border_color = color;
-        self.border_width = width;
-        self
+    pub fn new_image(
+        id: usize,
+        position: (f32, f32),
+        size: (f32, f32),
+        color: [f32; 3],
+        path: String,
+    ) -> Self {
+        Self::new(
+            id,
+            UIElementData::Image { path },
+            position,
+            size,
+            color
+        )
     }
 
-    pub fn with_z_index(mut self, z_index: i32) -> Self {
+    pub fn set_border(mut self, border_color: [f32; 4], border_width: f32) -> Self {
+        self.border_color = border_color;
+        self.border_width = border_width;
+        self
+    }
+    pub fn set_color(mut self, color: [f32; 4]) -> Self {
+        // should not use this, cus' alpha
+        self.color = color;
+        self
+    }
+    pub fn set_z_index(mut self, z_index: i32) -> Self {
         self.z_index = z_index;
         self
     }
-
-    pub fn with_visibility(mut self, visible: bool) -> Self {
+    pub fn set_visibility(mut self, visible: bool) -> Self {
         self.visible = visible;
         self
     }
-
-    pub fn with_enabled(mut self, enabled: bool) -> Self {
+    pub fn set_enabled(mut self, enabled: bool) -> Self {
+        // currently this is basically not processed ... so yeah ...
         self.enabled = enabled;
+        self
+    }
+    pub fn set_pos(mut self, x : f32, y : f32) -> Self {
+        self.position = (x, y);
+        self
+    }
+    pub fn set_size(mut self, w : f32, h : f32) -> Self {
+        self.size = (w, h);
         self
     }
 
@@ -236,11 +291,11 @@ impl UIElement {
         self.hovered = is_hovered && self.enabled;
         if matches!(self.data, UIElementData::Button { .. }) {
             self.color[3] = if self.hovered && self.enabled {
-                HOVER_ALPHA
+                Self::HOVER_ALPHA
             } else if !self.enabled {
-                DEFAULT_ALPHA * 0.5
+                Self::DEFAULT_ALPHA * 0.5
             } else {
-                DEFAULT_ALPHA
+                Self::DEFAULT_ALPHA
             };
         }
     }
@@ -296,26 +351,9 @@ impl UIElement {
     }
 }
 
-impl fmt::Debug for UIElement {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("UIElement")
-            .field("id", &self.id)
-            .field("data", &self.data)
-            .field("position", &self.position)
-            .field("size", &self.size)
-            .field("color", &self.color)
-            .field("hovered", &self.hovered)
-            .field("visible", &self.visible)
-            .field("enabled", &self.enabled)
-            .field("z_index", &self.z_index)
-            .field("border_width", &self.border_width)
-            .finish()
-    }
-}
-
 // Input validation and processing (unchanged)
 pub fn process_text_input(text: &mut String, c: char) -> bool {
-    if text.len() >= MAX_INPUT_LENGTH || c.is_control() {
+    if text.len() >= UIElement::MAX_INPUT_LENGTH || c.is_control() {
         return false;
     }
     text.push(c);

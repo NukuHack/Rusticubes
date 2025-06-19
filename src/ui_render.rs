@@ -16,6 +16,7 @@ pub struct UIRenderer {
     pub font_sampler: wgpu::Sampler,
     font: Font<'static>,
     text_textures: HashMap<String, (wgpu::Texture, wgpu::BindGroup)>,
+        image_textures: HashMap<usize, (wgpu::Texture, wgpu::BindGroup)>, // Add this line
     default_bind_group: wgpu::BindGroup,
     pixel_ratio: f32, // For high DPI support
 }
@@ -23,7 +24,7 @@ pub struct UIRenderer {
 impl UIRenderer {
     pub fn new(device: &wgpu::Device, queue: &wgpu::Queue) -> Self {
         // Load font from embedded bytes or file
-        let font_data = crate::get_bytes!("calibri.ttf");
+        let font_data = crate::get_bytes!("calibri.ttf"); // C:\Windows\Fonts\..
         let font = Font::try_from_vec(font_data.clone()).expect("Failed to load font");
 
         // Create sampler for font rendering
@@ -108,6 +109,7 @@ impl UIRenderer {
             font_sampler,
             font,
             text_textures: HashMap::new(),
+            image_textures: HashMap::new(), // Add this line
             default_bind_group,
             pixel_ratio: 4.0,
         }
@@ -115,7 +117,7 @@ impl UIRenderer {
 
 
     pub fn set_pixel_ratio(&mut self, ratio: f32) {
-        self.pixel_ratio = ratio.max(1.0);
+        self.pixel_ratio = ratio.max(10.0).min(0.1);
     }
 
     pub fn process_elements(
@@ -135,10 +137,13 @@ impl UIRenderer {
             }
 
             match &element.data {
+                UIElementData::Image { .. } => {
+                    self.process_image_element(element, &mut vertices, &mut indices, &mut current_index);
+                }
                 UIElementData::Checkbox { .. } => {
                     self.process_checkbox(element, &mut vertices, &mut indices, &mut current_index);
                 }
-                _ => {
+                UIElementData::InputField { .. } | UIElementData::Button { .. } | UIElementData::Label { .. }  => {
                     if element.get_text().is_some() {
                         self.process_text_element(
                             element,
@@ -155,6 +160,14 @@ impl UIRenderer {
                         );
                     }
                 }
+                UIElementData::Panel { .. } | UIElementData::Divider { .. } => {
+                    self.process_rect_element(
+                        element,
+                        &mut vertices,
+                        &mut indices,
+                        &mut current_index,
+                    );
+                }
             }
         }
 
@@ -170,7 +183,7 @@ impl UIRenderer {
     ) {
         let state = super::config::get_state();
         
-        // First process the background if needed
+        // First process the background if needed (not for label)
         match &element.data {
             UIElementData::InputField { .. } | UIElementData::Button { .. } => {
                 self.add_rectangle(vertices, element.position, element.size, element.color);
@@ -181,7 +194,7 @@ impl UIRenderer {
         }
 
         if let Some(text) = element.get_text() {
-            let texture_key = format!("{}_{}_{}", text, element.z_index, element.position.0);
+            let texture_key = format!("{}_{}_{}", text, element.size.0, element.size.1);
             
             if !self.text_textures.contains_key(&texture_key) {
                 let texture = self.render_text_to_texture(
@@ -212,34 +225,31 @@ impl UIRenderer {
             }
 
             if let Some((texture, _)) = self.text_textures.get(&texture_key) {
-                let (x, y) = element.position;
-                let (w, h) = element.size;
+                let (pos_x, pos_y) = element.position;
+                let (siz_w, siz_h) = element.size;
                 let pixel_to_unit = 1.0 / (100.0 * self.pixel_ratio);
                 
-                let texture_width = texture.width() as f32 * pixel_to_unit;
-                let texture_height = texture.height() as f32 * pixel_to_unit;
+                let w = texture.width() as f32 * pixel_to_unit;
+                let h = texture.height() as f32 * pixel_to_unit;
                 
                 // Center the text in the element
-                let text_x = x + (w - texture_width) / 2.0;
-                let text_y = y + (h - texture_height) / 2.0;
-                
+                let x = pos_x + (siz_w - w) / 2.0;
+                let y = pos_y + (siz_h - h) / 2.0;
                 // Correct vertex positions and UVs
                 let positions = [
-                    [text_x, text_y],                      // top-left
-                    [text_x + texture_width, text_y],      // top-right
-                    [text_x, text_y + texture_height],     // bottom-left
-                    [text_x + texture_width, text_y + texture_height], // bottom-right
+                    [x, y],         // top-left
+                    [x + w, y],     // top-right
+                    [x, y + h],     // bottom-left
+                    [x + w, y + h], // bottom-right
                 ];
-                
                 let uvs = [
                      [0.0, 1.0], [1.0, 1.0],[0.0, 0.0], [1.0, 0.0],
                 ];
-                
                 for j in 0..4 {
                     vertices.push(Vertex {
                         position: positions[j],
                         uv: uvs[j],
-                        color: [1.0, 1.0, 1.0, 1.0], // Use white color and let texture provide the color
+                        color: element.color, // Use white color and let texture provide the color
                     });
                 }
                 
@@ -350,6 +360,109 @@ impl UIRenderer {
         texture
     }
 
+
+    // Add this new method to process image elements
+    fn process_image_element(
+        &mut self,
+        element: &UIElement,
+        vertices: &mut Vec<Vertex>,
+        indices: &mut Vec<u32>,
+        current_index: &mut u32,
+    ) {
+        if let UIElementData::Image { path } = &element.data {
+            let state = super::config::get_state();
+            
+            // Create or get cached image texture
+            if !self.image_textures.contains_key(&element.id) {
+                let texture = self.create_image_texture(
+                    state.device(),
+                    state.queue(),
+                    path.to_string(),
+                );
+                
+                let texture_view = texture.create_view(&Default::default());
+                let bind_group = state.device().create_bind_group(&wgpu::BindGroupDescriptor {
+                    layout: &self.bind_group_layout,
+                    entries: &[
+                        wgpu::BindGroupEntry {
+                            binding: 0,
+                            resource: wgpu::BindingResource::Sampler(&self.font_sampler),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 1,
+                            resource: wgpu::BindingResource::TextureView(&texture_view),
+                        },
+                    ],
+                    label: Some("image_bind_group"),
+                });
+                
+                self.image_textures.insert(element.id, (texture, bind_group));
+            }
+
+            // Add vertices for the image quad - FIXED: Match the vertex order used in add_rectangle
+            let (x, y) = element.position;
+            let (w, h) = element.size;
+            // Correct vertex positions and UVs
+            let positions = [
+                [x, y],         // top-left
+                [x + w, y],     // top-right
+                [x, y + h],     // bottom-left
+                [x + w, y + h], // bottom-right
+            ];
+            let uvs = [
+                 [0.0, 1.0], [1.0, 1.0],[0.0, 0.0], [1.0, 0.0],
+            ];
+            for j in 0..4 {
+                vertices.push(Vertex {
+                    position: positions[j],
+                    uv: uvs[j],
+                    color: element.color, // Use white color and let texture provide the color
+                });
+            }
+            
+            indices.extend(self.rectangle_indices(*current_index));
+            *current_index += 4;
+        }
+    }
+
+    // Add this method to create image textures
+    fn create_image_texture(
+        &self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        path: String,
+    ) -> wgpu::Texture {
+        let Some((rgba,width,height)) = super::resources::load_image_from_bytes(path.to_string()) else { panic!() };
+        let texture = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("Image Texture"),
+            size: wgpu::Extent3d { width, height, depth_or_array_layers: 1 },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8Unorm, //Rgba8UnormSrgb
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+            view_formats: &[],
+        });
+
+        // Upload the pixel data
+        queue.write_texture(
+            wgpu::TexelCopyTextureInfo {
+                texture: &texture,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            &rgba,
+            wgpu::TexelCopyBufferLayout {
+                offset: 0,
+                bytes_per_row: Some(4 * width), // 4 bytes per pixel (RGBA)
+                rows_per_image: Some(height),
+            },
+            wgpu::Extent3d { width, height, depth_or_array_layers: 1 },
+        );
+
+        texture
+    }
 }
 
 impl UIRenderer {
@@ -508,6 +621,18 @@ impl UIRenderer {
             
             // Draw background/element body
             match &element.data {
+                UIElementData::Image { .. } => {
+                    // Draw image with its texture
+                    if let Some((_, bind_group)) = self.image_textures.get(&element.id) {
+                        render_pass.set_bind_group(0, bind_group, &[]);
+                        render_pass.draw_indexed(
+                            index_offset..(index_offset + 6),
+                            0,
+                            0..1
+                        );
+                    }
+                    index_offset += 6;
+                }
                 UIElementData::Checkbox { checked, .. } => {
                     // Draw checkbox background
                     render_pass.set_bind_group(0, &self.default_bind_group, &[]);
@@ -529,12 +654,8 @@ impl UIRenderer {
                     }
                     
                     // Draw checkbox label text (if any)
-                    if element.get_text().is_some() {
-                        let texture_key = format!("{}_{}_{}", 
-                            element.get_text().unwrap(), 
-                            element.z_index, 
-                            element.position.0
-                        );
+                    if let Some(text) = element.get_text() {
+                        let texture_key = format!("{}_{}_{}", text, element.size.0, element.size.1);
                         if let Some((_, bind_group)) = self.text_textures.get(&texture_key) {
                             render_pass.set_bind_group(0, bind_group, &[]);
                             render_pass.draw_indexed(
@@ -546,35 +667,44 @@ impl UIRenderer {
                         index_offset += 6;
                     }
                 }
-                _ => {
-                    // For text elements (Button, InputField, Label), draw background first if needed
-                    match &element.data {
-                        UIElementData::InputField { .. } | UIElementData::Button { .. } => {
-                            // Draw background rectangle
-                            render_pass.set_bind_group(0, &self.default_bind_group, &[]);
-                            render_pass.draw_indexed(
-                                index_offset..(index_offset + 6),
-                                0, 
-                                0..1
-                            );
-                            index_offset += 6;
-                        }
-                        UIElementData::Panel { .. } | UIElementData::Divider { .. } => {
-                            // Draw the panel/divider rectangle
-                            render_pass.set_bind_group(0, &self.default_bind_group, &[]);
-                            render_pass.draw_indexed(
-                                index_offset..(index_offset + 6),
-                                0, 
-                                0..1
-                            );
-                            index_offset += 6;
-                        }
-                        _ => {}
-                    }
+                UIElementData::InputField { .. } | UIElementData::Button { .. } => {
+                    // Draw background rectangle
+                    render_pass.set_bind_group(0, &self.default_bind_group, &[]);
+                    render_pass.draw_indexed(
+                        index_offset..(index_offset + 6),
+                        0, 
+                        0..1
+                    );
+                    index_offset += 6;
                     
                     // Draw text if element has text
                     if let Some(text) = element.get_text() {
-                        let texture_key = format!("{}_{}_{}", text, element.z_index, element.position.0);
+                        let texture_key = format!("{}_{}_{}", text, element.size.0, element.size.1);
+                        if let Some((_, bind_group)) = self.text_textures.get(&texture_key) {
+                            render_pass.set_bind_group(0, bind_group, &[]);
+                            render_pass.draw_indexed(
+                                index_offset..(index_offset + 6),
+                                0,
+                                0..1
+                            );
+                        }
+                        index_offset += 6;
+                    }
+                }
+                UIElementData::Panel { .. } | UIElementData::Divider { .. } => {
+                    // Draw the panel/divider rectangle
+                    render_pass.set_bind_group(0, &self.default_bind_group, &[]);
+                    render_pass.draw_indexed(
+                        index_offset..(index_offset + 6),
+                        0, 
+                        0..1
+                    );
+                    index_offset += 6;
+                }
+                UIElementData::Label { .. } => {
+                    // Draw text if element has text
+                    if let Some(text) = element.get_text() {
+                        let texture_key = format!("{}_{}_{}", text, element.size.0, element.size.1);
                         if let Some((_, bind_group)) = self.text_textures.get(&texture_key) {
                             render_pass.set_bind_group(0, bind_group, &[]);
                             render_pass.draw_indexed(

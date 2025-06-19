@@ -203,6 +203,11 @@ impl UIManager {
         self.elements.clear();
         self.focused_element = None;
         self.next_id = 1;
+        /*
+        match self.state {
+            UIState::None => {}
+        }
+        */
     }
 
     pub fn handle_key_input(&mut self, key: Key, shift: bool) {
@@ -320,7 +325,7 @@ impl UIManager {
 
         let bg_panel =
             UIElement::new_panel(self.next_id(), (-1.0, -1.0), (2.0, 2.0), [0.08, 0.08, 0.12])
-                .with_z_index(-5);
+                .set_z_index(-5);
 
         match self.state {
             UIState::None => {
@@ -358,15 +363,15 @@ impl UIManager {
             [1.0, 1.0, 1.0],
             "Rusticubes".to_string(),
         )
-        .with_border([0.9, 0.9, 0.9, 0.9], 0.005)
-        .with_z_index(10);
+        .set_border([0.9, 0.9, 0.9, 0.9], 0.005)
+        .set_z_index(10);
         self.add_element(title);
 
         // Button container panel
         let button_panel =
             UIElement::new_panel(self.next_id(), (-0.35, -0.2), (0.7, 0.5), [0.15, 0.15, 0.2])
-                .with_border([0.3, 0.3, 0.4, 1.0], 0.005)
-                .with_z_index(1);
+                .set_border([0.3, 0.3, 0.4, 1.0], 0.005)
+                .set_z_index(1);
         self.add_element(button_panel);
 
         // Start button with hover effects
@@ -382,8 +387,8 @@ impl UIManager {
                 state.ui_manager.setup_ui();
             },
         )
-        .with_border([0.3, 0.6, 0.9, 1.0], 0.005)
-        .with_z_index(6);
+        .set_border([0.3, 0.6, 0.9, 1.0], 0.005)
+        .set_z_index(6);
         self.add_element(start_button);
 
         // Exit button with hover effects
@@ -397,9 +402,21 @@ impl UIManager {
                 close_pressed();
             },
         )
-        .with_border([0.9, 0.3, 0.3, 1.0], 0.005)
-        .with_z_index(5);
+        .set_border([0.9, 0.3, 0.3, 1.0], 0.005)
+        .set_z_index(5);
         self.add_element(exit_button);
+
+        // Funny tree (used in github too)
+        let tree_picture = UIElement::new_image(
+            self.next_id(),
+            (0.6, 0.5),
+            (0.27, 0.45),
+            [1f32, 1f32, 1f32],
+            "happy-tree.png".to_string(),
+        )
+        .set_border([0.3, 0.6, 0.9, 1.0], 0.005)
+        .set_z_index(6);
+        self.add_element(tree_picture);
 
         // Version label at bottom
         let version = UIElement::new_label(
@@ -409,8 +426,8 @@ impl UIManager {
             [0.7, 0.7, 0.7],
             format!("v{}", env!("CARGO_PKG_VERSION")),
         )
-        .with_border([0.5, 0.5, 0.5, 0.5], 0.002)
-        .with_z_index(8);
+        .set_border([0.5, 0.5, 0.5, 0.5], 0.002)
+        .set_z_index(8);
         self.add_element(version);
     }
 
@@ -423,15 +440,15 @@ impl UIManager {
             [1.0, 1.0, 1.0],
             "Select World".to_string(),
         )
-        .with_border([0.7, 0.7, 0.8, 1.0], 0.005)
-        .with_z_index(10);
+        .set_border([0.7, 0.7, 0.8, 1.0], 0.005)
+        .set_z_index(10);
         self.add_element(title);
 
         // World list container
         let list_panel =
             UIElement::new_panel(self.next_id(), (-0.5, -0.4), (1.0, 1.0), [0.15, 0.15, 0.2])
-                .with_border([0.25, 0.25, 0.35, 1.0], 0.01)
-                .with_z_index(1);
+                .set_border([0.25, 0.25, 0.35, 1.0], 0.01)
+                .set_z_index(1);
         self.add_element(list_panel);
 
         // New World button
@@ -447,8 +464,8 @@ impl UIManager {
                 state.ui_manager.setup_ui();
             },
         )
-        .with_border([0.4, 0.5, 0.7, 1.0], 0.005)
-        .with_z_index(8);
+        .set_border([0.4, 0.5, 0.7, 1.0], 0.005)
+        .set_z_index(8);
         self.add_element(new_w_button);
 
         let worlds = match super::file_manager::get_world_names() {
@@ -481,8 +498,8 @@ impl UIManager {
                     state.ui_manager.setup_ui();
                 },
             )
-            .with_border([0.35, 0.35, 0.5, 1.0], 0.003)
-            .with_z_index(5);
+            .set_border([0.35, 0.35, 0.5, 1.0], 0.003)
+            .set_z_index(5);
             self.add_element(world_button);
         }
 
@@ -499,8 +516,8 @@ impl UIManager {
                 state.ui_manager.setup_ui();
             },
         )
-        .with_border([0.6, 0.6, 0.6, 1.0], 0.005)
-        .with_z_index(8);
+        .set_border([0.6, 0.6, 0.6, 1.0], 0.005)
+        .set_z_index(8);
         self.add_element(back_button);
     }
 
@@ -513,15 +530,15 @@ impl UIManager {
             [1.0, 1.0, 1.0],
             "Create New World".to_string(),
         )
-        .with_border([0.7, 0.7, 0.8, 1.0], 0.005)
-        .with_z_index(10);
+        .set_border([0.7, 0.7, 0.8, 1.0], 0.005)
+        .set_z_index(10);
         self.add_element(title);
 
         // Form panel
         let form_panel =
             UIElement::new_panel(self.next_id(), (-0.4, -0.3), (0.8, 0.7), [0.15, 0.15, 0.2])
-                .with_border([0.25, 0.25, 0.35, 1.0], 0.01)
-                .with_z_index(1);
+                .set_border([0.25, 0.25, 0.35, 1.0], 0.01)
+                .set_z_index(1);
         self.add_element(form_panel);
 
         // World name label
@@ -532,7 +549,7 @@ impl UIManager {
             [0.9, 0.9, 0.9],
             "World Name:".to_string(),
         )
-        .with_z_index(3);
+        .set_z_index(3);
         self.add_element(w_name_label);
 
         // World Name input
@@ -544,8 +561,8 @@ impl UIManager {
             [0.2, 0.2, 0.3],
             Some("New World".to_string()),
         )
-        .with_border([0.4, 0.4, 0.6, 1.0], 0.005)
-        .with_z_index(5);
+        .set_border([0.4, 0.4, 0.6, 1.0], 0.005)
+        .set_z_index(5);
         self.add_element(world_name_input);
 
         // Generate button
@@ -572,8 +589,8 @@ impl UIManager {
                 state.ui_manager.setup_ui();
             },
         )
-        .with_border([0.4, 0.5, 0.7, 1.0], 0.005)
-        .with_z_index(6);
+        .set_border([0.4, 0.5, 0.7, 1.0], 0.005)
+        .set_z_index(6);
         self.add_element(gen_button);
 
         // Back button
@@ -589,8 +606,8 @@ impl UIManager {
                 state.ui_manager.setup_ui();
             },
         )
-        .with_border([0.6, 0.6, 0.6, 1.0], 0.005)
-        .with_z_index(8);
+        .set_border([0.6, 0.6, 0.6, 1.0], 0.005)
+        .set_z_index(8);
         self.add_element(back_button);
     }
 
@@ -598,8 +615,8 @@ impl UIManager {
         // Loading panel
         let loading_panel =
             UIElement::new_panel(self.next_id(), (-0.3, -0.1), (0.6, 0.2), [0.1, 0.1, 0.15])
-                .with_border([0.3, 0.3, 0.4, 1.0], 0.01)
-                .with_z_index(10);
+                .set_border([0.3, 0.3, 0.4, 1.0], 0.01)
+                .set_z_index(10);
         self.add_element(loading_panel);
 
         // Loading text with animation
@@ -610,7 +627,7 @@ impl UIManager {
             [1.0, 1.0, 1.0],
             "Loading...".to_string(),
         )
-        .with_z_index(15);
+        .set_z_index(15);
         self.add_element(loading_text);
 
         // Progress bar background
@@ -620,8 +637,8 @@ impl UIManager {
             (0.5, 0.03),
             [0.05, 0.05, 0.1],
         )
-        .with_border([0.2, 0.2, 0.3, 1.0], 0.003)
-        .with_z_index(8);
+        .set_border([0.2, 0.2, 0.3, 1.0], 0.003)
+        .set_z_index(8);
         self.add_element(progress_bg);
 
         // Progress bar (animated)
@@ -631,7 +648,7 @@ impl UIManager {
             (0.01, 0.02), // Will be animated
             [0.3, 0.5, 0.8],
         )
-        .with_z_index(8);
+        .set_z_index(8);
         self.add_element(progress_bar);
     }
 
@@ -639,8 +656,8 @@ impl UIManager {
         // Side panel for in-game UI
         let side_panel =
             UIElement::new_panel(self.next_id(), (0.4, -0.9), (0.6, 1.8), [0.1, 0.1, 0.15])
-                .with_border([0.2, 0.2, 0.3, 1.0], 0.01)
-                .with_z_index(1);
+                .set_border([0.2, 0.2, 0.3, 1.0], 0.01)
+                .set_z_index(1);
         self.add_element(side_panel);
 
         // Panel title
@@ -651,8 +668,8 @@ impl UIManager {
             [1.0, 1.0, 1.0],
             "Game Menu".to_string(),
         )
-        .with_border([0.5, 0.5, 0.6, 1.0], 0.003)
-        .with_z_index(10);
+        .set_border([0.5, 0.5, 0.6, 1.0], 0.003)
+        .set_z_index(10);
         self.add_element(panel_title);
 
         // Clean world button
@@ -667,8 +684,8 @@ impl UIManager {
                 super::cube_extra::add_full_world();
             },
         )
-        .with_border([0.7, 0.4, 0.4, 1.0], 0.005)
-        .with_z_index(8);
+        .set_border([0.7, 0.4, 0.4, 1.0], 0.005)
+        .set_z_index(8);
         self.add_element(clean_button);
 
         // Help text
@@ -679,8 +696,8 @@ impl UIManager {
             [1.0, 1.0, 1.0],
             "Press ALT to lock".to_string(),
         )
-        .with_border([0.5, 0.5, 0.6, 1.0], 0.003)
-        .with_z_index(5);
+        .set_border([0.5, 0.5, 0.6, 1.0], 0.003)
+        .set_z_index(5);
         self.add_element(help_text_1);
 
         let help_text_2 = UIElement::new_label(
@@ -690,8 +707,8 @@ impl UIManager {
             [1.0, 1.0, 1.0],
             "Press L to fill chunk".to_string(),
         )
-        .with_border([0.5, 0.5, 0.6, 1.0], 0.003)
-        .with_z_index(5);
+        .set_border([0.5, 0.5, 0.6, 1.0], 0.003)
+        .set_z_index(5);
         self.add_element(help_text_2);
 
         let help_text_3 = UIElement::new_label(
@@ -701,8 +718,8 @@ impl UIManager {
             [1.0, 1.0, 1.0],
             "Press R to break".to_string(),
         )
-        .with_border([0.5, 0.5, 0.6, 1.0], 0.003)
-        .with_z_index(5);
+        .set_border([0.5, 0.5, 0.6, 1.0], 0.003)
+        .set_z_index(5);
         self.add_element(help_text_3);
 
         let help_text_4 = UIElement::new_label(
@@ -712,8 +729,8 @@ impl UIManager {
             [1.0, 1.0, 1.0],
             "Press F to place".to_string(),
         )
-        .with_border([0.5, 0.5, 0.6, 1.0], 0.003)
-        .with_z_index(5);
+        .set_border([0.5, 0.5, 0.6, 1.0], 0.003)
+        .set_z_index(5);
         self.add_element(help_text_4);
 
         let help_text_5 = UIElement::new_label(
@@ -723,8 +740,8 @@ impl UIManager {
             [1.0, 1.0, 1.0],
             "Press ESC to leave".to_string(),
         )
-        .with_border([0.5, 0.5, 0.6, 1.0], 0.003)
-        .with_z_index(5);
+        .set_border([0.5, 0.5, 0.6, 1.0], 0.003)
+        .set_z_index(5);
         self.add_element(help_text_5);
 
         // Close button
@@ -739,17 +756,17 @@ impl UIManager {
                 close_pressed();
             },
         )
-        .with_border([0.9, 0.3, 0.3, 1.0], 0.005)
-        .with_z_index(8);
+        .set_border([0.9, 0.3, 0.3, 1.0], 0.005)
+        .set_z_index(8);
         self.add_element(close_button);
 
         // Crosshair with better visibility
         let crosshair_v =
             UIElement::new_divider(self.next_id(), (0.0, -0.02), (0.02, 0.06), [1.0, 1.0, 1.0])
-                .with_z_index(20);
+                .set_z_index(20);
         let crosshair_h =
             UIElement::new_divider(self.next_id(), (-0.02, 0.0), (0.06, 0.02), [1.0, 1.0, 1.0])
-                .with_z_index(20);
+                .set_z_index(20);
 
         self.add_element(crosshair_v);
         self.add_element(crosshair_h);
