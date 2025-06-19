@@ -562,11 +562,12 @@ impl UIManager {
                     .get_input_text(input_id)
                     .map(|s| s.to_string())
                     .unwrap_or_else(|| "New World".to_string());
+                    
+                super::start_world(&world_name);
 
                 state.ui_manager.state = UIState::Loading;
                 state.ui_manager.setup_ui();
 
-                super::start_world(&world_name);
                 state.ui_manager.state = UIState::InGame;
                 state.ui_manager.setup_ui();
             },
