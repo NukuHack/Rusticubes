@@ -275,18 +275,21 @@ impl UIManager {
         // Find topmost clickable element
         for (index, element) in self.elements.iter_mut().enumerate().rev() {
             if element.visible && element.enabled && element.contains_point(norm_x, norm_y) {
-                super::sound::play_sound("click.ogg".to_string());
                 match &element.data {
                     UIElementData::InputField { .. } => {
                         self.focused_element = Some(index); // Store the vector index
-                                                            //println!("Focused element at index: {}", index);
                     }
                     UIElementData::Checkbox { .. } => {
                         element.toggle_checked();
+                        element.trigger_click();
                     }
+                    UIElementData::Button { .. } => {
+                        super::sound::play_sound("click.ogg".to_string());
+                        element.trigger_click();
+                    }
+
                     _ => {}
                 }
-                element.trigger_click();
                 return true;
             }
         }

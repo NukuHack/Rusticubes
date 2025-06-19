@@ -7,10 +7,12 @@ mod geometry;
 mod pipeline;
 
 mod debug;
-mod resources;
-mod sound;
 mod input;
+mod math;
+
+mod resources;
 mod file_manager;
+mod sound;
 
 mod cube;
 mod cube_math;

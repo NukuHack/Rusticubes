@@ -16,7 +16,7 @@ pub struct UIRenderer {
     pub font_sampler: wgpu::Sampler,
     font: Font<'static>,
     text_textures: HashMap<String, (wgpu::Texture, wgpu::BindGroup)>,
-        image_textures: HashMap<usize, (wgpu::Texture, wgpu::BindGroup)>, // Add this line
+    image_textures: HashMap<String, (wgpu::Texture, wgpu::BindGroup)>, // Add this line
     default_bind_group: wgpu::BindGroup,
     pixel_ratio: f32, // For high DPI support
 }
@@ -371,9 +371,10 @@ impl UIRenderer {
     ) {
         if let UIElementData::Image { path } = &element.data {
             let state = super::config::get_state();
+            let image_key = format!("{}_{}_{}", path, element.size.0, element.size.1);
             
             // Create or get cached image texture
-            if !self.image_textures.contains_key(&element.id) {
+            if !self.image_textures.contains_key(&image_key) {
                 let texture = self.create_image_texture(
                     state.device(),
                     state.queue(),
@@ -396,7 +397,7 @@ impl UIRenderer {
                     label: Some("image_bind_group"),
                 });
                 
-                self.image_textures.insert(element.id, (texture, bind_group));
+                self.image_textures.insert(image_key, (texture, bind_group));
             }
 
             // Add vertices for the image quad - FIXED: Match the vertex order used in add_rectangle
@@ -621,9 +622,10 @@ impl UIRenderer {
             
             // Draw background/element body
             match &element.data {
-                UIElementData::Image { .. } => {
+                UIElementData::Image { path } => {
+                    let image_key = format!("{}_{}_{}", path, element.size.0, element.size.1);
                     // Draw image with its texture
-                    if let Some((_, bind_group)) = self.image_textures.get(&element.id) {
+                    if let Some((_, bind_group)) = self.image_textures.get(&image_key) {
                         render_pass.set_bind_group(0, bind_group, &[]);
                         render_pass.draw_indexed(
                             index_offset..(index_offset + 6),
