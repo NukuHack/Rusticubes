@@ -1,0 +1,5 @@
+
+Todo :
+2d texture array and load in some other textures -> more blocks
+hardcode the "missing texture" texture (purple black or idk)
+slight ui rework (mainly just make the text not overflow)
