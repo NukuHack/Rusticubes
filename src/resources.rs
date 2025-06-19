@@ -21,7 +21,7 @@ macro_rules! get_bytes {
     ($path:expr) => {{
         use crate::resources::RESOURCE_DIR;
         // First try to find a compressed version
-        if let Some(file) = RESOURCE_DIR.get_file(concat!($path, ".lz4")) {
+        if let Some(file) = RESOURCE_DIR.get_file(format!("{}{}",$path, ".lz4")) {
             lz4_flex::decompress_size_prepended(file.contents())
                 .unwrap_or_else(|e| panic!("Failed to decompress {}: {}", $path, e))
         } else {
@@ -46,33 +46,33 @@ use std::io::Cursor;
 use winit::window::Icon;
 
 pub fn load_icon_from_bytes() -> Option<Icon> {
-    // Create a cursor to read from memory
-    let reader = match ImageReader::new(Cursor::new(get_bytes!("icon.png")))
-        .with_guessed_format()
-        .map_err(|e| {
-            println!("Failed to guess image format: {}", e);
-            e
-        }) {
-        Ok(reader) => reader,
-        Err(_) => return None,
-    };
+    let Some((rgba,w,h)) = load_image_from_bytes("icon.png".to_string()) else { panic!() };
 
-    let image = match reader.decode().map_err(|e| {
-        println!("Failed to decode image: {}", e);
-        e
-    }) {
-        Ok(img) => img,
-        Err(_) => return None,
-    };
-
-    let rgba = image.into_rgba8();
-    let (width, height) = rgba.dimensions();
-
-    match Icon::from_rgba(rgba.into_raw(), width, height) {
+    match Icon::from_rgba(rgba, w, h) {
         Ok(icon) => Some(icon),
         Err(e) => {
             println!("Failed to create icon from RGBA data: {}", e);
             None
         }
     }
+}
+
+pub fn load_image_from_bytes(path: String) -> Option<(Vec<u8>,u32,u32)> {
+    // Create a cursor to read from memory
+    let reader_rgba = match ImageReader::new(Cursor::new(crate::get_bytes!(path.clone())))
+        .with_guessed_format()
+        .expect("Failed to guess format")
+        .decode() 
+    {
+        Ok(img) => img.to_rgba8(),
+        Err(e) => {
+            println!("Failed to decode image: {}", e);
+            return None;
+        }
+    };
+
+    let (width, height) = reader_rgba.dimensions();
+
+    // Convert to RGBA8 (16×16 = 1024 bytes)
+    Some((reader_rgba.into_raw(),width,height))
 }
