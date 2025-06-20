@@ -21,7 +21,8 @@ fn vs_main(in: VertexInput) -> VertexOutput {
     return out;
 }
 @group(0) @binding(0) var font_sampler: sampler;
-@group(0) @binding(1) var font_texture: texture_2d<f32>;
+@group(0) @binding(1) var texture_array: texture_2d_array<f32>;
+@group(0) @binding(2) var<uniform> current_frame: u32;
 
 struct FragmentInput {
     @location(0) uv: vec2<f32>,
@@ -30,14 +31,18 @@ struct FragmentInput {
 
 @fragment
 fn fs_main(in: FragmentInput) -> @location(0) vec4<f32> {
-    let uv_zero = vec2<f32>(0.0, 0.0);
-    let is_uv_zero = in.uv == uv_zero;
-
-    if any(is_uv_zero) {
+    // For solid color rectangles
+    if (in.uv.x == 0.0 && in.uv.y == 0.0) {
         return in.color;
     }
-
-    // sample the texture
-    let sampled_color = textureSample(font_texture, font_sampler, in.uv);
+    
+    // Sample from texture array using current_frame
+    let sampled_color = textureSample(
+        texture_array, 
+        font_sampler, 
+        in.uv, 
+        current_frame
+    );
+    
     return in.color * sampled_color;
 }

@@ -24,6 +24,7 @@ mod cube_tables;
 mod ui_element;
 mod ui_render;
 mod ui_manager;
+mod ui_setup;
 
 
 use std::sync::atomic::Ordering;
@@ -523,6 +524,7 @@ impl<'a> State<'a> {
             self.camera_system.update(&self.render_context.queue);
         }
         if self.ui_manager.visibility {
+            self.ui_manager.update_anim(delta_seconds);
             self.ui_manager.update(&self.render_context.device,&self.render_context.queue);
         }
     }

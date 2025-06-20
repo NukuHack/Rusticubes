@@ -1,3 +1,4 @@
+use wgpu::util::DeviceExt;
 use rusttype::{Font, Scale, point};
 use image::{ImageBuffer,Rgba};
 use std::collections::HashMap;
@@ -16,7 +17,8 @@ pub struct UIRenderer {
     pub font_sampler: wgpu::Sampler,
     font: Font<'static>,
     text_textures: HashMap<String, (wgpu::Texture, wgpu::BindGroup)>,
-    image_textures: HashMap<String, (wgpu::Texture, wgpu::BindGroup)>, // Add this line
+    image_textures: HashMap<String, (wgpu::Texture, wgpu::BindGroup)>,
+    animation_textures: HashMap<String, (wgpu::Texture, wgpu::BindGroup)>,
     default_bind_group: wgpu::BindGroup,
     pixel_ratio: f32, // For high DPI support
 }
@@ -39,24 +41,37 @@ impl UIRenderer {
 
         let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             entries: &[
+                // Sampler
                 wgpu::BindGroupLayoutEntry {
                     binding: 0,
                     visibility: wgpu::ShaderStages::FRAGMENT,
                     ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
                     count: None,
                 },
+                // Texture array
                 wgpu::BindGroupLayoutEntry {
                     binding: 1,
                     visibility: wgpu::ShaderStages::FRAGMENT,
                     ty: wgpu::BindingType::Texture {
                         sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                        view_dimension: wgpu::TextureViewDimension::D2,
+                        view_dimension: wgpu::TextureViewDimension::D2Array,
                         multisampled: false,
                     },
                     count: None,
                 },
+                // Uniform buffer for animation control
+                wgpu::BindGroupLayoutEntry {
+                    binding: 2,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                },
             ],
-            label: Some("font_bind_group_layout"),
+            label: Some("ui_bind_group_layout"),
         });
 
         // Create default texture
@@ -88,7 +103,20 @@ impl UIRenderer {
             wgpu::Extent3d { width: 1, height: 1, depth_or_array_layers: 1 },
         );
 
-        let texture_view = default_texture.create_view(&Default::default());
+        let texture_view = default_texture.create_view(&wgpu::TextureViewDescriptor {
+            dimension: Some(wgpu::TextureViewDimension::D2Array),
+            ..Default::default()
+        });
+
+        // Create uniform buffer
+        let uniform_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("UI Animation Buffer"),
+            contents: bytemuck::cast_slice(&[
+                0 as u64,
+            ]),
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        });
+
         let default_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             layout: &bind_group_layout,
             entries: &[
@@ -100,6 +128,10 @@ impl UIRenderer {
                     binding: 1,
                     resource: wgpu::BindingResource::TextureView(&texture_view),
                 },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: uniform_buffer.as_entire_binding(),
+                },
             ],
             label: Some("default_bind_group"),
         });
@@ -110,6 +142,7 @@ impl UIRenderer {
             font,
             text_textures: HashMap::new(),
             image_textures: HashMap::new(), // Add this line
+            animation_textures: HashMap::new(), // Added this line
             default_bind_group,
             pixel_ratio: 4.0,
         }
@@ -146,6 +179,9 @@ impl UIRenderer {
             match &element.data {
                 UIElementData::Image { .. } => {
                     self.process_image_element(element, &mut vertices, &mut indices, &mut current_index);
+                }
+                UIElementData::Animation { .. } => {
+                    self.process_animation_element(element, &mut vertices, &mut indices, &mut current_index);
                 }
                 UIElementData::Checkbox { .. } => {
                     self.process_checkbox(element, &mut vertices, &mut indices, &mut current_index);
@@ -201,7 +237,7 @@ impl UIRenderer {
         }
 
         if let Some(text) = element.get_text() {
-            let texture_key = format!("{}_{}_{}", text, element.size.0, element.size.1);
+            let texture_key = format!("{}_{}", text, element.color.map(|c| c.to_string()).join("|"));
             
             if !self.text_textures.contains_key(&texture_key) {
                 let texture = self.render_text_to_texture(
@@ -212,7 +248,19 @@ impl UIRenderer {
                     element.color,
                 );
                 
-                let texture_view = texture.create_view(&Default::default());
+                let texture_view = texture.create_view(&wgpu::TextureViewDescriptor {
+                    dimension: Some(wgpu::TextureViewDimension::D2Array),
+                    ..Default::default()
+                });
+                // Create uniform buffer
+                let uniform_buffer = state.device().create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: Some("UI Animation Buffer"),
+                    contents: bytemuck::cast_slice(&[
+                        0 as u64,
+                    ]),
+                    usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+                });
+
                 let bind_group = state.device().create_bind_group(&wgpu::BindGroupDescriptor {
                     layout: &self.bind_group_layout,
                     entries: &[
@@ -223,6 +271,10 @@ impl UIRenderer {
                         wgpu::BindGroupEntry {
                             binding: 1,
                             resource: wgpu::BindingResource::TextureView(&texture_view),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 2,
+                            resource: uniform_buffer.as_entire_binding(),
                         },
                     ],
                     label: Some("font_bind_group"),
@@ -378,7 +430,7 @@ impl UIRenderer {
     ) {
         if let UIElementData::Image { path } = &element.data {
             let state = super::config::get_state();
-            let image_key = format!("{}_{}_{}", path, element.size.0, element.size.1);
+            let image_key = format!("{}_{}", path, element.color.map(|c| c.to_string()).join("|"));
             
             // Create or get cached image texture
             if !self.image_textures.contains_key(&image_key) {
@@ -388,7 +440,20 @@ impl UIRenderer {
                     path.to_string(),
                 );
                 
-                let texture_view = texture.create_view(&Default::default());
+                
+                let texture_view = texture.create_view(&wgpu::TextureViewDescriptor {
+                    dimension: Some(wgpu::TextureViewDimension::D2Array),
+                    ..Default::default()
+                });
+                // Create uniform buffer
+                let uniform_buffer = state.device().create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: Some("UI Animation Buffer"),
+                    contents: bytemuck::cast_slice(&[
+                        0 as u64,
+                    ]),
+                    usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+                });
+
                 let bind_group = state.device().create_bind_group(&wgpu::BindGroupDescriptor {
                     layout: &self.bind_group_layout,
                     entries: &[
@@ -399,6 +464,10 @@ impl UIRenderer {
                         wgpu::BindGroupEntry {
                             binding: 1,
                             resource: wgpu::BindingResource::TextureView(&texture_view),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 2,
+                            resource: uniform_buffer.as_entire_binding(),
                         },
                     ],
                     label: Some("image_bind_group"),
@@ -447,7 +516,7 @@ impl UIRenderer {
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba8Unorm, //Rgba8UnormSrgb
+            format: wgpu::TextureFormat::Rgba8Unorm, // not Rgba8UnormSrgb
             usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
             view_formats: &[],
         });
@@ -470,6 +539,152 @@ impl UIRenderer {
         );
 
         texture
+    }
+
+    fn process_animation_element(
+        &mut self,
+        element: &UIElement,
+        vertices: &mut Vec<Vertex>,
+        indices: &mut Vec<u32>,
+        current_index: &mut u32,
+    ) {
+        if let UIElementData::Animation {
+            frames,
+            current_frame,
+            ..
+        } = &element.data {
+            let state = super::config::get_state();
+            
+            // Create a unique key for this animation based on its frames
+            let animation_key = frames.join("|");
+            
+            if !self.animation_textures.contains_key(&animation_key) {
+                if let Some((texture, bind_group)) = self.create_animation_texture_array(
+                    state.device(),
+                    state.queue(),
+                    frames,
+                    *current_frame,
+                ) {
+                    self.animation_textures.insert(animation_key.clone(), (texture, bind_group));
+                }
+            }
+
+            // Add vertices for the animation quad
+            let (x, y) = element.position;
+            let (w, h) = element.size;
+            let positions = [
+                [x, y],         // top-left
+                [x + w, y],     // top-right
+                [x, y + h],     // bottom-left
+                [x + w, y + h], // bottom-right
+            ];
+            let uvs = [
+                [0.0, 1.0], [1.0, 1.0], [0.0, 0.0], [1.0, 0.0],
+            ];
+            for j in 0..4 {
+                vertices.push(Vertex {
+                    position: positions[j],
+                    uv: uvs[j],
+                    color: element.color,
+                });
+            }
+            
+            indices.extend(self.rectangle_indices(*current_index));
+            *current_index += 4;
+        }
+    }
+
+    fn create_animation_texture_array(
+        &self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        frames: &[String],
+        current_index: usize,
+    ) -> Option<(wgpu::Texture, wgpu::BindGroup)> {
+        if frames.is_empty() {
+            return None;
+        }
+
+        // Load first frame to get dimensions
+        let first_frame = super::resources::load_image_from_bytes(frames[0].clone())?;
+        let (width, height) = (first_frame.1, first_frame.2);
+        let layer_count = frames.len() as u32;
+
+        // Create texture array
+        let texture = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("animation_texture_array"),
+            size: wgpu::Extent3d {
+                width,
+                height,
+                depth_or_array_layers: layer_count,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8Unorm,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+            view_formats: &[],
+        });
+
+        // Upload each frame as a layer in the texture array
+        for (i, frame_path) in frames.iter().enumerate() {
+            if let Some((rgba, _, _)) = super::resources::load_image_from_bytes(frame_path.clone()) {
+                queue.write_texture(
+                    wgpu::TexelCopyTextureInfo {
+                        texture: &texture,
+                        mip_level: 0,
+                        origin: wgpu::Origin3d { x: 0, y: 0, z: i as u32 },
+                        aspect: wgpu::TextureAspect::All,
+                    },
+                    &rgba,
+                    wgpu::TexelCopyBufferLayout {
+                        offset: 0,
+                        bytes_per_row: Some(4 * width),
+                        rows_per_image: Some(height),
+                    },
+                    wgpu::Extent3d {
+                        width,
+                        height,
+                        depth_or_array_layers: 1,
+                    },
+                );
+            }
+        }
+
+        // Create texture view
+        let texture_view = texture.create_view(&wgpu::TextureViewDescriptor {
+            dimension: Some(wgpu::TextureViewDimension::D2Array),
+            ..Default::default()
+        });
+
+        // Create uniform buffer for frame index
+        let uniform_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("animation_uniform_buffer"),
+            contents: bytemuck::cast_slice(&[current_index]),
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        });
+
+        // Create bind group
+        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            layout: &self.bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::Sampler(&self.font_sampler),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::TextureView(&texture_view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: uniform_buffer.as_entire_binding(),
+                },
+            ],
+            label: Some("animation_bind_group"),
+        });
+
+        Some((texture, bind_group))
     }
 }
 
@@ -630,9 +845,21 @@ impl UIRenderer {
             // Draw background/element body
             match &element.data {
                 UIElementData::Image { path } => {
-                    let image_key = format!("{}_{}_{}", path, element.size.0, element.size.1);
+                    let image_key = format!("{}_{}", path, element.color.map(|c| c.to_string()).join("|"));
                     // Draw image with its texture
                     if let Some((_, bind_group)) = self.image_textures.get(&image_key) {
+                        render_pass.set_bind_group(0, bind_group, &[]);
+                        render_pass.draw_indexed(
+                            index_offset..(index_offset + 6),
+                            0,
+                            0..1
+                        );
+                    }
+                    index_offset += 6;
+                }
+                UIElementData::Animation { frames, .. } => {
+                    let animation_key = frames.join("|");
+                    if let Some((_, bind_group)) = self.animation_textures.get(&animation_key) {
                         render_pass.set_bind_group(0, bind_group, &[]);
                         render_pass.draw_indexed(
                             index_offset..(index_offset + 6),
@@ -664,7 +891,7 @@ impl UIRenderer {
                     
                     // Draw checkbox label text (if any)
                     if let Some(text) = element.get_text() {
-                        let texture_key = format!("{}_{}_{}", text, element.size.0, element.size.1);
+                        let texture_key = format!("{}_{}", text, element.color.map(|c| c.to_string()).join("|"));
                         if let Some((_, bind_group)) = self.text_textures.get(&texture_key) {
                             render_pass.set_bind_group(0, bind_group, &[]);
                             render_pass.draw_indexed(
@@ -688,7 +915,7 @@ impl UIRenderer {
                     
                     // Draw text if element has text
                     if let Some(text) = element.get_text() {
-                        let texture_key = format!("{}_{}_{}", text, element.size.0, element.size.1);
+                        let texture_key = format!("{}_{}", text, element.color.map(|c| c.to_string()).join("|"));
                         if let Some((_, bind_group)) = self.text_textures.get(&texture_key) {
                             render_pass.set_bind_group(0, bind_group, &[]);
                             render_pass.draw_indexed(
@@ -713,7 +940,7 @@ impl UIRenderer {
                 UIElementData::Label { .. } => {
                     // Draw text if element has text
                     if let Some(text) = element.get_text() {
-                        let texture_key = format!("{}_{}_{}", text, element.size.0, element.size.1);
+                        let texture_key = format!("{}_{}", text, element.color.map(|c| c.to_string()).join("|"));
                         if let Some((_, bind_group)) = self.text_textures.get(&texture_key) {
                             render_pass.set_bind_group(0, bind_group, &[]);
                             render_pass.draw_indexed(

@@ -39,6 +39,14 @@ pub enum UIElementData {
         // Store raw path (only name and extension)
         path: String
     },
+    Animation {
+        frames: Vec<String>,          // Paths to each frame
+        current_frame: usize,         // Current frame index
+        frame_duration: f32,          // Duration per frame in seconds
+        elapsed_time: f32,            // Time since last frame change
+        looping: bool,                // Whether animation loops
+        playing: bool,                // Whether animation is currently playing
+    },
     Divider,
 }
 
@@ -67,6 +75,14 @@ impl fmt::Debug for UIElementData {
             Self::Image { path } => f
                 .debug_struct("Image")
                 .field("path", path)
+                .finish(),
+            Self::Animation { frames, current_frame, frame_duration, looping, playing, .. } => f
+                .debug_struct("Animation")
+                .field("frames", frames)
+                .field("current_frame", current_frame)
+                .field("frame_duration", frame_duration)
+                .field("looping", looping)
+                .field("playing", playing)
                 .finish(),
             Self::Divider => write!(f, "Divider"),
         }
@@ -239,6 +255,108 @@ impl UIElement {
             size,
             color
         )
+    }
+
+
+    pub fn new_animation(
+        id: usize,
+        position: (f32, f32),
+        size: (f32, f32),
+        color: [f32; 3],
+        frames: Vec<String>,
+    ) -> Self {
+        Self::new(
+            id,
+            UIElementData::Animation {
+                frames,
+                current_frame: 0,
+                frame_duration: 0.1,
+                elapsed_time: 0.0,
+                looping: true,
+                playing: true,
+            },
+            position,
+            size,
+            color,
+        )
+    }
+
+    pub fn play_animation(&mut self) {
+        if let UIElementData::Animation {
+            frames, current_frame, looping, playing, ..
+        } = &mut self.data {
+            if !*looping && *current_frame == frames.len() -1 {
+                *current_frame = 0usize;
+            }
+            *playing = true;
+        }
+    }
+    pub fn pause_animation(&mut self) {
+        if let UIElementData::Animation { playing, .. } = &mut self.data {
+            *playing = false;
+        }
+    }
+    pub fn reset_animation(&mut self) {
+        if let UIElementData::Animation {
+            current_frame,
+            elapsed_time,
+            ..
+        } = &mut self.data
+        {
+            *current_frame = 0;
+            *elapsed_time = 0.0;
+        }
+    }
+    pub fn set_animation_index(&mut self, index: u32) {
+        if let UIElementData::Animation {
+            current_frame,
+            elapsed_time,
+            ..
+        } = &mut self.data
+        {
+            *current_frame = index as usize;
+            *elapsed_time = 0.0;
+        }
+    }
+    pub fn update_animation(&mut self, delta_time: f32) {
+        if let UIElementData::Animation {
+            frames,
+            current_frame,
+            frame_duration,
+            elapsed_time,
+            looping,
+            playing,
+        } = &mut self.data
+        {
+            if !*playing || frames.is_empty() {
+                return;
+            }
+
+            *elapsed_time += delta_time;
+
+            while *elapsed_time >= *frame_duration {
+                *elapsed_time -= *frame_duration;
+                *current_frame += 1;
+
+                if *current_frame >= frames.len() {
+                    if *looping {
+                        *current_frame = 0;
+                    } else {
+                        *current_frame = frames.len() - 1;
+                        *playing = false;
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    pub fn get_current_frame(&self) -> Option<&str> {
+        if let UIElementData::Animation { frames, current_frame, .. } = &self.data {
+            frames.get(*current_frame).map(|s| s.as_str())
+        } else {
+            None
+        }
     }
 
     pub fn set_border(mut self, border_color: [f32; 4], border_width: f32) -> Self {
