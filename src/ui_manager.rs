@@ -1,3 +1,4 @@
+
 use super::ui_element;
 use super::ui_element::UIElement;
 use super::ui_render::{UIRenderer,Vertex};
@@ -17,6 +18,8 @@ pub enum UIState {
     None, // Baiscally not yet initialized
 }
 
+
+    //Custom,         // this will be the exeption, aka we do not know the contents at compile time
 pub struct UIManager {
     pub state: UIState,
     pub vertex_buffer: wgpu::Buffer,
@@ -379,7 +382,7 @@ impl UIManager {
                 .set_z_index(1);
         self.add_element(button_panel);
 
-        // Start button with hover effects
+        // Start button
         let start_button = UIElement::new_button(
             self.next_id(),
             (-0.15, 0.0),
@@ -396,7 +399,7 @@ impl UIManager {
         .set_z_index(6);
         self.add_element(start_button);
 
-        // Exit button with hover effects
+        // Exit button
         let exit_button = UIElement::new_button(
             self.next_id(),
             (-0.15, -0.15),
@@ -431,7 +434,7 @@ impl UIManager {
             [0.7, 0.7, 0.7],
             format!("v{}", env!("CARGO_PKG_VERSION")),
         )
-        .set_border([0.5, 0.5, 0.5, 0.5], 0.002)
+        .set_border([0.5, 0.5, 0.5, 0.5], 0.003)
         .set_z_index(8);
         self.add_element(version);
     }
@@ -451,7 +454,7 @@ impl UIManager {
 
         // World list container
         let list_panel =
-            UIElement::new_panel(self.next_id(), (-0.5, -0.4), (1.0, 1.0), [0.15, 0.15, 0.2])
+            UIElement::new_panel(self.next_id(), (-0.6, -0.4), (1.2, 1.0), [0.15, 0.15, 0.2])
                 .set_border([0.25, 0.25, 0.35, 1.0], 0.01)
                 .set_z_index(1);
         self.add_element(list_panel);
@@ -484,28 +487,41 @@ impl UIManager {
         // Add world buttons
         for (i, name) in worlds.iter().enumerate() {
             let y_pos = 0.2 - (i as f32 * 0.12);
-            let world_name = name.clone();
+            
+            // Create one clone that will be moved into both closures
+            let name_clone = name.clone();
 
             let world_button = UIElement::new_button(
                 self.next_id(),
                 (-0.4, y_pos),
                 (0.8, 0.1),
                 [0.25, 0.25, 0.4],
-                name.clone(),
-                move || {
-                    let state = super::config::get_state();
-                    state.ui_manager.state = UIState::Loading;
-                    state.ui_manager.setup_ui();
-
-                    println!("Loading world: {}", world_name);
-                    super::start_world(&world_name);
-                    state.ui_manager.state = UIState::InGame;
-                    state.ui_manager.setup_ui();
+                name.clone(),  // This clone is for the button text display
+                {
+                    let name_clone = name_clone.clone();
+                    move || {
+                        super::world_builder::join_world(&name_clone);
+                    }
                 },
             )
-            .set_border([0.35, 0.35, 0.5, 1.0], 0.003)
+            .set_border([0.35, 0.35, 0.5, 1.0], 0.005)
             .set_z_index(5);
             self.add_element(world_button);
+
+            // Delete button with hover effects
+            let delete_button = UIElement::new_button(
+                self.next_id(),
+                (0.42, y_pos),
+                (0.13, 0.1),
+                [0.8, 0.2, 0.2],
+                String::from("del"),
+                move || {
+                    super::world_builder::del_world(&name_clone);
+                },
+            )
+            .set_border([0.9, 0.3, 0.3, 1.0], 0.005)
+            .set_z_index(5);
+            self.add_element(delete_button);
         }
 
         // Back button with consistent styling
@@ -584,14 +600,7 @@ impl UIManager {
                     .get_input_text(input_id)
                     .map(|s| s.to_string())
                     .unwrap_or_else(|| "New World".to_string());
-                    
-                super::start_world(&world_name);
-
-                state.ui_manager.state = UIState::Loading;
-                state.ui_manager.setup_ui();
-
-                state.ui_manager.state = UIState::InGame;
-                state.ui_manager.setup_ui();
+                super::world_builder::join_world(&world_name);
             },
         )
         .set_border([0.4, 0.5, 0.7, 1.0], 0.005)
@@ -642,7 +651,7 @@ impl UIManager {
             (0.5, 0.03),
             [0.05, 0.05, 0.1],
         )
-        .set_border([0.2, 0.2, 0.3, 1.0], 0.003)
+        .set_border([0.2, 0.2, 0.3, 1.0], 0.005)
         .set_z_index(8);
         self.add_element(progress_bg);
 
@@ -673,7 +682,7 @@ impl UIManager {
             [1.0, 1.0, 1.0],
             "Game Menu".to_string(),
         )
-        .set_border([0.5, 0.5, 0.6, 1.0], 0.003)
+        .set_border([0.5, 0.5, 0.6, 1.0], 0.005)
         .set_z_index(10);
         self.add_element(panel_title);
 
@@ -701,7 +710,7 @@ impl UIManager {
             [1.0, 1.0, 1.0],
             "Press ALT to lock".to_string(),
         )
-        .set_border([0.5, 0.5, 0.6, 1.0], 0.003)
+        .set_border([0.5, 0.5, 0.6, 1.0], 0.005)
         .set_z_index(5);
         self.add_element(help_text_1);
 
@@ -712,7 +721,7 @@ impl UIManager {
             [1.0, 1.0, 1.0],
             "Press L to fill chunk".to_string(),
         )
-        .set_border([0.5, 0.5, 0.6, 1.0], 0.003)
+        .set_border([0.5, 0.5, 0.6, 1.0], 0.005)
         .set_z_index(5);
         self.add_element(help_text_2);
 
@@ -723,7 +732,7 @@ impl UIManager {
             [1.0, 1.0, 1.0],
             "Press R to break".to_string(),
         )
-        .set_border([0.5, 0.5, 0.6, 1.0], 0.003)
+        .set_border([0.5, 0.5, 0.6, 1.0], 0.005)
         .set_z_index(5);
         self.add_element(help_text_3);
 
@@ -734,7 +743,7 @@ impl UIManager {
             [1.0, 1.0, 1.0],
             "Press F to place".to_string(),
         )
-        .set_border([0.5, 0.5, 0.6, 1.0], 0.003)
+        .set_border([0.5, 0.5, 0.6, 1.0], 0.005)
         .set_z_index(5);
         self.add_element(help_text_4);
 
@@ -745,7 +754,7 @@ impl UIManager {
             [1.0, 1.0, 1.0],
             "Press ESC to leave".to_string(),
         )
-        .set_border([0.5, 0.5, 0.6, 1.0], 0.003)
+        .set_border([0.5, 0.5, 0.6, 1.0], 0.005)
         .set_z_index(5);
         self.add_element(help_text_5);
 

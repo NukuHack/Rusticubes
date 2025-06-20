@@ -156,9 +156,24 @@ pub fn get_world_names() -> std::io::Result<Vec<String>> {
 
     Ok(folders)
 }
+pub fn del_world(name: &str) -> Result<(), Box<dyn std::error::Error>> {
+    let saves_path = super::config::get_save_path().join("saves");
+    let target_path = saves_path.join(name);
+
+    if !target_path.exists() {
+        return Err(format!("World '{}' does not exist", name).into());
+    }
+
+    if !target_path.is_dir() {
+        return Err(format!("'{}' is not a directory", name).into());
+    }
+
+    fs::remove_dir_all(&target_path)?;
+    Ok(())
+}
 
 #[allow(dead_code)]
-fn main() {
+fn test() {
     let saver = FileSaver::new();
 
     // Spawn a thread to create 100 files

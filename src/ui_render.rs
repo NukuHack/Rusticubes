@@ -115,9 +115,16 @@ impl UIRenderer {
         }
     }
 
+    pub fn change_font(&mut self, path: String) {
+        let font_data = crate::get_bytes!(path.clone()); // C:\Windows\Fonts\..
+        let font = Font::try_from_vec(font_data.clone()).expect("Failed to load font");
+
+        self.font = font;
+        self.text_textures.clear();
+    }
 
     pub fn set_pixel_ratio(&mut self, ratio: f32) {
-        self.pixel_ratio = ratio.max(10.0).min(0.1);
+        self.pixel_ratio = ratio.max(6.0).min(0.5);
     }
 
     pub fn process_elements(

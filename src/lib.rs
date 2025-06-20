@@ -12,6 +12,7 @@ mod math;
 
 mod resources;
 mod file_manager;
+mod world_builder;
 mod sound;
 
 mod cube;
