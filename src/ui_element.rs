@@ -41,11 +41,13 @@ pub enum UIElementData {
     },
     Animation {
         frames: Vec<String>,          // Paths to each frame
-        current_frame: usize,         // Current frame index
+        current_frame: u32,           // Current frame index
         frame_duration: f32,          // Duration per frame in seconds
         elapsed_time: f32,            // Time since last frame change
         looping: bool,                // Whether animation loops
         playing: bool,                // Whether animation is currently playing
+        smooth_transition: bool,      // When making the transition alpha changing
+        blend_delay: u32,             // If sm_tr -> how much% of the fr_dur should the frame be Not affected by the blending
     },
     Divider,
 }
@@ -274,6 +276,8 @@ impl UIElement {
                 elapsed_time: 0.0,
                 looping: true,
                 playing: true,
+                smooth_transition: false,
+                blend_delay: 20,
             },
             position,
             size,
@@ -285,8 +289,8 @@ impl UIElement {
         if let UIElementData::Animation {
             frames, current_frame, looping, playing, ..
         } = &mut self.data {
-            if !*playing && !*looping && *current_frame == frames.len() -1 {
-                *current_frame = 0usize;
+            if !*playing && !*looping && *current_frame == frames.len() as u32 -1 {
+                *current_frame = 0;
             }
             *playing = !*playing;
         }
@@ -295,6 +299,18 @@ impl UIElement {
     pub fn add_anim_frame(mut self, frame: String) -> Self {
         if let UIElementData::Animation { frames, .. } = &mut self.data {
             frames.push(frame); // Just push directly, no assignment needed
+        }
+        self
+    }
+    pub fn anim_smooth(mut self, smooth: bool) -> Self {
+        if let UIElementData::Animation { smooth_transition, .. } = &mut self.data {
+            *smooth_transition = smooth;
+        }
+        self
+    }
+    pub fn with_anim_blend_delay(mut self, delay: u32) -> Self {
+        if let UIElementData::Animation { blend_delay, .. } = &mut self.data {
+            *blend_delay = delay;
         }
         self
     }
@@ -317,7 +333,7 @@ impl UIElement {
             ..
         } = &mut self.data
         {
-            *current_frame = index as usize;
+            *current_frame = index;
             *elapsed_time = 0.0;
         }
         self
@@ -341,6 +357,7 @@ impl UIElement {
             elapsed_time,
             looping,
             playing,
+            ..
         } = &mut self.data
         {
             if !*playing || frames.is_empty() {
@@ -353,24 +370,16 @@ impl UIElement {
                 *elapsed_time -= *frame_duration;
                 *current_frame += 1;
 
-                if *current_frame >= frames.len() {
+                if *current_frame >= frames.len() as u32 {
                     if *looping {
                         *current_frame = 0;
                     } else {
-                        *current_frame = frames.len() - 1;
+                        *current_frame = frames.len() as u32 - 1;
                         *playing = false;
                         break;
                     }
                 }
             }
-        }
-    }
-
-    pub fn get_current_frame(&self) -> Option<&str> {
-        if let UIElementData::Animation { frames, current_frame, .. } = &self.data {
-            frames.get(*current_frame).map(|s| s.as_str())
-        } else {
-            None
         }
     }
 

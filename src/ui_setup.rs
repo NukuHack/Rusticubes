@@ -116,7 +116,8 @@ impl UIManager {
         )
         .set_border([0.3, 0.6, 0.9, 1.0], 0.005)
         .set_z_index(6)
-        .set_anim_duration(1.5);
+        .anim_smooth(true)
+        .set_anim_duration(2.5);
         self.add_element(tree_picture);
 
         // Version label at bottom

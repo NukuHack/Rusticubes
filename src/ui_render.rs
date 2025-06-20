@@ -67,7 +67,7 @@ impl UIRenderer {
 
         let uniform_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Uniform Buffer"),
-            size: std::mem::size_of::<u32>() as u64,
+            size: std::mem::size_of::<u32>() as u64 * 2u64,
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
@@ -165,7 +165,7 @@ impl UIRenderer {
     }
 
     pub fn set_pixel_ratio(&mut self, ratio: f32) {
-        self.pixel_ratio = ratio.max(6.0).min(0.5);
+        self.pixel_ratio = ratio.max(10.0).min(0.5);
     }
 
     pub fn process_elements(
@@ -771,15 +771,27 @@ impl UIRenderer {
                     }
                     i_off += 6;
                 }
-                UIElementData::Animation { frames, current_frame, .. } => {
+                UIElementData::Animation { frames, current_frame, elapsed_time, smooth_transition, blend_delay, frame_duration, .. } => {
                     let animation_key = frames.join("|");
                     if let Some((_, bind_group)) = self.animation_textures.get(&animation_key) {
-                        // Update the uniform buffer with current frame
-                        super::config::get_state().queue().write_buffer
-                            (&self.uniform_buffer, 0, bytemuck::cast_slice(&[*current_frame as u32]));
-                        // Set both bind groups
+                        let frame_count = frames.len() as u32;
+                        let next_frame = if *smooth_transition {
+                            (*current_frame + 1) % frame_count  // Wrap around using modulo
+                        } else {
+                            *current_frame  // Doesn't matter since progress will be 0
+                        };
+                        // Pack frames
+                        let packed_frames = (*current_frame & 0xFFFF) | ((next_frame & 0xFFFF) << 16);
+                        let raw_progress = ((elapsed_time / frame_duration) * 100.0) as u32;
+                        // Pack progress and hold percentage
+                        let packed_progress = (raw_progress & 0xFFFF) | ((blend_delay & 0xFFFF) << 16);
+                        super::config::get_state().queue().write_buffer(
+                            &self.uniform_buffer,
+                            0,
+                            bytemuck::cast_slice(&[packed_frames, packed_progress])
+                        );
                         r_pass.set_bind_group(0, bind_group, &[]);
-                        r_pass.draw_indexed(i_off..(i_off + 6),0,0..1);
+                        r_pass.draw_indexed(i_off..(i_off + 6), 0, 0..1);
                     }
                     i_off += 6;
                 }
