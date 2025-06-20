@@ -102,8 +102,6 @@ impl UIManager {
         .set_z_index(6);
         self.add_element(tree_picture);
 
-
-        // Funny tree (used in github too)
         let tree_picture = UIElement::new_animation(
             self.next_id(),
             (-0.6, 0.5),
