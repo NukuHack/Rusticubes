@@ -111,12 +111,12 @@ impl UIManager {
             [1f32, 1f32, 1f32],
             vec![
                 "happy-tree.png".to_string(),
-                "happy-tree.png".to_string(),
                 "cube.jpg".to_string()
             ],
         )
         .set_border([0.3, 0.6, 0.9, 1.0], 0.005)
-        .set_z_index(6);
+        .set_z_index(6)
+        .set_anim_duration(1.5);
         self.add_element(tree_picture);
 
         // Version label at bottom

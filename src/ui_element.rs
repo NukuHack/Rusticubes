@@ -270,7 +270,7 @@ impl UIElement {
             UIElementData::Animation {
                 frames,
                 current_frame: 0,
-                frame_duration: 0.1,
+                frame_duration: 1f32,
                 elapsed_time: 0.0,
                 looping: true,
                 playing: true,
@@ -281,22 +281,48 @@ impl UIElement {
         )
     }
 
-    pub fn play_animation(&mut self) {
+    pub fn play_anim(mut self) -> Self {
         if let UIElementData::Animation {
             frames, current_frame, looping, playing, ..
         } = &mut self.data {
-            if !*looping && *current_frame == frames.len() -1 {
+            if !*playing && !*looping && *current_frame == frames.len() -1 {
                 *current_frame = 0usize;
             }
-            *playing = true;
+            *playing = !*playing;
         }
+        self
     }
-    pub fn pause_animation(&mut self) {
-        if let UIElementData::Animation { playing, .. } = &mut self.data {
-            *playing = false;
+    pub fn add_anim_frame(mut self, frame: String) -> Self {
+        if let UIElementData::Animation { frames, .. } = &mut self.data {
+            frames.push(frame); // Just push directly, no assignment needed
         }
+        self
     }
-    pub fn reset_animation(&mut self) {
+    pub fn loop_anim(mut self) -> Self {
+        if let UIElementData::Animation { looping, .. } = &mut self.data {
+            *looping = !*looping;
+        }
+        self
+    }
+    pub fn set_anim_duration(mut self, delay: f32) -> Self {
+        if let UIElementData::Animation { frame_duration, .. } = &mut self.data {
+            *frame_duration = delay;
+        }
+        self
+    }
+    pub fn set_anim_index(mut self, index: u32) -> Self {
+        if let UIElementData::Animation {
+            current_frame,
+            elapsed_time,
+            ..
+        } = &mut self.data
+        {
+            *current_frame = index as usize;
+            *elapsed_time = 0.0;
+        }
+        self
+    }
+    pub fn reset_anim(&mut self) {
         if let UIElementData::Animation {
             current_frame,
             elapsed_time,
@@ -307,18 +333,7 @@ impl UIElement {
             *elapsed_time = 0.0;
         }
     }
-    pub fn set_animation_index(&mut self, index: u32) {
-        if let UIElementData::Animation {
-            current_frame,
-            elapsed_time,
-            ..
-        } = &mut self.data
-        {
-            *current_frame = index as usize;
-            *elapsed_time = 0.0;
-        }
-    }
-    pub fn update_animation(&mut self, delta_time: f32) {
+    pub fn update_anim(&mut self, delta_time: f32) {
         if let UIElementData::Animation {
             frames,
             current_frame,

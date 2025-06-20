@@ -22,7 +22,11 @@ fn vs_main(in: VertexInput) -> VertexOutput {
 }
 @group(0) @binding(0) var font_sampler: sampler;
 @group(0) @binding(1) var texture_array: texture_2d_array<f32>;
-@group(0) @binding(2) var<uniform> current_frame: u32;
+struct Uniforms {
+    current_frame: u32,
+};
+@group(1) @binding(0)
+var<uniform> uniforms: Uniforms;
 
 struct FragmentInput {
     @location(0) uv: vec2<f32>,
@@ -41,7 +45,7 @@ fn fs_main(in: FragmentInput) -> @location(0) vec4<f32> {
         texture_array, 
         font_sampler, 
         in.uv, 
-        current_frame
+        i32(uniforms.current_frame)
     );
     
     return in.color * sampled_color;

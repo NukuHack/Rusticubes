@@ -1,4 +1,3 @@
-use wgpu::util::DeviceExt;
 use rusttype::{Font, Scale, point};
 use image::{ImageBuffer,Rgba};
 use std::collections::HashMap;
@@ -15,6 +14,9 @@ pub struct Vertex {
 pub struct UIRenderer {
     pub bind_group_layout: wgpu::BindGroupLayout,
     pub font_sampler: wgpu::Sampler,
+    pub uniform_buffer: wgpu::Buffer,
+    pub uniform_bind_group: wgpu::BindGroup,
+    pub uniform_bind_group_layout: wgpu::BindGroupLayout,
     font: Font<'static>,
     text_textures: HashMap<String, (wgpu::Texture, wgpu::BindGroup)>,
     image_textures: HashMap<String, (wgpu::Texture, wgpu::BindGroup)>,
@@ -59,21 +61,38 @@ impl UIRenderer {
                     },
                     count: None,
                 },
-                // Uniform buffer for animation control
-                wgpu::BindGroupLayoutEntry {
-                    binding: 2,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count: None,
-                },
             ],
             label: Some("ui_bind_group_layout"),
         });
 
+        let uniform_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Uniform Buffer"),
+            size: std::mem::size_of::<u32>() as u64,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        // Create bind group layout
+        let uniform_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("Uniform Bind Group Layout"),
+            entries: &[wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            }],
+        });
+        let uniform_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("Uniform Bind Group"),
+            layout: &uniform_bind_group_layout,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: uniform_buffer.as_entire_binding(),
+            }],
+        });
         // Create default texture
         let default_texture = device.create_texture(&wgpu::TextureDescriptor {
             label: Some("Default Texture"),
@@ -85,7 +104,6 @@ impl UIRenderer {
             usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
             view_formats: &[],
         });
-
         // Fill with white pixel
         queue.write_texture(
             wgpu::TexelCopyTextureInfo {
@@ -108,15 +126,6 @@ impl UIRenderer {
             ..Default::default()
         });
 
-        // Create uniform buffer
-        let uniform_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("UI Animation Buffer"),
-            contents: bytemuck::cast_slice(&[
-                0 as u64,
-            ]),
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-        });
-
         let default_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             layout: &bind_group_layout,
             entries: &[
@@ -128,10 +137,6 @@ impl UIRenderer {
                     binding: 1,
                     resource: wgpu::BindingResource::TextureView(&texture_view),
                 },
-                wgpu::BindGroupEntry {
-                    binding: 2,
-                    resource: uniform_buffer.as_entire_binding(),
-                },
             ],
             label: Some("default_bind_group"),
         });
@@ -139,6 +144,9 @@ impl UIRenderer {
         Self {
             bind_group_layout,
             font_sampler,
+            uniform_buffer,
+            uniform_bind_group,
+            uniform_bind_group_layout,
             font,
             text_textures: HashMap::new(),
             image_textures: HashMap::new(), // Add this line
@@ -188,28 +196,13 @@ impl UIRenderer {
                 }
                 UIElementData::InputField { .. } | UIElementData::Button { .. } | UIElementData::Label { .. }  => {
                     if element.get_text().is_some() {
-                        self.process_text_element(
-                            element,
-                            &mut vertices,
-                            &mut indices,
-                            &mut current_index,
-                        );
+                        self.process_text_element(element,&mut vertices,&mut indices,&mut current_index,);
                     } else {
-                        self.process_rect_element(
-                            element,
-                            &mut vertices,
-                            &mut indices,
-                            &mut current_index,
-                        );
+                        self.process_rect_element(element,&mut vertices,&mut indices,&mut current_index,);
                     }
                 }
                 UIElementData::Panel { .. } | UIElementData::Divider { .. } => {
-                    self.process_rect_element(
-                        element,
-                        &mut vertices,
-                        &mut indices,
-                        &mut current_index,
-                    );
+                    self.process_rect_element(element,&mut vertices,&mut indices,&mut current_index,);
                 }
             }
         }
@@ -252,14 +245,6 @@ impl UIRenderer {
                     dimension: Some(wgpu::TextureViewDimension::D2Array),
                     ..Default::default()
                 });
-                // Create uniform buffer
-                let uniform_buffer = state.device().create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                    label: Some("UI Animation Buffer"),
-                    contents: bytemuck::cast_slice(&[
-                        0 as u64,
-                    ]),
-                    usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-                });
 
                 let bind_group = state.device().create_bind_group(&wgpu::BindGroupDescriptor {
                     layout: &self.bind_group_layout,
@@ -271,10 +256,6 @@ impl UIRenderer {
                         wgpu::BindGroupEntry {
                             binding: 1,
                             resource: wgpu::BindingResource::TextureView(&texture_view),
-                        },
-                        wgpu::BindGroupEntry {
-                            binding: 2,
-                            resource: uniform_buffer.as_entire_binding(),
                         },
                     ],
                     label: Some("font_bind_group"),
@@ -343,7 +324,6 @@ impl UIRenderer {
             .next()
             .unwrap_or(0.0)
             .ceil() as u32) + padding * 2;
-        
         let height = ((v_metrics.ascent - v_metrics.descent).ceil() as u32) + padding * 2;
 
         // Ensure minimum size
@@ -370,21 +350,14 @@ impl UIRenderer {
                         let alpha = (v * a as f32) as u8;
                         // Use premultiplied alpha for better quality
                         let premultiplied = |c: u8| ((c as f32 * v).round() as u8);
-                        image.put_pixel(
-                            x as u32, 
-                            y as u32, 
-                            Rgba([
-                                premultiplied(r),
-                                premultiplied(g),
-                                premultiplied(b),
-                                alpha,
-                            ])
-                        );
+            image.put_pixel(
+                x as u32, y as u32, 
+                Rgba([premultiplied(r),premultiplied(g),premultiplied(b),alpha,])
+            );
                     }
                 });
             }
         }
-
         // Create texture with mipmaps for better quality at small sizes
         let texture = device.create_texture(&wgpu::TextureDescriptor {
             label: Some("Text Texture"),
@@ -396,7 +369,6 @@ impl UIRenderer {
             usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
             view_formats: &[],
         });
-
         // Upload texture data
         let raw_data = image.into_raw();
         
@@ -415,7 +387,6 @@ impl UIRenderer {
             },
             wgpu::Extent3d { width, height, depth_or_array_layers: 1 },
         );
-
         texture
     }
 
@@ -440,18 +411,9 @@ impl UIRenderer {
                     path.to_string(),
                 );
                 
-                
                 let texture_view = texture.create_view(&wgpu::TextureViewDescriptor {
                     dimension: Some(wgpu::TextureViewDimension::D2Array),
                     ..Default::default()
-                });
-                // Create uniform buffer
-                let uniform_buffer = state.device().create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                    label: Some("UI Animation Buffer"),
-                    contents: bytemuck::cast_slice(&[
-                        0 as u64,
-                    ]),
-                    usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
                 });
 
                 let bind_group = state.device().create_bind_group(&wgpu::BindGroupDescriptor {
@@ -464,10 +426,6 @@ impl UIRenderer {
                         wgpu::BindGroupEntry {
                             binding: 1,
                             resource: wgpu::BindingResource::TextureView(&texture_view),
-                        },
-                        wgpu::BindGroupEntry {
-                            binding: 2,
-                            resource: uniform_buffer.as_entire_binding(),
                         },
                     ],
                     label: Some("image_bind_group"),
@@ -548,11 +506,7 @@ impl UIRenderer {
         indices: &mut Vec<u32>,
         current_index: &mut u32,
     ) {
-        if let UIElementData::Animation {
-            frames,
-            current_frame,
-            ..
-        } = &element.data {
+        if let UIElementData::Animation {frames,..} = &element.data {
             let state = super::config::get_state();
             
             // Create a unique key for this animation based on its frames
@@ -563,7 +517,6 @@ impl UIRenderer {
                     state.device(),
                     state.queue(),
                     frames,
-                    *current_frame,
                 ) {
                     self.animation_textures.insert(animation_key.clone(), (texture, bind_group));
                 }
@@ -599,7 +552,6 @@ impl UIRenderer {
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         frames: &[String],
-        current_index: usize,
     ) -> Option<(wgpu::Texture, wgpu::BindGroup)> {
         if frames.is_empty() {
             return None;
@@ -657,13 +609,6 @@ impl UIRenderer {
             ..Default::default()
         });
 
-        // Create uniform buffer for frame index
-        let uniform_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("animation_uniform_buffer"),
-            contents: bytemuck::cast_slice(&[current_index]),
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-        });
-
         // Create bind group
         let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             layout: &self.bind_group_layout,
@@ -675,10 +620,6 @@ impl UIRenderer {
                 wgpu::BindGroupEntry {
                     binding: 1,
                     resource: wgpu::BindingResource::TextureView(&texture_view),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 2,
-                    resource: uniform_buffer.as_entire_binding(),
                 },
             ],
             label: Some("animation_bind_group"),
@@ -783,26 +724,10 @@ impl UIRenderer {
         color: [f32; 4],
     ) {
         vertices.extend([
-            Vertex {
-                position: [x, y + h],
-                uv: [0.0, 0.0],
-                color,
-            },
-            Vertex {
-                position: [x + w, y + h],
-                uv: [0.0, 0.0],
-                color,
-            },
-            Vertex {
-                position: [x, y],
-                uv: [0.0, 0.0],
-                color,
-            },
-            Vertex {
-                position: [x + w, y],
-                uv: [0.0, 0.0],
-                color,
-            },
+            Vertex { position: [x, y + h], uv: [0.0, 0.0], color, },
+            Vertex { position: [x + w, y + h], uv: [0.0, 0.0], color, },
+            Vertex { position: [x, y], uv: [0.0, 0.0], color, },
+            Vertex { position: [x + w, y], uv: [0.0, 0.0], color, },
         ]);
     }
 
@@ -814,18 +739,16 @@ impl UIRenderer {
 
 
 impl UIRenderer {
-    // insainly long rendering function made by "https://claude.ai/chat/" 4.0 to be exact
     pub fn render<'a>(
         &'a self,
         ui_manager: &super::ui_manager::UIManager,
-        render_pass: &mut wgpu::RenderPass<'a>,
+        r_pass: &mut wgpu::RenderPass<'a>,
     ) {
-        render_pass.set_pipeline(&ui_manager.pipeline);
-        render_pass.set_vertex_buffer(0, ui_manager.vertex_buffer.slice(..));
-        render_pass.set_index_buffer(ui_manager.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
-
-        let mut index_offset = 0;
-        
+        r_pass.set_pipeline(&ui_manager.pipeline);
+        r_pass.set_vertex_buffer(0, ui_manager.vertex_buffer.slice(..));
+        r_pass.set_index_buffer(ui_manager.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
+        r_pass.set_bind_group(1, &self.uniform_bind_group, &[]);
+        let mut i_off = 0;
         // Get sorted elements (same as in process_elements)
         let mut sorted_elements: Vec<&UIElement> = ui_manager.elements.iter().filter(|e| e.visible).collect();
         sorted_elements.sort_by_key(|e| e.z_index);
@@ -833,123 +756,83 @@ impl UIRenderer {
         for element in sorted_elements {
             // Draw border first (if it exists)
             if element.border_width > 0.0 {
-                render_pass.set_bind_group(0, &self.default_bind_group, &[]);
-                render_pass.draw_indexed(
-                    index_offset..(index_offset + 6),
-                    0, 
-                    0..1
-                );
-                index_offset += 6;
+                r_pass.set_bind_group(0, &self.default_bind_group, &[]);
+                r_pass.draw_indexed(i_off..(i_off + 6),0,0..1);
+                i_off += 6;
             }
-            
             // Draw background/element body
             match &element.data {
                 UIElementData::Image { path } => {
                     let image_key = format!("{}_{}", path, element.color.map(|c| c.to_string()).join("|"));
                     // Draw image with its texture
                     if let Some((_, bind_group)) = self.image_textures.get(&image_key) {
-                        render_pass.set_bind_group(0, bind_group, &[]);
-                        render_pass.draw_indexed(
-                            index_offset..(index_offset + 6),
-                            0,
-                            0..1
-                        );
+                        r_pass.set_bind_group(0, bind_group, &[]);
+                        r_pass.draw_indexed(i_off..(i_off + 6),0,0..1);
                     }
-                    index_offset += 6;
+                    i_off += 6;
                 }
-                UIElementData::Animation { frames, .. } => {
+                UIElementData::Animation { frames, current_frame, .. } => {
                     let animation_key = frames.join("|");
                     if let Some((_, bind_group)) = self.animation_textures.get(&animation_key) {
-                        render_pass.set_bind_group(0, bind_group, &[]);
-                        render_pass.draw_indexed(
-                            index_offset..(index_offset + 6),
-                            0,
-                            0..1
-                        );
+                        // Update the uniform buffer with current frame
+                        super::config::get_state().queue().write_buffer
+                            (&self.uniform_buffer, 0, bytemuck::cast_slice(&[*current_frame as u32]));
+                        // Set both bind groups
+                        r_pass.set_bind_group(0, bind_group, &[]);
+                        r_pass.draw_indexed(i_off..(i_off + 6),0,0..1);
                     }
-                    index_offset += 6;
+                    i_off += 6;
                 }
                 UIElementData::Checkbox { checked, .. } => {
                     // Draw checkbox background
-                    render_pass.set_bind_group(0, &self.default_bind_group, &[]);
-                    render_pass.draw_indexed(
-                        index_offset..(index_offset + 6),
-                        0, 
-                        0..1
-                    );
-                    index_offset += 6;
-                    
+                    r_pass.set_bind_group(0, &self.default_bind_group, &[]);
+                    r_pass.draw_indexed(i_off..(i_off + 6),0,0..1);
+                    i_off += 6;
                     // Draw checkmark if checked
                     if *checked {
-                        render_pass.draw_indexed(
-                            index_offset..(index_offset + 6),
-                            0, 
-                            0..1
-                        );
-                        index_offset += 6;
+                        r_pass.draw_indexed(i_off..(i_off + 6),0,0..1);
+                        i_off += 6;
                     }
-                    
                     // Draw checkbox label text (if any)
                     if let Some(text) = element.get_text() {
                         let texture_key = format!("{}_{}", text, element.color.map(|c| c.to_string()).join("|"));
                         if let Some((_, bind_group)) = self.text_textures.get(&texture_key) {
-                            render_pass.set_bind_group(0, bind_group, &[]);
-                            render_pass.draw_indexed(
-                                index_offset..(index_offset + 6),
-                                0,
-                                0..1
-                            );
+                            r_pass.set_bind_group(0, bind_group, &[]);
+                            r_pass.draw_indexed(i_off..(i_off + 6),0,0..1);
                         }
-                        index_offset += 6;
+                        i_off += 6;
                     }
                 }
                 UIElementData::InputField { .. } | UIElementData::Button { .. } => {
                     // Draw background rectangle
-                    render_pass.set_bind_group(0, &self.default_bind_group, &[]);
-                    render_pass.draw_indexed(
-                        index_offset..(index_offset + 6),
-                        0, 
-                        0..1
-                    );
-                    index_offset += 6;
-                    
+                    r_pass.set_bind_group(0, &self.default_bind_group, &[]);
+                    r_pass.draw_indexed(i_off..(i_off + 6),0,0..1);
+                    i_off += 6;
                     // Draw text if element has text
                     if let Some(text) = element.get_text() {
                         let texture_key = format!("{}_{}", text, element.color.map(|c| c.to_string()).join("|"));
                         if let Some((_, bind_group)) = self.text_textures.get(&texture_key) {
-                            render_pass.set_bind_group(0, bind_group, &[]);
-                            render_pass.draw_indexed(
-                                index_offset..(index_offset + 6),
-                                0,
-                                0..1
-                            );
+                            r_pass.set_bind_group(0, bind_group, &[]);
+                            r_pass.draw_indexed(i_off..(i_off + 6),0,0..1);
                         }
-                        index_offset += 6;
+                        i_off += 6;
                     }
                 }
                 UIElementData::Panel { .. } | UIElementData::Divider { .. } => {
                     // Draw the panel/divider rectangle
-                    render_pass.set_bind_group(0, &self.default_bind_group, &[]);
-                    render_pass.draw_indexed(
-                        index_offset..(index_offset + 6),
-                        0, 
-                        0..1
-                    );
-                    index_offset += 6;
+                    r_pass.set_bind_group(0, &self.default_bind_group, &[]);
+                    r_pass.draw_indexed(i_off..(i_off + 6),0,0..1);
+                    i_off += 6;
                 }
                 UIElementData::Label { .. } => {
                     // Draw text if element has text
                     if let Some(text) = element.get_text() {
                         let texture_key = format!("{}_{}", text, element.color.map(|c| c.to_string()).join("|"));
                         if let Some((_, bind_group)) = self.text_textures.get(&texture_key) {
-                            render_pass.set_bind_group(0, bind_group, &[]);
-                            render_pass.draw_indexed(
-                                index_offset..(index_offset + 6),
-                                0,
-                                0..1
-                            );
+                            r_pass.set_bind_group(0, bind_group, &[]);
+                            r_pass.draw_indexed(i_off..(i_off + 6),0,0..1);
                         }
-                        index_offset += 6;
+                        i_off += 6;
                     }
                 }
             }

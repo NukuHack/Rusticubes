@@ -41,7 +41,7 @@ impl UIManager {
         let renderer = UIRenderer::new(device, queue);
 
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            bind_group_layouts: &[&renderer.bind_group_layout], // Use the renderer's layout
+            bind_group_layouts: &[&renderer.bind_group_layout,&renderer.uniform_bind_group_layout], // Use the renderer's layout
             ..Default::default()
         });
 
@@ -109,7 +109,7 @@ impl UIManager {
             usage: wgpu::BufferUsages::INDEX | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
-
+        
         Self {
             state: UIState::default(),
             vertex_buffer,
@@ -141,7 +141,7 @@ impl UIManager {
     pub fn update_anim(&mut self, delta: f32) {
         for element in self.elements.iter_mut() {
             if let UIElementData::Animation{ .. } = element.data {
-                element.update_animation(delta);
+                element.update_anim(delta);
             }
         }
     }
