@@ -14,17 +14,15 @@ build = "build.rs"
 
 [dependencies]
 # core lib for events and other utility stuff
-winit = { version = "^0.29", features = ["rwh_05"] }
+winit = { version = "0.29", features = ["rwh_05"] }
 # core lib used to make windows and display stuff on them
-wgpu = "^24" # not sure how to add vulkan to this ...
+wgpu = "24" # not sure how to add vulkan to this ...
 # advanced lib for math and extra complex stuff
 bytemuck = { version = "1.16", features = [ "derive" ] }
 # just the basic math : 3d points vectors rotation etc...
-glam = "^0.30"
+glam = "0.30"
 # image load lib
 image = { version = "0.24", features = ["png", "jpeg"], default-features = false}
-# better hashmap access
-ahash = "^0.8"
 # just to compile the resources
 include_dir = "0.7"
 # needed to de-compress the files

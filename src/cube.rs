@@ -3,17 +3,12 @@ use super::cube_math::ChunkCoord;
 use super::cube_render::{ChunkMeshBuilder, GeometryBuffer};
 #[allow(unused_imports)]
 use super::debug;
-use ahash::AHasher;
 use glam::{Quat, Vec3};
 use std::{
     collections::{HashMap, HashSet},
     f32::consts::{PI, TAU},
-    hash::BuildHasherDefault,
 };
 use wgpu::util::DeviceExt;
-
-// Type aliases for better readability
-type FastMap<K, V> = HashMap<K, V, BuildHasherDefault<AHasher>>;
 
 /// Represents a block in the world with optimized storage
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -553,7 +548,7 @@ impl Chunk {
 /// Represents the game world containing chunks
 #[derive(Debug, Clone)]
 pub struct World {
-    pub chunks: FastMap<ChunkCoord, Chunk>,
+    pub chunks: HashMap<ChunkCoord, Chunk>,
     pub loaded_chunks: HashSet<ChunkCoord>,
 }
 
@@ -563,7 +558,7 @@ impl World {
     #[inline]
     pub fn empty() -> Self {
         Self {
-            chunks: FastMap::with_capacity_and_hasher(10_000, BuildHasherDefault::<AHasher>::default()),
+            chunks: HashMap::with_capacity(10_000),
             loaded_chunks: HashSet::with_capacity(10_000),
         }
     }

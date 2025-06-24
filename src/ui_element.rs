@@ -1,7 +1,6 @@
 use std::cell::RefCell;
 use std::fmt;
 use std::sync::Arc;
-use winit::keyboard::KeyCode as Key;
 
 // Constants for common values
 impl UIElement {
@@ -569,10 +568,14 @@ pub fn handle_backspace(text: &mut String) -> bool {
     }
 }
 
+
+use winit::keyboard::KeyCode as Key;
+
 // Input handling utilities (unchanged)
 #[inline]
 pub fn key_to_char(key: Key, shift: bool) -> Option<char> {
     match key {
+            // Alphabet
         Key::KeyA => Some(if shift { 'A' } else { 'a' }),
         Key::KeyB => Some(if shift { 'B' } else { 'b' }),
         Key::KeyC => Some(if shift { 'C' } else { 'c' }),
@@ -599,6 +602,7 @@ pub fn key_to_char(key: Key, shift: bool) -> Option<char> {
         Key::KeyX => Some(if shift { 'X' } else { 'x' }),
         Key::KeyY => Some(if shift { 'Y' } else { 'y' }),
         Key::KeyZ => Some(if shift { 'Z' } else { 'z' }),
+            // Numbers
         Key::Digit0 => Some(if shift { ')' } else { '0' }),
         Key::Digit1 => Some(if shift { '!' } else { '1' }),
         Key::Digit2 => Some(if shift { '@' } else { '2' }),
@@ -610,6 +614,7 @@ pub fn key_to_char(key: Key, shift: bool) -> Option<char> {
         Key::Digit8 => Some(if shift { '*' } else { '8' }),
         Key::Digit9 => Some(if shift { '(' } else { '9' }),
         Key::Space => Some(' '),
+            // Symbols
         Key::Minus => Some(if shift { '_' } else { '-' }),
         Key::Equal => Some(if shift { '+' } else { '=' }),
         Key::BracketLeft => Some(if shift { '{' } else { '[' }),
@@ -620,6 +625,23 @@ pub fn key_to_char(key: Key, shift: bool) -> Option<char> {
         Key::Comma => Some(if shift { '<' } else { ',' }),
         Key::Period => Some(if shift { '>' } else { '.' }),
         Key::Slash => Some(if shift { '?' } else { '/' }),
+            // Numpad keys (with NumLock on)
+        Key::Numpad0 => Some('0'),
+        Key::Numpad1 => Some('1'),
+        Key::Numpad2 => Some('2'),
+        Key::Numpad3 => Some('3'),
+        Key::Numpad4 => Some('4'),
+        Key::Numpad5 => Some('5'),
+        Key::Numpad6 => Some('6'),
+        Key::Numpad7 => Some('7'),
+        Key::Numpad8 => Some('8'),
+        Key::Numpad9 => Some('9'),
+        Key::NumpadAdd => Some('+'),
+        Key::NumpadSubtract => Some('-'),
+        Key::NumpadMultiply => Some('*'),
+        Key::NumpadDivide => Some('/'),
+        Key::NumpadDecimal => Some('.'),
+            // Fallback - undefined
         _ => None,
     }
 }

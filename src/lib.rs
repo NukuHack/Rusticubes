@@ -29,6 +29,7 @@ mod ui_manager;
 mod ui_setup;
 
 
+use winit::keyboard::PhysicalKey;
 use std::sync::atomic::Ordering;
 use glam::Vec3;
 use std::iter::Iterator;
@@ -37,7 +38,6 @@ use winit::{
     keyboard::KeyCode as Key,
     window::Window
 };
-
 
 pub struct State<'a> {
     window: &'a Window,
@@ -52,7 +52,6 @@ pub struct State<'a> {
     save_path: std::path::PathBuf,
 }
 
-
 pub struct RenderContext<'a> {
     surface: wgpu::Surface<'a>,
     device: wgpu::Device,
@@ -61,7 +60,6 @@ pub struct RenderContext<'a> {
     size: winit::dpi::PhysicalSize<u32>,
     chunk_bind_group_layout:  wgpu::BindGroupLayout,
 }
-
 
 impl<'a> State<'a> {
     #[inline]
@@ -220,8 +218,8 @@ impl<'a> State<'a> {
         &self.render_context.size
     }
     #[inline]
-    pub fn modifier_keys(&self) -> &input::ModifierKeys {
-        &self.input_system.modifier_keys
+    pub fn modifiers(&self) -> &winit::keyboard::ModifiersState {
+        &self.input_system.modifiers
     }
     #[inline]
     pub fn mouse_states(&self) -> &input::MouseButtonState {
@@ -287,10 +285,14 @@ impl<'a> State<'a> {
                     },
                 }
             },
+            WindowEvent::ModifiersChanged(modifiers) => {
+                self.input_system.modifiers = modifiers.state();
+                true
+            },
             WindowEvent::KeyboardInput { .. } => {
                 self.handle_key_input(event);
                 true
-            }
+            },
             _ => {
                 self.handle_mouse_input(event);
                 true
@@ -302,13 +304,17 @@ impl<'a> State<'a> {
         match event {
             WindowEvent::KeyboardInput {
                 event: KeyEvent {
-                    physical_key: winit::keyboard::PhysicalKey::Code(key),
+                    physical_key,
                     state // ElementState::Released or ElementState::Pressed
                     , .. },..
             } => {
-                // always handle the modifier keys first
-                self.input_system.modifier_keys.set_modify_kes(*key,*state);
-
+                let key = match physical_key {
+                    PhysicalKey::Code(code) => *code,
+                    _ => {
+                        println!("You called a function that can only be called with a keyboard input ... without a keyboard input ... FF"); 
+                        return false;
+                    },
+                };
                 // Handle UI input first if there's a focused element
                 if let Some(_focused_idx) = self.ui_manager.focused_element {
                     if self.is_world_running {
@@ -317,14 +323,14 @@ impl<'a> State<'a> {
                     
                     if *state == ElementState::Pressed {
                         // Handle special keys for UI
-                        self.ui_manager.handle_key_input(*key,self.modifier_keys().sift);
+                        self.ui_manager.handle_key_input(key,self.modifiers().shift_key());
                         return true;
                     }
                     return true;
                 }
 
                 // Toggle mouse capture when ALT is pressed
-                if *key == Key::AltLeft || *key == Key::AltRight {
+                if key == Key::AltLeft || key == Key::AltRight {
                     if *state == ElementState::Pressed {
                         self.toggle_mouse_capture();
                     }
