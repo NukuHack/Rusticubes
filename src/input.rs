@@ -7,6 +7,7 @@ pub struct InputSystem {
     pub mouse_captured: bool,
 }
 impl Default for InputSystem {
+    #[inline]
     fn default() -> Self {
         Self {
             previous_mouse: None,
@@ -31,6 +32,7 @@ pub struct ModifierKeys {
     pub caps: bool,
 }
 impl ModifierKeys {
+    #[inline]
     pub fn set_modify_kes(&mut self, key: winit::keyboard::KeyCode, state: ElementState) {
         if state == ElementState::Pressed {
             match key {

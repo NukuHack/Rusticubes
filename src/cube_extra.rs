@@ -8,6 +8,7 @@ use glam::Vec3;
 const REACH: f32 = 6.0;
 
 /// Helper function to update a chunk mesh after modification
+#[inline]
 fn update_chunk_mesh(world: &mut World, pos: Vec3) {
     let chunk_pos = ChunkCoord::from_world_pos(pos);
     if let Some(chunk) = world.get_chunk_mut(chunk_pos) {
@@ -20,6 +21,7 @@ fn update_chunk_mesh(world: &mut World, pos: Vec3) {
 }
 
 /// Improved raycasting function that finds the first non-empty block and its face
+#[inline]
 pub fn raycast_to_block(camera: &Camera, world: &World, max_distance: f32) -> Option<(Vec3, Vec3)> {
     let ray_origin = camera.position;
     let ray_dir = camera.forward();
@@ -84,6 +86,7 @@ pub fn raycast_to_block(camera: &Camera, world: &World, max_distance: f32) -> Op
 }
 
 /// Places a cube on the face of the block the player is looking at
+#[inline]
 pub fn place_looked_cube() {
     if !super::config::get_state().is_world_running {
         return;
@@ -115,7 +118,7 @@ pub fn remove_targeted_block() {
 }
 
 /// Loads a chunk at the camera's position if not already loaded
-#[allow(dead_code)]
+#[allow(dead_code)]#[inline]
 pub fn add_def_chunk() {
     if !super::config::get_state().is_world_running {
         return;
@@ -145,6 +148,7 @@ pub fn add_def_chunk() {
     }
 }
 /// Loads a chunk at the camera's position if not already loaded
+#[inline]
 pub fn add_full_chunk() {
     if !super::config::get_state().is_world_running {
         return;
@@ -167,6 +171,7 @@ pub fn add_full_chunk() {
 }
 
 /// Loads chunks around the camera in a radius
+#[inline]
 pub fn update_full_world() {
     if !super::config::get_state().is_world_running {
         return;
@@ -185,6 +190,7 @@ pub fn update_full_world() {
 }
 
 /// Fill chunks around the camera in a radius
+#[inline]
 pub fn add_full_world() {
     if !super::config::get_state().is_world_running {
         return;
@@ -202,6 +208,7 @@ pub fn add_full_world() {
         .make_chunk_meshes(state_b.device(), state_b.queue());
 }
 /// Performs ray tracing to a cube and determines which of the 27 points (3x3x3 grid) was hit
+#[inline]
 pub fn raycast_to_cube_point(
     camera: &Camera,
     world: &World,
@@ -252,6 +259,7 @@ pub fn raycast_to_cube_point(
 }
 
 /// Toggles a point in the marching cube that the player is looking at
+#[inline]
 pub fn toggle_looked_point() -> Option<(bool, (u8, u8, u8))> {
     let state = super::config::get_state();
     let camera = &state.camera_system.camera;

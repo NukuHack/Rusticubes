@@ -21,6 +21,7 @@ fn main() {
 }
 
 /// Disables Vulkan layers to prevent potential startup errors
+#[inline]
 fn initialize_vulkan() {
     unsafe {
         // Disable all Vulkan layers to avoid missing file errors
@@ -32,11 +33,13 @@ fn initialize_vulkan() {
 }
 
 /// Prints application header
+#[inline]
 fn print_header(output: &mut impl Write) {
     writeln!(output, "\n\nBegin code:\n\n\n").unwrap();
 }
 
 /// Prints application footer
+#[inline]
 fn print_footer(output: &mut impl Write) {
     writeln!(output, "\n\nEnd code:\n\n").unwrap();
 }
@@ -48,16 +51,19 @@ struct ManualWaker {
 }
 
 impl std::task::Wake for ManualWaker {
+    #[inline]
     fn wake(self: sync::Arc<Self>) {
         self.wake_flag.store(true, sync::atomic::Ordering::Relaxed);
     }
 
+    #[inline]
     fn wake_by_ref(self: &sync::Arc<ManualWaker>) {
         self.wake_flag.store(true, sync::atomic::Ordering::Relaxed);
     }
 }
 
 /// Runs the application future until completion
+#[inline]
 fn run_app() {
     let future = run();
     let mut future = Box::pin(future);

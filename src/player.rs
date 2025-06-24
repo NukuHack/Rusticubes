@@ -10,6 +10,7 @@ pub struct Player {
 }
 
 impl Player {
+    #[inline]
     pub fn new(config: CameraConfig) -> Self {
         Self {
             position: Vec3::ZERO,
@@ -17,7 +18,7 @@ impl Player {
             controller: PlayerController::new(config),
         }
     }
-
+    #[inline]
     pub fn update(
         &mut self,
         camera: &mut Camera,
@@ -112,6 +113,7 @@ pub struct MovementInputs {
 
 #[allow(dead_code)]
 impl PlayerController {
+    #[inline]
     pub fn new(config: CameraConfig) -> Self {
         Self {
             movement: MovementInputs::default(),
@@ -137,23 +139,23 @@ impl PlayerController {
         }
         true
     }
-
+    #[inline]
     pub fn reset_keyboard(&mut self) {
         self.movement = MovementInputs::default();
     }
-
+    #[inline]
     pub fn process_mouse(&mut self, delta_x: f32, delta_y: f32) {
         self.rotation.x = -delta_x;
         self.rotation.y = -delta_y;
     }
-
+    #[inline]
     pub fn process_scroll(&mut self, delta: &MouseScrollDelta) {
         self.scroll = match delta {
             MouseScrollDelta::LineDelta(_, y) => y * 0.5,
             MouseScrollDelta::PixelDelta(pos) => pos.y as f32,
         };
     }
-
+    #[inline]
     pub fn reset(&mut self, camera: &mut Camera) {
         self.movement = MovementInputs::default();
         self.velocity = Vec3::ZERO;

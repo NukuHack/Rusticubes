@@ -45,28 +45,11 @@ impl Block {
         Self::Simple(1, 0)
     }
 
-    /// Creates a new simple block with default material
-    #[inline]
-    pub const fn new_conf(material: u16, rotation: u8) -> Self {
-        Self::Simple(material, rotation)
-    }
 
     /// Creates a new marching cubes block with center point set
     #[inline]
     pub const fn new_dot() -> Self {
         Self::Marching(1, 0x20_00)
-    }
-
-    /// Creates a new marching cubes block with no point set
-    #[inline]
-    pub const fn new_march(material: u16, points: u32) -> Self {
-        Self::Marching(material, points)
-    }
-
-    /// Creates a new block with specified rotation
-    #[inline]
-    pub const fn new_rot(rotation: u8) -> Self {
-        Self::Simple(1, rotation)
     }
 
     /// Creates a block from a quaternion rotation
@@ -208,7 +191,7 @@ impl Block {
     pub fn get_march(&mut self) -> Option<Block> {
         match self {
             Block::Marching(_, _) => None,
-            _ => Some(Self::new_march(self.material(), 0)),
+            _ => Some(*self),
         }
     }
 }

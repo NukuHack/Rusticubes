@@ -26,6 +26,7 @@ pub struct UIRenderer {
 }
 
 impl UIRenderer {
+    #[inline]
     pub fn new(device: &wgpu::Device, queue: &wgpu::Queue) -> Self {
         // Load font from embedded bytes or file
         let font_data = crate::get_bytes!("calibri.ttf"); // C:\Windows\Fonts\..
@@ -155,7 +156,7 @@ impl UIRenderer {
             pixel_ratio: 4.0,
         }
     }
-
+    #[inline]
     pub fn change_font(&mut self, path: String) {
         let font_data = crate::get_bytes!(path.clone()); // C:\Windows\Fonts\..
         let font = Font::try_from_vec(font_data.clone()).expect("Failed to load font");
@@ -163,11 +164,11 @@ impl UIRenderer {
         self.font = font;
         self.text_textures.clear();
     }
-
+    #[inline]
     pub fn set_pixel_ratio(&mut self, ratio: f32) {
         self.pixel_ratio = ratio.max(10.0).min(0.5);
     }
-
+    #[inline]
     pub fn process_elements(
         &mut self,
         elements: &[UIElement],
@@ -209,7 +210,7 @@ impl UIRenderer {
 
         (vertices, indices)
     }
-
+    #[inline]
     fn process_text_element(
         &mut self,
         element: &UIElement,
@@ -390,8 +391,7 @@ impl UIRenderer {
         texture
     }
 
-
-    // Add this new method to process image elements
+    #[inline]
     fn process_image_element(
         &mut self,
         element: &UIElement,
@@ -498,7 +498,7 @@ impl UIRenderer {
 
         texture
     }
-
+    #[inline]
     fn process_animation_element(
         &mut self,
         element: &UIElement,
@@ -630,7 +630,7 @@ impl UIRenderer {
 }
 
 impl UIRenderer {
-    
+    #[inline]
     fn process_border(
         &self,
         element: &UIElement,
@@ -656,7 +656,7 @@ impl UIRenderer {
         indices.extend(self.rectangle_indices(*current_index));
         *current_index += 4;
     }
-
+    #[inline]
     fn process_checkbox(
         &mut self,
         element: &UIElement,
@@ -703,7 +703,7 @@ impl UIRenderer {
             self.process_text_element(&label_element, vertices, indices, current_index);
         }
     }
-
+    #[inline]
     fn process_rect_element(
         &self,
         element: &UIElement,
@@ -716,6 +716,7 @@ impl UIRenderer {
         *current_index += 4;
     }
 
+    #[inline]
     fn add_rectangle(
         &self,
         vertices: &mut Vec<Vertex>,
@@ -730,7 +731,7 @@ impl UIRenderer {
             Vertex { position: [x + w, y], uv: [0.0, 0.0], color, },
         ]);
     }
-
+    #[inline]
     fn rectangle_indices(&self, base: u32) -> [u32; 6] {
         [base, base + 1, base + 2, base + 1, base + 3, base + 2]
     }
@@ -739,6 +740,7 @@ impl UIRenderer {
 
 
 impl UIRenderer {
+    #[inline]
     pub fn render<'a>(
         &'a self,
         ui_manager: &super::ui_manager::UIManager,

@@ -1,9 +1,8 @@
-use std::fs::{self, File};
-use std::io::{BufWriter, Write};
+
+use std::io::Write;
 use std::path::PathBuf;
 use std::sync::mpsc;
 use std::thread;
-use std::time::Duration;
 
 pub struct FileSaver {
     sender: Option<mpsc::Sender<(PathBuf, String)>>,
@@ -12,8 +11,9 @@ pub struct FileSaver {
 
 #[allow(dead_code)]
 impl FileSaver {
+    #[inline]
     pub fn new() -> Self {
-        if let Err(e) = fs::create_dir_all("save") {
+        if let Err(e) = std::fs::create_dir_all("save") {
             eprintln!("Failed to create save directory: {}", e);
         }
 
@@ -37,13 +37,13 @@ impl FileSaver {
             handle: Some(handle),
         }
     }
-
+    #[inline]
     fn write_file(filename: &PathBuf, content: &str) -> std::io::Result<()> {
-        let mut writer = BufWriter::new(File::create(filename)?);
+        let mut writer = std::io::BufWriter::new(std::fs::File::create(filename)?);
         writer.write_all(content.as_bytes())?;
         Ok(())
     }
-
+    #[inline]
     pub fn save(
         &self,
         filename: impl Into<PathBuf>,
@@ -55,7 +55,7 @@ impl FileSaver {
             .send((filename.into(), content.into()))
             .map_err(|e| e.to_string())
     }
-
+    #[inline]
     pub fn shutdown(mut self) -> thread::Result<()> {
         self.sender = None;
         self.handle.take().unwrap().join()
@@ -63,6 +63,7 @@ impl FileSaver {
 }
 
 impl Drop for FileSaver {
+    #[inline]
     fn drop(&mut self) {
         if self.handle.is_some() {
             self.sender = None;
@@ -83,6 +84,7 @@ pub struct FileLoader {
 #[allow(dead_code)]
 impl FileLoader {
     /// Creates a new FileLoader with a dedicated background thread
+    #[inline]
     pub fn new() -> Self {
         let (sender, receiver) = mpsc::channel::<(PathBuf, mpsc::Sender<String>)>();
 
@@ -108,11 +110,13 @@ impl FileLoader {
     }
 
     /// Internal helper method for file reading
+    #[inline]
     fn read_file(filename: &PathBuf) -> std::io::Result<String> {
-        fs::read_to_string(filename)
+        std::fs::read_to_string(filename)
     }
 
     /// Loads content from a file asynchronously
+    #[inline]
     pub fn load(&self, filename: impl Into<PathBuf>) -> mpsc::Receiver<String> {
         let (result_sender, result_receiver) = mpsc::channel();
         let _ = self.sender.send((filename.into(), result_sender));
@@ -120,6 +124,7 @@ impl FileLoader {
     }
 
     /// Shuts down the file loader
+    #[inline]
     pub fn shutdown(self) -> thread::Result<()> {
         drop(self.sender); // Close the channel
         self.handle.join()
@@ -128,6 +133,7 @@ impl FileLoader {
 
 // Implement Clone for FileSaver to allow sharing between threads
 impl Clone for FileSaver {
+    #[inline]
     fn clone(&self) -> Self {
         FileSaver {
             sender: self.sender.clone(),
@@ -135,13 +141,13 @@ impl Clone for FileSaver {
         }
     }
 }
-
+#[inline]
 pub fn get_world_names() -> std::io::Result<Vec<String>> {
     let path = super::config::get_save_path().join("saves");
 
     let mut folders = Vec::new();
 
-    for entry in fs::read_dir(path)? {
+    for entry in std::fs::read_dir(path)? {
         let entry = entry?;
         let path = entry.path();
 
@@ -156,6 +162,7 @@ pub fn get_world_names() -> std::io::Result<Vec<String>> {
 
     Ok(folders)
 }
+#[inline]
 pub fn del_world(name: &str) -> Result<(), Box<dyn std::error::Error>> {
     let saves_path = super::config::get_save_path().join("saves");
     let target_path = saves_path.join(name);
@@ -168,7 +175,7 @@ pub fn del_world(name: &str) -> Result<(), Box<dyn std::error::Error>> {
         return Err(format!("'{}' is not a directory", name).into());
     }
 
-    fs::remove_dir_all(&target_path)?;
+    std::fs::remove_dir_all(&target_path)?;
     Ok(())
 }
 
@@ -185,14 +192,14 @@ fn test() {
             saver_clone
                 .save(filename, content)
                 .expect("Failed to send save request");
-            thread::sleep(Duration::from_millis(10)); // Small delay to see parallelism
+            thread::sleep(std::time::Duration::from_millis(10)); // Small delay to see parallelism
         }
     });
 
     // Main thread prints messages while files are being created
     for i in 1..=5 {
         println!("Main thread working... while saving {}", i);
-        thread::sleep(Duration::from_millis(100));
+        thread::sleep(std::time::Duration::from_millis(100));
     }
 
     saver.shutdown().unwrap();
@@ -209,7 +216,7 @@ fn test() {
     // Main thread prints messages while files are being created
     for i in 1..=5 {
         println!("Main thread working... while loading {}", i);
-        thread::sleep(Duration::from_millis(100));
+        thread::sleep(std::time::Duration::from_millis(100));
     }
 
     // Collect results

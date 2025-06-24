@@ -59,6 +59,7 @@ pub struct ChunkMeshBuilder {
 }
 
 impl Default for ChunkMeshBuilder {
+    #[inline]
     fn default() -> Self {
         Self::new()
     }
@@ -403,6 +404,7 @@ impl GeometryBuffer {
         vertices: &[Vertex],
     ) {
         // Helper to align buffer sizes
+        #[inline]
         fn align_size(size: usize, alignment: usize) -> usize {
             ((size + alignment - 1) / alignment) * alignment
         }

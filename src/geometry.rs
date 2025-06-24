@@ -14,6 +14,7 @@ impl Texture {
     pub const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
 
     /// Creates a texture from raw bytes
+    #[inline]
     pub fn from_bytes(
         device: &wgpu::Device,
         queue: &wgpu::Queue,

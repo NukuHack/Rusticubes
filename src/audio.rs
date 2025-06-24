@@ -13,6 +13,7 @@ struct AudioSystem {
 static AUDIO_SYSTEM_PTR: AtomicPtr<AudioSystem> = AtomicPtr::new(ptr::null_mut());
 
 // Helper function to safely access the AudioSystem pointer
+#[inline]
 fn get_ptr() -> Option<&'static mut AudioSystem> {
     let system_ptr = AUDIO_SYSTEM_PTR.load(Ordering::Acquire);
     if system_ptr.is_null() {
@@ -21,7 +22,7 @@ fn get_ptr() -> Option<&'static mut AudioSystem> {
         unsafe { Some(&mut *system_ptr) }
     }
 }
-
+#[inline]
 pub fn init_audio() -> Result<(), Box<dyn std::error::Error>> {
     let (stream, stream_handle) = OutputStream::try_default()?;
     
@@ -48,6 +49,7 @@ pub fn init_audio() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 // Play background music (longer sounds, loops, etc.)
+#[inline]
 pub fn play_background(path: String) {
     if let Some(system) = get_ptr() {
         match try_play_sound(path.clone(), system, true) {
@@ -62,6 +64,7 @@ pub fn play_background(path: String) {
 }
 
 // Play UI sound (short sounds, immediate playback)
+#[inline]
 pub fn play_sound(path: String) {
     if let Some(system) = get_ptr() {
         match try_play_sound(path.clone(), system, false) {
@@ -78,7 +81,7 @@ pub fn play_sound(path: String) {
 }
 
 /// Set a new UI sound, stopping any currently playing UI sounds first
-#[allow(dead_code)]
+#[allow(dead_code)]#[inline]
 pub fn set_sound(path: String) {
     if let Some(system) = get_ptr() {
         // Clear all currently playing UI sounds
@@ -98,7 +101,7 @@ pub fn set_sound(path: String) {
 }
 
 /// Set a new background sound, stopping any currently playing background music first
-#[allow(dead_code)]
+#[allow(dead_code)]#[inline]
 pub fn set_background(path: String) {
     if let Some(system) = get_ptr() {
         // Clear all currently playing background sounds
@@ -116,6 +119,7 @@ pub fn set_background(path: String) {
 }
 
 // Common sound playing function
+#[inline]
 fn try_play_sound(
     path: String, 
     system: &mut AudioSystem, 
@@ -124,10 +128,10 @@ fn try_play_sound(
     let sound_bytes = crate::get_bytes!(path.clone());
     let cursor = Cursor::new(sound_bytes);
     let source = Decoder::new(cursor)?;
-    
+    /*
     let volume = 1.0; // Volume is now controlled per-sink
     let source = source.amplify(volume);
-    
+    */
     let speed = super::math::random_float(0.8, 0.9);
     let source = source.speed(speed);
     
@@ -144,43 +148,44 @@ fn try_play_sound(
     Ok(duration)
 }
 
+#[inline]
 fn play_terminal_ping() {
     print!("\x07");
     let _ = std::io::stdout().flush();
 }
 
 // Control functions
-#[allow(dead_code)]
+#[allow(dead_code)]#[inline]
 pub fn set_background_volume(volume: f32) {
     if let Some(system) = get_ptr() {
         system.bg_sink.set_volume(volume);
     }
 }
 
-#[allow(dead_code)]
+#[allow(dead_code)]#[inline]
 pub fn set_volume(volume: f32) {
     if let Some(system) = get_ptr() {
         system.ui_sink.set_volume(volume);
     }
 }
-
+#[inline]
 pub fn stop_background() {
     if let Some(system) = get_ptr() {
         system.bg_sink.stop();
     }
 }
-
+#[inline]
 pub fn stop_ui_sounds() {
     if let Some(system) = get_ptr() {
         system.ui_sink.stop();
     }
 }
-
+#[inline]
 pub fn stop_all_sounds() {
     stop_background();
     stop_ui_sounds();
 }
-
+#[inline]
 pub fn cleanup_audio() {
     let system_ptr = AUDIO_SYSTEM_PTR.swap(ptr::null_mut(), Ordering::AcqRel);
     if !system_ptr.is_null() {

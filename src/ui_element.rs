@@ -24,7 +24,7 @@ pub enum UIElementData {
     },
     Button {
         text: String,
-        on_click: Callback,
+        on_click: Option<Callback>,
     },
     InputField {
         text: String,
@@ -142,6 +142,8 @@ impl fmt::Debug for UIElement {
     }
 }
 impl UIElement {
+
+    #[inline]
     pub fn new(
         id: usize,
         data: UIElementData,
@@ -159,19 +161,22 @@ impl UIElement {
         }
     }
 
+    #[inline]
     pub fn new_button(
         id: usize,
         position: (f32, f32),
         size: (f32, f32),
         color: [f32; 3],
         text: String,
-        on_click: impl FnMut() + 'static,
+        on_click: Option<impl FnMut() + 'static>,
     ) -> Self {
         Self::new(
             id,
             UIElementData::Button {
                 text,
-                on_click: Arc::new(RefCell::new(on_click)),
+                on_click: on_click
+                    .map(|f| Arc::new(RefCell::new(f)))
+                    .map(|arc| arc as Callback),
             },
             position,
             size,
@@ -179,6 +184,7 @@ impl UIElement {
         )
     }
 
+    #[inline]
     pub fn new_label(
         id: usize,
         position: (f32, f32),
@@ -189,6 +195,7 @@ impl UIElement {
         Self::new(id, UIElementData::Label { text }, position, size, color)
     }
 
+    #[inline]
     pub fn new_input(
         id: usize,
         position: (f32, f32),
@@ -196,13 +203,11 @@ impl UIElement {
         color: [f32; 3],
         placeholder: Option<String>,
     ) -> Self {
-        // Initialize text with placeholder if it exists, otherwise empty string
-        let text = placeholder.clone().unwrap_or_default();
-
         Self::new(
             id,
             UIElementData::InputField {
-                text,        // Use the initialized text
+                // Initialize text with placeholder if it exists, otherwise empty string
+                text: placeholder.clone().unwrap_or_default(),        // Use the initialized text
                 placeholder, // Keep the original placeholder
             },
             position,
@@ -211,6 +216,7 @@ impl UIElement {
         )
     }
 
+    #[inline]
     pub fn new_checkbox(
         id: usize,
         position: (f32, f32),
@@ -235,14 +241,17 @@ impl UIElement {
         )
     }
 
+    #[inline]
     pub fn new_panel(id: usize, position: (f32, f32), size: (f32, f32), color: [f32; 3]) -> Self {
         Self::new(id, UIElementData::Panel, position, size, color)
     }
 
+    #[inline]
     pub fn new_divider(id: usize, position: (f32, f32), size: (f32, f32), color: [f32; 3]) -> Self {
         Self::new(id, UIElementData::Divider, position, size, color)
     }
 
+    #[inline]
     pub fn new_image(
         id: usize,
         position: (f32, f32),
@@ -259,7 +268,7 @@ impl UIElement {
         )
     }
 
-
+    #[inline]
     pub fn new_animation(
         id: usize,
         position: (f32, f32),
@@ -285,6 +294,7 @@ impl UIElement {
         )
     }
 
+    #[inline]
     pub fn play_anim(mut self) -> Self {
         if let UIElementData::Animation {
             frames, current_frame, looping, playing, ..
@@ -296,36 +306,42 @@ impl UIElement {
         }
         self
     }
+    #[inline]
     pub fn add_anim_frame(mut self, frame: String) -> Self {
         if let UIElementData::Animation { frames, .. } = &mut self.data {
             frames.push(frame); // Just push directly, no assignment needed
         }
         self
     }
+    #[inline]
     pub fn anim_smooth(mut self, smooth: bool) -> Self {
         if let UIElementData::Animation { smooth_transition, .. } = &mut self.data {
             *smooth_transition = smooth;
         }
         self
     }
+    #[inline]
     pub fn with_anim_blend_delay(mut self, delay: u32) -> Self {
         if let UIElementData::Animation { blend_delay, .. } = &mut self.data {
             *blend_delay = delay;
         }
         self
     }
+    #[inline]
     pub fn loop_anim(mut self) -> Self {
         if let UIElementData::Animation { looping, .. } = &mut self.data {
             *looping = !*looping;
         }
         self
     }
+    #[inline]
     pub fn set_anim_duration(mut self, delay: f32) -> Self {
         if let UIElementData::Animation { frame_duration, .. } = &mut self.data {
             *frame_duration = delay;
         }
         self
     }
+    #[inline]
     pub fn set_anim_index(mut self, index: u32) -> Self {
         if let UIElementData::Animation {
             current_frame,
@@ -338,6 +354,7 @@ impl UIElement {
         }
         self
     }
+    #[inline]
     pub fn reset_anim(&mut self) {
         if let UIElementData::Animation {
             current_frame,
@@ -349,6 +366,7 @@ impl UIElement {
             *elapsed_time = 0.0;
         }
     }
+    #[inline]
     pub fn update_anim(&mut self, delta_time: f32) {
         if let UIElementData::Animation {
             frames,
@@ -383,44 +401,53 @@ impl UIElement {
         }
     }
 
+    #[inline]
     pub fn set_border(mut self, border_color: [f32; 4], border_width: f32) -> Self {
         self.border_color = border_color;
         self.border_width = border_width;
         self
     }
+    #[inline]
     pub fn set_color(mut self, color: [f32; 4]) -> Self {
         // should not use this, cus' alpha
         self.color = color;
         self
     }
+    #[inline]
     pub fn set_z_index(mut self, z_index: i32) -> Self {
         self.z_index = z_index;
         self
     }
+    #[inline]
     pub fn set_visibility(mut self, visible: bool) -> Self {
         self.visible = visible;
         self
     }
+    #[inline]
     pub fn set_enabled(mut self, enabled: bool) -> Self {
         // currently this is basically not processed ... so yeah ...
         self.enabled = enabled;
         self
     }
+    #[inline]
     pub fn set_pos(mut self, x : f32, y : f32) -> Self {
         self.position = (x, y);
         self
     }
+    #[inline]
     pub fn set_size(mut self, w : f32, h : f32) -> Self {
         self.size = (w, h);
         self
     }
 
+    #[inline]
     pub fn get_bounds(&self) -> (f32, f32, f32, f32) {
         let (x, y) = self.position;
         let (w, h) = self.size;
         (x, y, x + w, y + h)
     }
 
+    #[inline]
     pub fn contains_point(&self, x: f32, y: f32) -> bool {
         if !self.visible || !self.enabled {
             return false;
@@ -442,6 +469,7 @@ impl UIElement {
         }
     }
 
+    #[inline]
     pub fn toggle_checked(&mut self) {
         if let UIElementData::Checkbox { checked, .. } = &mut self.data {
             *checked = !*checked;
@@ -468,10 +496,12 @@ impl UIElement {
         }
     }
 
+    #[inline]
     pub fn is_input(&self) -> bool {
         matches!(self.data, UIElementData::InputField { .. })
     }
 
+    #[inline]
     pub fn is_checked(&self) -> Option<bool> {
         if let UIElementData::Checkbox { checked, .. } = &self.data {
             Some(*checked)
@@ -480,11 +510,14 @@ impl UIElement {
         }
     }
 
-    pub fn trigger_click(&mut self) {
+    // sometimes fails, making the user unable to interact with some things like buttons
+    pub fn trigger_click_bad(&mut self) {
         match &mut self.data {
             UIElementData::Button { on_click, .. } => {
-                if let Ok(mut callback) = on_click.try_borrow_mut() {
-                    callback();
+                if let Some(callback) = on_click {
+                    if let Ok(mut cb) = callback.try_borrow_mut() {
+                        cb();
+                    }
                 }
             }
             UIElementData::Checkbox { on_click, .. } => {
@@ -497,12 +530,14 @@ impl UIElement {
             _ => {}
         }
     }
-    #[allow(dead_code)] // maybe better than try_borrow
-    pub fn trigger_click_clone(&mut self) {
+    // maybe better than try_borrow
+    pub fn trigger_click(&mut self) {
         match &mut self.data {
             UIElementData::Button { on_click, .. } => {
-                let callback = on_click.clone();
-                callback.borrow_mut()();
+                if let Some(callback) = on_click {
+                    let cb = callback.clone();
+                    cb.borrow_mut()();
+                }
             }
             UIElementData::Checkbox { on_click, .. } => {
                 if let Some(callback) = on_click {
@@ -516,6 +551,7 @@ impl UIElement {
 }
 
 // Input validation and processing (unchanged)
+#[inline]
 pub fn process_text_input(text: &mut String, c: char) -> bool {
     if text.len() >= UIElement::MAX_INPUT_LENGTH || c.is_control() {
         return false;
@@ -523,7 +559,7 @@ pub fn process_text_input(text: &mut String, c: char) -> bool {
     text.push(c);
     true
 }
-
+#[inline]
 pub fn handle_backspace(text: &mut String) -> bool {
     if !text.is_empty() {
         text.pop();
@@ -534,6 +570,7 @@ pub fn handle_backspace(text: &mut String) -> bool {
 }
 
 // Input handling utilities (unchanged)
+#[inline]
 pub fn key_to_char(key: Key, shift: bool) -> Option<char> {
     match key {
         Key::KeyA => Some(if shift { 'A' } else { 'a' }),

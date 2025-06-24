@@ -1,5 +1,5 @@
 ﻿
-use crate::game::GameState;
+use crate::game_state::GameState;
 use crate::State;
 use std::sync::atomic::{AtomicBool,AtomicPtr, Ordering};
 use std::path::PathBuf;
@@ -14,6 +14,7 @@ pub struct AppConfig {
 }
 
 impl Default for AppConfig {
+    #[inline]
      fn default() -> Self {
         Self {
             window_title: "Default App".into(),
@@ -25,6 +26,7 @@ impl Default for AppConfig {
     }
 }
 impl AppConfig {
+    #[inline]
     pub fn new(size: winit::dpi::PhysicalSize<u32>) -> Self {
         let width:f32 = 1280.0; let height:f32 = 720.0;
         let x:f32 = (size.width as f32 - width) / 2.0;
@@ -38,7 +40,7 @@ impl AppConfig {
         }
     }
 }
-
+#[inline]
 pub fn get_save_path() -> PathBuf {
     let mut path = if cfg!(windows) {
         dirs::document_dir()
@@ -57,7 +59,7 @@ pub fn get_save_path() -> PathBuf {
     path.push("Rusticubes");
     path
 }
-
+#[inline]
 pub fn ensure_save_dir() -> std::io::Result<PathBuf> {
     let path = get_save_path();
     std::fs::create_dir_all(&path)?;
@@ -72,6 +74,7 @@ pub static CLOSED: AtomicBool = AtomicBool::new(false);
 pub static GAMESTATE_PTR: AtomicPtr<GameState> = AtomicPtr::new(std::ptr::null_mut());
 
 // Safe accessor functions
+#[inline]
 pub fn get_window() -> &'static mut winit::window::Window {
     let ptr = WINDOW_PTR.load(Ordering::Acquire);
     if ptr.is_null() {
@@ -79,7 +82,7 @@ pub fn get_window() -> &'static mut winit::window::Window {
     }
     unsafe { &mut *ptr }
 }
-
+#[inline]
 pub fn get_state() -> &'static mut State<'static> {
     let ptr = STATE_PTR.load(Ordering::Acquire);
     if ptr.is_null() {
@@ -87,6 +90,7 @@ pub fn get_state() -> &'static mut State<'static> {
     }
     unsafe { &mut *ptr }
 }
+#[inline]
 pub fn get_gamestate() -> &'static mut GameState {
     let ptr = GAMESTATE_PTR.load(Ordering::Acquire);
     if ptr.is_null() {
@@ -94,16 +98,17 @@ pub fn get_gamestate() -> &'static mut GameState {
     }
     unsafe { &mut *ptr }
 }
-
+#[inline]
 pub fn close_app() {
     CLOSED.store(true, Ordering::Release);
 }
-
+#[inline]
 pub fn is_closed() -> bool {
     CLOSED.load(Ordering::Acquire)
 }
 
 // In your cleanup code (like when closing the app):
+#[inline]
 pub fn cleanup_resources() {
     // dropping the audio first (if not cleaned up properly it might play after app close)
     super::audio::stop_all_sounds();
@@ -121,13 +126,11 @@ pub fn cleanup_resources() {
         unsafe { let _ = Box::from_raw(window_ptr); }; // Drops when goes out of scope
     }
 }
-
+#[inline]
 pub fn drop_gamestate() {
-
     let gamestate_ptr = GAMESTATE_PTR.swap(std::ptr::null_mut(), Ordering::AcqRel);
     if !gamestate_ptr.is_null() {
         unsafe { let _ = Box::from_raw(gamestate_ptr); }; // Drops when goes out of scope
     }
-
 }
 

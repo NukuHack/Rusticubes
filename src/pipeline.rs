@@ -23,6 +23,7 @@ pub struct Pipeline {
 
 impl Pipeline {
     /// Creates all render pipelines with proper configuration
+    #[inline]
     pub fn new(
         device: &wgpu::Device,
         config: &wgpu::SurfaceConfiguration,
@@ -61,7 +62,7 @@ impl Pipeline {
             post_pipeline_layout,
         }
     }
-
+    #[inline]
     pub fn post_bind_group_layout(&self) -> &wgpu::BindGroupLayout {
         &self.post_bind_group_layout
     }
@@ -76,6 +77,7 @@ struct Shaders {
 }
 
 impl Shaders {
+    #[inline]
     fn new(device: &wgpu::Device) -> Self {
         // Load shader sources first
         let chunk_shader = get_string!("chunk_shader.wgsl");
@@ -98,6 +100,7 @@ impl Shaders {
 }
 
 /// Creates a shader module with the given label and source
+#[inline]
 fn create_shader(device: &wgpu::Device, label: &str, source: &str) -> wgpu::ShaderModule {
     device.create_shader_module(wgpu::ShaderModuleDescriptor {
         label: Some(label),
@@ -106,6 +109,7 @@ fn create_shader(device: &wgpu::Device, label: &str, source: &str) -> wgpu::Shad
 }
 
 /// Common pipeline creation helper
+#[inline]
 fn create_base_pipeline(
     device: &wgpu::Device,
     layout: Option<&wgpu::PipelineLayout>,
@@ -142,7 +146,7 @@ fn create_base_pipeline(
         cache: None,
     })
 }
-
+#[inline]
 fn create_chunk_pipeline(
     device: &wgpu::Device,
     layout: &wgpu::PipelineLayout,
@@ -160,7 +164,7 @@ fn create_chunk_pipeline(
         "Chunk Render Pipeline",
     )
 }
-
+#[inline]
 fn create_inside_pipeline(
     device: &wgpu::Device,
     layout: &wgpu::PipelineLayout,
@@ -178,7 +182,7 @@ fn create_inside_pipeline(
         "Inside Render Pipeline",
     )
 }
-
+#[inline]
 fn create_post_pipeline(
     device: &wgpu::Device,
     shader: &wgpu::ShaderModule,
@@ -196,7 +200,7 @@ fn create_post_pipeline(
         "Post Processing Pipeline",
     )
 }
-
+#[inline]
 fn create_post_bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
     device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
         label: Some("Post Processing Bind Group Layout"),
@@ -222,7 +226,7 @@ fn create_post_bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout
         ],
     })
 }
-
+#[inline]
 fn create_sky_pipeline(
     device: &wgpu::Device,
     shader: &wgpu::ShaderModule,
@@ -265,7 +269,7 @@ fn create_sky_pipeline(
 }
 
 // --- Pipeline Configuration ---
-
+#[inline]
 fn default_primitive_state() -> wgpu::PrimitiveState {
     wgpu::PrimitiveState {
         topology: wgpu::PrimitiveTopology::TriangleList,
@@ -278,14 +282,14 @@ fn default_primitive_state() -> wgpu::PrimitiveState {
         ..Default::default()
     }
 }
-
+#[inline]
 fn inside_primitive_state() -> wgpu::PrimitiveState {
     wgpu::PrimitiveState {
         front_face: wgpu::FrontFace::Cw,
         ..default_primitive_state()
     }
 }
-
+#[inline]
 fn depth_stencil_state(write_enabled: bool) -> wgpu::DepthStencilState {
     wgpu::DepthStencilState {
         format: super::geometry::Texture::DEPTH_FORMAT,
@@ -295,7 +299,7 @@ fn depth_stencil_state(write_enabled: bool) -> wgpu::DepthStencilState {
         bias: wgpu::DepthBiasState::default(),
     }
 }
-
+#[inline]
 fn inside_depth_stencil() -> wgpu::DepthStencilState {
     wgpu::DepthStencilState {
         depth_compare: wgpu::CompareFunction::Less,
@@ -304,7 +308,7 @@ fn inside_depth_stencil() -> wgpu::DepthStencilState {
 }
 
 // --- Optimized Render Passes ---
-
+#[inline]
 pub fn render_all(current_state: &mut super::State) -> Result<(), wgpu::SurfaceError> {
     let output = current_state.surface().get_current_texture()?;
     let view = output

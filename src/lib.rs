@@ -9,11 +9,9 @@ mod pipeline;
 mod debug;
 mod input;
 mod math;
-mod game;
+mod game_state;
 
 mod resources;
-mod file_manager;
-mod world_builder;
 mod audio;
 
 mod cube;
@@ -21,6 +19,9 @@ mod cube_math;
 mod cube_extra;
 mod cube_render;
 mod cube_tables;
+
+mod world_manager;
+mod world_builder;
 
 mod ui_element;
 mod ui_render;
@@ -63,6 +64,7 @@ pub struct RenderContext<'a> {
 
 
 impl<'a> State<'a> {
+    #[inline]
     async fn new(window: &'a Window) -> Self {
         let size: winit::dpi::PhysicalSize<u32> = window.inner_size();
         let instance: wgpu::Instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
@@ -194,47 +196,58 @@ impl<'a> State<'a> {
             save_path,
         }
     }
-
+    #[inline]
     pub fn window(&self) -> &Window {
         self.window
     }
+    #[inline]
     pub fn surface(&self) -> &wgpu::Surface<'a> {
         &self.render_context.surface
     }
+    #[inline]
     pub fn device(&self) -> &wgpu::Device {
         &self.render_context.device
     }
+    #[inline]
     pub fn queue(&self) -> &wgpu::Queue {
         &self.render_context.queue
     }
+    #[inline]
     pub fn config(&self) -> &wgpu::SurfaceConfiguration {
         &self.render_context.config
     }
     pub fn size(&self) -> &winit::dpi::PhysicalSize<u32> {
         &self.render_context.size
     }
+    #[inline]
     pub fn modifier_keys(&self) -> &input::ModifierKeys {
         &self.input_system.modifier_keys
     }
+    #[inline]
     pub fn mouse_states(&self) -> &input::MouseButtonState {
         &self.input_system.mouse_button_state
     }
+    #[inline]
     pub fn previous_frame_time(&self) -> &std::time::Instant {
         &self.previous_frame_time
     }
+    #[inline]
     pub fn camera_system(&self) -> &camera::CameraSystem {
         &self.camera_system
     }
+    #[inline]
     pub fn pipeline(&self) -> &pipeline::Pipeline {
         &self.pipeline
     }
+    #[inline]
     pub fn texture_manager(&self) -> &geometry::TextureManager {
         &self.texture_manager
     }
+    #[inline]
     pub fn ui_manager(&self) -> &ui_manager::UIManager {
         &self.ui_manager
     }
-
+    #[inline]
     pub fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) -> bool{
         if new_size.width > 0 && new_size.height > 0 {
             self.render_context.size = new_size;
@@ -251,6 +264,7 @@ impl<'a> State<'a> {
         }
         false
     }
+    #[inline]
     pub fn handle_events(&mut self,event: &WindowEvent) -> bool{
         match event {
             WindowEvent::CloseRequested => {config::close_app(); true},
@@ -283,6 +297,7 @@ impl<'a> State<'a> {
             }
         }
     }
+    #[inline]
     pub fn handle_key_input(&mut self, event: &WindowEvent) -> bool {
         match event {
             WindowEvent::KeyboardInput {
@@ -397,8 +412,7 @@ impl<'a> State<'a> {
             _ => false
         }
     }
-
-
+    #[inline]
     pub fn center_mouse(&self) {
         // Reset mouse to center
         let size: &winit::dpi::PhysicalSize<u32> = self.size();
@@ -407,7 +421,7 @@ impl<'a> State<'a> {
         self.window().set_cursor_position(winit::dpi::PhysicalPosition::new(x, y))
             .expect("Set mouse cursor position");
     }
-
+    #[inline]
     pub fn handle_mouse_input(&mut self, event: &WindowEvent) -> bool {
         match event {
             WindowEvent::MouseInput { button, state, .. } => {
@@ -485,7 +499,7 @@ impl<'a> State<'a> {
         };
         false
     }
-
+    #[inline]
     pub fn update(&mut self) {
         let current_time: std::time::Instant = std::time::Instant::now();
         let delta_seconds: f32 = (current_time - self.previous_frame_time).as_secs_f32();
@@ -502,11 +516,11 @@ impl<'a> State<'a> {
             self.ui_manager.update(&self.render_context.device,&self.render_context.queue);
         }
     }
-
+    #[inline]
     pub fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
         pipeline::render_all(self)
     }
-
+    #[inline]
     pub fn toggle_mouse_capture(&mut self) {
         if !self.input_system.mouse_captured && self.is_world_running {
             self.input_system.mouse_captured = true;
@@ -526,6 +540,7 @@ impl<'a> State<'a> {
 }
 
 //#[cfg_attr(target_arch = "wasm32", wasm_bindgen(start))]
+#[inline]
 pub async fn run() {    
     let event_loop: winit::event_loop::EventLoop<()> = winit::event_loop::EventLoop::new().unwrap();
     let monitor: winit::monitor::MonitorHandle = event_loop.primary_monitor().expect("No primary monitor found!");
@@ -585,8 +600,3 @@ pub async fn run() {
 }
 
 
-pub fn start_world(worldname: &str) {
-    let game_state = game::GameState::new(worldname);
-    config::GAMESTATE_PTR.store(Box::into_raw(Box::new(game_state)), Ordering::Release);
-    config::get_state().is_world_running= true;
-}

@@ -16,10 +16,9 @@ pub enum UIState {
     NewWorld,       // Make a new world
     #[default]
     None, // Baiscally not yet initialized
+    //Custom,       // this will be the exeption, aka we do not know the contents at compile time
 }
 
-
-    //Custom,         // this will be the exeption, aka we do not know the contents at compile time
 pub struct UIManager {
     pub state: UIState,
     pub vertex_buffer: wgpu::Buffer,

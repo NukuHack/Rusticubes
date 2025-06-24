@@ -1,4 +1,5 @@
 
+use std::sync::atomic::Ordering;
 use glam::Vec3;
 
 #[allow(dead_code)]
@@ -10,6 +11,7 @@ pub struct GameState {
 }
 
 impl GameState {
+    #[inline]
     pub fn new(worldname: &str) -> Self {
         let player = super::player::Player::new(super::camera::CameraConfig::new(Vec3::new(0.5, 1.8, 2.0)));
         
@@ -31,4 +33,11 @@ impl GameState {
             save_path,
         }
     }
+}
+
+#[inline]
+pub fn start_world(worldname: &str) {
+    let game_state = GameState::new(worldname);
+    super::config::GAMESTATE_PTR.store(Box::into_raw(Box::new(game_state)), Ordering::Release);
+    super::config::get_state().is_world_running= true;
 }

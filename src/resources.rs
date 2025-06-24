@@ -44,7 +44,7 @@ macro_rules! get_string {
 use image::io::Reader as ImageReader;
 use std::io::Cursor;
 use winit::window::Icon;
-
+#[inline]
 pub fn load_icon_from_bytes() -> Option<Icon> {
     let Some((rgba,w,h)) = load_image_from_bytes("icon.png".to_string()) else { panic!() };
 

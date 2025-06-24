@@ -4,6 +4,7 @@ use crate::ui_manager::UIState;
 use crate::ui_element::UIElement;
 
 impl UIManager {
+    #[inline]
     pub fn setup_ui(&mut self) {
         self.clear_elements();
 
@@ -37,7 +38,7 @@ impl UIManager {
             }
         }
     }
-
+    #[inline]
     fn setup_boot_screen_ui(&mut self) {
         // Title with shadow effect
         let title = UIElement::new_label(
@@ -65,11 +66,11 @@ impl UIManager {
             (0.3, 0.1),
             [0.2, 0.5, 0.8],
             "Start".to_string(),
-            || {
+            Some(|| {
                 let state = super::config::get_state();
                 state.ui_manager.state = UIState::WorldSelection;
                 state.ui_manager.setup_ui();
-            },
+            }),
         )
         .set_border([0.3, 0.6, 0.9, 1.0], 0.005)
         .set_z_index(6);
@@ -82,9 +83,9 @@ impl UIManager {
             (0.3, 0.1),
             [0.8, 0.2, 0.2],
             "Exit".to_string(),
-            || {
+            Some(|| {
                 close_pressed();
-            },
+            }),
         )
         .set_border([0.9, 0.3, 0.3, 1.0], 0.005)
         .set_z_index(5);
@@ -130,7 +131,7 @@ impl UIManager {
         .set_z_index(8);
         self.add_element(version);
     }
-
+    #[inline]
     fn setup_world_selection_ui(&mut self) {
         // Title with decorative border
         let title = UIElement::new_label(
@@ -158,17 +159,17 @@ impl UIManager {
             (0.6, 0.1),
             [0.3, 0.4, 0.6],
             "Create New World".to_string(),
-            || {
+            Some(|| {
                 let state = super::config::get_state();
                 state.ui_manager.state = UIState::NewWorld;
                 state.ui_manager.setup_ui();
-            },
+            }),
         )
         .set_border([0.4, 0.5, 0.7, 1.0], 0.005)
         .set_z_index(8);
         self.add_element(new_w_button);
 
-        let worlds = match super::file_manager::get_world_names() {
+        let worlds = match super::world_manager::get_world_names() {
             Ok(worlds) => worlds,
             Err(e) => {
                 eprintln!("Error loading world names: {}", e);
@@ -191,9 +192,9 @@ impl UIManager {
                 name.clone(),  // This clone is for the button text display
                 {
                     let name_clone = name_clone.clone();
-                    move || {
+                    Some(move || {
                         super::world_builder::join_world(&name_clone);
-                    }
+                    })
                 },
             )
             .set_border([0.35, 0.35, 0.5, 1.0], 0.005)
@@ -207,9 +208,9 @@ impl UIManager {
                 (0.13, 0.1),
                 [0.8, 0.2, 0.2],
                 String::from("del"),
-                move || {
+                Some(move || {
                     super::world_builder::del_world(&name_clone);
-                },
+                }),
             )
             .set_border([0.9, 0.3, 0.3, 1.0], 0.005)
             .set_z_index(5);
@@ -223,17 +224,17 @@ impl UIManager {
             (0.2, 0.08),
             [0.5, 0.5, 0.5],
             "Back".to_string(),
-            || {
+            Some(|| {
                 let state = super::config::get_state();
                 state.ui_manager.state = UIState::BootScreen;
                 state.ui_manager.setup_ui();
-            },
+            }),
         )
         .set_border([0.6, 0.6, 0.6, 1.0], 0.005)
         .set_z_index(8);
         self.add_element(back_button);
     }
-
+    #[inline]
     fn setup_new_world_ui(&mut self) {
         // Title with decorative border
         let title = UIElement::new_label(
@@ -285,7 +286,7 @@ impl UIManager {
             (0.4, 0.1),
             [0.3, 0.4, 0.6],
             "Create World".to_string(),
-            move || {
+            Some(move || {
                 let state = super::config::get_state();
                 let world_name = state
                     .ui_manager
@@ -293,7 +294,7 @@ impl UIManager {
                     .map(|s| s.to_string())
                     .unwrap_or_else(|| "New World".to_string());
                 super::world_builder::join_world(&world_name);
-            },
+            }),
         )
         .set_border([0.4, 0.5, 0.7, 1.0], 0.005)
         .set_z_index(6);
@@ -306,17 +307,17 @@ impl UIManager {
             (0.2, 0.08),
             [0.5, 0.5, 0.5],
             "Back".to_string(),
-            || {
+            Some(|| {
                 let state = super::config::get_state();
                 state.ui_manager.state = UIState::WorldSelection;
                 state.ui_manager.setup_ui();
-            },
+            }),
         )
         .set_border([0.6, 0.6, 0.6, 1.0], 0.005)
         .set_z_index(8);
         self.add_element(back_button);
     }
-
+    #[inline]
     fn setup_loading_screen_ui(&mut self) {
         // Loading panel
         let loading_panel =
@@ -357,7 +358,7 @@ impl UIManager {
         .set_z_index(8);
         self.add_element(progress_bar);
     }
-
+    #[inline]
     fn setup_in_game_ui(&mut self) {
         // Side panel for in-game UI
         let side_panel =
@@ -385,10 +386,10 @@ impl UIManager {
             (0.5, 0.15),
             [0.6, 0.3, 0.3],
             "Clean World".to_string(),
-            || {
+            Some(|| {
                 println!("Clean world button clicked!");
                 super::cube_extra::add_full_world();
-            },
+            }),
         )
         .set_border([0.7, 0.4, 0.4, 1.0], 0.005)
         .set_z_index(8);
@@ -457,10 +458,10 @@ impl UIManager {
             (0.3, 0.1),
             [0.8, 0.2, 0.2],
             "Exit Game".to_string(),
-            || {
+            Some(|| {
                 println!("Close button clicked!");
                 close_pressed();
-            },
+            }),
         )
         .set_border([0.9, 0.3, 0.3, 1.0], 0.005)
         .set_z_index(8);

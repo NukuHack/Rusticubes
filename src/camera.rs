@@ -10,6 +10,7 @@ pub struct CameraUniform {
 }
 
 impl Default for CameraUniform {
+    #[inline]
     fn default() -> Self {
         Self { 
             view_proj: Mat4::IDENTITY.to_cols_array_2d(),
@@ -19,6 +20,7 @@ impl Default for CameraUniform {
 }
 
 impl CameraUniform {
+    #[inline]
     pub fn update_view_proj(&mut self, camera: &Camera, projection: &Projection) {
         self.view_proj = (projection.matrix * camera.view_matrix()).to_cols_array_2d();
         self.position = camera.position.extend(0.0).into();
@@ -35,6 +37,7 @@ pub struct CameraSystem {
 }
 
 impl CameraSystem {
+    #[inline]
     pub fn new(
         device: &wgpu::Device,
         size: PhysicalSize<u32>,
@@ -83,20 +86,20 @@ impl CameraSystem {
             bind_group_layout,
         }
     }
-
+    #[inline]
     pub fn update(&mut self, queue: &wgpu::Queue) {
         self.uniform.update_view_proj(&self.camera, &self.projection);
         queue.write_buffer(&self.camera_buffer, 0, bytemuck::cast_slice(&[self.uniform]));
     }
-
+    #[inline]
     pub fn resize(&mut self, new_size: PhysicalSize<u32>) {
         self.projection.resize(new_size);
     }
-
+    #[inline]
     pub fn bind_group_layout(&self) -> &wgpu::BindGroupLayout {
         &self.bind_group_layout
     }
-
+    #[inline]
     pub fn bind_group(&self) -> &wgpu::BindGroup {
         &self.bind_group
     }
@@ -109,22 +112,23 @@ pub struct Camera {
 }
 
 impl Camera {
+    #[inline]
     pub fn new(position: Vec3, rotation: Vec3) -> Self {
         Self { position, rotation }
     }
-
+    #[inline]
     pub fn view_matrix(&self) -> Mat4 {
         Mat4::look_to_rh(self.position, self.forward(), Vec3::Y)
     }
-
+    #[inline]
     pub fn forward(&self) -> Vec3 {
         Quat::from_rotation_y(self.rotation.x) * Quat::from_rotation_x(self.rotation.y) * Vec3::NEG_Z
     }
-
+    #[inline]
     pub fn right(&self) -> Vec3 {
         Quat::from_rotation_y(self.rotation.x) * Vec3::X
     }
-
+    #[inline]
     pub fn up(&self) -> Vec3 {
         Quat::from_rotation_y(self.rotation.x) * Quat::from_rotation_x(self.rotation.y) * Vec3::Y
     }
@@ -139,6 +143,7 @@ pub struct Projection {
 }
 
 impl Projection {
+    #[inline]
     pub fn new(size: PhysicalSize<u32>, fovy: f32, znear: f32, zfar: f32) -> Self {
         let aspect = size.width as f32 / size.height as f32;
         Self {
@@ -149,12 +154,12 @@ impl Projection {
             zfar,
         }
     }
-
+    #[inline]
     pub fn resize(&mut self, size: PhysicalSize<u32>) {
         self.aspect = size.width as f32 / size.height as f32;
         self.matrix = Mat4::perspective_rh(self.fovy, self.aspect, self.znear, self.zfar);
     }
-
+    #[inline]
     pub fn set_fovy(&mut self, fovy: f32) {
         self.fovy = fovy;
         self.matrix = Mat4::perspective_rh(self.fovy, self.aspect, self.znear, self.zfar);
@@ -177,6 +182,7 @@ pub struct CameraConfig {
 }
 
 impl CameraConfig {
+    #[inline]
     pub fn new(position: Vec3) -> Self {
         Self {
             position,
@@ -193,6 +199,7 @@ impl CameraConfig {
 }
 
 impl Default for CameraConfig {
+    #[inline]
     fn default() -> Self {
         Self::new(Vec3::ZERO)
     }
