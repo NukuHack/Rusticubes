@@ -580,10 +580,7 @@ impl World {
     #[inline]
     pub fn empty() -> Self {
         Self {
-            chunks: FastMap::with_capacity_and_hasher(
-                10_000,
-                BuildHasherDefault::<AHasher>::default(),
-            ),
+            chunks: FastMap::with_capacity_and_hasher(10_000, BuildHasherDefault::<AHasher>::default()),
             loaded_chunks: HashSet::with_capacity(10_000),
         }
     }

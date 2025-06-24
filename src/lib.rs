@@ -9,11 +9,12 @@ mod pipeline;
 mod debug;
 mod input;
 mod math;
+mod game;
 
 mod resources;
 mod file_manager;
 mod world_builder;
-mod sound;
+mod audio;
 
 mod cube;
 mod cube_math;
@@ -59,37 +60,6 @@ pub struct RenderContext<'a> {
     size: winit::dpi::PhysicalSize<u32>,
     chunk_bind_group_layout:  wgpu::BindGroupLayout,
 }
-#[allow(dead_code)]
-pub struct GameState {
-    worldname: String,
-    player: player::Player,
-    world: cube::World, // lol main data storage :)
-    save_path: std::path::PathBuf,
-}
-
-impl GameState {
-    fn new(worldname: &str) -> Self {
-        let player = player::Player::new(camera::CameraConfig::new(Vec3::new(0.5, 1.8, 2.0)));
-        
-        // Create the save path
-        let save_path = std::path::PathBuf::from(&config::get_state().save_path)
-            .join("saves")
-            .join(worldname);
-        
-        // Create directories if they don't exist
-        if let Err(e) = std::fs::create_dir_all(&save_path) {
-            eprintln!("Failed to create save directory at {:?}: {}", save_path, e);
-            // You might want to handle this error differently depending on your needs
-        }
-
-        Self {
-            worldname: worldname.to_string(),
-            player,
-            world: cube::World::empty(),
-            save_path,
-        }
-    }
-}
 
 
 impl<'a> State<'a> {
@@ -110,15 +80,19 @@ impl<'a> State<'a> {
             .next()
             .expect("No suitable GPU adapter found");
 
+        println!("Bind-group limits: {:?} if smaller than 4 it will crash", adapter.limits().max_bind_groups);
+        println!("Max texture array layers: {} if smaller than 256 it will crash", adapter.limits().max_texture_array_layers);
+        let required_limits = wgpu::Limits {
+            max_texture_array_layers: 256,
+            max_bind_groups: 4,
+            ..wgpu::Limits::default()
+        };
+
         let (device, queue): (wgpu::Device, wgpu::Queue) = adapter
             .request_device(
                 &wgpu::DeviceDescriptor {
                     required_features: wgpu::Features::SHADER_INT64,
-                    required_limits: if cfg!(target_arch = "wasm32") {
-                        wgpu::Limits::downlevel_webgl2_defaults()
-                    } else {
-                        wgpu::Limits::default()
-                    },
+                    required_limits,
                     ..Default::default()
                 },
                 None,
@@ -556,6 +530,15 @@ pub async fn run() {
     let event_loop: winit::event_loop::EventLoop<()> = winit::event_loop::EventLoop::new().unwrap();
     let monitor: winit::monitor::MonitorHandle = event_loop.primary_monitor().expect("No primary monitor found!");
     let monitor_size: winit::dpi::PhysicalSize<u32> = monitor.size(); // Monitor size in physical pixels
+
+
+    // Initialize once at startup
+    audio::init_audio().expect("Failed to initialize audio");
+    audio::play_background("background_music.ogg".to_string());
+    // Control audio
+    // audio::stop_all_sounds();
+    // audio::clear_sound_queue();
+
     
     let config: config::AppConfig = config::AppConfig::new(monitor_size);
     let window_raw: Window = winit::window::WindowBuilder::new()
@@ -603,7 +586,7 @@ pub async fn run() {
 
 
 pub fn start_world(worldname: &str) {
-    let game_state = GameState::new(worldname);
+    let game_state = game::GameState::new(worldname);
     config::GAMESTATE_PTR.store(Box::into_raw(Box::new(game_state)), Ordering::Release);
     config::get_state().is_world_running= true;
 }

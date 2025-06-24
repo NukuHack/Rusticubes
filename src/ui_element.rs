@@ -482,10 +482,32 @@ impl UIElement {
 
     pub fn trigger_click(&mut self) {
         match &mut self.data {
-            UIElementData::Button { on_click, .. } => on_click.borrow_mut()(),
+            UIElementData::Button { on_click, .. } => {
+                if let Ok(mut callback) = on_click.try_borrow_mut() {
+                    callback();
+                }
+            }
             UIElementData::Checkbox { on_click, .. } => {
                 if let Some(callback) = on_click {
-                    callback.borrow_mut()();
+                    if let Ok(mut cb) = callback.try_borrow_mut() {
+                        cb();
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    #[allow(dead_code)] // maybe better than try_borrow
+    pub fn trigger_click_clone(&mut self) {
+        match &mut self.data {
+            UIElementData::Button { on_click, .. } => {
+                let callback = on_click.clone();
+                callback.borrow_mut()();
+            }
+            UIElementData::Checkbox { on_click, .. } => {
+                if let Some(callback) = on_click {
+                    let cb = callback.clone();
+                    cb.borrow_mut()();
                 }
             }
             _ => {}

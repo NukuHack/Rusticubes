@@ -1,6 +1,6 @@
 ﻿
-use crate::GameState;
-use super::State;
+use crate::game::GameState;
+use crate::State;
 use std::sync::atomic::{AtomicBool,AtomicPtr, Ordering};
 use std::path::PathBuf;
 
@@ -39,6 +39,30 @@ impl AppConfig {
     }
 }
 
+pub fn get_save_path() -> PathBuf {
+    let mut path = if cfg!(windows) {
+        dirs::document_dir()
+            .unwrap_or_else(|| PathBuf::from("."))
+            .join("My Games")
+    } else if cfg!(target_os = "macos") {
+        dirs::home_dir()
+            .unwrap_or_else(|| PathBuf::from("."))
+            .join("Library/Application Support")
+    } else {
+        // Linux and others
+        dirs::data_local_dir()
+            .unwrap_or_else(|| PathBuf::from("."))
+    };
+
+    path.push("Rusticubes");
+    path
+}
+
+pub fn ensure_save_dir() -> std::io::Result<PathBuf> {
+    let path = get_save_path();
+    std::fs::create_dir_all(&path)?;
+    Ok(path)
+}
 
 
 // Replace your static mut variables with these:
@@ -81,6 +105,9 @@ pub fn is_closed() -> bool {
 
 // In your cleanup code (like when closing the app):
 pub fn cleanup_resources() {
+    // dropping the audio first (if not cleaned up properly it might play after app close)
+    super::audio::stop_all_sounds();
+    super::audio::cleanup_audio();
     // 1. Take ownership of the state pointer (atomically setting it to null)
     let state_ptr = STATE_PTR.swap(std::ptr::null_mut(), Ordering::AcqRel);
     // 2. If we got a non-null pointer, convert it back to Box to drop it
@@ -104,28 +131,3 @@ pub fn drop_gamestate() {
 
 }
 
-
-pub fn get_save_path() -> PathBuf {
-    let mut path = if cfg!(windows) {
-        dirs::document_dir()
-            .unwrap_or_else(|| PathBuf::from("."))
-            .join("My Games")
-    } else if cfg!(target_os = "macos") {
-        dirs::home_dir()
-            .unwrap_or_else(|| PathBuf::from("."))
-            .join("Library/Application Support")
-    } else {
-        // Linux and others
-        dirs::data_local_dir()
-            .unwrap_or_else(|| PathBuf::from("."))
-    };
-
-    path.push("Rusticubes");
-    path
-}
-
-pub fn ensure_save_dir() -> std::io::Result<PathBuf> {
-    let path = get_save_path();
-    std::fs::create_dir_all(&path)?;
-    Ok(path)
-}

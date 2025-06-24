@@ -295,7 +295,7 @@ impl UIManager {
                         element.trigger_click();
                     }
                     UIElementData::Button { .. } => {
-                        super::sound::play_sound("click.ogg".to_string());
+                        super::audio::play_sound("click.ogg".to_string());
                         element.trigger_click();
                     }
 
