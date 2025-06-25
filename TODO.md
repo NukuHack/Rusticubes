@@ -18,21 +18,21 @@
 
 ## Compiled stuff
 
-Technique	Purpose	Example 	Usage
-Blinn-Phong	Cheap lighting		Wooden crates, character skin
-SMAA/FXAA	Smooth edges		Post-process pass
-Baked Lighting	Static shadows		Buildings, terrain
-Texture Atlases	Reduce draw calls	Foliage, debris
-Fog		Hide LOD transitions	Dungeons, open worlds
+Technique	Purpose	Example 	Usage  
+Blinn-Phong	Cheap lighting		Wooden crates, character skin  
+SMAA/FXAA	Smooth edges		Post-process pass  
+Baked Lighting	Static shadows		Buildings, terrain  
+Texture Atlases	Reduce draw calls	Foliage, debris  
+Fog		Hide LOD transitions	Dungeons, open worlds  
  
-## Textures (for realistic lights and heights)
-Albedo (RGBA) – Base texture.
-Normal (three channel).
-Bump (one channel).
-Roughness (one channel).
-Metallic (one channel).
+## Textures (for realistic lights and heights)  
+Albedo (RGBA) – Base texture.  
+Normal (three channel).  
+Bump (one channel).  
+Roughness (one channel).  
+Metallic (one channel).  
 
-## Actual lighting (algorythms)
-Physically Based Rendering (PBR) (currently the "best", actually physics based)
-Blinn-Phong (BP) (one of the earliest from late 20th century, pretty cheap too)
-https://google.github.io/filament/Filament.md.html - middle ?
+## Actual lighting (algorythms)  
+Physically Based Rendering (PBR) (currently the "best", actually physics based)  
+Blinn-Phong (BP) (one of the earliest from late 20th century, pretty cheap too)  
+https://google.github.io/filament/Filament.md.html - middle ?  
