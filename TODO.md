@@ -3,6 +3,7 @@
 
 ## High Priority  
 - [ ] slight ui rework (mainly just make the text not overflow) 
+- [ ] settings for sound volume font and stuff 
 - [ ] fly and general movement rework 
 - [ ] fov and general camera rework (also drag nice-ify) 
 - [ ] making the save-load actually do stuff 
