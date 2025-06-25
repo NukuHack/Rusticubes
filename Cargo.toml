@@ -35,6 +35,9 @@ dirs = "6.0.0"
 rusttype = "0.9"
 # needed for neat sound playing
 rodio = "0.20"
+# small lib used for memory clearing
+winapi = "0"
+windows-sys = { version = "0.48", features = ["Win32_System_Memory"] }
 
 
 [build-dependencies]

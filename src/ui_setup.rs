@@ -96,6 +96,20 @@ impl UIManager {
             .with_z_index(6);
         self.add_element(tree_picture);
 
+        let memory_button = UIElement::button(self.next_id(), "Memory")
+            .with_position(0.5, 0.2)
+            .with_size(0.3, 0.1)
+            .with_color(0.2, 0.2, 0.2)
+            .with_border((0.4, 0.4, 0.4, 1.0), 0.005)
+            .with_z_index(6)
+            .with_callback(|| {
+                super::memory::clean_gpu_memory(super::config::get_state().device());
+                super::memory::MemoryManager::light_trim();
+                super::memory::MemoryManager::aggressive_trim();
+                super::memory::force_memory_cleanup();
+            });
+        self.add_element(memory_button);
+
         let tree_animation = UIElement::animation(self.next_id(), vec![
                 "happy-tree.png".to_string(),
                 "cube.jpg".to_string()
@@ -236,7 +250,7 @@ impl UIManager {
 
         // World Name input
         let input_id = self.next_id();
-        let world_name_input = UIElement::input(self.next_id())
+        let world_name_input = UIElement::input(input_id)
             .with_position(-0.35, -0.0)
             .with_size(0.7, 0.1)
             .with_color(0.2, 0.2, 0.3)
@@ -253,9 +267,8 @@ impl UIManager {
             .with_border((0.4, 0.5, 0.7, 1.0), 0.005)
             .with_z_index(6)
             .with_callback(move || {
-                let state = super::config::get_state();
-                let world_name = state
-                    .ui_manager
+                let world_name = super::config::get_state()
+                    .ui_manager()
                     .get_input_text(input_id)
                     .map(|s| s.to_string())
                     .unwrap_or_else(|| "New World".to_string());

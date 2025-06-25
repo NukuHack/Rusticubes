@@ -7,6 +7,7 @@ mod geometry;
 mod pipeline;
 
 mod debug;
+mod memory;
 mod input;
 mod math;
 mod game_state;
@@ -585,6 +586,13 @@ pub async fn run() {
 
     // Store the state pointer
     config::STATE_PTR.store(Box::into_raw(Box::new(state)), Ordering::Release);
+
+
+    // Post-init cleanup
+    memory::clean_gpu_memory(config::get_state().device());
+    memory::MemoryManager::light_trim();
+    memory::MemoryManager::aggressive_trim();
+    memory::force_memory_cleanup();
 
     event_loop.run(move |event, control_flow| {
         if config::is_closed() {
