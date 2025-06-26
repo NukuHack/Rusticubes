@@ -36,6 +36,7 @@ impl UIRenderer {
         let font_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
             address_mode_u: wgpu::AddressMode::ClampToEdge,
             address_mode_v: wgpu::AddressMode::ClampToEdge,
+            address_mode_w: wgpu::AddressMode::ClampToEdge,
             mag_filter: wgpu::FilterMode::Linear,
             min_filter: wgpu::FilterMode::Linear,
             mipmap_filter: wgpu::FilterMode::Linear,
@@ -150,24 +151,27 @@ impl UIRenderer {
             uniform_bind_group_layout,
             font,
             text_textures: HashMap::new(),
-            image_textures: HashMap::new(), // Add this line
-            animation_textures: HashMap::new(), // Added this line
+            image_textures: HashMap::new(), 
+            animation_textures: HashMap::new(),
             default_bind_group,
             pixel_ratio: 4.0,
         }
     }
+    
     #[inline]
     pub fn change_font(&mut self, path: String) {
-        let font_data = crate::get_bytes!(path.clone()); // C:\Windows\Fonts\..
+        let font_data = crate::get_bytes!(path.clone()); 
         let font = Font::try_from_vec(font_data.clone()).expect("Failed to load font");
 
         self.font = font;
         self.text_textures.clear();
     }
+    
     #[inline]
     pub fn set_pixel_ratio(&mut self, ratio: f32) {
         self.pixel_ratio = ratio.max(10.0).min(0.5);
     }
+    
     #[inline]
     pub fn process_elements(
         &mut self,
@@ -220,7 +224,6 @@ impl UIRenderer {
     ) {
         let state = super::config::get_state();
         
-        // First process the background if needed (not for label)
         match &element.data {
             UIElementData::InputField { .. } | UIElementData::Button { .. } => {
                 self.add_rectangle(vertices, element.position, element.size, element.color);
@@ -231,22 +234,20 @@ impl UIRenderer {
         }
 
         if let Some(text) = element.get_text() {
-            let texture_key = format!("{}_{}", text, element.color.map(|c| c.to_string()).join("|"));
-            
+            // Create cache key that includes element size for proper scaling
+            let texture_key = format!("{}_{}", text, element.color.map(|c| c.to_string()).join("|"));            
             if !self.text_textures.contains_key(&texture_key) {
                 let texture = self.render_text_to_texture(
                     state.device(),
                     state.queue(),
                     text,
-                    element.size.1 * 100.0 * self.pixel_ratio, // Scale based on height and pixel ratio
+                    element.size,
                     element.color,
                 );
-                
                 let texture_view = texture.create_view(&wgpu::TextureViewDescriptor {
                     dimension: Some(wgpu::TextureViewDimension::D2Array),
                     ..Default::default()
                 });
-
                 let bind_group = state.device().create_bind_group(&wgpu::BindGroupDescriptor {
                     layout: &self.bind_group_layout,
                     entries: &[
@@ -261,7 +262,6 @@ impl UIRenderer {
                     ],
                     label: Some("font_bind_group"),
                 });
-                
                 self.text_textures.insert(texture_key.clone(), (texture, bind_group));
             }
 
@@ -270,27 +270,27 @@ impl UIRenderer {
                 let (siz_w, siz_h) = element.size;
                 let pixel_to_unit = 1.0 / (100.0 * self.pixel_ratio);
                 
-                let w = texture.width() as f32 * pixel_to_unit;
-                let h = texture.height() as f32 * pixel_to_unit;
+                let tex_w = texture.width() as f32 * pixel_to_unit;
+                let tex_h = texture.height() as f32 * pixel_to_unit;
                 
-                // Center the text in the element
-                let x = pos_x + (siz_w - w) / 2.0;
-                let y = pos_y + (siz_h - h) / 2.0;
-                // Correct vertex positions and UVs
+                // Center the text within the element bounds
+                let x = pos_x + (siz_w - tex_w) / 2.0;
+                let y = pos_y + (siz_h - tex_h) / 2.0;
+                
                 let positions = [
-                    [x, y],         // top-left
-                    [x + w, y],     // top-right
-                    [x, y + h],     // bottom-left
-                    [x + w, y + h], // bottom-right
+                    [x, y],              // top-left
+                    [x + tex_w, y],      // top-right
+                    [x, y + tex_h],      // bottom-left
+                    [x + tex_w, y + tex_h], // bottom-right
                 ];
                 let uvs = [
-                     [0.0, 1.0], [1.0, 1.0],[0.0, 0.0], [1.0, 0.0],
+                    [0.0, 1.0], [1.0, 1.0], [0.0, 0.0], [1.0, 0.0],
                 ];
                 for j in 0..4 {
                     vertices.push(Vertex {
                         position: positions[j],
                         uv: uvs[j],
-                        color: element.color, // Use white color and let texture provide the color
+                        color: element.color,
                     });
                 }
                 
@@ -305,18 +305,44 @@ impl UIRenderer {
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         text: &str,
-        scale: f32,
+        element_size: (f32, f32),
         color: [f32; 4],
-    ) -> wgpu::Texture {        
-        let scale = Scale::uniform(scale);
+    ) -> wgpu::Texture {
+        // Calculate target size in pixels based on element size and pixel ratio
+        let target_width_px = (element_size.0 * 100.0 * self.pixel_ratio) as u32;
+        let target_height_px = (element_size.1 * 100.0 * self.pixel_ratio) as u32;
+        
+        // Start with a reasonable font size and scale it to fit
+        let mut font_size = target_height_px as f32 * 0.8; // Start with 80% of height
+        let scale = Scale::uniform(font_size);
         let v_metrics = self.font.v_metrics(scale);
-
-        // Layout the text
+        
+        // Layout text to measure actual width
         let glyphs: Vec<_> = self.font.layout(text, scale, point(0.0, v_metrics.ascent)).collect();
-
-        // Calculate text dimensions with padding
-        let padding = (scale.x * 0.2).ceil() as u32;
-        let width = (glyphs.iter().rev()
+        
+        // Calculate actual text width
+        let text_width = glyphs.iter().rev()
+            .map(|g| {
+                let pos = g.position().x;
+                let advance = g.unpositioned().h_metrics().advance_width;
+                pos + advance
+            })
+            .next()
+            .unwrap_or(0.0);
+        
+        // Scale font size to fit within target dimensions
+        if text_width > target_width_px as f32 * 0.9 { // Leave 10% margin
+            font_size = font_size * (target_width_px as f32 * 0.9) / text_width;
+        }
+        
+        // Recalculate with final font size
+        let scale = Scale::uniform(font_size);
+        let v_metrics = self.font.v_metrics(scale);
+        let glyphs: Vec<_> = self.font.layout(text, scale, point(0.0, v_metrics.ascent)).collect();
+        
+        // Calculate final dimensions with minimal padding
+        let padding = (font_size * 0.05).ceil() as u32; // 5% padding
+        let final_text_width = glyphs.iter().rev()
             .map(|g| {
                 let pos = g.position().x;
                 let advance = g.unpositioned().h_metrics().advance_width;
@@ -324,55 +350,57 @@ impl UIRenderer {
             })
             .next()
             .unwrap_or(0.0)
-            .ceil() as u32) + padding * 2;
-        let height = ((v_metrics.ascent - v_metrics.descent).ceil() as u32) + padding * 2;
-
-        // Ensure minimum size
-        let width = width.max(1);
-        let height = height.max(1);
-
-        // Create an image buffer with transparency
-        let mut image = ImageBuffer::from_pixel(width, height, Rgba([0, 0, 0, 0]));
+            .ceil() as u32;
+            
+        let text_height = (v_metrics.ascent - v_metrics.descent).ceil() as u32;
         
-        // Convert color to u8
+        let width = (final_text_width + padding * 2).max(1);
+        let height = (text_height + padding * 2).max(1);
+
+        let mut image = ImageBuffer::from_pixel(width, height, Rgba([0, 0, 0, 0]));
         let [r, g, b, a] = color;
         let r = (r * 255.0) as u8;
         let g = (g * 255.0) as u8;
         let b = (b * 255.0) as u8;
         let a = (a * 255.0) as u8;
 
-        // Render each glyph with padding offset
-        for glyph in glyphs {
+        // Center the text horizontally within the texture
+        let text_start_x = (width as f32 - final_text_width as f32) / 2.0;
+        let adjusted_glyphs: Vec<_> = self.font.layout(
+            text, 
+            scale, 
+            point(text_start_x, v_metrics.ascent + padding as f32)
+        ).collect();
+
+        for glyph in adjusted_glyphs {
             if let Some(bounding_box) = glyph.pixel_bounding_box() {
                 glyph.draw(|x, y, v| {
-                    let x = x as i32 + bounding_box.min.x + padding as i32;
-                    let y = y as i32 + bounding_box.min.y + padding as i32;
+                    let x = x as i32 + bounding_box.min.x;
+                    let y = y as i32 + bounding_box.min.y;
                     if x >= 0 && x < width as i32 && y >= 0 && y < height as i32 {
                         let alpha = (v * a as f32) as u8;
-                        // Use premultiplied alpha for better quality
                         let premultiplied = |c: u8| ((c as f32 * v).round() as u8);
-            image.put_pixel(
-                x as u32, y as u32, 
-                Rgba([premultiplied(r),premultiplied(g),premultiplied(b),alpha,])
-            );
+                        image.put_pixel(
+                            x as u32, y as u32, 
+                            Rgba([premultiplied(r), premultiplied(g), premultiplied(b), alpha])
+                        );
                     }
                 });
             }
         }
-        // Create texture with mipmaps for better quality at small sizes
+
         let texture = device.create_texture(&wgpu::TextureDescriptor {
             label: Some("Text Texture"),
             size: wgpu::Extent3d { width, height, depth_or_array_layers: 1 },
-            mip_level_count: 1, // Consider increasing for better quality at small sizes
+            mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba8UnormSrgb, // Use sRGB for better color handling
+            format: wgpu::TextureFormat::Rgba8UnormSrgb,
             usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
             view_formats: &[],
         });
-        // Upload texture data
+
         let raw_data = image.into_raw();
-        
         queue.write_texture(
             wgpu::TexelCopyTextureInfo {
                 texture: &texture,
@@ -434,10 +462,9 @@ impl UIRenderer {
                 self.image_textures.insert(image_key, (texture, bind_group));
             }
 
-            // Add vertices for the image quad - FIXED: Match the vertex order used in add_rectangle
+            // Add vertices for the image quad
             let (x, y) = element.position;
             let (w, h) = element.size;
-            // Correct vertex positions and UVs
             let positions = [
                 [x, y],         // top-left
                 [x + w, y],     // top-right
@@ -451,7 +478,7 @@ impl UIRenderer {
                 vertices.push(Vertex {
                     position: positions[j],
                     uv: uvs[j],
-                    color: element.color, // Use white color and let texture provide the color
+                    color: element.color,
                 });
             }
             
@@ -460,7 +487,6 @@ impl UIRenderer {
         }
     }
 
-    // Add this method to create image textures
     fn create_image_texture(
         &self,
         device: &wgpu::Device,

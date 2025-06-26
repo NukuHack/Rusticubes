@@ -2,7 +2,8 @@
 # Project TODO  
 
 ## High Priority  
-- [ ] slight ui rework (mainly just make the text not overflow) 
+- [X] slight ui rework (mainly just make the text not overflow) 
+- [ ] making text wrap if it's too long 
 - [ ] settings for sound volume font and stuff 
 - [ ] fly and general movement rework 
 - [ ] fov and general camera rework (also drag nice-ify) 
@@ -15,6 +16,7 @@
 - [ ] Some basic Rounding for UI elements 
 - [ ] Maybe a "multi-state" button kind of thing (like a slider but with a button) 
 - [ ] Making a new "panel" kind of thing with scrollable contents 
+- [ ] Ambient oc. and other lighting 
 
 
 ## Compiled stuff
