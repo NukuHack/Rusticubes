@@ -114,7 +114,7 @@ impl UIManager {
                 "happy-tree.png".to_string(),
                 "cube.jpg".to_string()
             ])
-            .with_position(-0.6, 0.5)
+            .with_position(-0.8, 0.5)
             .with_size(0.27, 0.45)
             .with_color(1.0, 1.0, 1.0)
             .with_border((0.3, 0.6, 0.9, 1.0), 0.005)
@@ -243,7 +243,7 @@ impl UIManager {
         // World name label
         let w_name_label = UIElement::label(self.next_id(), "World Name:")
             .with_position(-0.35, 0.1)
-            .with_size(0.3, 0.08)
+            .with_size(0.4, 0.08)
             .with_color(0.9, 0.9, 0.9)
             .with_z_index(3);
         self.add_element(w_name_label);
@@ -261,8 +261,8 @@ impl UIManager {
 
         // Generate button
         let gen_button = UIElement::button(self.next_id(), "Create World")
-            .with_position(-0.2, -0.2)
-            .with_size(0.4, 0.1)
+            .with_position(-0.3, -0.2)
+            .with_size(0.6, 0.1)
             .with_color(0.3, 0.4, 0.6)
             .with_border((0.4, 0.5, 0.7, 1.0), 0.005)
             .with_z_index(6)
@@ -351,7 +351,7 @@ impl UIManager {
         // Clean world button
         let clean_button = UIElement::button(self.next_id(), "Clean World")
             .with_position(0.45, 0.4)
-            .with_size(0.5, 0.15)
+            .with_size(0.5, 0.1)
             .with_color(0.6, 0.3, 0.3)
             .with_border((0.7, 0.4, 0.4, 1.0), 0.005)
             .with_z_index(8)
@@ -362,50 +362,47 @@ impl UIManager {
         self.add_element(clean_button);
 
         // Help text
-        let help_text_1 = UIElement::label(self.next_id(), "Press ALT to lock")
+        let help_text_1 = UIElement::label(self.next_id(), "ALT to lock")
             .with_position(0.5, 0.1)
-            .with_size(0.4, 0.1)
+            .with_size(0.4, 0.08)
             .with_color(1.0, 1.0, 1.0)
             .with_border((0.5, 0.5, 0.6, 1.0), 0.005)
             .with_z_index(5);
-        self.add_element(help_text_1);
-
-        let help_text_2 = UIElement::label(self.next_id(), "Press L to fill chunk")
+        let help_text_2 = UIElement::label(self.next_id(), "L to fill chunk")
             .with_position(0.5, -0.05)
-            .with_size(0.4, 0.1)
+            .with_size(0.4, 0.08)
             .with_color(1.0, 1.0, 1.0)
             .with_border((0.5, 0.5, 0.6, 1.0), 0.005)
             .with_z_index(5);
-        self.add_element(help_text_2);
-
-        let help_text_3 = UIElement::label(self.next_id(), "Press R to break")
+        let help_text_3 = UIElement::label(self.next_id(), "R to break")
             .with_position(0.5, -0.2)
-            .with_size(0.4, 0.1)
+            .with_size(0.4, 0.08)
             .with_color(1.0, 1.0, 1.0)
             .with_border((0.5, 0.5, 0.6, 1.0), 0.005)
             .with_z_index(5);
-        self.add_element(help_text_3);
-
-        let help_text_4 = UIElement::label(self.next_id(), "Press F to place")
+        let help_text_4 = UIElement::label(self.next_id(), "F to place")
             .with_position(0.5, -0.35)
-            .with_size(0.4, 0.1)
+            .with_size(0.4, 0.08)
             .with_color(1.0, 1.0, 1.0)
             .with_border((0.5, 0.5, 0.6, 1.0), 0.005)
             .with_z_index(5);
-        self.add_element(help_text_4);
-
-        let help_text_5 = UIElement::label(self.next_id(), "Press ESC to leave")
+        let help_text_5 = UIElement::label(self.next_id(), "ESC to leave")
             .with_position(0.5, -0.5)
-            .with_size(0.4, 0.1)
+            .with_size(0.4, 0.08)
             .with_color(1.0, 1.0, 1.0)
             .with_border((0.5, 0.5, 0.6, 1.0), 0.005)
             .with_z_index(5);
+
+        self.add_element(help_text_1);
+        self.add_element(help_text_2);
+        self.add_element(help_text_3);
+        self.add_element(help_text_4);
         self.add_element(help_text_5);
 
         // Close button
         let close_button = UIElement::button(self.next_id(), "Exit Game")
             .with_position(0.55, -0.8)
-            .with_size(0.3, 0.1)
+            .with_size(0.3, 0.08)
             .with_color(0.8, 0.2, 0.2)
             .with_border((0.9, 0.3, 0.3, 1.0), 0.005)
             .with_z_index(8)

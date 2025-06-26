@@ -313,11 +313,11 @@ impl UIRenderer {
         let target_height_px = (element_size.1 * 100.0 * self.pixel_ratio) as u32;
         
         // Start with a reasonable font size and scale it to fit
-        let mut font_size = target_height_px as f32 * 0.8; // Start with 80% of height
+        let font_size = target_height_px as f32 * 0.8; // Start with 80% of height
         let scale = Scale::uniform(font_size);
         let v_metrics = self.font.v_metrics(scale);
         
-        // Layout text to measure actual width
+        // First try to render the full text
         let glyphs: Vec<_> = self.font.layout(text, scale, point(0.0, v_metrics.ascent)).collect();
         
         // Calculate actual text width
@@ -330,31 +330,37 @@ impl UIRenderer {
             .next()
             .unwrap_or(0.0);
         
-        // Scale font size to fit within target dimensions
-        if text_width > target_width_px as f32 * 0.9 { // Leave 10% margin
-            font_size = font_size * (target_width_px as f32 * 0.9) / text_width;
-        }
+        // If text is too wide, we'll either wrap it or truncate it
+        let (final_text, final_width) = if text_width > target_width_px as f32 * 0.9 {
+            // Option 1: Text wrapping (multi-line)
+            // let wrapped_text = self.wrap_text(text, scale, target_width_px as f32 * 0.9);
+            // let (w, h) = self.measure_wrapped_text(&wrapped_text, scale, v_metrics);
+            // (wrapped_text, w)
+            
+            // Option 2: Text truncation with ellipsis (default)
+            let truncated_text = self.truncate_text_with_ellipsis(text, scale, target_width_px as f32 * 1.2);
+            let truncated_glyphs: Vec<_> = self.font.layout(&truncated_text, scale, point(0.0, v_metrics.ascent)).collect();
+            let truncated_width = truncated_glyphs.iter().rev()
+                .map(|g| {
+                    let pos = g.position().x;
+                    let advance = g.unpositioned().h_metrics().advance_width;
+                    pos + advance
+                })
+                .next()
+                .unwrap_or(0.0);
+            (truncated_text, truncated_width)
+        } else {
+            (text.to_string(), text_width)
+        };
         
-        // Recalculate with final font size
-        let scale = Scale::uniform(font_size);
-        let v_metrics = self.font.v_metrics(scale);
-        let glyphs: Vec<_> = self.font.layout(text, scale, point(0.0, v_metrics.ascent)).collect();
+        // Recalculate with final text
+        let _final_glyphs: Vec<_> = self.font.layout(&final_text, scale, point(0.0, v_metrics.ascent)).collect();
         
         // Calculate final dimensions with minimal padding
         let padding = (font_size * 0.05).ceil() as u32; // 5% padding
-        let final_text_width = glyphs.iter().rev()
-            .map(|g| {
-                let pos = g.position().x;
-                let advance = g.unpositioned().h_metrics().advance_width;
-                pos + advance
-            })
-            .next()
-            .unwrap_or(0.0)
-            .ceil() as u32;
-            
         let text_height = (v_metrics.ascent - v_metrics.descent).ceil() as u32;
         
-        let width = (final_text_width + padding * 2).max(1);
+        let width = (final_width.ceil() as u32 + padding * 2).max(1);
         let height = (text_height + padding * 2).max(1);
 
         let mut image = ImageBuffer::from_pixel(width, height, Rgba([0, 0, 0, 0]));
@@ -365,9 +371,9 @@ impl UIRenderer {
         let a = (a * 255.0) as u8;
 
         // Center the text horizontally within the texture
-        let text_start_x = (width as f32 - final_text_width as f32) / 2.0;
+        let text_start_x = (width as f32 - final_width) / 2.0;
         let adjusted_glyphs: Vec<_> = self.font.layout(
-            text, 
+            &final_text, 
             scale, 
             point(text_start_x, v_metrics.ascent + padding as f32)
         ).collect();
@@ -418,6 +424,115 @@ impl UIRenderer {
         );
         texture
     }
+
+    // Helper method to truncate text with ellipsis
+    fn truncate_text_with_ellipsis(&self, text: &str, scale: Scale, max_width: f32) -> String {
+        let mut result = String::new();
+        let ellipsis = "...";
+        
+        // First measure the ellipsis width
+        let ellipsis_width = self.font.layout(ellipsis, scale, point(0.0, 0.0))
+            .map(|g| g.position().x + g.unpositioned().h_metrics().advance_width)
+            .last()
+            .unwrap_or(0.0);
+        
+        if ellipsis_width >= max_width {
+            return ellipsis.to_string();
+        }
+        
+        let mut current_width = 0.0;
+        for c in text.chars() {
+            let glyph = self.font.glyph(c).scaled(scale);
+            let advance = glyph.h_metrics().advance_width;
+            
+            if current_width + advance + ellipsis_width > max_width {
+                result.push_str(ellipsis);
+                break;
+            }
+            
+            result.push(c);
+            current_width += advance;
+        }
+        
+        result
+    }
+
+    // Helper method for text wrapping (uncomment if you want to use this instead)
+    /*
+    fn wrap_text(&self, text: &str, scale: Scale, max_width: f32) -> String {
+        let mut result = String::new();
+        let mut current_line = String::new();
+        let mut current_width = 0.0;
+        
+        for word in text.split_whitespace() {
+            let word_width = self.font.layout(word, scale, point(0.0, 0.0))
+                .map(|g| g.position().x + g.unpositioned().h_metrics().advance_width)
+                .last()
+                .unwrap_or(0.0);
+            
+            if !current_line.is_empty() {
+                let space_width = self.font.glyph(' ').scaled(scale).h_metrics().advance_width;
+                
+                if current_width + space_width + word_width <= max_width {
+                    current_line.push(' ');
+                    current_width += space_width;
+                } else {
+                    result.push_str(&current_line);
+                    result.push('\n');
+                    current_line.clear();
+                    current_width = 0.0;
+                }
+            }
+            
+            if word_width > max_width {
+                // Word is too long, need to break it
+                for c in word.chars() {
+                    let glyph = self.font.glyph(c).scaled(scale);
+                    let advance = glyph.h_metrics().advance_width;
+                    
+                    if current_width + advance > max_width {
+                        result.push_str(&current_line);
+                        result.push('\n');
+                        current_line.clear();
+                        current_width = 0.0;
+                    }
+                    
+                    current_line.push(c);
+                    current_width += advance;
+                }
+            } else {
+                current_line.push_str(word);
+                current_width += word_width;
+            }
+        }
+        
+        if !current_line.is_empty() {
+            result.push_str(&current_line);
+        }
+        
+        result
+    }
+
+    fn measure_wrapped_text(&self, text: &str, scale: Scale, v_metrics: VMetrics) -> (f32, f32) {
+        let mut max_width = 0.0;
+        let mut line_count = 0;
+        
+        for line in text.lines() {
+            let line_width = self.font.layout(line, scale, point(0.0, 0.0))
+                .map(|g| g.position().x + g.unpositioned().h_metrics().advance_width)
+                .last()
+                .unwrap_or(0.0);
+            
+            max_width = max_width.max(line_width);
+            line_count += 1;
+        }
+        
+        let line_height = (v_metrics.ascent - v_metrics.descent).ceil();
+        let total_height = line_height * line_count as f32;
+        
+        (max_width, total_height)
+    }
+    */
 
     #[inline]
     fn process_image_element(

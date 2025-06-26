@@ -2,8 +2,8 @@
 # Project TODO  
 
 ## High Priority  
-- [X] slight ui rework (mainly just make the text not overflow) 
-- [ ] making text wrap if it's too long 
+- [x] slight ui rework (mainly just make the text not overflow) 
+- [x] making text wrap if it's too long 
 - [ ] settings for sound volume font and stuff 
 - [ ] fly and general movement rework 
 - [ ] fov and general camera rework (also drag nice-ify) 
