@@ -1,3 +1,4 @@
+
 use include_dir::include_dir;
 
 // Include the assets directory at compile time

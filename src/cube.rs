@@ -1,5 +1,5 @@
-use super::cube_math;
-use super::cube_math::ChunkCoord;
+
+use super::cube_math::{self,ChunkCoord};
 use super::cube_render::{ChunkMeshBuilder, GeometryBuffer};
 #[allow(unused_imports)]
 use super::debug;

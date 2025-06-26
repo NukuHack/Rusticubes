@@ -1,4 +1,5 @@
-use crate::get_string;
+
+use super::get_string;
 use wgpu;
 
 /// Struct holding all render pipelines and their associated shaders
@@ -376,7 +377,7 @@ pub fn render_all(current_state: &mut super::State) -> Result<(), wgpu::SurfaceE
 
         let bind_groups = [
             &current_state.texture_manager().bind_group,
-            &current_state.camera_system.bind_group,
+            &current_state.camera_system.bind_group(),
         ];
 
         // Render chunks

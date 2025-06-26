@@ -1,6 +1,6 @@
 ﻿
-use crate::game_state::GameState;
-use crate::State;
+use super::game_state::GameState;
+use super::State;
 use std::sync::atomic::{AtomicBool,AtomicPtr, Ordering};
 use std::path::PathBuf;
 

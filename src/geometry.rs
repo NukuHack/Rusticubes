@@ -1,5 +1,5 @@
-//! Vertex and texture utilities for wgpu rendering.
-use crate::get_bytes;
+// Vertex and texture utilities for wgpu rendering.
+use super::get_bytes;
 use image::GenericImageView;
 
 /// Wrapper for wgpu texture resources

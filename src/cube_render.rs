@@ -1,5 +1,6 @@
+
 use super::cube_tables::{EDGE_TABLE, TRI_TABLE};
-use crate::cube::Chunk;
+use super::cube::Chunk;
 use glam::{Mat4, Quat, Vec3};
 use std::mem;
 use wgpu::util::DeviceExt;

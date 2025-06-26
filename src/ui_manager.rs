@@ -1,9 +1,7 @@
 
-use super::ui_element;
-use super::ui_element::UIElement;
+use super::ui_element::{self,UIElement,UIElementData};
 use super::ui_render::{UIRenderer,Vertex};
-use crate::get_string;
-use crate::ui_element::UIElementData;
+use super::get_string;
 use winit::keyboard::KeyCode as Key;
 
 #[derive(Default, PartialEq)]

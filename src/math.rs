@@ -1,5 +1,4 @@
 // might need more of these small files for math and other extra shit 
-
 use std::time::{SystemTime, UNIX_EPOCH};
 
 pub fn random_float(min: f32, max: f32) -> f32 {

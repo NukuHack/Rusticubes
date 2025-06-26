@@ -4,9 +4,9 @@
 ## High Priority  
 - [x] slight ui rework (mainly just make the text not overflow) 
 - [x] making text wrap if it's too long 
+- [x] fly and general movement rework 
+- [x] fov and general camera rework (also drag nice-ify) 
 - [ ] settings for sound volume font and stuff 
-- [ ] fly and general movement rework 
-- [ ] fov and general camera rework (also drag nice-ify) 
 - [ ] making the save-load actually do stuff 
 
 ## Low Priority  

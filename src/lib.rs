@@ -1,5 +1,5 @@
 ﻿
-mod camera;
+//mod camera;
 mod player;
 
 mod config;
@@ -47,7 +47,7 @@ pub struct State<'a> {
     input_system: input::InputSystem,
     pipeline: pipeline::Pipeline,
     ui_manager: ui_manager::UIManager,
-    camera_system: camera::CameraSystem,
+    camera_system: player::CameraSystem,
     texture_manager: geometry::TextureManager,
     is_world_running: bool,
     save_path: std::path::PathBuf,
@@ -98,12 +98,7 @@ impl<'a> State<'a> {
                 },
                 None,
             )
-            .await
-            .unwrap();
-
-        //println!("max_texture_array_layers {}",device.limits().max_texture_array_layers);
-        // this is 256 so i can load up to 256 textures into one binding of the shader
-        //most shader support up to 16 bindings but using too much stuff can make it slow or really V-ram consuming
+            .await.unwrap();
 
         let surface_caps: wgpu::SurfaceCapabilities = surface.get_capabilities(&adapter);
         let surface_format: wgpu::TextureFormat = surface_caps.formats.iter()
@@ -125,9 +120,9 @@ impl<'a> State<'a> {
             desired_maximum_frame_latency: 2,
         };
 
-        let cam_config = camera::CameraConfig::new(Vec3::new(0.5, 1.8, 2.0));
+        let cam_config = player::CameraConfig::new(Vec3::new(0.5, 1.8, 2.0));
         // Create camera system with advanced controls
-        let camera_system: camera::CameraSystem = camera::CameraSystem::new(
+        let camera_system: player::CameraSystem = player::CameraSystem::new(
             &device,
             size,
             cam_config,
@@ -156,7 +151,7 @@ impl<'a> State<'a> {
             label: Some("Render Pipeline Layout"),
             bind_group_layouts: &[
                 &texture_manager.bind_group_layout,
-                &camera_system.bind_group_layout,
+                &camera_system.bind_group_layout(),
                 &chunk_bind_group_layout,
 
             ],
@@ -231,7 +226,7 @@ impl<'a> State<'a> {
         &self.previous_frame_time
     }
     #[inline]
-    pub fn camera_system(&self) -> &camera::CameraSystem {
+    pub fn camera_system(&self) -> &player::CameraSystem {
         &self.camera_system
     }
     #[inline]
@@ -252,7 +247,7 @@ impl<'a> State<'a> {
             self.render_context.size = new_size;
             self.render_context.config.width = new_size.width;
             self.render_context.config.height = new_size.height;
-            self.camera_system.projection.resize(new_size);
+            self.camera_system.projection_mut().resize(new_size);
             self.render_context.surface.configure(self.device(), self.config());
             self.texture_manager.depth_texture = geometry::Texture::create_depth_texture(
                 self.device(),
@@ -319,7 +314,7 @@ impl<'a> State<'a> {
                 // Handle UI input first if there's a focused element
                 if let Some(_focused_idx) = self.ui_manager.focused_element {
                     if self.is_world_running {
-                        config::get_gamestate().player.controller.reset_keyboard(); // Temporary workaround
+                        config::get_gamestate().player.controller().reset_keyboard(); // Temporary workaround
                     }
                     
                     if *state == ElementState::Pressed {
@@ -342,7 +337,7 @@ impl<'a> State<'a> {
                 // `key` is of type `KeyCode` (e.g., KeyCode::W)
                 // `state` is of type `ElementState` (Pressed or Released)
                 if self.is_world_running {
-                    config::get_gamestate().player.controller.process_keyboard(&key, &state);
+                    config::get_gamestate().player.controller().process_keyboard(&key, &state);
                     match key {
                         Key::KeyF => {
                             if *state == ElementState::Pressed {
@@ -471,7 +466,7 @@ impl<'a> State<'a> {
                     // Process mouse movement for camera control
 
                     if self.is_world_running {
-                        config::get_gamestate().player.controller.process_mouse(delta_x, delta_y);
+                        config::get_gamestate().player.controller().process_mouse(delta_x, delta_y);
                     }
                     // Reset cursor to center
                     self.center_mouse();
@@ -484,7 +479,7 @@ impl<'a> State<'a> {
                             let delta_x = (position.x - prev.x) as f32;
                             let delta_y = (position.y - prev.y) as f32;
                             if self.is_world_running {
-                                config::get_gamestate().player.controller.process_mouse(delta_x, delta_y);
+                                config::get_gamestate().player.controller().process_mouse(delta_x, delta_y);
                             }
                         }
                     }
@@ -498,7 +493,7 @@ impl<'a> State<'a> {
             }
             WindowEvent::MouseWheel { delta, .. } => {
                 if self.is_world_running {
-                    config::get_gamestate().player.controller.process_scroll(delta);
+                    config::get_gamestate().player.controller().process_scroll(delta);
                 }
                 true
             }
@@ -513,9 +508,18 @@ impl<'a> State<'a> {
         self.previous_frame_time = current_time;
         
         if self.is_world_running {
-            let movement_delta = config::get_gamestate().player.update(&mut self.camera_system.camera,&mut self.camera_system.projection,delta_seconds);
-            config::get_gamestate().player.position += movement_delta;
-            self.camera_system.camera.position+= movement_delta;
+            let movement_delta = {
+                let player = &mut config::get_gamestate().player;
+                player.update(&mut self.camera_system, delta_seconds)
+            };
+
+            // Update both player and camera positions in one operation
+            {
+                let player = &mut config::get_gamestate().player;
+                let camera = self.camera_system.camera_mut();
+                player.append_position(movement_delta, camera);
+            }
+
             self.camera_system.update(&self.render_context.queue);
         }
         if self.ui_manager.visibility {
@@ -529,7 +533,9 @@ impl<'a> State<'a> {
     }
     #[inline]
     pub fn toggle_mouse_capture(&mut self) {
+        let player = &mut config::get_gamestate().player;
         if !self.input_system.mouse_captured && self.is_world_running {
+            player.set_camera_mode(player::CameraMode::Instant);
             self.input_system.mouse_captured = true;
             // Hide cursor and lock to center
             self.window().set_cursor_visible(false);
@@ -538,6 +544,7 @@ impl<'a> State<'a> {
                 .unwrap();
             self.center_mouse();
         } else {
+            player.set_camera_mode(player::CameraMode::Smooth);
             self.input_system.mouse_captured = false;
             // Show cursor and release
             self.window().set_cursor_visible(true);

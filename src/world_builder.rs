@@ -1,5 +1,5 @@
 
-use crate::ui_manager::UIState;
+use super::ui_manager::UIState;
 #[inline]
 pub fn join_world(world_name: &str) {
     println!("Loading world: {}", world_name);

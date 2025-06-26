@@ -1,7 +1,6 @@
 #[allow(unused_imports)]
-use super::cube;
 use super::cube_math::ChunkCoord;
-use crate::camera::Camera;
+use crate::player::Camera;
 use crate::cube::{Block, World};
 use glam::Vec3;
 
@@ -23,7 +22,7 @@ fn update_chunk_mesh(world: &mut World, pos: Vec3) {
 /// Improved raycasting function that finds the first non-empty block and its face
 #[inline]
 pub fn raycast_to_block(camera: &Camera, world: &World, max_distance: f32) -> Option<(Vec3, Vec3)> {
-    let ray_origin = camera.position;
+    let ray_origin = camera.position();
     let ray_dir = camera.forward();
 
     // Initialize variables for DDA algorithm
@@ -92,7 +91,7 @@ pub fn place_looked_cube() {
         return;
     }
     let state = super::config::get_state();
-    let camera = &state.camera_system.camera;
+    let camera = &state.camera_system.camera();
     let world = &mut super::config::get_gamestate().world;
 
     if let Some((block_pos, normal)) = raycast_to_block(camera, world, REACH) {
@@ -108,7 +107,7 @@ pub fn remove_targeted_block() {
         return;
     }
     let state = super::config::get_state();
-    let camera = &state.camera_system.camera;
+    let camera = &state.camera_system.camera();
     let world = &mut super::config::get_gamestate().world;
 
     if let Some((block_pos, _)) = raycast_to_block(camera, world, REACH) {
@@ -124,7 +123,7 @@ pub fn add_def_chunk() {
         return;
     }
     let state = super::config::get_state();
-    let chunk_pos = ChunkCoord::from_world_pos(state.camera_system.camera.position);
+    let chunk_pos = ChunkCoord::from_world_pos(state.camera_system.camera().position());
 
     if super::config::get_gamestate()
         .world
@@ -154,7 +153,7 @@ pub fn add_full_chunk() {
         return;
     }
     let state = super::config::get_state();
-    let chunk_pos = ChunkCoord::from_world_pos(state.camera_system.camera.position);
+    let chunk_pos = ChunkCoord::from_world_pos(state.camera_system.camera().position());
 
     if super::config::get_gamestate()
         .world
@@ -178,7 +177,7 @@ pub fn update_full_world() {
     }
     let state = super::config::get_state();
     super::config::get_gamestate().world.update_loaded_chunks(
-        state.camera_system.camera.position,
+        state.camera_system.camera().position(),
         REACH * 2.0,
         false,
     );
@@ -197,7 +196,7 @@ pub fn add_full_world() {
     }
     let state = super::config::get_state();
     super::config::get_gamestate().world.update_loaded_chunks(
-        state.camera_system.camera.position,
+        state.camera_system.camera().position(),
         REACH * 2.0,
         true,
     );
@@ -220,7 +219,7 @@ pub fn raycast_to_cube_point(
     let (block_pos, normal) = raycast_to_block(camera, world, max_distance)?;
 
     // Get ray details
-    let ray_origin = camera.position;
+    let ray_origin = camera.position();
     let ray_dir = camera.forward();
 
     // Calculate the exact intersection point on the cube's surface
@@ -262,7 +261,7 @@ pub fn raycast_to_cube_point(
 #[inline]
 pub fn toggle_looked_point() -> Option<(bool, (u8, u8, u8))> {
     let state = super::config::get_state();
-    let camera = &state.camera_system.camera;
+    let camera = &state.camera_system.camera();
     let world = &mut super::config::get_gamestate().world;
 
     let (block_pos, (x, y, z)) = raycast_to_cube_point(camera, world, REACH)?;

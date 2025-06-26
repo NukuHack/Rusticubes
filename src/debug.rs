@@ -1,3 +1,4 @@
+
 #[derive(Debug, Clone, Copy)]
 pub struct RunningAverage {
     count: u64,

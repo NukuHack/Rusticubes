@@ -1,5 +1,5 @@
-use super::cube::{Block, BlockStorage, Chunk};
 
+use super::cube::{Block, BlockStorage, Chunk};
 use glam::Vec3;
 use std::io::{Error, ErrorKind};
 use std::path::PathBuf;

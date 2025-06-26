@@ -1,6 +1,5 @@
-use crate::ui_manager::close_pressed;
-use crate::ui_manager::UIManager;
-use crate::ui_manager::UIState;
+
+use crate::ui_manager::*;
 use crate::ui_element::UIElement;
 
 impl UIManager {
