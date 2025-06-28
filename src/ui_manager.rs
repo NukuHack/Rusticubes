@@ -316,16 +316,18 @@ impl UIManager {
 pub fn close_pressed() {
     match super::config::get_state().ui_manager.state {
         UIState::WorldSelection => {
-            super::config::get_state().ui_manager.state = UIState::BootScreen;
-            super::config::get_state().ui_manager.setup_ui();
+            let state = super::config::get_state();
+            state.ui_manager.state = UIState::BootScreen;
+            state.ui_manager.setup_ui();
         }
         UIState::BootScreen => {
             super::config::close_app();
         }
         UIState::InGame => {
-            super::config::get_state().is_world_running = false;
-            super::config::get_state().ui_manager.state = UIState::BootScreen;
-            super::config::get_state().ui_manager.setup_ui();
+            let state = super::config::get_state();
+            state.is_world_running = false;
+            state.ui_manager.state = UIState::BootScreen;
+            state.ui_manager.setup_ui();
 
             super::config::drop_gamestate();
         }
@@ -336,8 +338,9 @@ pub fn close_pressed() {
             return; // why ???
         }
         UIState::NewWorld => {
-            super::config::get_state().ui_manager.state = UIState::WorldSelection;
-            super::config::get_state().ui_manager.setup_ui();
+            let ui_manager = &mut super::config::get_state().ui_manager;
+            ui_manager.state = UIState::WorldSelection;
+            ui_manager.setup_ui();
         }
     }
 }

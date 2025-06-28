@@ -158,7 +158,7 @@ impl UIManager {
         self.add_element(list_panel);
 
         // New World button with consistent styling
-        let new_w_button = UIElement::button(self.next_id(), "Create New World")
+        let new_button = UIElement::button(self.next_id(), "Create New World")
             .with_position(-0.3, 0.4)
             .with_size(0.6, 0.08)
             .with_color(50, 70, 110)  // Medium blue
@@ -170,7 +170,7 @@ impl UIManager {
                 state.ui_manager.state = UIState::NewWorld;
                 state.ui_manager.setup_ui();
             });
-        self.add_element(new_w_button);
+        self.add_element(new_button);
 
         let worlds = match super::world_manager::get_world_names() {
             Ok(worlds) => worlds,

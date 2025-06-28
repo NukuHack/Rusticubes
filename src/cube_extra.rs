@@ -11,9 +11,10 @@ const REACH: f32 = 6.0;
 fn update_chunk_mesh(world: &mut World, pos: Vec3) {
     let chunk_pos = ChunkCoord::from_world_pos(pos);
     if let Some(chunk) = world.get_chunk_mut(chunk_pos) {
+        let state = super::config::get_state();
         chunk.make_mesh(
-            super::config::get_state().device(),
-            super::config::get_state().queue(),
+            state.device(),
+            state.queue(),
             true,
         );
     }
@@ -87,10 +88,10 @@ pub fn raycast_to_block(camera: &Camera, world: &World, max_distance: f32) -> Op
 /// Places a cube on the face of the block the player is looking at
 #[inline]
 pub fn place_looked_cube() {
-    if !super::config::get_state().is_world_running {
+    let state = super::config::get_state();
+    if !state.is_world_running {
         return;
     }
-    let state = super::config::get_state();
     let camera = &state.camera_system.camera();
     let world = &mut super::config::get_gamestate().world;
 
@@ -103,14 +104,13 @@ pub fn place_looked_cube() {
 
 /// Removes the block the player is looking at
 pub fn remove_targeted_block() {
-    if !super::config::get_state().is_world_running {
+    let state = super::config::get_state();
+    if !state.is_world_running {
         return;
     }
-    let state = super::config::get_state();
-    let camera = &state.camera_system.camera();
     let world = &mut super::config::get_gamestate().world;
 
-    if let Some((block_pos, _)) = raycast_to_block(camera, world, REACH) {
+    if let Some((block_pos, _)) = raycast_to_block(state.camera_system.camera(), world, REACH) {
         world.set_block(block_pos, Block::None);
         update_chunk_mesh(world, block_pos);
     }
@@ -119,10 +119,10 @@ pub fn remove_targeted_block() {
 /// Loads a chunk at the camera's position if not already loaded
 #[allow(dead_code)]#[inline]
 pub fn add_def_chunk() {
-    if !super::config::get_state().is_world_running {
+    let state = super::config::get_state();
+    if !state.is_world_running {
         return;
     }
-    let state = super::config::get_state();
     let chunk_pos = ChunkCoord::from_world_pos(state.camera_system.camera().position());
 
     if super::config::get_gamestate()
@@ -149,10 +149,10 @@ pub fn add_def_chunk() {
 /// Loads a chunk at the camera's position if not already loaded
 #[inline]
 pub fn add_full_chunk() {
-    if !super::config::get_state().is_world_running {
+    let state = super::config::get_state();
+    if !state.is_world_running {
         return;
     }
-    let state = super::config::get_state();
     let chunk_pos = ChunkCoord::from_world_pos(state.camera_system.camera().position());
 
     if super::config::get_gamestate()
@@ -172,10 +172,10 @@ pub fn add_full_chunk() {
 /// Loads chunks around the camera in a radius
 #[inline]
 pub fn update_full_world() {
-    if !super::config::get_state().is_world_running {
+    let state = super::config::get_state();
+    if !state.is_world_running {
         return;
     }
-    let state = super::config::get_state();
     super::config::get_gamestate().world.update_loaded_chunks(
         state.camera_system.camera().position(),
         REACH * 2.0,
@@ -191,10 +191,10 @@ pub fn update_full_world() {
 /// Fill chunks around the camera in a radius
 #[inline]
 pub fn add_full_world() {
-    if !super::config::get_state().is_world_running {
+    let state = super::config::get_state();
+    if !state.is_world_running {
         return;
     }
-    let state = super::config::get_state();
     super::config::get_gamestate().world.update_loaded_chunks(
         state.camera_system.camera().position(),
         REACH * 2.0,
