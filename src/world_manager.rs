@@ -1,147 +1,7 @@
 
-use std::io::Write;
-use std::path::PathBuf;
-use std::sync::mpsc;
-use std::thread;
+use std::io::{Write,Read};
+use std::path::{Path,PathBuf};
 
-pub struct FileSaver {
-    sender: Option<mpsc::Sender<(PathBuf, String)>>,
-    handle: Option<thread::JoinHandle<()>>,
-}
-
-#[allow(dead_code)]
-impl FileSaver {
-    #[inline]
-    pub fn new() -> Self {
-        if let Err(e) = std::fs::create_dir_all("save") {
-            eprintln!("Failed to create save directory: {}", e);
-        }
-
-        let (sender, receiver) = mpsc::channel::<(PathBuf, String)>();
-
-        let handle = thread::Builder::new()
-            .name("file-saver".into())
-            .spawn(move || {
-                for (filename, content) in receiver {
-                    let full_path = PathBuf::from("save").join(filename);
-                    if let Err(e) = Self::write_file(&full_path, &content) {
-                        eprintln!("Failed to write file {:?}: {}", full_path, e);
-                    }
-                }
-                println!("File saver thread shutting down");
-            })
-            .expect("Failed to spawn file saver thread");
-
-        FileSaver {
-            sender: Some(sender),
-            handle: Some(handle),
-        }
-    }
-    #[inline]
-    fn write_file(filename: &PathBuf, content: &str) -> std::io::Result<()> {
-        let mut writer = std::io::BufWriter::new(std::fs::File::create(filename)?);
-        writer.write_all(content.as_bytes())?;
-        Ok(())
-    }
-    #[inline]
-    pub fn save(
-        &self,
-        filename: impl Into<PathBuf>,
-        content: impl Into<String>,
-    ) -> Result<(), String> {
-        self.sender
-            .as_ref()
-            .ok_or_else(|| "FileSaver has been shutdown".to_string())?
-            .send((filename.into(), content.into()))
-            .map_err(|e| e.to_string())
-    }
-    #[inline]
-    pub fn shutdown(mut self) -> thread::Result<()> {
-        self.sender = None;
-        self.handle.take().unwrap().join()
-    }
-}
-
-impl Drop for FileSaver {
-    #[inline]
-    fn drop(&mut self) {
-        if self.handle.is_some() {
-            self.sender = None;
-            if let Some(handle) = self.handle.take() {
-                let _ = handle.join();
-            }
-        }
-    }
-}
-
-/// Asynchronous file loader that reads files in a background thread
-#[allow(dead_code)]
-pub struct FileLoader {
-    sender: mpsc::Sender<(PathBuf, mpsc::Sender<String>)>,
-    handle: thread::JoinHandle<()>,
-}
-
-#[allow(dead_code)]
-impl FileLoader {
-    /// Creates a new FileLoader with a dedicated background thread
-    #[inline]
-    pub fn new() -> Self {
-        let (sender, receiver) = mpsc::channel::<(PathBuf, mpsc::Sender<String>)>();
-
-        let handle = thread::Builder::new()
-            .name("file-loader".into())
-            .spawn(move || {
-                for (filename, result_sender) in receiver {
-                    match Self::read_file(&filename) {
-                        Ok(content) => {
-                            let _ = result_sender.send(content);
-                        }
-                        Err(e) => {
-                            eprintln!("Failed to read file {:?}: {}", filename, e);
-                            let _ = result_sender.send(String::new());
-                        }
-                    }
-                }
-                println!("File loader thread shutting down");
-            })
-            .expect("Failed to spawn file loader thread");
-
-        FileLoader { sender, handle }
-    }
-
-    /// Internal helper method for file reading
-    #[inline]
-    fn read_file(filename: &PathBuf) -> std::io::Result<String> {
-        std::fs::read_to_string(filename)
-    }
-
-    /// Loads content from a file asynchronously
-    #[inline]
-    pub fn load(&self, filename: impl Into<PathBuf>) -> mpsc::Receiver<String> {
-        let (result_sender, result_receiver) = mpsc::channel();
-        let _ = self.sender.send((filename.into(), result_sender));
-        result_receiver
-    }
-
-    /// Shuts down the file loader
-    #[inline]
-    pub fn shutdown(self) -> thread::Result<()> {
-        drop(self.sender); // Close the channel
-        self.handle.join()
-    }
-}
-
-// Implement Clone for FileSaver to allow sharing between threads
-impl Clone for FileSaver {
-    #[inline]
-    fn clone(&self) -> Self {
-        FileSaver {
-            sender: self.sender.clone(),
-            handle: None, // We don't clone the handle
-        }
-    }
-}
-#[inline]
 pub fn get_world_names() -> std::io::Result<Vec<String>> {
     let path = super::config::get_save_path().join("saves");
 
@@ -162,73 +22,115 @@ pub fn get_world_names() -> std::io::Result<Vec<String>> {
 
     Ok(folders)
 }
-#[inline]
-pub fn del_world(name: &str) -> Result<(), Box<dyn std::error::Error>> {
-    let saves_path = super::config::get_save_path().join("saves");
-    let target_path = saves_path.join(name);
 
+pub fn del_world(world_name: &str) {
+    // Get the saves path
+    let saves_path = match super::config::get_save_path().join("saves").canonicalize() {
+        Ok(p) => p,
+        Err(e) => {
+            println!("Failed to access saves directory: {}", e);
+            return;
+        }
+    };
+
+    let target_path = saves_path.join(world_name);  // Fixed: use world_name instead of name
     if !target_path.exists() {
-        return Err(format!("World '{}' does not exist", name).into());
+        println!("World '{}' does not exist", world_name);
+        return;
     }
-
     if !target_path.is_dir() {
-        return Err(format!("'{}' is not a directory", name).into());
+        println!("'{}' is not a directory", world_name);
+        return;
     }
+    // Try to delete the directory
+    match std::fs::remove_dir_all(&target_path) {
+        Ok(_) => {
+            println!("Successfully deleted world '{}'", world_name);
+            // Refresh UI after successful deletion
+            let state = super::config::get_state();
+            state.ui_manager.setup_ui();
+        },
+        Err(e) => {
+            println!("Failed to delete world '{}': {}", world_name, e);
+        }
+    }
+}
 
-    std::fs::remove_dir_all(&target_path)?;
+
+
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
+pub struct WorldData {
+    pub version: String,
+    pub creation_date: super::time::Time,
+    pub last_opened_date: super::time::Time,
+}
+
+impl WorldData {
+    pub fn new() -> Self {
+        WorldData {
+            version: std::env!("CARGO_PKG_VERSION").to_string(),
+            creation_date: super::time::Time::now(),
+            last_opened_date: super::time::Time::now(),
+        }
+    }
+    
+    pub fn update_last_opened(&mut self) {
+        self.last_opened_date = super::time::Time::now();
+    }
+}
+
+pub fn load_world_data(path: &Path) -> std::io::Result<WorldData> {
+    let file_path = path.join("world_data.json");
+    
+    std::fs::create_dir_all(path)?;
+    
+    match std::fs::File::open(&file_path) {
+        Ok(mut file) => {
+            let mut contents = String::new();
+            file.read_to_string(&mut contents)?;
+            
+            serde_json::from_str(&contents)
+                .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))
+        },
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            let new_data = WorldData::new();
+            save_world_data(path, &new_data)?;
+            Ok(new_data)
+        },
+        Err(e) => Err(e),
+    }
+}
+
+pub fn save_world_data(path: &Path, data: &WorldData) -> std::io::Result<()> {
+    let file_path = path.join("world_data.json");
+    
+    let json = serde_json::to_string_pretty(data)
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+    
+    let temp_path = file_path.with_extension("tmp");
+    {
+        let mut file = std::fs::File::create(&temp_path)?;
+        file.write_all(json.as_bytes())?;
+    }
+    std::fs::rename(temp_path, file_path)?;
+    
     Ok(())
 }
 
-#[allow(dead_code)]
-fn test() {
-    let saver = FileSaver::new();
-
-    // Spawn a thread to create 100 files
-    let saver_clone = saver.clone();
-    thread::spawn(move || {
-        for i in 1..=100 {
-            let filename = format!("file_{}.txt", i);
-            let content = format!("This is file number {}", i);
-            saver_clone
-                .save(filename, content)
-                .expect("Failed to send save request");
-            thread::sleep(std::time::Duration::from_millis(10)); // Small delay to see parallelism
-        }
-    });
-
-    // Main thread prints messages while files are being created
-    for i in 1..=5 {
-        println!("Main thread working... while saving {}", i);
-        thread::sleep(std::time::Duration::from_millis(100));
+pub fn update_world_data(path: &PathBuf) -> std::io::Result<()> {
+    let mut world_data = load_world_data(path)?;
+    let current_version = std::env!("CARGO_PKG_VERSION");
+    
+    if world_data.version != current_version {
+        world_data.version = current_version.to_string();
+        // Optionally update creation_date if you want to track version changes
+        // world_data.creation_date = super::time::Time::now();
     }
-
-    saver.shutdown().unwrap();
-
-    let loader = FileLoader::new();
-
-    // Load files in parallel
-    let mut receivers = vec![];
-    for i in 1..=100 {
-        let rx = loader.load(format!("save/file_{}.txt", i));
-        receivers.push((i, rx));
-    }
-
-    // Main thread prints messages while files are being created
-    for i in 1..=5 {
-        println!("Main thread working... while loading {}", i);
-        thread::sleep(std::time::Duration::from_millis(100));
-    }
-
-    // Collect results
-    for (i, rx) in receivers {
-        match rx.recv() {
-            #[allow(unused_variables)]
-            Ok(content) => (), //println!("Loaded file {}: {}", i, content.trim()),
-            Err(e) => eprintln!("Error loading file {}: {}", i, e),
-        }
-    }
-
-    loader.shutdown().unwrap();
-
-    println!("Main thread exiting");
+    
+    world_data.update_last_opened();
+    
+    save_world_data(path, &world_data)?;
+    println!("World data updated");
+    
+    Ok(())
 }

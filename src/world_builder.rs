@@ -1,6 +1,6 @@
 
 use super::ui_manager::UIState;
-#[inline]
+
 pub fn join_world(world_name: &str) {
     println!("Loading world: {}", world_name);
 
@@ -11,14 +11,17 @@ pub fn join_world(world_name: &str) {
     state.ui_manager.state = UIState::InGame;
     state.ui_manager.setup_ui();
 }
-#[inline]
-pub fn del_world(world_name: &str) {
-	match super::world_manager::del_world(&world_name) {
-	    Ok(_) => {
-	        println!("Successfully deleted world '{}'", world_name);
-	        let state = super::config::get_state();
-	        state.ui_manager.setup_ui();
-	    },
-	    Err(e) => panic!("Failed to delete world '{}': {}", world_name, e),
-	}
+
+pub fn try_join_world(id: usize) {
+	let world_name = super::config::get_state()
+	    .ui_manager()
+	    .get_input_text(id)
+	    .map(|s| s.trim())  // Trim whitespace first
+	    .filter(|s| !s.is_empty())  // Reject empty strings after trim
+	    .map(|s| s.to_string())
+	    .unwrap_or_else(|| {
+	        // You might want to log this fallback behavior
+	        "New World".to_string()
+	    });
+    super::world_builder::join_world(&world_name);
 }

@@ -1,6 +1,6 @@
 [package]
 name = "rusticubes"
-version = "0.4.0"
+version = "0.4.5"
 edition = "2024"
 authors = ["NukuHack", "nukuhack@gmail.com"] # might not be able to answer too quickly
 description = "3D voxel sandbox game"
@@ -38,6 +38,9 @@ rodio = "0.20"
 # small lib used for memory clearing
 winapi = "0"
 windows-sys = { version = "0.48", features = ["Win32_System_Memory"] }
+# used for json serialization and de-serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
 
 
 [build-dependencies]

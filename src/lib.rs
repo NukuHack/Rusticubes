@@ -14,6 +14,8 @@ mod game_state;
 
 mod resources;
 mod audio;
+mod file_manager;
+mod time;
 
 mod cube;
 mod cube_math;

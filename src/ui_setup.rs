@@ -183,18 +183,20 @@ impl UIManager {
         // World buttons with improved styling
         for (i, name) in worlds.iter().enumerate() {
             let y_pos = 0.2 - (i as f32 * 0.12);
-            let name_clone = name.clone();
-            let name_cl = name_clone.clone();
+            let name_clone = name.clone();  // Clone once here
 
-            let world_button = UIElement::button(self.next_id(), name.to_uppercase())
+            let world_button = UIElement::button(self.next_id(), name)
                 .with_position(-0.4, y_pos)
                 .with_size(0.8, 0.1)
-                .with_color(40, 50, 80)  // Darker blue
-                .with_text_color(180, 200, 220) // Light blue text
+                .with_color(40, 50, 80)
+                .with_text_color(180, 200, 220)
                 .with_border((70, 90, 130, 255), 0.005)
                 .with_z_index(5)
-                .with_callback(move || {
-                    super::world_builder::join_world(&name_cl);
+                .with_callback({
+                    let name_clone = name_clone.clone();  // Clone for this closure
+                    move || {
+                        super::world_builder::join_world(&name_clone);
+                    }
                 });
             self.add_element(world_button);
 
@@ -202,15 +204,16 @@ impl UIManager {
             let delete_button = UIElement::button(self.next_id(), "X")
                 .with_position(0.43, y_pos)
                 .with_size(0.1, 0.1)
-                .with_color(100, 40, 40)  // Dark red
-                .with_text_color(255, 180, 180) // Light red
+                .with_color(100, 40, 40)
+                .with_text_color(255, 180, 180)
                 .with_border((150, 60, 60, 255), 0.005)
                 .with_z_index(5)
                 .with_callback(move || {
-                    super::world_builder::del_world(&name_clone);
+                    super::world_manager::del_world(&name_clone);
                 });
             self.add_element(delete_button);
         }
+
 
         // Back button with consistent styling
         let back_button = UIElement::button(self.next_id(), "Back")
@@ -279,12 +282,7 @@ impl UIManager {
             .with_border((80, 110, 160, 255), 0.005)
             .with_z_index(6)
             .with_callback(move || {
-                let world_name = super::config::get_state()
-                    .ui_manager()
-                    .get_input_text(input_id)
-                    .map(|s| s.to_string())
-                    .unwrap_or_else(|| "New World".to_string());
-                super::world_builder::join_world(&world_name);
+                super::world_builder::try_join_world(input_id);
             });
         self.add_element(gen_button);
 
@@ -368,7 +366,7 @@ impl UIManager {
             .with_position(0.45, 0.4)
             .with_size(0.5, 0.1)
             .with_color(90, 50, 50)  // Dark reddish
-            .with_text_color(220, 180, 180) // Light red
+            .with_text_color(255, 180, 180) // Light red
             .with_border((140, 80, 80, 255), 0.005)
             .with_z_index(8)
             .with_callback(|| super::cube_extra::add_full_world());

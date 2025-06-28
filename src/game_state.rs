@@ -19,11 +19,37 @@ impl GameState {
         let save_path = std::path::PathBuf::from(&super::config::get_state().save_path)
             .join("saves")
             .join(worldname);
+
+        // Check and create directories if needed
+        match std::fs::metadata(&save_path) {
+            Ok(metadata) => {
+                if !metadata.is_dir() {
+                    println!(
+                        "Save path {:?} exists but is not a directory", 
+                        save_path
+                    );
+                }
+                // Directory already exists, no need to create
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                // Directory doesn't exist, try to create it
+                std::fs::create_dir_all(&save_path)
+                    .map_err(|e| {
+                        println!("Failed to create save directory at {:?}: {}", save_path, e)
+                    }).unwrap_or_else(|_| println!("Something failed"));
+            }
+            Err(e) => {
+                // Other IO error (permission issues, etc.)
+                println!(
+                    "Unexpected error accessing save path {:?}: {}", 
+                    save_path, e
+                );
+            }
+        }
         
-        // Create directories if they don't exist
-        if let Err(e) = std::fs::create_dir_all(&save_path) {
-            eprintln!("Failed to create save directory at {:?}: {}", save_path, e);
-            // You might want to handle this error differently depending on your needs
+        match super::world_manager::update_world_data(&save_path) {
+            Ok(_) => (), // Everything is fine, do nothing
+            Err(e) => println!("Error updating world data: {}", e),
         }
 
         Self {

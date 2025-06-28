@@ -6,8 +6,9 @@
 - [x] making text wrap if it's too long 
 - [x] fly and general movement rework 
 - [x] fov and general camera rework (also drag nice-ify) 
+- [x] making the save-load actually do stuff 
+- [ ] making the save-load actually save the world 
 - [ ] settings for sound volume font and stuff 
-- [ ] making the save-load actually do stuff 
 
 ## Low Priority  
 - [ ] hardcode the "missing texture" texture (purple black or idk) 

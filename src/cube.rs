@@ -902,7 +902,7 @@ impl World {
     /// Generates meshes for all dirty chunks
     #[inline]
     pub fn make_chunk_meshes(&mut self, device: &wgpu::Device, queue: &wgpu::Queue) {
-        let timer = std::time::Instant::now();
+//        let timer = std::time::Instant::now();
         //let mut chunk_times = debug::RunningAverage::default();
 
         for chunk in self.chunks.values_mut() {
@@ -916,11 +916,12 @@ impl World {
             //let elapsed_micros = chunk_timer.elapsed().as_micros() as f32;
             //chunk_times.add(elapsed_micros.into());
         }
-
+/*
         println!(
             "World mesh_gen_time: {:.2}ms",
             timer.elapsed().as_secs_f32() * 1000.0
         );
+*/
     }
 
     pub fn render_chunks<'a>(&'a self, render_pass: &mut wgpu::RenderPass<'a>) {
