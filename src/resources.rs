@@ -10,7 +10,7 @@ macro_rules! get_raw_data {
     ($path:expr) => {{
         use crate::resources::RESOURCE_DIR;
         RESOURCE_DIR
-            .get_file($path)
+            .get_file($path.clone())
             .map(|file| file.contents())
             .unwrap_or_else(|| panic!("File {} not found in embedded resources", $path))
     }};

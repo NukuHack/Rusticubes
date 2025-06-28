@@ -1,4 +1,3 @@
-
 use crate::ui_manager::*;
 use crate::ui_element::UIElement;
 
@@ -10,7 +9,7 @@ impl UIManager {
         let bg_panel = UIElement::panel(self.next_id())
             .with_position(-1.0, -1.0)
             .with_size(2.0, 2.0)
-            .with_color(0.08, 0.08, 0.12)
+            .with_color(20, 20, 30)  // Dark background
             .with_z_index(-5);
 
         match self.state {
@@ -46,8 +45,8 @@ impl UIManager {
         let title = UIElement::label(self.next_id(), "Rusticubes")
             .with_position(-0.4, 0.3)
             .with_size(0.8, 0.2)
-            .with_color(1.0, 1.0, 1.0)
-            .with_border((0.9, 0.9, 0.9, 0.9), 0.005)
+            .with_color(255, 255, 255)  // White
+            .with_border((230, 230, 230, 230), 0.005)
             .with_z_index(10);
         self.add_element(title);
 
@@ -55,8 +54,8 @@ impl UIManager {
         let button_panel = UIElement::panel(self.next_id())
             .with_position(-0.35, -0.2)
             .with_size(0.7, 0.5)
-            .with_color(0.15, 0.15, 0.2)
-            .with_border((0.3, 0.3, 0.4, 1.0), 0.005)
+            .with_color(38, 38, 51)  // Dark blue-gray
+            .with_border((76, 76, 102, 255), 0.005)
             .with_z_index(1);
         self.add_element(button_panel);
 
@@ -64,8 +63,8 @@ impl UIManager {
         let start_button = UIElement::button(self.next_id(), "Start")
             .with_position(-0.15, 0.0)
             .with_size(0.3, 0.1)
-            .with_color(0.2, 0.5, 0.8)
-            .with_border((0.3, 0.6, 0.9, 1.0), 0.005)
+            .with_color(51, 127, 204)  // Blue
+            .with_border((76, 153, 229, 255), 0.005)
             .with_z_index(6)
             .with_callback(|| {
                 let state = super::config::get_state();
@@ -78,8 +77,8 @@ impl UIManager {
         let exit_button = UIElement::button(self.next_id(), "Exit")
             .with_position(-0.15, -0.15)
             .with_size(0.3, 0.1)
-            .with_color(0.8, 0.2, 0.2)
-            .with_border((0.9, 0.3, 0.3, 1.0), 0.005)
+            .with_color(204, 51, 51)  // Red
+            .with_border((229, 76, 76, 255), 0.005)
             .with_z_index(5)
             .with_callback(|| {
                 close_pressed();
@@ -90,16 +89,16 @@ impl UIManager {
         let tree_picture = UIElement::image(self.next_id(), "happy-tree.png")
             .with_position(0.6, 0.5)
             .with_size(0.27, 0.45)
-            .with_color(1.0, 1.0, 1.0)
-            .with_border((0.3, 0.6, 0.9, 1.0), 0.005)
+            .with_color(255, 255, 255)  // White
+            .with_border((76, 153, 229, 255), 0.005)
             .with_z_index(6);
         self.add_element(tree_picture);
 
         let memory_button = UIElement::button(self.next_id(), "Memory")
             .with_position(0.5, 0.2)
             .with_size(0.3, 0.1)
-            .with_color(0.2, 0.2, 0.2)
-            .with_border((0.4, 0.4, 0.4, 1.0), 0.005)
+            .with_color(51, 51, 51)  // Dark gray
+            .with_border((102, 102, 102, 255), 0.005)
             .with_z_index(6)
             .with_callback(|| {
                 super::memory::clean_gpu_memory(super::config::get_state().device());
@@ -115,8 +114,8 @@ impl UIManager {
             ])
             .with_position(-0.8, 0.5)
             .with_size(0.27, 0.45)
-            .with_color(1.0, 1.0, 1.0)
-            .with_border((0.3, 0.6, 0.9, 1.0), 0.005)
+            .with_color(255, 255, 255)  // White
+            .with_border((76, 153, 229, 255), 0.005)
             .with_z_index(6)
             .with_smooth_transition(true)
             .with_animation_duration(2.5);
@@ -126,8 +125,8 @@ impl UIManager {
         let version = UIElement::label(self.next_id(), format!("v{}", env!("CARGO_PKG_VERSION")))
             .with_position(0.7, -0.95)
             .with_size(0.2, 0.05)
-            .with_color(0.7, 0.7, 0.7)
-            .with_border((0.5, 0.5, 0.5, 0.5), 0.003)
+            .with_color(179, 179, 179)  // Light gray
+            .with_border((127, 127, 127, 127), 0.003)
             .with_z_index(8);
         self.add_element(version);
     }
@@ -138,8 +137,8 @@ impl UIManager {
         let title = UIElement::label(self.next_id(), "Select World")
             .with_position(-0.4, 0.6)
             .with_size(0.8, 0.15)
-            .with_color(1.0, 1.0, 1.0)
-            .with_border((0.7, 0.7, 0.8, 1.0), 0.005)
+            .with_color(255, 255, 255)  // White
+            .with_border((179, 179, 204, 255), 0.005)
             .with_z_index(10);
         self.add_element(title);
 
@@ -147,8 +146,8 @@ impl UIManager {
         let list_panel = UIElement::panel(self.next_id())
             .with_position(-0.6, -0.4)
             .with_size(1.2, 1.0)
-            .with_color(0.15, 0.15, 0.2)
-            .with_border((0.25, 0.25, 0.35, 1.0), 0.01)
+            .with_color(38, 38, 51)  // Dark blue-gray
+            .with_border((63, 63, 89, 255), 0.01)
             .with_z_index(1);
         self.add_element(list_panel);
 
@@ -156,8 +155,8 @@ impl UIManager {
         let new_w_button = UIElement::button(self.next_id(), "Create New World")
             .with_position(-0.3, 0.4)
             .with_size(0.6, 0.1)
-            .with_color(0.3, 0.4, 0.6)
-            .with_border((0.4, 0.5, 0.7, 1.0), 0.005)
+            .with_color(76, 102, 153)  // Medium blue
+            .with_border((102, 127, 179, 255), 0.005)
             .with_z_index(8)
             .with_callback(|| {
                 let state = super::config::get_state();
@@ -183,8 +182,8 @@ impl UIManager {
             let world_button = UIElement::button(self.next_id(), name.clone())
                 .with_position(-0.4, y_pos)
                 .with_size(0.8, 0.1)
-                .with_color(0.25, 0.25, 0.4)
-                .with_border((0.35, 0.35, 0.5, 1.0), 0.005)
+                .with_color(63, 63, 102)  // Darker blue
+                .with_border((89, 89, 127, 255), 0.005)
                 .with_z_index(5)
                 .with_callback(move || {
                     super::world_builder::join_world(&name_cl);
@@ -195,8 +194,8 @@ impl UIManager {
             let delete_button = UIElement::button(self.next_id(), "del")
                 .with_position(0.42, y_pos)
                 .with_size(0.13, 0.1)
-                .with_color(0.8, 0.2, 0.2)
-                .with_border((0.9, 0.3, 0.3, 1.0), 0.005)
+                .with_color(204, 51, 51)  // Red
+                .with_border((229, 76, 76, 255), 0.005)
                 .with_z_index(5)
                 .with_callback(move || {
                     super::world_builder::del_world(&name_clone);
@@ -208,8 +207,8 @@ impl UIManager {
         let back_button = UIElement::button(self.next_id(), "Back")
             .with_position(-0.1, -0.8)
             .with_size(0.2, 0.08)
-            .with_color(0.5, 0.5, 0.5)
-            .with_border((0.6, 0.6, 0.6, 1.0), 0.005)
+            .with_color(127, 127, 127)  // Gray
+            .with_border((153, 153, 153, 255), 0.005)
             .with_z_index(8)
             .with_callback(|| {
                 let state = super::config::get_state();
@@ -225,8 +224,8 @@ impl UIManager {
         let title = UIElement::label(self.next_id(), "Create New World")
             .with_position(-0.5, 0.4)
             .with_size(1.0, 0.15)
-            .with_color(1.0, 1.0, 1.0)
-            .with_border((0.7, 0.7, 0.8, 1.0), 0.005)
+            .with_color(255, 255, 255)  // White
+            .with_border((179, 179, 204, 255), 0.005)
             .with_z_index(10);
         self.add_element(title);
 
@@ -234,8 +233,8 @@ impl UIManager {
         let form_panel = UIElement::panel(self.next_id())
             .with_position(-0.4, -0.3)
             .with_size(0.8, 0.7)
-            .with_color(0.15, 0.15, 0.2)
-            .with_border((0.25, 0.25, 0.35, 1.0), 0.01)
+            .with_color(38, 38, 51)  // Dark blue-gray
+            .with_border((63, 63, 89, 255), 0.01)
             .with_z_index(1);
         self.add_element(form_panel);
 
@@ -243,7 +242,7 @@ impl UIManager {
         let w_name_label = UIElement::label(self.next_id(), "World Name:")
             .with_position(-0.35, 0.1)
             .with_size(0.4, 0.08)
-            .with_color(0.9, 0.9, 0.9)
+            .with_color(229, 229, 229)  // Light gray
             .with_z_index(3);
         self.add_element(w_name_label);
 
@@ -252,9 +251,9 @@ impl UIManager {
         let world_name_input = UIElement::input(input_id)
             .with_position(-0.35, -0.0)
             .with_size(0.7, 0.1)
-            .with_color(0.2, 0.2, 0.3)
+            .with_color(51, 51, 76)  // Dark blue
             .with_placeholder("New World")
-            .with_border((0.4, 0.4, 0.6, 1.0), 0.005)
+            .with_border((102, 102, 153, 255), 0.005)
             .with_z_index(5);
         self.add_element(world_name_input);
 
@@ -262,8 +261,8 @@ impl UIManager {
         let gen_button = UIElement::button(self.next_id(), "Create World")
             .with_position(-0.3, -0.2)
             .with_size(0.6, 0.1)
-            .with_color(0.3, 0.4, 0.6)
-            .with_border((0.4, 0.5, 0.7, 1.0), 0.005)
+            .with_color(76, 102, 153)  // Medium blue
+            .with_border((102, 127, 179, 255), 0.005)
             .with_z_index(6)
             .with_callback(move || {
                 let world_name = super::config::get_state()
@@ -279,8 +278,8 @@ impl UIManager {
         let back_button = UIElement::button(self.next_id(), "Back")
             .with_position(-0.1, -0.45)
             .with_size(0.2, 0.08)
-            .with_color(0.5, 0.5, 0.5)
-            .with_border((0.6, 0.6, 0.6, 1.0), 0.005)
+            .with_color(127, 127, 127)  // Gray
+            .with_border((153, 153, 153, 255), 0.005)
             .with_z_index(8)
             .with_callback(|| {
                 let state = super::config::get_state();
@@ -296,8 +295,8 @@ impl UIManager {
         let loading_panel = UIElement::panel(self.next_id())
             .with_position(-0.3, -0.1)
             .with_size(0.6, 0.2)
-            .with_color(0.1, 0.1, 0.15)
-            .with_border((0.3, 0.3, 0.4, 1.0), 0.01)
+            .with_color(25, 25, 38)  // Very dark blue
+            .with_border((76, 76, 102, 255), 0.01)
             .with_z_index(10);
         self.add_element(loading_panel);
 
@@ -305,7 +304,7 @@ impl UIManager {
         let loading_text = UIElement::label(self.next_id(), "Loading...")
             .with_position(-0.25, -0.05)
             .with_size(0.5, 0.1)
-            .with_color(1.0, 1.0, 1.0)
+            .with_color(255, 255, 255)  // White
             .with_z_index(15);
         self.add_element(loading_text);
 
@@ -313,8 +312,8 @@ impl UIManager {
         let progress_bg = UIElement::panel(self.next_id())
             .with_position(-0.25, -0.15)
             .with_size(0.5, 0.03)
-            .with_color(0.05, 0.05, 0.1)
-            .with_border((0.2, 0.2, 0.3, 1.0), 0.005)
+            .with_color(12, 12, 25)  // Very dark
+            .with_border((51, 51, 76, 255), 0.005)
             .with_z_index(8);
         self.add_element(progress_bg);
 
@@ -322,7 +321,7 @@ impl UIManager {
         let progress_bar = UIElement::panel(self.next_id())
             .with_position(-0.245, -0.145)
             .with_size(0.01, 0.02) // Will be animated
-            .with_color(0.3, 0.5, 0.8)
+            .with_color(76, 127, 204)  // Bright blue
             .with_z_index(8);
         self.add_element(progress_bar);
     }
@@ -333,8 +332,8 @@ impl UIManager {
         let side_panel = UIElement::panel(self.next_id())
             .with_position(0.4, -0.9)
             .with_size(0.6, 1.8)
-            .with_color(0.1, 0.1, 0.15)
-            .with_border((0.2, 0.2, 0.3, 1.0), 0.01)
+            .with_color(25, 25, 38)  // Dark blue-gray
+            .with_border((51, 51, 76, 255), 0.01)
             .with_z_index(1);
         self.add_element(side_panel);
 
@@ -342,8 +341,8 @@ impl UIManager {
         let panel_title = UIElement::label(self.next_id(), "Game Menu")
             .with_position(0.45, 0.75)
             .with_size(0.5, 0.1)
-            .with_color(1.0, 1.0, 1.0)
-            .with_border((0.5, 0.5, 0.6, 1.0), 0.005)
+            .with_color(255, 255, 255)  // White
+            .with_border((127, 127, 153, 255), 0.005)
             .with_z_index(10);
         self.add_element(panel_title);
 
@@ -351,8 +350,8 @@ impl UIManager {
         let clean_button = UIElement::button(self.next_id(), "Clean World")
             .with_position(0.45, 0.4)
             .with_size(0.5, 0.1)
-            .with_color(0.6, 0.3, 0.3)
-            .with_border((0.7, 0.4, 0.4, 1.0), 0.005)
+            .with_color(153, 76, 76)  // Reddish
+            .with_border((179, 102, 102, 255), 0.005)
             .with_z_index(8)
             .with_callback(|| {
                 println!("Clean world button clicked!");
@@ -364,32 +363,32 @@ impl UIManager {
         let help_text_1 = UIElement::label(self.next_id(), "ALT to lock")
             .with_position(0.5, 0.1)
             .with_size(0.4, 0.08)
-            .with_color(1.0, 1.0, 1.0)
-            .with_border((0.5, 0.5, 0.6, 1.0), 0.005)
+            .with_color(255, 255, 255)  // White
+            .with_border((127, 127, 153, 255), 0.005)
             .with_z_index(5);
         let help_text_2 = UIElement::label(self.next_id(), "L to fill chunk")
             .with_position(0.5, -0.05)
             .with_size(0.4, 0.08)
-            .with_color(1.0, 1.0, 1.0)
-            .with_border((0.5, 0.5, 0.6, 1.0), 0.005)
+            .with_color(255, 255, 255)  // White
+            .with_border((127, 127, 153, 255), 0.005)
             .with_z_index(5);
         let help_text_3 = UIElement::label(self.next_id(), "R to break")
             .with_position(0.5, -0.2)
             .with_size(0.4, 0.08)
-            .with_color(1.0, 1.0, 1.0)
-            .with_border((0.5, 0.5, 0.6, 1.0), 0.005)
+            .with_color(255, 255, 255)  // White
+            .with_border((127, 127, 153, 255), 0.005)
             .with_z_index(5);
         let help_text_4 = UIElement::label(self.next_id(), "F to place")
             .with_position(0.5, -0.35)
             .with_size(0.4, 0.08)
-            .with_color(1.0, 1.0, 1.0)
-            .with_border((0.5, 0.5, 0.6, 1.0), 0.005)
+            .with_color(255, 255, 255)  // White
+            .with_border((127, 127, 153, 255), 0.005)
             .with_z_index(5);
         let help_text_5 = UIElement::label(self.next_id(), "ESC to leave")
             .with_position(0.5, -0.5)
             .with_size(0.4, 0.08)
-            .with_color(1.0, 1.0, 1.0)
-            .with_border((0.5, 0.5, 0.6, 1.0), 0.005)
+            .with_color(255, 255, 255)  // White
+            .with_border((127, 127, 153, 255), 0.005)
             .with_z_index(5);
 
         self.add_element(help_text_1);
@@ -402,8 +401,8 @@ impl UIManager {
         let close_button = UIElement::button(self.next_id(), "Exit Game")
             .with_position(0.55, -0.8)
             .with_size(0.3, 0.08)
-            .with_color(0.8, 0.2, 0.2)
-            .with_border((0.9, 0.3, 0.3, 1.0), 0.005)
+            .with_color(204, 51, 51)  // Red
+            .with_border((229, 76, 76, 255), 0.005)
             .with_z_index(8)
             .with_callback(|| {
                 println!("Close button clicked!");
@@ -415,13 +414,13 @@ impl UIManager {
         let crosshair_v = UIElement::divider(self.next_id())
             .with_position(0.0, -0.02)
             .with_size(0.02, 0.06)
-            .with_color(1.0, 1.0, 1.0)
+            .with_color(255, 255, 255)  // White
             .with_z_index(20);
         
         let crosshair_h = UIElement::divider(self.next_id())
             .with_position(-0.02, 0.0)
             .with_size(0.06, 0.02)
-            .with_color(1.0, 1.0, 1.0)
+            .with_color(255, 255, 255)  // White
             .with_z_index(20);
 
         self.add_element(crosshair_v);

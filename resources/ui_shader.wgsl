@@ -1,8 +1,6 @@
-
 struct VertexInput {
     @location(0) position: vec2<f32>,
-    @location(1) uv: vec2<f32>,
-    @location(2) color: vec4<f32>,
+    @location(1) packed_data: u32, // This matches your Rust struct
 };
 
 struct VertexOutput {
@@ -11,15 +9,35 @@ struct VertexOutput {
     @builtin(position) position: vec4<f32>,
 };
 
+// Your existing unpack_color function
+fn unpack_color(packed: u32) -> vec4<f32> {
+    return vec4(
+        f32((packed >> 24) & 0xFF) / 255.0,
+        f32((packed >> 16) & 0xFF) / 255.0,
+        f32((packed >> 8) & 0xFF) / 255.0,
+        f32(packed & 0xFF) / 255.0
+    );
+}
+
 @vertex
-fn vs_main(in: VertexInput) -> VertexOutput {
+fn vs_main(
+    in: VertexInput,
+    @builtin(vertex_index) vert_idx: u32  // Built-in vertex index
+) -> VertexOutput {
     var out: VertexOutput;
-    out.uv = in.uv;
-    out.color = in.color;
-    // Assign to the position field instead of gl_Position
+    
+    // Calculate UVs based on vertex index (for a quad made of two triangles)
+out.uv = vec2<f32>(
+    select(1.0, 0.0, (vert_idx & 1u) == 1u),  // U (horizontal) coordinate
+    select(1.0, 0.0, (vert_idx & 2u) == 2u)   // V (vertical) coordinate - flipped
+);
+    
+    out.color = unpack_color(in.packed_data);
     out.position = vec4<f32>(in.position, 0.0, 1.0);
     return out;
 }
+
+// The rest of your shader can remain the same
 @group(0) @binding(0) var font_sampler: sampler;
 @group(0) @binding(1) var texture_array: texture_2d_array<f32>;
 struct Uniforms {
@@ -35,11 +53,10 @@ struct FragmentInput {
 fn sample_frame(uv: vec2<f32>, frame: u32) -> vec4<f32> {
     return textureSample(texture_array, font_sampler, uv, frame);
 }
-// Helper function to extract 2 numbers from a packed u32
 fn unpack_number(packed: u32) -> vec2<u32> {
     return vec2<u32>(
-        packed & 0xFFFFu,         // one number (lower 16 bits)
-        (packed >> 16) & 0xFFFFu  // other number (upper 16 bits)
+        packed & 0xFFFFu,
+        (packed >> 16) & 0xFFFFu
     );
 }
 
@@ -55,14 +72,11 @@ fn fs_main(in: FragmentInput) -> @location(0) vec4<f32> {
     let raw_progress = f32(progress_info.x) / 100.0;
     let hold_pct = f32(progress_info.y) / 100.0;
     
-    // Calculate adjusted progress (0 when below hold, linear when above)
     let adjusted_progress = clamp((raw_progress - hold_pct) / (1.0 - hold_pct), 0.0, 1.0);
     
     if (adjusted_progress == 0.0) {
-        // Display current frame only when below hold threshold
         return sample_frame(in.uv, frames.x) * in.color;
     } else {
-        // Alpha-weighted blend when in transition phase
         let current = sample_frame(in.uv, frames.x);
         let next = sample_frame(in.uv, frames.y);
         

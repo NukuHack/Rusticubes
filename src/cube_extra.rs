@@ -96,7 +96,7 @@ pub fn place_looked_cube() {
 
     if let Some((block_pos, normal)) = raycast_to_block(camera, world, REACH) {
         let placement_pos = block_pos + normal;
-        world.set_block(placement_pos, Block::new());
+        world.set_block(placement_pos, Block::new(1));
         update_chunk_mesh(world, placement_pos);
     }
 }

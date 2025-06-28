@@ -8,8 +8,48 @@ use super::ui_element::{UIElement, UIElementData};
 #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct Vertex {
     pub position: [f32; 2],
-    pub uv: [f32; 2],
-    pub color: [f32; 4],
+    pub packed_data: u32, // [u8; 4] packed into u32: [color_r, color_g, color_b, color_a]
+}
+/*
+let uvs = [
+     [0.0, 1.0], [1.0, 1.0],[0.0, 0.0], [1.0, 0.0],
+];
+*/
+impl Vertex {
+    #[inline]
+    pub fn new(position: [f32; 2], color: [u8; 4]) -> Self {
+        Self {
+            position,
+            packed_data: pack_color_u8(color),
+        }
+    }
+
+    pub fn desc() -> wgpu::VertexBufferLayout<'static> {
+        wgpu::VertexBufferLayout {
+            array_stride: std::mem::size_of::<Vertex>() as wgpu::BufferAddress,
+            step_mode: wgpu::VertexStepMode::Vertex,
+            attributes: &[
+                wgpu::VertexAttribute {
+                    offset: 0,
+                    shader_location: 0,
+                    format: wgpu::VertexFormat::Float32x2,
+                },
+                wgpu::VertexAttribute {
+                    offset: 8,
+                    shader_location: 1,
+                    format: wgpu::VertexFormat::Uint32,
+                },
+            ],
+        }
+    }
+}
+
+#[inline]
+fn pack_color_u8(color: [u8; 4]) -> u32 {
+    ((color[0] as u32) << 24) |
+    ((color[1] as u32) << 16) |
+    ((color[2] as u32) << 8) |
+    (color[3] as u32)
 }
 
 pub struct UIRenderer {
@@ -103,7 +143,7 @@ impl UIRenderer {
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba8Unorm,
+            format: wgpu::TextureFormat::Rgba8Unorm, //Rgba8Unorm,
             usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
             view_formats: &[],
         });
@@ -215,6 +255,7 @@ impl UIRenderer {
 
         (vertices, indices)
     }
+
     #[inline]
     fn process_text_element(
         &mut self,
@@ -235,8 +276,8 @@ impl UIRenderer {
         }
 
         if let Some(text) = element.get_text() {
-            // Create cache key that includes element size for proper scaling
-            let texture_key = format!("{}_{}", text, element.color.map(|c| c.to_string()).join("|"));            
+            // Convert color from f32 to u8            
+            let texture_key = format!("{}_{:?}", text, element.color);            
             if !self.text_textures.contains_key(&texture_key) {
                 let texture = self.render_text_to_texture(
                     state.device(),
@@ -281,18 +322,15 @@ impl UIRenderer {
                 let positions = [
                     [x, y],              // top-left
                     [x + tex_w, y],      // top-right
-                    [x, y + tex_h],      // bottom-left
+                    [x, y + tex_h],     // bottom-left
                     [x + tex_w, y + tex_h], // bottom-right
                 ];
-                let uvs = [
-                    [0.0, 1.0], [1.0, 1.0], [0.0, 0.0], [1.0, 0.0],
-                ];
+                                
                 for j in 0..4 {
-                    vertices.push(Vertex {
-                        position: positions[j],
-                        uv: uvs[j],
-                        color: element.color,
-                    });
+                    vertices.push(Vertex::new(
+                        positions[j],
+                        element.color,
+                    ));
                 }
                 
                 indices.extend(self.rectangle_indices(*current_index));
@@ -307,7 +345,7 @@ impl UIRenderer {
         queue: &wgpu::Queue,
         text: &str,
         element_size: (f32, f32),
-        color: [f32; 4],
+        color: [u8; 4],
     ) -> wgpu::Texture {
         // Calculate target size in pixels based on element size and pixel ratio
         let target_width_px = (element_size.0 * 100.0 * self.pixel_ratio) as u32;
@@ -365,11 +403,7 @@ impl UIRenderer {
         let height = (text_height + padding * 2).max(1);
 
         let mut image = ImageBuffer::from_pixel(width, height, Rgba([0, 0, 0, 0]));
-        let [r, g, b, a] = color;
-        let r = (r * 255.0) as u8;
-        let g = (g * 255.0) as u8;
-        let b = (b * 255.0) as u8;
-        let a = (a * 255.0) as u8;
+        let [r, g, b, a] = [255,255,255,255];//color;
 
         // Center the text horizontally within the texture
         let text_start_x = (width as f32 - final_width) / 2.0;
@@ -385,11 +419,10 @@ impl UIRenderer {
                     let x = x as i32 + bounding_box.min.x;
                     let y = y as i32 + bounding_box.min.y;
                     if x >= 0 && x < width as i32 && y >= 0 && y < height as i32 {
-                        let alpha = (v * a as f32) as u8;
                         let premultiplied = |c: u8| ((c as f32 * v).round() as u8);
                         image.put_pixel(
                             x as u32, y as u32, 
-                            Rgba([premultiplied(r), premultiplied(g), premultiplied(b), alpha])
+                            Rgba([premultiplied(r), premultiplied(g), premultiplied(b), a])
                         );
                     }
                 });
@@ -402,7 +435,7 @@ impl UIRenderer {
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba8UnormSrgb,
+            format: wgpu::TextureFormat::Rgba8Unorm, //Rgba8UnormSrgb,
             usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
             view_formats: &[],
         });
@@ -587,15 +620,11 @@ impl UIRenderer {
                 [x, y + h],     // bottom-left
                 [x + w, y + h], // bottom-right
             ];
-            let uvs = [
-                 [0.0, 1.0], [1.0, 1.0],[0.0, 0.0], [1.0, 0.0],
-            ];
             for j in 0..4 {
-                vertices.push(Vertex {
-                    position: positions[j],
-                    uv: uvs[j],
-                    color: element.color,
-                });
+                vertices.push(Vertex::new(
+                    positions[j],
+                    element.color,
+                ));
             }
             
             indices.extend(self.rectangle_indices(*current_index));
@@ -673,15 +702,11 @@ impl UIRenderer {
                 [x, y + h],     // bottom-left
                 [x + w, y + h], // bottom-right
             ];
-            let uvs = [
-                [0.0, 1.0], [1.0, 1.0], [0.0, 0.0], [1.0, 0.0],
-            ];
             for j in 0..4 {
-                vertices.push(Vertex {
-                    position: positions[j],
-                    uv: uvs[j],
-                    color: element.color,
-                });
+                vertices.push(Vertex::new(
+                    positions[j],
+                    element.color,
+                ));
             }
             
             indices.extend(self.rectangle_indices(*current_index));
@@ -822,7 +847,7 @@ impl UIRenderer {
                     vertices,
                     (check_x, check_y),
                     (check_w, check_h),
-                    [0.2, 0.7, 0.2, 1.0],
+                    [50, 120, 50, 255],
                 );
                 indices.extend(self.rectangle_indices(*current_index));
                 *current_index += 4;
@@ -839,7 +864,7 @@ impl UIRenderer {
                 data: UIElementData::Label {
                     text: text.to_string(),
                 },
-                color: [0.0, 0.0, 0.0, 1.0],
+                color: [0, 0, 0, 255],
                 ..*element
             };
             self.process_text_element(&label_element, vertices, indices, current_index);
@@ -864,15 +889,19 @@ impl UIRenderer {
         vertices: &mut Vec<Vertex>,
         (x, y): (f32, f32),
         (w, h): (f32, f32),
-        color: [f32; 4],
+        color: [u8; 4],
     ) {
+        // Convert color to u8 and pack into u32
+        let packed_color = pack_color_u8(color);
+        
         vertices.extend([
-            Vertex { position: [x, y + h], uv: [0.0, 0.0], color, },
-            Vertex { position: [x + w, y + h], uv: [0.0, 0.0], color, },
-            Vertex { position: [x, y], uv: [0.0, 0.0], color, },
-            Vertex { position: [x + w, y], uv: [0.0, 0.0], color, },
+            Vertex{position: [x, y + h],packed_data:packed_color},
+            Vertex{position: [x + w, y + h],packed_data:packed_color},
+            Vertex{position: [x, y],packed_data:packed_color},
+            Vertex{position: [x + w, y],packed_data:packed_color},
         ]);
     }
+
     #[inline]
     fn rectangle_indices(&self, base: u32) -> [u32; 6] {
         [base, base + 1, base + 2, base + 1, base + 3, base + 2]

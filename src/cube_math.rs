@@ -158,7 +158,7 @@ impl ChunkSerializer {
                 Block::Simple(mat, rot) => {
                     buffer.push(1);
                     buffer.extend_from_slice(&mat.to_le_bytes());
-                    buffer.push(*rot);
+                    buffer.push(rot.to_byte());
                 }
                 Block::Marching(mat, points) => {
                     buffer.push(2);
@@ -254,7 +254,7 @@ impl ChunkSerializer {
                     let mat = u16::from_le_bytes([data[pos], data[pos + 1]]);
                     let rot = data[pos + 2];
                     pos += 3;
-                    Block::Simple(mat, rot)
+                    Block::Simple(mat, super::cube::BlockRotation::from_byte(rot).expect("Bad rotation"))
                 }
                 2 => {
                     if pos + 6 > data_len - 4 {

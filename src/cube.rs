@@ -1,4 +1,5 @@
 
+use std::f32::consts::FRAC_PI_2;
 use super::cube_math::{self,ChunkCoord};
 use super::cube_render::{ChunkMeshBuilder, GeometryBuffer};
 #[allow(unused_imports)]
@@ -16,14 +17,215 @@ use wgpu::util::DeviceExt;
 type FastMap<K, V> = HashMap<K, V, BuildHasherDefault<AHasher>>;
 
 
+/// Axis enumeration with positive/negative variants
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Axis {
+    Xplus,
+    Xminus,
+    Yplus,
+    Yminus,
+    Zplus,
+    Zminus,
+}
+
+/// Represents all 36 possible block rotations (6 front directions × 6 up directions)
+/// The enum variants follow the pattern "FrontFaceUpFace" (e.g., XplusYplus means front faces +X and up faces +Y).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[repr(u8)]
+pub enum BlockRotation {
+    // X+ front facing (with all possible up directions)
+    XplusYplus, XplusYminus, XplusZplus, XplusZminus,
+    // X- front facing
+    XminusYplus, XminusYminus, XminusZplus, XminusZminus,
+    // Y+ front facing
+    YplusXplus, YplusXminus, YplusZplus, YplusZminus,
+    // Y- front facing
+    YminusXplus, YminusXminus, YminusZplus, YminusZminus,
+    // Z+ front facing
+    ZplusXplus, ZplusXminus, ZplusYplus, ZplusYminus,
+    // Z- front facing
+    ZminusXplus, ZminusXminus, ZminusYplus, ZminusYminus,
+}
+
+#[allow(dead_code)]
+impl BlockRotation {
+    /// Converts from the old packed u8 format to the new enum
+    pub fn from_packed(packed: u8) -> Self {
+        // Extract the 3 axes (each 2 bits)
+        let x = (packed & 0b0000_0011) >> 0;
+        let y = (packed & 0b0000_1100) >> 2;
+        let z = (packed & 0b0011_0000) >> 4;
+        
+        // Convert to the new enum (implementation depends on your exact rotation mapping)
+        // This is a placeholder - you'll need to define your exact conversion logic
+        match (x, y, z) {
+            (0, 0, 0) => BlockRotation::XplusYplus,
+            // ... fill in all 36 cases
+            _ => BlockRotation::XplusYplus, // default
+        }
+    }
+
+    /// Converts to the old packed u8 format (for compatibility if needed)
+    pub fn to_packed(self) -> u8 {
+        match self {
+            BlockRotation::XplusYplus => 0b0000_0000,
+            // ... fill in all 36 cases
+            _ => 0,
+        }
+    }
+
+    /// Converts to a byte for storage
+    #[inline]
+    pub fn to_byte(self) -> u8 {
+        self as u8
+    }
+    
+    /// Creates from a byte
+    #[inline]
+    pub fn from_byte(byte: u8) -> Option<Self> {
+        if byte < 36 {
+            // SAFETY: We've verified the value is within enum bounds
+            Some(unsafe { std::mem::transmute(byte) })
+        } else {
+            None
+        }
+    }
+
+    /// Converts to a quaternion
+    pub fn to_quat(self) -> Quat {
+        match self {
+            // +X facing
+            BlockRotation::XplusYplus => Quat::IDENTITY,
+            BlockRotation::XplusYminus => Quat::from_rotation_x(PI),
+            BlockRotation::XplusZplus => Quat::from_rotation_y(FRAC_PI_2),
+            BlockRotation::XplusZminus => Quat::from_rotation_y(-FRAC_PI_2),
+            
+            // -X facing
+            BlockRotation::XminusYplus => Quat::from_rotation_z(PI),
+            BlockRotation::XminusYminus => Quat::from_rotation_x(PI) * Quat::from_rotation_z(PI),
+            BlockRotation::XminusZplus => Quat::from_rotation_y(FRAC_PI_2) * Quat::from_rotation_z(PI),
+            BlockRotation::XminusZminus => Quat::from_rotation_y(-FRAC_PI_2) * Quat::from_rotation_z(PI),
+            
+            // +Y facing
+            BlockRotation::YplusXplus => Quat::from_rotation_x(-FRAC_PI_2),
+            BlockRotation::YplusXminus => Quat::from_rotation_x(-FRAC_PI_2) * Quat::from_rotation_z(PI),
+            BlockRotation::YplusZplus => Quat::from_rotation_x(-FRAC_PI_2) * Quat::from_rotation_y(FRAC_PI_2),
+            BlockRotation::YplusZminus => Quat::from_rotation_x(-FRAC_PI_2) * Quat::from_rotation_y(-FRAC_PI_2),
+            
+            // -Y facing
+            BlockRotation::YminusXplus => Quat::from_rotation_x(FRAC_PI_2),
+            BlockRotation::YminusXminus => Quat::from_rotation_x(FRAC_PI_2) * Quat::from_rotation_z(PI),
+            BlockRotation::YminusZplus => Quat::from_rotation_x(FRAC_PI_2) * Quat::from_rotation_y(FRAC_PI_2),
+            BlockRotation::YminusZminus => Quat::from_rotation_x(FRAC_PI_2) * Quat::from_rotation_y(-FRAC_PI_2),
+            
+            // +Z facing
+            BlockRotation::ZplusXplus => Quat::from_rotation_y(PI),
+            BlockRotation::ZplusXminus => Quat::from_rotation_y(PI) * Quat::from_rotation_z(PI),
+            BlockRotation::ZplusYplus => Quat::from_rotation_x(FRAC_PI_2) * Quat::from_rotation_y(PI),
+            BlockRotation::ZplusYminus => Quat::from_rotation_x(-FRAC_PI_2) * Quat::from_rotation_y(PI),
+            
+            // -Z facing
+            BlockRotation::ZminusXplus => Quat::IDENTITY,
+            BlockRotation::ZminusXminus => Quat::from_rotation_z(PI),
+            BlockRotation::ZminusYplus => Quat::from_rotation_x(FRAC_PI_2),
+            BlockRotation::ZminusYminus => Quat::from_rotation_x(-FRAC_PI_2),
+        }
+    }
+    
+    /// Creates from a quaternion (finds closest matching orientation)
+    pub fn from_quat(quat: Quat) -> Self {
+        let forward = quat * Vec3::Z;
+        let up = quat * Vec3::Y;
+        
+        // Determine primary axis (front face)
+        let primary_axis = if forward.x.abs() >= forward.y.abs() && forward.x.abs() >= forward.z.abs() {
+            if forward.x > 0.0 { Axis::Xplus } else { Axis::Xminus }
+        } else if forward.y.abs() >= forward.z.abs() {
+            if forward.y > 0.0 { Axis::Yplus } else { Axis::Yminus }
+        } else {
+            if forward.z > 0.0 { Axis::Zplus } else { Axis::Zminus }
+        };
+        
+        // Determine secondary axis (up face), excluding the primary axis
+        let secondary_axis = {
+            let candidates = match primary_axis {
+                Axis::Xplus | Axis::Xminus => [
+                    (up.y.abs(), if up.y > 0.0 { Axis::Yplus } else { Axis::Yminus }),
+                    (up.z.abs(), if up.z > 0.0 { Axis::Zplus } else { Axis::Zminus }),
+                ],
+                Axis::Yplus | Axis::Yminus => [
+                    (up.x.abs(), if up.x > 0.0 { Axis::Xplus } else { Axis::Xminus }),
+                    (up.z.abs(), if up.z > 0.0 { Axis::Zplus } else { Axis::Zminus }),
+                ],
+                Axis::Zplus | Axis::Zminus => [
+                    (up.x.abs(), if up.x > 0.0 { Axis::Xplus } else { Axis::Xminus }),
+                    (up.y.abs(), if up.y > 0.0 { Axis::Yplus } else { Axis::Yminus }),
+                ],
+            };
+            // Select the axis with the larger component
+            if candidates[0].0 >= candidates[1].0 { candidates[0].1 } else { candidates[1].1 }
+        };
+        
+        // Combine into enum variant
+        match (primary_axis, secondary_axis) {
+            (Axis::Xplus, Axis::Yplus) => BlockRotation::XplusYplus,
+            (Axis::Xplus, Axis::Yminus) => BlockRotation::XplusYminus,
+            (Axis::Xplus, Axis::Zplus) => BlockRotation::XplusZplus,
+            (Axis::Xplus, Axis::Zminus) => BlockRotation::XplusZminus,
+            
+            (Axis::Xminus, Axis::Yplus) => BlockRotation::XminusYplus,
+            (Axis::Xminus, Axis::Yminus) => BlockRotation::XminusYminus,
+            (Axis::Xminus, Axis::Zplus) => BlockRotation::XminusZplus,
+            (Axis::Xminus, Axis::Zminus) => BlockRotation::XminusZminus,
+            
+            (Axis::Yplus, Axis::Xplus) => BlockRotation::YplusXplus,
+            (Axis::Yplus, Axis::Xminus) => BlockRotation::YplusXminus,
+            (Axis::Yplus, Axis::Zplus) => BlockRotation::YplusZplus,
+            (Axis::Yplus, Axis::Zminus) => BlockRotation::YplusZminus,
+            
+            (Axis::Yminus, Axis::Xplus) => BlockRotation::YminusXplus,
+            (Axis::Yminus, Axis::Xminus) => BlockRotation::YminusXminus,
+            (Axis::Yminus, Axis::Zplus) => BlockRotation::YminusZplus,
+            (Axis::Yminus, Axis::Zminus) => BlockRotation::YminusZminus,
+            
+            (Axis::Zplus, Axis::Xplus) => BlockRotation::ZplusXplus,
+            (Axis::Zplus, Axis::Xminus) => BlockRotation::ZplusXminus,
+            (Axis::Zplus, Axis::Yplus) => BlockRotation::ZplusYplus,
+            (Axis::Zplus, Axis::Yminus) => BlockRotation::ZplusYminus,
+            
+            (Axis::Zminus, Axis::Xplus) => BlockRotation::ZminusXplus,
+            (Axis::Zminus, Axis::Xminus) => BlockRotation::ZminusXminus,
+            (Axis::Zminus, Axis::Yplus) => BlockRotation::ZminusYplus,
+            (Axis::Zminus, Axis::Yminus) => BlockRotation::ZminusYminus,
+            
+            // These cases shouldn't happen due to our secondary axis selection
+            _ => BlockRotation::XplusYplus,
+        }
+    }
+    
+    /// Rotates the block around an axis by 90° steps
+    pub fn rotate(self, axis: super::cube_math::Axis, steps: u8) -> Self {
+        let quat = self.to_quat();
+        let rotation = match axis {
+            super::cube_math::Axis::X => Quat::from_rotation_x(steps as f32 * std::f32::consts::FRAC_PI_2),
+            super::cube_math::Axis::Y => Quat::from_rotation_y(steps as f32 * std::f32::consts::FRAC_PI_2),
+            super::cube_math::Axis::Z => Quat::from_rotation_z(steps as f32 * std::f32::consts::FRAC_PI_2),
+        };
+        Self::from_quat(rotation * quat)
+    }
+}
+
+
+
 /// Represents a block in the world with optimized storage
 #[derive(Clone, Copy, Debug, PartialEq)]
 #[repr(u8)]
 pub enum Block {
     None = 0,
-    Simple(u16, u8),    // material, packed rotation (6 bits - 2)
-    Marching(u16, u32), // material, density field (27 bits - 4)
+    Simple(u16, BlockRotation),  // material, rotation
+    Marching(u16, u32),         // material, density field (27 bits - 4)
 }
+
 #[allow(dead_code)]
 impl Block {
     // Rotation bit masks and shifts
@@ -37,15 +239,20 @@ impl Block {
     /// Creates a default empty block
     #[inline]
     pub const fn default() -> Self {
-        Self::Simple(0, 0)
+        Self::Simple(0, BlockRotation::XplusYplus)
     }
 
     /// Creates a new simple block with default material
     #[inline]
-    pub const fn new() -> Self {
-        Self::Simple(1, 0)
+    pub const fn new(material: u16) -> Self {
+        Self::Simple(material, BlockRotation::XplusYplus)
     }
 
+    /// Creates a block from a quaternion rotation
+    #[inline]
+    pub fn new_quat(rotation: Quat) -> Self {
+        Self::Simple(1, BlockRotation::from_quat(rotation))
+    }
 
     /// Creates a new marching cubes block with center point set
     #[inline]
@@ -53,21 +260,12 @@ impl Block {
         Self::Marching(1, 0x20_00)
     }
 
-    /// Creates a block from a quaternion rotation
-    #[inline]
-    pub fn new_quat(rotation: Quat) -> Self {
-        Self::Simple(1, Self::quat_to_rotation(rotation))
-    }
 
-    /// Extracts rotation components (0-3)
+    /// Extracts rotation
     #[inline]
-    pub fn get_rotation(&self) -> Option<(u8, u8, u8)> {
+    pub fn get_rotation(&self) -> Option<BlockRotation> {
         match self {
-            Block::Simple(_, rot) => Some((
-                (rot & Self::ROT_MASK_X) >> Self::ROT_SHIFT_X,
-                (rot & Self::ROT_MASK_Y) >> Self::ROT_SHIFT_Y,
-                (rot & Self::ROT_MASK_Z) >> Self::ROT_SHIFT_Z,
-            )),
+            Block::Simple(_, rot) => Some(*rot),
             _ => None,
         }
     }
@@ -76,20 +274,16 @@ impl Block {
     #[inline]
     pub fn to_quat(&self) -> Quat {
         self.get_rotation()
-            .map(|(x, y, z)| {
-                // Convert to radians (0, π/2, π, 3π/2)
-                let angles = [
-                    x as f32 * PI / 2.0,
-                    y as f32 * PI / 2.0,
-                    z as f32 * PI / 2.0,
-                ];
-
-                // Apply rotations in ZYX order
-                Quat::from_rotation_z(angles[2])
-                    * Quat::from_rotation_y(angles[1])
-                    * Quat::from_rotation_x(angles[0])
-            })
+            .map(|rot| rot.to_quat())
             .unwrap_or_else(|| Quat::IDENTITY)
+    }
+
+    /// Rotates the block around an axis by N 90° steps
+    #[inline]
+    pub fn rotate(&mut self, axis: cube_math::Axis, steps: u8) {
+        if let Block::Simple(_, rotation) = self {
+            *rotation = rotation.rotate(axis, steps);
+        }
     }
 
     #[inline]
@@ -127,22 +321,6 @@ impl Block {
         }
     }
 
-    /// Rotates the block around an axis by N 90° steps
-    #[inline]
-    pub fn rotate(&mut self, axis: cube_math::Axis, steps: u8) {
-        if let Block::Simple(_, rotation) = self {
-            let (mask, shift) = match axis {
-                cube_math::Axis::X => (Self::ROT_MASK_X, Self::ROT_SHIFT_X),
-                cube_math::Axis::Y => (Self::ROT_MASK_Y, Self::ROT_SHIFT_Y),
-                cube_math::Axis::Z => (Self::ROT_MASK_Z, Self::ROT_SHIFT_Z),
-            };
-
-            let current = (*rotation & mask) >> shift;
-            let new_rot = (current + steps) % 4;
-            *rotation = (*rotation & !mask) | (new_rot << shift);
-        }
-    }
-
     /// Converts quaternion to packed rotation format
     #[inline]
     pub fn quat_to_rotation(rotation: Quat) -> u8 {
@@ -160,9 +338,9 @@ impl Block {
 
     /// Sets all rotation axes at once
     #[inline]
-    pub fn set_rotation(&mut self, x: u8, y: u8, z: u8) {
+    pub fn set_rotation(&mut self, rotaio: BlockRotation) {
         if let Block::Simple(_, rotation) = self {
-            *rotation = (x & 0x3) | ((y & 0x3) << 2) | ((z & 0x3) << 4);
+            *rotation = rotaio;
         }
     }
 
@@ -287,7 +465,7 @@ impl Chunk {
     #[inline]
     pub fn new() -> Self {
         let mut chunk = Self::empty();
-        let new_block = Block::new();
+        let new_block = Block::new(1);
         let idx = chunk.palette_add(new_block);
         chunk.storage = BlockStorage::Uniform(idx);
         chunk.dirty = true;

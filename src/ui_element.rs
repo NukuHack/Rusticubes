@@ -83,11 +83,11 @@ pub struct UIElement {
     pub data: UIElementData,
     pub position: (f32, f32),
     pub size: (f32, f32),
-    pub color: [f32; 4],
+    pub color: [u8; 4],
     pub hovered: bool,
     pub z_index: i32,
     pub visible: bool,
-    pub border_color: [f32; 4],
+    pub border_color: [u8; 4],
     pub border_width: f32,
     pub enabled: bool,
 }
@@ -129,9 +129,9 @@ impl fmt::Debug for UIElement {
 
 impl UIElement {
     // Constants
-    const DEFAULT_ALPHA: f32 = 0.9;
-    const HOVER_ALPHA: f32 = 0.5;
-    const DEFAULT_COLOR: [f32; 4] = [1.0, 1.0, 1.0, Self::DEFAULT_ALPHA];
+    const DEFAULT_ALPHA: u8 = 255;
+    const HOVER_ALPHA: u8 = 124;
+    const DEFAULT_COLOR: [u8; 4] = [255, 255, 255, Self::DEFAULT_ALPHA];
     
     // Element creation
     pub fn new(id: usize, element_type: UIElementData) -> Self {
@@ -205,12 +205,12 @@ impl UIElement {
         self
     }
     
-    pub fn with_color(mut self, r: f32, g: f32, b: f32) -> Self {
+    pub fn with_color(mut self, r: u8, g: u8, b: u8) -> Self {
         self.color = [r, g, b, self.color[3]];
         self
     }
     
-    pub fn with_alpha(mut self, alpha: f32) -> Self {
+    pub fn with_alpha(mut self, alpha: u8) -> Self {
         self.color[3] = alpha;
         self
     }
@@ -230,7 +230,7 @@ impl UIElement {
         self
     }
     
-    pub fn with_border(mut self, (r, g, b, a):(f32,f32,f32,f32), width: f32) -> Self {
+    pub fn with_border(mut self, (r, g, b, a):(u8,u8,u8,u8), width: f32) -> Self {
         self.border_color = [r, g, b, a];
         self.border_width = width;
         self
@@ -328,7 +328,7 @@ impl UIElement {
             self.color[3] = if self.hovered && self.enabled {
                 Self::HOVER_ALPHA
             } else if !self.enabled {
-                Self::DEFAULT_ALPHA * 0.5
+                Self::DEFAULT_ALPHA / 2
             } else {
                 Self::DEFAULT_ALPHA
             };
