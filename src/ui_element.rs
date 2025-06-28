@@ -5,28 +5,15 @@ use std::sync::Arc;
 
 type Callback = Arc<RefCell<dyn FnMut() + 'static>>;
 
+
 #[derive(Clone)]
 pub enum UIElementData {
     Panel,
-    Label {
-        text: String,
-    },
-    Button {
-        text: String,
-        on_click: Option<Callback>,
-    },
-    InputField {
-        text: String,
-        placeholder: Option<String>,
-    },
-    Checkbox {
-        label: Option<String>,
-        checked: bool,
-        on_click: Option<Callback>,
-    },
-    Image {
-        path: String
-    },
+    Label { text: String, text_color: Option<[u8; 4]> },
+    Button { text: String, text_color: Option<[u8; 4]>, on_click: Option<Callback> },
+    InputField { text: String, text_color: Option<[u8; 4]>, placeholder: Option<String> },
+    Checkbox { label: Option<String>, text_color: Option<[u8; 4]>, checked: bool, on_click: Option<Callback> },
+    Image { path: String },
     Animation {
         frames: Vec<String>,
         current_frame: u32,
@@ -41,17 +28,16 @@ pub enum UIElementData {
 }
 
 impl Default for UIElementData {
-    fn default() -> Self {
-        UIElementData::Panel
-    }
+    fn default() -> Self { UIElementData::Panel }
 }
+
 impl fmt::Debug for UIElementData {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Panel => f.debug_struct("Panel").finish(),
-            Self::Label { text } => f.debug_struct("Label").field("text", text).finish(),
+            Self::Panel => write!(f, "Panel"),
+            Self::Label { text, .. } => f.debug_struct("Label").field("text", text).finish(),
             Self::Button { text, .. } => f.debug_struct("Button").field("text", text).finish(),
-            Self::InputField { text, placeholder } => f
+            Self::InputField { text, placeholder, .. } => f
                 .debug_struct("InputField")
                 .field("text", text)
                 .field("placeholder", placeholder)
@@ -61,10 +47,7 @@ impl fmt::Debug for UIElementData {
                 .field("label", label)
                 .field("checked", checked)
                 .finish(),
-            Self::Image { path } => f
-                .debug_struct("Image")
-                .field("path", path)
-                .finish(),
+            Self::Image { path } => f.debug_struct("Image").field("path", path).finish(),
             Self::Animation { frames, current_frame, frame_duration, looping, playing, .. } => f
                 .debug_struct("Animation")
                 .field("frames", frames)
@@ -78,6 +61,7 @@ impl fmt::Debug for UIElementData {
     }
 }
 
+#[derive(Clone)]
 pub struct UIElement {
     pub id: usize,
     pub data: UIElementData,
@@ -91,13 +75,14 @@ pub struct UIElement {
     pub border_width: f32,
     pub enabled: bool,
 }
+
 impl Default for UIElement {
     fn default() -> Self {
         Self {
             id: 0,
             data: UIElementData::default(),
-            position: (0.0,0.0),
-            size: (0.0,0.0),
+            position: (0.0, 0.0),
+            size: (0.0, 0.0),
             color: Self::DEFAULT_COLOR,
             hovered: false,
             z_index: 0,
@@ -108,6 +93,7 @@ impl Default for UIElement {
         }
     }
 }
+
 impl fmt::Debug for UIElement {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("UIElement")
@@ -115,133 +101,96 @@ impl fmt::Debug for UIElement {
             .field("data", &self.data)
             .field("position", &self.position)
             .field("size", &self.size)
-            .field("color", &self.color)
-            .field("hovered", &self.hovered)
-            // Enhanced features
-            .field("z_index", &self.z_index)
             .field("visible", &self.visible)
-            .field("border_color", &self.border_color)
-            .field("border_width", &self.border_width)
             .field("enabled", &self.enabled)
             .finish()
     }
 }
 
 impl UIElement {
-    // Constants
     const DEFAULT_ALPHA: u8 = 255;
     const HOVER_ALPHA: u8 = 124;
     const DEFAULT_COLOR: [u8; 4] = [255, 255, 255, Self::DEFAULT_ALPHA];
     
     // Element creation
     pub fn new(id: usize, element_type: UIElementData) -> Self {
-        Self {
-            id,
-            data: element_type,
-            color: Self::DEFAULT_COLOR,
-            ..Default::default()
-        }
+        Self { id, data: element_type, color: Self::DEFAULT_COLOR, ..Default::default() }
     }
     
-    pub fn panel(id: usize) -> Self {
-        Self::new(id, UIElementData::Panel)
-    }
-    
+    pub fn panel(id: usize) -> Self { Self::new(id, UIElementData::Panel) }
     pub fn label(id: usize, text: impl Into<String>) -> Self {
-        Self::new(id, UIElementData::Label { text: text.into() })
+        Self::new(id, UIElementData::Label { text: text.into(), text_color: None })
     }
-    
     pub fn button(id: usize, text: impl Into<String>) -> Self {
-        Self::new(id, UIElementData::Button {
-            text: text.into(),
-            on_click: None,
-        })
+        Self::new(id, UIElementData::Button { text: text.into(), text_color: None, on_click: None })
     }
-    
     pub fn input(id: usize) -> Self {
-        Self::new(id, UIElementData::InputField {
-            text: String::new(),
-            placeholder: None,
-        })
+        Self::new(id, UIElementData::InputField { text: String::new(), text_color: None, placeholder: None })
     }
-    
     pub fn checkbox(id: usize) -> Self {
-        Self::new(id, UIElementData::Checkbox {
-            label: None,
-            checked: false,
-            on_click: None,
-        })
+        Self::new(id, UIElementData::Checkbox { label: None, text_color: None, checked: false, on_click: None })
     }
-    
     pub fn image(id: usize, path: impl Into<String>) -> Self {
         Self::new(id, UIElementData::Image { path: path.into() })
     }
-    
     pub fn animation(id: usize, frames: Vec<String>) -> Self {
         Self::new(id, UIElementData::Animation {
-            frames,
-            current_frame: 0,
-            frame_duration: 1.0,
-            elapsed_time: 0.0,
-            looping: true,
-            playing: true,
-            smooth_transition: false,
-            blend_delay: 20,
+            frames, current_frame: 0, frame_duration: 1.0, elapsed_time: 0.0,
+            looping: true, playing: true, smooth_transition: false, blend_delay: 20,
         })
     }
+    pub fn divider(id: usize) -> Self { Self::new(id, UIElementData::Divider) }
     
-    pub fn divider(id: usize) -> Self {
-        Self::new(id, UIElementData::Divider)
-    }
-    
-    // Builder methods for configuration
-    pub fn with_position(mut self, x: f32, y: f32) -> Self {
-        self.position = (x, y);
-        self
-    }
-    
-    pub fn with_size(mut self, width: f32, height: f32) -> Self {
-        self.size = (width, height);
-        self
-    }
-    
-    pub fn with_color(mut self, r: u8, g: u8, b: u8) -> Self {
-        self.color = [r, g, b, self.color[3]];
-        self
-    }
-    
-    pub fn with_alpha(mut self, alpha: u8) -> Self {
-        self.color[3] = alpha;
-        self
-    }
-    
-    pub fn with_z_index(mut self, z_index: i32) -> Self {
-        self.z_index = z_index;
-        self
-    }
-    
-    pub fn with_visibility(mut self, visible: bool) -> Self {
-        self.visible = visible;
-        self
-    }
-    
-    pub fn with_enabled(mut self, enabled: bool) -> Self {
-        self.enabled = enabled;
-        self
-    }
-    
-    pub fn with_border(mut self, (r, g, b, a):(u8,u8,u8,u8), width: f32) -> Self {
-        self.border_color = [r, g, b, a];
+    // Builder methods
+    pub fn with_position(mut self, x: f32, y: f32) -> Self { self.position = (x, y); self }
+    pub fn with_size(mut self, width: f32, height: f32) -> Self { self.size = (width, height); self }
+    pub fn with_color(mut self, r: u8, g: u8, b: u8) -> Self { self.color = [r, g, b, self.color[3]]; self }
+    pub fn with_alpha(mut self, alpha: u8) -> Self { self.color[3] = alpha; self }
+    pub fn with_z_index(mut self, z_index: i32) -> Self { self.z_index = z_index; self }
+    pub fn with_visibility(mut self, visible: bool) -> Self { self.visible = visible; self }
+    pub fn with_enabled(mut self, enabled: bool) -> Self { self.enabled = enabled; self }
+    pub fn with_border(mut self, color: (u8, u8, u8, u8), width: f32) -> Self {
+        self.border_color = [color.0, color.1, color.2, color.3];
         self.border_width = width;
         self
     }
     
-    // Element-specific configuration
+    // Text-related methods
     pub fn with_text(mut self, text: impl Into<String>) -> Self {
-        if let Some(text_field) = self.get_text_mut() {
-            *text_field = text.into();
-        }
+        if let Some(text_field) = self.get_text_mut() { *text_field = text.into(); }
         self
+    }
+
+    fn set_text_color(&mut self, r: u8, g: u8, b: u8, a: u8) {
+        match &mut self.data {
+            UIElementData::Label { text_color, .. } |
+            UIElementData::Button { text_color, .. } |
+            UIElementData::InputField { text_color, .. } |
+            UIElementData::Checkbox { text_color, .. } => *text_color = Some([r, g, b, a]),
+            _ => {}
+        }
+    }
+
+    pub fn with_text_color(mut self, r: u8, g: u8, b: u8) -> Self {
+        self.set_text_color(r, g, b, 255);
+        self
+    }
+
+    pub fn with_text_visibility(mut self, a: u8) -> Self {
+        let color = self.get_text_color();
+        self.set_text_color(color[0], color[1], color[2], a);
+        self
+    }
+
+    pub fn get_text_color(&self) -> [u8; 4] {
+        let text_color = match &self.data {
+            UIElementData::Label { text_color, .. } |
+            UIElementData::Button { text_color, .. } |
+            UIElementData::InputField { text_color, .. } |
+            UIElementData::Checkbox { text_color, .. } => *text_color,
+            _ => None,
+        };
+        text_color.unwrap_or(self.color)
     }
     
     pub fn with_placeholder(mut self, placeholder: impl Into<String>) -> Self {
@@ -252,12 +201,11 @@ impl UIElement {
     }
     
     pub fn with_checked(mut self, checked: bool) -> Self {
-        if let UIElementData::Checkbox { checked: c, .. } = &mut self.data {
-            *c = checked;
-        }
+        if let UIElementData::Checkbox { checked: c, .. } = &mut self.data { *c = checked; }
         self
     }
     
+
     pub fn with_callback<F: FnMut() + 'static>(mut self, callback: F) -> Self {
         match &mut self.data {
             UIElementData::Button { on_click, .. } => {
@@ -271,43 +219,30 @@ impl UIElement {
         self
     }
     
-    // Animation-specific methods
+    
+    // Animation methods
     pub fn with_animation_frames(mut self, frames: Vec<String>) -> Self {
-        if let UIElementData::Animation { frames: f, .. } = &mut self.data {
-            *f = frames;
-        }
+        if let UIElementData::Animation { frames: f, .. } = &mut self.data { *f = frames; }
         self
     }
-    
     pub fn with_animation_duration(mut self, duration: f32) -> Self {
-        if let UIElementData::Animation { frame_duration, .. } = &mut self.data {
-            *frame_duration = duration;
-        }
+        if let UIElementData::Animation { frame_duration, .. } = &mut self.data { *frame_duration = duration; }
         self
     }
-    
     pub fn with_looping(mut self, looping: bool) -> Self {
-        if let UIElementData::Animation { looping: l, .. } = &mut self.data {
-            *l = looping;
-        }
+        if let UIElementData::Animation { looping: l, .. } = &mut self.data { *l = looping; }
         self
     }
-    
     pub fn with_smooth_transition(mut self, smooth: bool) -> Self {
-        if let UIElementData::Animation { smooth_transition, .. } = &mut self.data {
-            *smooth_transition = smooth;
-        }
+        if let UIElementData::Animation { smooth_transition, .. } = &mut self.data { *smooth_transition = smooth; }
         self
     }
-    
     pub fn with_blend_delay(mut self, delay: u32) -> Self {
-        if let UIElementData::Animation { blend_delay, .. } = &mut self.data {
-            *blend_delay = delay;
-        }
+        if let UIElementData::Animation { blend_delay, .. } = &mut self.data { *blend_delay = delay; }
         self
     }
     
-    // Utility methods (unchanged from original)
+    // Utility methods
     pub fn get_bounds(&self) -> (f32, f32, f32, f32) {
         let (x, y) = self.position;
         let (w, h) = self.size;
@@ -315,9 +250,7 @@ impl UIElement {
     }
     
     pub fn contains_point(&self, x: f32, y: f32) -> bool {
-        if !self.visible || !self.enabled {
-            return false;
-        }
+        if !self.visible || !self.enabled { return false; }
         let (min_x, min_y, max_x, max_y) = self.get_bounds();
         x >= min_x && x <= max_x && y >= min_y && y <= max_y
     }
@@ -336,15 +269,13 @@ impl UIElement {
     }
     
     pub fn toggle_checked(&mut self) {
-        if let UIElementData::Checkbox { checked, .. } = &mut self.data {
-            *checked = !*checked;
-        }
+        if let UIElementData::Checkbox { checked, .. } = &mut self.data { *checked = !*checked; }
     }
     
     pub fn get_text(&self) -> Option<&str> {
         match &self.data {
-            UIElementData::Label { text } => Some(text),
-            UIElementData::Button { text, .. } => Some(text),
+            UIElementData::Label { text, .. } |
+            UIElementData::Button { text, .. } |
             UIElementData::InputField { text, .. } => Some(text),
             UIElementData::Checkbox { label, .. } => label.as_deref(),
             _ => None,
@@ -353,25 +284,21 @@ impl UIElement {
     
     pub fn get_text_mut(&mut self) -> Option<&mut String> {
         match &mut self.data {
-            UIElementData::Label { text } => Some(text),
-            UIElementData::Button { text, .. } => Some(text),
+            UIElementData::Label { text, .. } |
+            UIElementData::Button { text, .. } |
             UIElementData::InputField { text, .. } => Some(text),
             UIElementData::Checkbox { label, .. } => label.as_mut(),
             _ => None,
         }
     }
     
-    pub fn is_input(&self) -> bool {
-        matches!(self.data, UIElementData::InputField { .. })
-    }
+    pub fn is_input(&self) -> bool { matches!(self.data, UIElementData::InputField { .. }) }
     
     pub fn is_checked(&self) -> Option<bool> {
-        if let UIElementData::Checkbox { checked, .. } = &self.data {
-            Some(*checked)
-        } else {
-            None
-        }
+        if let UIElementData::Checkbox { checked, .. } = &self.data { Some(*checked) } else { None }
     }
+    
+
     
     pub fn trigger_click(&mut self) {
         match &mut self.data {
@@ -391,47 +318,30 @@ impl UIElement {
         }
     }
     
-    // Animation control methods
+    // Animation control
     pub fn play(&mut self) {
-        if let UIElementData::Animation { playing, .. } = &mut self.data {
-            *playing = true;
-        }
+        if let UIElementData::Animation { playing, .. } = &mut self.data { *playing = true; }
     }
-    
     pub fn pause(&mut self) {
-        if let UIElementData::Animation { playing, .. } = &mut self.data {
-            *playing = false;
-        }
+        if let UIElementData::Animation { playing, .. } = &mut self.data { *playing = false; }
     }
-    
     pub fn reset(&mut self) {
         if let UIElementData::Animation { current_frame, elapsed_time, .. } = &mut self.data {
-            *current_frame = 0;
-            *elapsed_time = 0.0;
+            *current_frame = 0; *elapsed_time = 0.0;
         }
     }
     
     pub fn update_anim(&mut self, delta_time: f32) {
         if let UIElementData::Animation {
-            frames,
-            current_frame,
-            frame_duration,
-            elapsed_time,
-            looping,
-            playing,
-            ..
-        } = &mut self.data
-        {
-            if !*playing || frames.is_empty() {
-                return;
-            }
-
+            frames, current_frame, frame_duration, elapsed_time, looping, playing, ..
+        } = &mut self.data {
+            if !*playing || frames.is_empty() { return; }
+            
             *elapsed_time += delta_time;
-
             while *elapsed_time >= *frame_duration {
                 *elapsed_time -= *frame_duration;
                 *current_frame += 1;
-
+                
                 if *current_frame >= frames.len() as u32 {
                     if *looping {
                         *current_frame = 0;

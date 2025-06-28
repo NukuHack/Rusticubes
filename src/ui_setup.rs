@@ -9,7 +9,7 @@ impl UIManager {
         let bg_panel = UIElement::panel(self.next_id())
             .with_position(-1.0, -1.0)
             .with_size(2.0, 2.0)
-            .with_color(20, 20, 30)  // Dark background
+            .with_color(15, 15, 25)  // Darker background
             .with_z_index(-5);
 
         match self.state {
@@ -41,30 +41,32 @@ impl UIManager {
 
     #[inline]
     fn setup_boot_screen_ui(&mut self) {
-        // Title with shadow effect
+        // Main title with gradient effect
         let title = UIElement::label(self.next_id(), "Rusticubes")
             .with_position(-0.4, 0.3)
             .with_size(0.8, 0.2)
-            .with_color(255, 255, 255)  // White
-            .with_border((230, 230, 230, 230), 0.005)
+            .with_color(30, 30, 45)  // Dark panel
+            .with_text_color(180, 180, 220) // Light blue-gray text
+            .with_border((80, 80, 120, 255), 0.008)
             .with_z_index(10);
         self.add_element(title);
 
-        // Button container panel
+        // Button container panel with subtle glow
         let button_panel = UIElement::panel(self.next_id())
             .with_position(-0.35, -0.2)
             .with_size(0.7, 0.5)
-            .with_color(38, 38, 51)  // Dark blue-gray
-            .with_border((76, 76, 102, 255), 0.005)
+            .with_color(25, 25, 40)  // Dark blue-gray
+            .with_border((60, 60, 90, 255), 0.008)
             .with_z_index(1);
         self.add_element(button_panel);
 
-        // Start button
+        // Start button with hover-friendly colors
         let start_button = UIElement::button(self.next_id(), "Start")
             .with_position(-0.15, 0.0)
             .with_size(0.3, 0.1)
-            .with_color(51, 127, 204)  // Blue
-            .with_border((76, 153, 229, 255), 0.005)
+            .with_color(40, 80, 140)  // Deep blue
+            .with_text_color(200, 220, 255) // Light blue
+            .with_border((70, 110, 180, 255), 0.005)
             .with_z_index(6)
             .with_callback(|| {
                 let state = super::config::get_state();
@@ -73,32 +75,34 @@ impl UIManager {
             });
         self.add_element(start_button);
 
-        // Exit button
+        // Exit button with more contrast
         let exit_button = UIElement::button(self.next_id(), "Exit")
             .with_position(-0.15, -0.15)
             .with_size(0.3, 0.1)
-            .with_color(204, 51, 51)  // Red
-            .with_border((229, 76, 76, 255), 0.005)
+            .with_color(120, 40, 40)  // Dark red
+            .with_text_color(255, 180, 180) // Light red
+            .with_border((160, 60, 60, 255), 0.005)
             .with_z_index(5)
             .with_callback(|| {
                 close_pressed();
             });
         self.add_element(exit_button);
 
-        // Funny tree (used in github too)
+        // Decorative elements
         let tree_picture = UIElement::image(self.next_id(), "happy-tree.png")
             .with_position(0.6, 0.5)
             .with_size(0.27, 0.45)
-            .with_color(255, 255, 255)  // White
-            .with_border((76, 153, 229, 255), 0.005)
+            .with_color(255, 255, 255)
+            .with_border((80, 120, 180, 255), 0.008)
             .with_z_index(6);
         self.add_element(tree_picture);
 
         let memory_button = UIElement::button(self.next_id(), "Memory")
-            .with_position(0.5, 0.2)
-            .with_size(0.3, 0.1)
-            .with_color(51, 51, 51)  // Dark gray
-            .with_border((102, 102, 102, 255), 0.005)
+            .with_position(0.55, 0.2)
+            .with_size(0.35, 0.1)
+            .with_color(40, 40, 60)  // Dark gray-blue
+            .with_text_color(150, 170, 200) // Light blue-gray
+            .with_border((70, 90, 120, 255), 0.005)
             .with_z_index(6)
             .with_callback(|| {
                 super::memory::clean_gpu_memory(super::config::get_state().device());
@@ -114,49 +118,52 @@ impl UIManager {
             ])
             .with_position(-0.8, 0.5)
             .with_size(0.27, 0.45)
-            .with_color(255, 255, 255)  // White
-            .with_border((76, 153, 229, 255), 0.005)
+            .with_color(255, 255, 255)
+            .with_border((80, 120, 180, 255), 0.008)
             .with_z_index(6)
             .with_smooth_transition(true)
             .with_animation_duration(2.5);
         self.add_element(tree_animation);
 
-        // Version label at bottom
+        // Version label with subtle styling
         let version = UIElement::label(self.next_id(), format!("v{}", env!("CARGO_PKG_VERSION")))
             .with_position(0.7, -0.95)
             .with_size(0.2, 0.05)
-            .with_color(179, 179, 179)  // Light gray
-            .with_border((127, 127, 127, 127), 0.003)
+            .with_color(30, 30, 45)  // Dark panel
+            .with_text_color(120, 140, 180) // Blue-gray text
+            .with_border((60, 80, 120, 127), 0.003)
             .with_z_index(8);
         self.add_element(version);
     }
 
     #[inline]
     fn setup_world_selection_ui(&mut self) {
-        // Title with decorative border
+        // Title with improved styling
         let title = UIElement::label(self.next_id(), "Select World")
             .with_position(-0.4, 0.6)
             .with_size(0.8, 0.15)
-            .with_color(255, 255, 255)  // White
-            .with_border((179, 179, 204, 255), 0.005)
+            .with_color(30, 30, 45)  // Dark panel
+            .with_text_color(180, 200, 220) // Light blue text
+            .with_border((80, 100, 140, 255), 0.008)
             .with_z_index(10);
         self.add_element(title);
 
-        // World list container
+        // World list container with better contrast
         let list_panel = UIElement::panel(self.next_id())
             .with_position(-0.6, -0.4)
-            .with_size(1.2, 1.0)
-            .with_color(38, 38, 51)  // Dark blue-gray
-            .with_border((63, 63, 89, 255), 0.01)
+            .with_size(1.2, 0.9)  // Slightly shorter
+            .with_color(25, 25, 40)  // Dark blue-gray
+            .with_border((60, 70, 100, 255), 0.01)
             .with_z_index(1);
         self.add_element(list_panel);
 
-        // New World button
+        // New World button with consistent styling
         let new_w_button = UIElement::button(self.next_id(), "Create New World")
             .with_position(-0.3, 0.4)
-            .with_size(0.6, 0.1)
-            .with_color(76, 102, 153)  // Medium blue
-            .with_border((102, 127, 179, 255), 0.005)
+            .with_size(0.6, 0.08)
+            .with_color(50, 70, 110)  // Medium blue
+            .with_text_color(180, 200, 220) // Light blue text
+            .with_border((80, 110, 160, 255), 0.005)
             .with_z_index(8)
             .with_callback(|| {
                 let state = super::config::get_state();
@@ -173,29 +180,31 @@ impl UIManager {
             }
         };
 
-        // Add world buttons
+        // World buttons with improved styling
         for (i, name) in worlds.iter().enumerate() {
             let y_pos = 0.2 - (i as f32 * 0.12);
             let name_clone = name.clone();
             let name_cl = name_clone.clone();
 
-            let world_button = UIElement::button(self.next_id(), name.clone())
+            let world_button = UIElement::button(self.next_id(), name.to_uppercase())
                 .with_position(-0.4, y_pos)
                 .with_size(0.8, 0.1)
-                .with_color(63, 63, 102)  // Darker blue
-                .with_border((89, 89, 127, 255), 0.005)
+                .with_color(40, 50, 80)  // Darker blue
+                .with_text_color(180, 200, 220) // Light blue text
+                .with_border((70, 90, 130, 255), 0.005)
                 .with_z_index(5)
                 .with_callback(move || {
                     super::world_builder::join_world(&name_cl);
                 });
             self.add_element(world_button);
 
-            // Delete button with hover effects
-            let delete_button = UIElement::button(self.next_id(), "del")
-                .with_position(0.42, y_pos)
-                .with_size(0.13, 0.1)
-                .with_color(204, 51, 51)  // Red
-                .with_border((229, 76, 76, 255), 0.005)
+            // Delete button with more contrast
+            let delete_button = UIElement::button(self.next_id(), "X")
+                .with_position(0.43, y_pos)
+                .with_size(0.1, 0.1)
+                .with_color(100, 40, 40)  // Dark red
+                .with_text_color(255, 180, 180) // Light red
+                .with_border((150, 60, 60, 255), 0.005)
                 .with_z_index(5)
                 .with_callback(move || {
                     super::world_builder::del_world(&name_clone);
@@ -207,8 +216,9 @@ impl UIManager {
         let back_button = UIElement::button(self.next_id(), "Back")
             .with_position(-0.1, -0.8)
             .with_size(0.2, 0.08)
-            .with_color(127, 127, 127)  // Gray
-            .with_border((153, 153, 153, 255), 0.005)
+            .with_color(60, 60, 80)  // Dark gray-blue
+            .with_text_color(180, 190, 210) // Light blue-gray
+            .with_border((90, 100, 130, 255), 0.005)
             .with_z_index(8)
             .with_callback(|| {
                 let state = super::config::get_state();
@@ -220,21 +230,22 @@ impl UIManager {
 
     #[inline]
     fn setup_new_world_ui(&mut self) {
-        // Title with decorative border
+        // Title with improved styling
         let title = UIElement::label(self.next_id(), "Create New World")
             .with_position(-0.5, 0.4)
             .with_size(1.0, 0.15)
-            .with_color(255, 255, 255)  // White
-            .with_border((179, 179, 204, 255), 0.005)
+            .with_color(30, 30, 45)  // Dark panel
+            .with_text_color(180, 200, 220) // Light blue text
+            .with_border((80, 100, 140, 255), 0.008)
             .with_z_index(10);
         self.add_element(title);
 
-        // Form panel
+        // Form panel with better contrast
         let form_panel = UIElement::panel(self.next_id())
             .with_position(-0.4, -0.3)
             .with_size(0.8, 0.7)
-            .with_color(38, 38, 51)  // Dark blue-gray
-            .with_border((63, 63, 89, 255), 0.01)
+            .with_color(25, 25, 40)  // Dark blue-gray
+            .with_border((60, 70, 100, 255), 0.01)
             .with_z_index(1);
         self.add_element(form_panel);
 
@@ -242,27 +253,30 @@ impl UIManager {
         let w_name_label = UIElement::label(self.next_id(), "World Name:")
             .with_position(-0.35, 0.1)
             .with_size(0.4, 0.08)
-            .with_color(229, 229, 229)  // Light gray
+            .with_color(30, 30, 45)  // Dark panel
+            .with_text_color(180, 200, 220) // Light blue text
             .with_z_index(3);
         self.add_element(w_name_label);
 
-        // World Name input
+        // World Name input with better styling
         let input_id = self.next_id();
         let world_name_input = UIElement::input(input_id)
             .with_position(-0.35, -0.0)
             .with_size(0.7, 0.1)
-            .with_color(51, 51, 76)  // Dark blue
+            .with_color(40, 50, 70)  // Dark blue-gray
+            .with_text_color(200, 220, 240) // Light blue text
             .with_placeholder("New World")
-            .with_border((102, 102, 153, 255), 0.005)
+            .with_border((80, 100, 140, 255), 0.005)
             .with_z_index(5);
         self.add_element(world_name_input);
 
-        // Generate button
+        // Generate button with consistent styling
         let gen_button = UIElement::button(self.next_id(), "Create World")
             .with_position(-0.3, -0.2)
             .with_size(0.6, 0.1)
-            .with_color(76, 102, 153)  // Medium blue
-            .with_border((102, 127, 179, 255), 0.005)
+            .with_color(50, 70, 110)  // Medium blue
+            .with_text_color(180, 200, 220) // Light blue text
+            .with_border((80, 110, 160, 255), 0.005)
             .with_z_index(6)
             .with_callback(move || {
                 let world_name = super::config::get_state()
@@ -274,12 +288,13 @@ impl UIManager {
             });
         self.add_element(gen_button);
 
-        // Back button
+        // Back button with consistent styling
         let back_button = UIElement::button(self.next_id(), "Back")
             .with_position(-0.1, -0.45)
             .with_size(0.2, 0.08)
-            .with_color(127, 127, 127)  // Gray
-            .with_border((153, 153, 153, 255), 0.005)
+            .with_color(60, 60, 80)  // Dark gray-blue
+            .with_text_color(180, 190, 210) // Light blue-gray
+            .with_border((90, 100, 130, 255), 0.005)
             .with_z_index(8)
             .with_callback(|| {
                 let state = super::config::get_state();
@@ -291,20 +306,21 @@ impl UIManager {
 
     #[inline]
     fn setup_loading_screen_ui(&mut self) {
-        // Loading panel
+        // Loading panel with better contrast
         let loading_panel = UIElement::panel(self.next_id())
             .with_position(-0.3, -0.1)
             .with_size(0.6, 0.2)
-            .with_color(25, 25, 38)  // Very dark blue
-            .with_border((76, 76, 102, 255), 0.01)
+            .with_color(20, 20, 35)  // Very dark blue
+            .with_border((60, 80, 120, 255), 0.01)
             .with_z_index(10);
         self.add_element(loading_panel);
 
-        // Loading text with animation
+        // Loading text with better visibility
         let loading_text = UIElement::label(self.next_id(), "Loading...")
             .with_position(-0.25, -0.05)
             .with_size(0.5, 0.1)
-            .with_color(255, 255, 255)  // White
+            .with_color(20, 20, 35)  // Dark panel
+            .with_text_color(180, 200, 220) // Light blue text
             .with_z_index(15);
         self.add_element(loading_text);
 
@@ -312,115 +328,93 @@ impl UIManager {
         let progress_bg = UIElement::panel(self.next_id())
             .with_position(-0.25, -0.15)
             .with_size(0.5, 0.03)
-            .with_color(12, 12, 25)  // Very dark
-            .with_border((51, 51, 76, 255), 0.005)
+            .with_color(15, 20, 30)  // Very dark
+            .with_border((40, 60, 90, 255), 0.005)
             .with_z_index(8);
         self.add_element(progress_bg);
 
-        // Progress bar (animated)
+        // Progress bar with brighter color
         let progress_bar = UIElement::panel(self.next_id())
             .with_position(-0.245, -0.145)
-            .with_size(0.01, 0.02) // Will be animated
-            .with_color(76, 127, 204)  // Bright blue
+            .with_size(0.01, 0.02)
+            .with_color(80, 140, 220)  // Bright blue
             .with_z_index(8);
         self.add_element(progress_bar);
     }
 
     #[inline]
     fn setup_in_game_ui(&mut self) {
-        // Side panel for in-game UI
+        // Side panel with better contrast
         let side_panel = UIElement::panel(self.next_id())
             .with_position(0.4, -0.9)
             .with_size(0.6, 1.8)
-            .with_color(25, 25, 38)  // Dark blue-gray
-            .with_border((51, 51, 76, 255), 0.01)
+            .with_color(20, 20, 35)  // Dark blue-gray
+            .with_border((50, 60, 90, 255), 0.01)
             .with_z_index(1);
         self.add_element(side_panel);
 
-        // Panel title
+        // Panel title with improved styling
         let panel_title = UIElement::label(self.next_id(), "Game Menu")
             .with_position(0.45, 0.75)
             .with_size(0.5, 0.1)
-            .with_color(255, 255, 255)  // White
-            .with_border((127, 127, 153, 255), 0.005)
+            .with_color(30, 30, 45)  // Dark panel
+            .with_text_color(180, 200, 220) // Light blue text
+            .with_border((80, 100, 140, 255), 0.008)
             .with_z_index(10);
         self.add_element(panel_title);
 
-        // Clean world button
+        // Clean world button with better contrast
         let clean_button = UIElement::button(self.next_id(), "Clean World")
             .with_position(0.45, 0.4)
             .with_size(0.5, 0.1)
-            .with_color(153, 76, 76)  // Reddish
-            .with_border((179, 102, 102, 255), 0.005)
+            .with_color(90, 50, 50)  // Dark reddish
+            .with_text_color(220, 180, 180) // Light red
+            .with_border((140, 80, 80, 255), 0.005)
             .with_z_index(8)
-            .with_callback(|| {
-                println!("Clean world button clicked!");
-                super::cube_extra::add_full_world();
-            });
+            .with_callback(|| super::cube_extra::add_full_world());
         self.add_element(clean_button);
 
-        // Help text
-        let help_text_1 = UIElement::label(self.next_id(), "ALT to lock")
-            .with_position(0.5, 0.1)
-            .with_size(0.4, 0.08)
-            .with_color(255, 255, 255)  // White
-            .with_border((127, 127, 153, 255), 0.005)
-            .with_z_index(5);
-        let help_text_2 = UIElement::label(self.next_id(), "L to fill chunk")
-            .with_position(0.5, -0.05)
-            .with_size(0.4, 0.08)
-            .with_color(255, 255, 255)  // White
-            .with_border((127, 127, 153, 255), 0.005)
-            .with_z_index(5);
-        let help_text_3 = UIElement::label(self.next_id(), "R to break")
-            .with_position(0.5, -0.2)
-            .with_size(0.4, 0.08)
-            .with_color(255, 255, 255)  // White
-            .with_border((127, 127, 153, 255), 0.005)
-            .with_z_index(5);
-        let help_text_4 = UIElement::label(self.next_id(), "F to place")
-            .with_position(0.5, -0.35)
-            .with_size(0.4, 0.08)
-            .with_color(255, 255, 255)  // White
-            .with_border((127, 127, 153, 255), 0.005)
-            .with_z_index(5);
-        let help_text_5 = UIElement::label(self.next_id(), "ESC to leave")
-            .with_position(0.5, -0.5)
-            .with_size(0.4, 0.08)
-            .with_color(255, 255, 255)  // White
-            .with_border((127, 127, 153, 255), 0.005)
-            .with_z_index(5);
+        // Help text with better contrast
+        let help_texts = [
+            ("ALT to lock", 0.1),
+            ("L to fill chunk", -0.05),
+            ("R to break", -0.2),
+            ("F to place", -0.35),
+            ("ESC to leave", -0.5)
+        ];
 
-        self.add_element(help_text_1);
-        self.add_element(help_text_2);
-        self.add_element(help_text_3);
-        self.add_element(help_text_4);
-        self.add_element(help_text_5);
+        for (_i, (text, y_pos)) in help_texts.iter().enumerate() {
+            let help_text = UIElement::label(self.next_id(), *text)
+                .with_position(0.5, *y_pos)
+                .with_size(0.4, 0.08)
+                .with_color(30, 30, 45)  // Dark panel
+                .with_text_color(180, 200, 220) // Light blue text
+                .with_border((80, 100, 140, 255), 0.005)
+                .with_z_index(5);
+            self.add_element(help_text);
+        }
 
-        // Close button
-        let close_button = UIElement::button(self.next_id(), "Exit Game")
+        // Close button with better contrast
+        let close_button = UIElement::button(self.next_id(), "Exit World")
             .with_position(0.55, -0.8)
             .with_size(0.3, 0.08)
-            .with_color(204, 51, 51)  // Red
-            .with_border((229, 76, 76, 255), 0.005)
+            .with_color(120, 40, 40)  // Dark red
+            .with_text_color(220, 180, 180) // Light red
+            .with_border((160, 60, 60, 255), 0.005)
             .with_z_index(8)
-            .with_callback(|| {
-                println!("Close button clicked!");
-                close_pressed();
-            });
+            .with_callback(|| close_pressed());
         self.add_element(close_button);
 
-        // Crosshair with better visibility
+        // Cross-hair with better visibility
         let crosshair_v = UIElement::divider(self.next_id())
             .with_position(0.0, -0.02)
             .with_size(0.02, 0.06)
-            .with_color(255, 255, 255)  // White
+            .with_color(220, 240, 255)  // Bright white
             .with_z_index(20);
-        
         let crosshair_h = UIElement::divider(self.next_id())
             .with_position(-0.02, 0.0)
             .with_size(0.06, 0.02)
-            .with_color(255, 255, 255)  // White
+            .with_color(220, 240, 255)  // Bright white
             .with_z_index(20);
 
         self.add_element(crosshair_v);

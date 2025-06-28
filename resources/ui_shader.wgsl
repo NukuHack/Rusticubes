@@ -27,10 +27,10 @@ fn vs_main(
     var out: VertexOutput;
     
     // Calculate UVs based on vertex index (for a quad made of two triangles)
-out.uv = vec2<f32>(
-    select(1.0, 0.0, (vert_idx & 1u) == 1u),  // U (horizontal) coordinate
-    select(1.0, 0.0, (vert_idx & 2u) == 2u)   // V (vertical) coordinate - flipped
-);
+    out.uv = vec2<f32>(
+        select(0.0, 1.0, (vert_idx & 1u) == 1u),  // U (horizontal) coordinate
+        select(1.0, 0.0, (vert_idx & 2u) == 2u)   // V (vertical) coordinate
+    );
     
     out.color = unpack_color(in.packed_data);
     out.position = vec4<f32>(in.position, 0.0, 1.0);

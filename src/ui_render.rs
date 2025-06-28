@@ -178,9 +178,9 @@ impl UIRenderer {
         }
 
         if let Some(text) = element.get_text() {
-            let texture_key = format!("{}_{:?}", text, element.color);            
+            let texture_key = format!("{}_{:?}", text, element.color);
             if !self.text_textures.contains_key(&texture_key) {
-                let texture = self.render_text_to_texture(state.device(), state.queue(), text, element.size, element.color);
+                let texture = self.render_text_to_texture(state.device(), state.queue(), text, element.size, element.get_text_color());
                 let texture_view = texture.create_view(&wgpu::TextureViewDescriptor {
                     dimension: Some(wgpu::TextureViewDimension::D2Array), ..Default::default() });
                 let bind_group = state.device().create_bind_group(&wgpu::BindGroupDescriptor {
@@ -205,7 +205,7 @@ impl UIRenderer {
                 let positions = [[x, y], [x + tex_w, y], [x, y + tex_h], [x + tex_w, y + tex_h]];
                 
                 for j in 0..4 {
-                    vertices.push(Vertex::new(positions[j], element.color));
+                    vertices.push(Vertex::new(positions[j], [255, 255, 255, 255]));
                 }
                 indices.extend(self.rectangle_indices(*current_index));
                 *current_index += 4;
@@ -226,7 +226,7 @@ impl UIRenderer {
             .fold(0.0, |width, g| width + g.unpositioned().h_metrics().advance_width);
         
         let (final_text, final_width) = if text_width > target_width_px as f32 * 0.9 {
-            let truncated = self.truncate_text_with_ellipsis(text, scale, target_width_px as f32 * 1.2);
+            let truncated = self.truncate_text(text, scale, target_width_px as f32 * 1.1);
             let truncated_width = self.font.layout(&truncated, scale, point(0.0, 0.0))
                 .fold(0.0, |width, g| width + g.unpositioned().h_metrics().advance_width);
             (truncated, truncated_width)
@@ -250,9 +250,9 @@ impl UIRenderer {
                     let x = x as i32 + bounding_box.min.x;
                     let y = y as i32 + bounding_box.min.y;
                     if x >= 0 && x < width as i32 && y >= 0 && y < height as i32 {
-                        let premultiplied = |c: u8| ((c as f32 * v).round() as u8);
+                        let alpha = (v * a as f32).round() as u8;
                         image.put_pixel(x as u32, y as u32, 
-                            Rgba([premultiplied(r), premultiplied(g), premultiplied(b), a]));
+                            Rgba([r, g, b, alpha]));
                     }
                 });
             }
@@ -278,7 +278,7 @@ impl UIRenderer {
         texture
     }
 
-    fn truncate_text_with_ellipsis(&self, text: &str, scale: Scale, max_width: f32) -> String {
+    fn truncate_text(&self, text: &str, scale: Scale, max_width: f32) -> String {
         let mut result = String::new();
         let ellipsis = "...";
         let ellipsis_width = self.font.layout(ellipsis, scale, point(0.0, 0.0))
@@ -450,7 +450,7 @@ impl UIRenderer {
             let label_element = UIElement {
                 position: (element.position.0 + element.size.0 + 0.01, element.position.1),
                 size: (text.len() as f32 * 0.01, element.size.1),
-                data: UIElementData::Label { text: text.to_string() },
+                data: UIElementData::Label { text: text.to_string(), text_color: None },
                 color: [0, 0, 0, 255],
                 ..*element
             };
@@ -531,7 +531,7 @@ impl UIRenderer {
                         i_off += 6;
                     }
                     if let Some(text) = element.get_text() {
-                        let texture_key = format!("{}_{}", text, element.color.map(|c| c.to_string()).join("|"));
+                        let texture_key = format!("{}_{:?}", text, element.color);
                         if let Some((_, bind_group)) = self.text_textures.get(&texture_key) {
                             r_pass.set_bind_group(0, bind_group, &[]);
                             r_pass.draw_indexed(i_off..(i_off + 6), 0, 0..1);
@@ -544,7 +544,7 @@ impl UIRenderer {
                     r_pass.draw_indexed(i_off..(i_off + 6), 0, 0..1);
                     i_off += 6;
                     if let Some(text) = element.get_text() {
-                        let texture_key = format!("{}_{}", text, element.color.map(|c| c.to_string()).join("|"));
+                        let texture_key = format!("{}_{:?}", text, element.color);
                         if let Some((_, bind_group)) = self.text_textures.get(&texture_key) {
                             r_pass.set_bind_group(0, bind_group, &[]);
                             r_pass.draw_indexed(i_off..(i_off + 6), 0, 0..1);
@@ -559,7 +559,7 @@ impl UIRenderer {
                 }
                 UIElementData::Label { .. } => {
                     if let Some(text) = element.get_text() {
-                        let texture_key = format!("{}_{}", text, element.color.map(|c| c.to_string()).join("|"));
+                        let texture_key = format!("{}_{:?}", text, element.color);
                         if let Some((_, bind_group)) = self.text_textures.get(&texture_key) {
                             r_pass.set_bind_group(0, bind_group, &[]);
                             r_pass.draw_indexed(i_off..(i_off + 6), 0, 0..1);
