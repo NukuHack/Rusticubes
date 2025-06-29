@@ -128,13 +128,13 @@ impl Texture {
 
 /// Manages all texture resources for rendering
 pub struct TextureManager {
-    pub texture: Texture,
-    pub depth_texture: Texture,
-    pub bind_group: wgpu::BindGroup,
-    pub bind_group_layout: wgpu::BindGroupLayout,
-    pub render_texture: wgpu::Texture,
-    pub render_texture_view: wgpu::TextureView,
-    pub post_processing_bind_group: wgpu::BindGroup,
+    texture: Texture,
+    depth_texture: Texture,
+    bind_group: wgpu::BindGroup,
+    bind_group_layout: wgpu::BindGroupLayout,
+    render_texture: wgpu::Texture,
+    render_texture_view: wgpu::TextureView,
+    post_processing_bind_group: wgpu::BindGroup,
 }
 
 impl TextureManager {
@@ -170,6 +170,39 @@ impl TextureManager {
             render_texture_view,
             post_processing_bind_group,
         }
+    }
+
+    #[inline]
+    pub fn texture(&self) -> &Texture {
+        &self.texture
+    }
+    #[inline]
+    pub fn depth_texture(&self) -> &Texture {
+        &self.depth_texture
+    }
+    #[inline]
+    pub fn depth_texture_mut(&mut self) -> &mut Texture {
+        &mut self.depth_texture
+    }
+    #[inline]
+    pub fn bind_group(&self) -> &wgpu::BindGroup {
+        &self.bind_group
+    }
+    #[inline]
+    pub fn bind_group_layout(&self) -> &wgpu::BindGroupLayout {
+        &self.bind_group_layout
+    }
+    #[inline]
+    pub fn render_texture(&self) -> &wgpu::Texture {
+        &self.render_texture
+    }
+    #[inline]
+    pub fn render_texture_view(&self) -> &wgpu::TextureView {
+        &self.render_texture_view
+    }
+    #[inline]
+    pub fn post_processing_bind_group(&self) -> &wgpu::BindGroup {
+        &self.post_processing_bind_group
     }
 }
 

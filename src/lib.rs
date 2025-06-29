@@ -152,7 +152,7 @@ impl<'a> State<'a> {
         let render_pipeline_layout: wgpu::PipelineLayout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("Render Pipeline Layout"),
             bind_group_layouts: &[
-                &texture_manager.bind_group_layout,
+                &texture_manager.bind_group_layout(),
                 &camera_system.bind_group_layout(),
                 &chunk_bind_group_layout,
 
@@ -216,14 +216,6 @@ impl<'a> State<'a> {
         &self.render_context.size
     }
     #[inline]
-    pub fn modifiers(&self) -> &winit::keyboard::ModifiersState {
-        &self.input_system.modifiers
-    }
-    #[inline]
-    pub fn mouse_states(&self) -> &input::MouseButtonState {
-        &self.input_system.mouse_button_state
-    }
-    #[inline]
     pub fn previous_frame_time(&self) -> &std::time::Instant {
         &self.previous_frame_time
     }
@@ -244,21 +236,20 @@ impl<'a> State<'a> {
         &self.ui_manager
     }
     #[inline]
-    pub fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) -> bool{
+    pub fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) -> bool {
         if new_size.width > 0 && new_size.height > 0 {
             self.render_context.size = new_size;
             self.render_context.config.width = new_size.width;
             self.render_context.config.height = new_size.height;
             self.camera_system.projection_mut().resize(new_size);
+            // Clone the values to avoid holding borrows
             self.render_context.surface.configure(self.device(), self.config());
-            self.texture_manager.depth_texture = geometry::Texture::create_depth_texture(
-                self.device(),
-                self.config(),
-                "depth_texture",
-            );
-            return true
+            *self.texture_manager.depth_texture_mut() = geometry::Texture::create_depth_texture(self.device(), self.config(),"depth_texture");
+            
+            true
+        } else {
+            false
         }
-        false
     }
     #[inline]
     pub fn handle_events(&mut self,event: &WindowEvent) -> bool{
@@ -316,12 +307,12 @@ impl<'a> State<'a> {
                 // Handle UI input first if there's a focused element
                 if let Some(_focused_idx) = self.ui_manager.focused_element {
                     if self.is_world_running {
-                        config::get_gamestate().player.controller().reset_keyboard(); // Temporary workaround
+                        config::get_gamestate().player_mut().controller().reset_keyboard(); // Temporary workaround
                     }
                     
                     if *state == ElementState::Pressed {
                         // Handle special keys for UI
-                        self.ui_manager.handle_key_input(key,self.modifiers().shift_key());
+                        self.ui_manager.handle_key_input(key,self.input_system.modifiers.shift_key());
                         return true;
                     }
                     return true;
@@ -339,7 +330,7 @@ impl<'a> State<'a> {
                 // `key` is of type `KeyCode` (e.g., KeyCode::W)
                 // `state` is of type `ElementState` (Pressed or Released)
                 if self.is_world_running {
-                    config::get_gamestate().player.controller().process_keyboard(&key, &state);
+                    config::get_gamestate().player_mut().controller().process_keyboard(&key, &state);
                     match key {
                         Key::KeyF => {
                             if *state == ElementState::Pressed {
@@ -456,7 +447,7 @@ impl<'a> State<'a> {
                 }
             }
             WindowEvent::CursorMoved { position, .. } => {
-                if self.input_system.mouse_captured == true {
+                if *self.input_system.mouse_captured() == true {
                     // Calculate relative movement from center
                     let size = self.size();
                     let center_x = size.width as f64 / 2.0;
@@ -468,7 +459,7 @@ impl<'a> State<'a> {
                     // Process mouse movement for camera control
 
                     if self.is_world_running {
-                        config::get_gamestate().player.controller().process_mouse(delta_x, delta_y);
+                        config::get_gamestate().player_mut().controller().process_mouse(delta_x, delta_y);
                     }
                     // Reset cursor to center
                     self.center_mouse();
@@ -481,7 +472,7 @@ impl<'a> State<'a> {
                             let delta_x = (position.x - prev.x) as f32;
                             let delta_y = (position.y - prev.y) as f32;
                             if self.is_world_running {
-                                config::get_gamestate().player.controller().process_mouse(delta_x, delta_y);
+                                config::get_gamestate().player_mut().controller().process_mouse(delta_x, delta_y);
                             }
                         }
                     }
@@ -495,7 +486,7 @@ impl<'a> State<'a> {
             }
             WindowEvent::MouseWheel { delta, .. } => {
                 if self.is_world_running {
-                    config::get_gamestate().player.controller().process_scroll(delta);
+                    config::get_gamestate().player_mut().controller().process_scroll(delta);
                 }
                 true
             }
@@ -511,13 +502,13 @@ impl<'a> State<'a> {
         
         if self.is_world_running {
             let movement_delta = {
-                let player = &mut config::get_gamestate().player;
+                let player = &mut config::get_gamestate().player_mut();
                 player.update(&mut self.camera_system, delta_seconds)
             };
 
             // Update both player and camera positions in one operation
             {
-                let player = &mut config::get_gamestate().player;
+                let player = &mut config::get_gamestate().player_mut();
                 let camera = self.camera_system.camera_mut();
                 player.append_position(movement_delta, camera);
             }
@@ -535,10 +526,10 @@ impl<'a> State<'a> {
     }
     #[inline]
     pub fn toggle_mouse_capture(&mut self) {
-        let player = &mut config::get_gamestate().player;
-        if !self.input_system.mouse_captured && self.is_world_running {
+        let player = &mut config::get_gamestate().player_mut();
+        if !self.input_system.mouse_captured() && self.is_world_running {
             player.set_camera_mode(player::CameraMode::Instant);
-            self.input_system.mouse_captured = true;
+            self.input_system.set_mouse_captured(true);
             // Hide cursor and lock to center
             self.window().set_cursor_visible(false);
             self.window().set_cursor_grab(winit::window::CursorGrabMode::Confined)
@@ -547,7 +538,7 @@ impl<'a> State<'a> {
             self.center_mouse();
         } else {
             player.set_camera_mode(player::CameraMode::Smooth);
-            self.input_system.mouse_captured = false;
+            self.input_system.set_mouse_captured(false);
             // Show cursor and release
             self.window().set_cursor_visible(true);
             self.window().set_cursor_grab(winit::window::CursorGrabMode::None).unwrap();
@@ -573,12 +564,12 @@ pub async fn run() {
     
     let config: config::AppConfig = config::AppConfig::new(monitor_size);
     let window_raw: Window = winit::window::WindowBuilder::new()
-        .with_title(&config.window_title)
-        .with_inner_size(config.initial_window_size)
-        .with_min_inner_size(config.min_window_size)
-        .with_position(config.initial_window_position)
+        .with_title(&*config.window_title())
+        .with_inner_size(*config.initial_window_size())
+        .with_min_inner_size(*config.min_window_size())
+        .with_position(*config.initial_window_position())
         .with_window_icon(resources::load_icon_from_bytes())
-        .with_theme(config.theme)
+        .with_theme(*config.theme())
         .with_active(true)
         .build(&event_loop)
         .unwrap();

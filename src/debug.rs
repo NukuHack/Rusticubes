@@ -2,8 +2,7 @@
 #[derive(Debug, Clone, Copy)]
 pub struct RunningAverage {
     count: u64,
-    average: f64,
-    // Cache the reciprocal of count to avoid division in hot path
+    average: f64, // Cache the reciprocal of count to avoid division in hot path
     inv_count: f64,
 }
 

@@ -93,7 +93,7 @@ pub fn place_looked_cube() {
         return;
     }
     let camera = &state.camera_system.camera();
-    let world = &mut super::config::get_gamestate().world;
+    let world = &mut super::config::get_gamestate().world_mut();
 
     if let Some((block_pos, normal)) = raycast_to_block(camera, world, REACH) {
         let placement_pos = block_pos + normal;
@@ -108,7 +108,7 @@ pub fn remove_targeted_block() {
     if !state.is_world_running {
         return;
     }
-    let world = &mut super::config::get_gamestate().world;
+    let world = &mut super::config::get_gamestate().world_mut();
 
     if let Some((block_pos, _)) = raycast_to_block(state.camera_system.camera(), world, REACH) {
         world.set_block(block_pos, Block::None);
@@ -126,7 +126,7 @@ pub fn add_def_chunk() {
     let chunk_pos = ChunkCoord::from_world_pos(state.camera_system.camera().position());
 
     if super::config::get_gamestate()
-        .world
+        .world()
         .loaded_chunks
         .contains(&chunk_pos)
     {
@@ -134,11 +134,11 @@ pub fn add_def_chunk() {
     }
 
     if super::config::get_gamestate()
-        .world
+        .world_mut()
         .load_chunk(chunk_pos, false)
     {
         if let Some(chunk) = super::config::get_gamestate()
-            .world
+            .world_mut()
             .get_chunk_mut(chunk_pos)
         {
             let state_b = super::config::get_state();
@@ -156,11 +156,11 @@ pub fn add_full_chunk() {
     let chunk_pos = ChunkCoord::from_world_pos(state.camera_system.camera().position());
 
     if super::config::get_gamestate()
-        .world
+        .world_mut()
         .load_chunk(chunk_pos, true)
     {
         if let Some(chunk) = super::config::get_gamestate()
-            .world
+            .world_mut()
             .get_chunk_mut(chunk_pos)
         {
             let state_b = super::config::get_state();
@@ -176,7 +176,7 @@ pub fn update_full_world() {
     if !state.is_world_running {
         return;
     }
-    super::config::get_gamestate().world.update_loaded_chunks(
+    super::config::get_gamestate().world_mut().update_loaded_chunks(
         state.camera_system.camera().position(),
         REACH * 2.0,
         false,
@@ -184,7 +184,7 @@ pub fn update_full_world() {
 
     let state_b = super::config::get_state();
     super::config::get_gamestate()
-        .world
+        .world_mut()
         .make_chunk_meshes(state_b.device(), state_b.queue());
 }
 
@@ -195,7 +195,7 @@ pub fn add_full_world() {
     if !state.is_world_running {
         return;
     }
-    super::config::get_gamestate().world.update_loaded_chunks(
+    super::config::get_gamestate().world_mut().update_loaded_chunks(
         state.camera_system.camera().position(),
         REACH * 2.0,
         true,
@@ -203,7 +203,7 @@ pub fn add_full_world() {
 
     let state_b = super::config::get_state();
     super::config::get_gamestate()
-        .world
+        .world_mut()
         .make_chunk_meshes(state_b.device(), state_b.queue());
 }
 /// Performs ray tracing to a cube and determines which of the 27 points (3x3x3 grid) was hit
@@ -262,7 +262,7 @@ pub fn raycast_to_cube_point(
 pub fn toggle_looked_point() -> Option<(bool, (u8, u8, u8))> {
     let state = super::config::get_state();
     let camera = &state.camera_system.camera();
-    let world = &mut super::config::get_gamestate().world;
+    let world = super::config::get_gamestate().world_mut();
 
     let (block_pos, (x, y, z)) = raycast_to_cube_point(camera, world, REACH)?;
 

@@ -6,10 +6,10 @@ use wgpu;
 #[allow(dead_code)]
 pub struct Pipeline {
     // Public pipelines
-    pub inside_pipeline: wgpu::RenderPipeline,
-    pub chunk_pipeline: wgpu::RenderPipeline,
-    pub post_pipeline: wgpu::RenderPipeline,
-    pub sky_pipeline: wgpu::RenderPipeline,
+    inside_pipeline: wgpu::RenderPipeline,
+    chunk_pipeline: wgpu::RenderPipeline,
+    post_pipeline: wgpu::RenderPipeline,
+    sky_pipeline: wgpu::RenderPipeline,
 
     // Private shaders
     inside_shader: wgpu::ShaderModule,
@@ -66,6 +66,22 @@ impl Pipeline {
     #[inline]
     pub fn post_bind_group_layout(&self) -> &wgpu::BindGroupLayout {
         &self.post_bind_group_layout
+    }
+    #[inline]
+    pub fn inside_pipeline(&self) -> &wgpu::RenderPipeline {
+        &self.inside_pipeline
+    }
+    #[inline]
+    pub fn chunk_pipeline(&self) -> &wgpu::RenderPipeline {
+        &self.chunk_pipeline
+    }
+    #[inline]
+    pub fn post_pipeline(&self) -> &wgpu::RenderPipeline {
+        &self.post_pipeline
+    }
+    #[inline]
+    pub fn sky_pipeline(&self) -> &wgpu::RenderPipeline {
+        &self.sky_pipeline
     }
 }
 
@@ -334,7 +350,7 @@ pub fn render_all(current_state: &mut super::State) -> Result<(), wgpu::SurfaceE
             },
         })],
         depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-            view: &current_state.texture_manager().depth_texture.view,
+            view: &current_state.texture_manager().depth_texture().view,
             depth_ops: Some(wgpu::Operations {
                 load: wgpu::LoadOp::Clear(1.0),
                 store: wgpu::StoreOp::Store,
@@ -352,7 +368,7 @@ pub fn render_all(current_state: &mut super::State) -> Result<(), wgpu::SurfaceE
 
     // 3D pass
     if current_state.is_world_running {
-        let depth_view = &current_state.texture_manager().depth_texture.view;
+        let depth_view = &current_state.texture_manager().depth_texture().view;
         let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("3D Render Pass"),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -375,25 +391,20 @@ pub fn render_all(current_state: &mut super::State) -> Result<(), wgpu::SurfaceE
             timestamp_writes: None,
         });
 
-        let bind_groups = [
-            &current_state.texture_manager().bind_group,
-            &current_state.camera_system.bind_group(),
-        ];
-
         // Render chunks
         rpass.set_pipeline(&current_state.pipeline.chunk_pipeline);
-        rpass.set_bind_group(0, bind_groups[0], &[]);
-        rpass.set_bind_group(1, bind_groups[1], &[]);
+        rpass.set_bind_group(0, current_state.texture_manager().bind_group(), &[]);
+        rpass.set_bind_group(1, current_state.camera_system().bind_group(), &[]);
         super::config::get_gamestate()
-            .world
+            .world()
             .render_chunks(&mut rpass);
 
         // Render inside surfaces
-        rpass.set_pipeline(&current_state.pipeline.inside_pipeline);
-        rpass.set_bind_group(0, bind_groups[0], &[]);
-        rpass.set_bind_group(1, bind_groups[1], &[]);
+        rpass.set_pipeline(&current_state.pipeline().inside_pipeline);
+        rpass.set_bind_group(0, current_state.texture_manager().bind_group(), &[]);
+        rpass.set_bind_group(1, current_state.camera_system().bind_group(), &[]);
         super::config::get_gamestate()
-            .world
+            .world()
             .render_chunks(&mut rpass);
     }
 
@@ -415,11 +426,7 @@ pub fn render_all(current_state: &mut super::State) -> Result<(), wgpu::SurfaceE
         });
 
         post_pass.set_pipeline(&current_state.pipeline.post_pipeline);
-        post_pass.set_bind_group(
-            0,
-            &current_state.texture_manager().post_processing_bind_group,
-            &[],
-        );
+        post_pass.set_bind_group(0,current_state.texture_manager().post_processing_bind_group(),&[],);
         post_pass.draw(0..3, 0..1);
     }
 

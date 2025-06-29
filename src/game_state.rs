@@ -4,12 +4,12 @@ use glam::Vec3;
 
 #[allow(dead_code)]
 pub struct GameState {
-    pub worldname: String,
-    pub player: super::player::Player,
-    pub world: super::cube::World, // lol main data storage :)
-    pub save_path: std::path::PathBuf,
+    worldname: String,
+    player: super::player::Player,
+    world: super::cube::World, // lol main data storage :)
+    save_path: std::path::PathBuf,
 }
-
+#[allow(dead_code)]
 impl GameState {
     #[inline]
     pub fn new(worldname: &str) -> Self {
@@ -58,6 +58,31 @@ impl GameState {
             world: super::cube::World::empty(),
             save_path,
         }
+    }
+    #[inline]
+    pub fn world_mut(&mut self) -> &mut super::cube::World {
+        &mut self.world
+    }
+    #[inline]
+    pub fn player_mut(&mut self) -> &mut super::player::Player {
+        &mut self.player
+    }
+
+    #[inline]
+    pub fn worldname(&self) -> &String {
+        &self.worldname
+    }
+    #[inline]
+    pub fn player(&self) -> &super::player::Player {
+        &self.player
+    }
+    #[inline]
+    pub fn world(&self) -> &super::cube::World {
+        &self.world
+    }
+    #[inline]
+    pub fn save_path(&self) -> &std::path::PathBuf {
+        &self.save_path
     }
 }
 

@@ -32,11 +32,11 @@ impl Vertex {
 }
 
 pub struct UIRenderer {
-    pub bind_group_layout: wgpu::BindGroupLayout,
-    pub font_sampler: wgpu::Sampler,
-    pub uniform_buffer: wgpu::Buffer,
-    pub uniform_bind_group: wgpu::BindGroup,
-    pub uniform_bind_group_layout: wgpu::BindGroupLayout,
+    bind_group_layout: wgpu::BindGroupLayout,
+    font_sampler: wgpu::Sampler,
+    uniform_buffer: wgpu::Buffer,
+    uniform_bind_group: wgpu::BindGroup,
+    uniform_bind_group_layout: wgpu::BindGroupLayout,
     font: Font<'static>,
     text_textures: HashMap<String, (wgpu::Texture, wgpu::BindGroup)>,
     image_textures: HashMap<String, (wgpu::Texture, wgpu::BindGroup)>,
@@ -46,6 +46,26 @@ pub struct UIRenderer {
 }
 
 impl UIRenderer {
+    #[inline]
+    pub fn bind_group_layout(&self) -> &wgpu::BindGroupLayout {
+        &self.bind_group_layout
+    }
+    #[inline]
+    pub fn font_sampler(&self) -> &wgpu::Sampler {
+        &self.font_sampler
+    }
+    #[inline]
+    pub fn uniform_buffer(&self) -> &wgpu::Buffer {
+        &self.uniform_buffer
+    }
+    #[inline]
+    pub fn uniform_bind_group(&self) -> &wgpu::BindGroup {
+        &self.uniform_bind_group
+    }
+    #[inline]
+    pub fn uniform_bind_group_layout(&self) -> &wgpu::BindGroupLayout {
+        &self.uniform_bind_group_layout
+    }
     #[inline] pub fn new(device: &wgpu::Device, queue: &wgpu::Queue) -> Self {
         let font = Font::try_from_vec(crate::get_bytes!("calibri.ttf")).expect("Failed to load font");
         let font_sampler = device.create_sampler(&wgpu::SamplerDescriptor {

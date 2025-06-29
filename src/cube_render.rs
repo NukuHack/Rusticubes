@@ -450,3 +450,30 @@ impl GeometryBuffer {
         self.num_vertices = vertices.len() as u32;
     }
 }
+
+
+
+impl super::cube::World {
+    
+    pub fn render_chunks<'a>(&'a self, render_pass: &mut wgpu::RenderPass<'a>) {
+        for chunk in self.chunks.values() {
+            // Skip empty chunks entirely - no mesh or bind group needed
+            if chunk.is_empty() {
+                continue;
+            }
+
+            if let (Some(mesh), Some(bind_group)) = (&chunk.mesh, &chunk.bind_group) {
+                // Skip if mesh has no indices (shouldn't happen but good to check)
+                if mesh.num_indices == 0 {
+                    continue;
+                }
+
+                render_pass.set_bind_group(2, bind_group, &[]);
+                render_pass.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
+                render_pass
+                    .set_index_buffer(mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
+                render_pass.draw_indexed(0..mesh.num_indices, 0, 0..1);
+            }
+        }
+    }
+}

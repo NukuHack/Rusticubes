@@ -6,11 +6,11 @@ use std::path::PathBuf;
 
 //#[derive(Default)]
 pub struct AppConfig {
-    pub window_title: String,
-    pub initial_window_size: winit::dpi::PhysicalSize<f32>,
-    pub min_window_size: winit::dpi::PhysicalSize<f32>,
-    pub initial_window_position: winit::dpi::PhysicalPosition<f32>,
-    pub theme: Option<winit::window::Theme>
+    window_title: String,
+    initial_window_size: winit::dpi::PhysicalSize<f32>,
+    min_window_size: winit::dpi::PhysicalSize<f32>,
+    initial_window_position: winit::dpi::PhysicalPosition<f32>,
+    theme: Option<winit::window::Theme>
 }
 
 impl Default for AppConfig {
@@ -38,6 +38,27 @@ impl AppConfig {
             initial_window_position: winit::dpi::PhysicalPosition::new(x,y),
             ..Self::default()
         }
+    }
+
+    #[inline]
+    pub fn window_title(&self) -> &String {
+        &self.window_title
+    }
+    #[inline]
+    pub fn initial_window_size(&self) -> &winit::dpi::PhysicalSize<f32> {
+        &self.initial_window_size
+    }
+    #[inline]
+    pub fn min_window_size(&self) -> &winit::dpi::PhysicalSize<f32> {
+        &self.min_window_size
+    }
+    #[inline]
+    pub fn initial_window_position(&self) -> &winit::dpi::PhysicalPosition<f32> {
+        &self.initial_window_position
+    }
+    #[inline]
+    pub fn theme(&self) -> &Option<winit::window::Theme> {
+        &self.theme
     }
 }
 #[inline]

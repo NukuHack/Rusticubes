@@ -25,7 +25,7 @@ pub struct UIManager {
     pub elements: Vec<UIElement>,
     pub focused_element: Option<usize>,
     pub visibility: bool,
-    pub renderer: UIRenderer,
+    renderer: UIRenderer,
     next_id: usize,
 }
 
@@ -38,7 +38,7 @@ impl UIManager {
         let renderer = UIRenderer::new(device, queue);
 
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            bind_group_layouts: &[&renderer.bind_group_layout,&renderer.uniform_bind_group_layout], // Use the renderer's layout
+            bind_group_layouts: &[renderer.bind_group_layout(),renderer.uniform_bind_group_layout()], // Use the renderer's layout
             ..Default::default()
         });
 
@@ -100,6 +100,14 @@ impl UIManager {
         }
     }
 
+    #[inline]
+    pub fn renderer(&self) -> &UIRenderer {
+        &self.renderer
+    }
+    #[inline]
+    pub fn renderer_mut(&mut self) -> &mut UIRenderer {
+        &mut self.renderer
+    }
 
     pub fn update(&mut self, _device: &wgpu::Device, queue: &wgpu::Queue) {
         let (vertices, indices) = self.renderer.process_elements(&self.elements);

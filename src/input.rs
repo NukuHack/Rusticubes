@@ -5,7 +5,7 @@ pub struct InputSystem {
     pub previous_mouse: Option<winit::dpi::PhysicalPosition<f64>>,
     pub mouse_button_state: MouseButtonState,
     pub modifiers: ModifiersState,
-    pub mouse_captured: bool,
+    mouse_captured: bool,
 }
 impl Default for InputSystem {
     #[inline]
@@ -16,6 +16,16 @@ impl Default for InputSystem {
             modifiers: ModifiersState::empty(),
             mouse_captured: false,
         }
+    }
+}
+impl InputSystem {
+    pub fn set_mouse_captured(&mut self, is_captured:bool) {
+        self.mouse_captured = is_captured;
+    }
+
+    #[inline]
+    pub fn mouse_captured(&self) -> &bool {
+        &self.mouse_captured
     }
 }
 

@@ -49,6 +49,9 @@ lz4_flex = "0.11"
 filetime = "0.2"
 
 
+[package.metadata.windows]
+icon = "assets/icon.ico"
+
 [profile.dev]
 opt-level = 1       # Light optimizations
 incremental = true  # Faster recompiles
