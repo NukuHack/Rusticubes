@@ -524,7 +524,7 @@ impl UIRenderer {
                         r_pass.draw_indexed(i_off..(i_off + 6), 0, 0..1);
                     }
                     i_off += 6;
-                }
+                },
                 UIElementData::Animation { frames, current_frame, elapsed_time, smooth_transition, blend_delay, frame_duration, .. } => {
                     let animation_key = frames.join("|");
                     if let Some((_, bind_group)) = self.animation_textures.get(&animation_key) {
@@ -541,7 +541,7 @@ impl UIRenderer {
                         r_pass.draw_indexed(i_off..(i_off + 6), 0, 0..1);
                     }
                     i_off += 6;
-                }
+                },
                 UIElementData::Checkbox { checked, .. } => {
                     r_pass.set_bind_group(0, &self.default_bind_group, &[]);
                     r_pass.draw_indexed(i_off..(i_off + 6), 0, 0..1);
@@ -558,7 +558,7 @@ impl UIRenderer {
                         }
                         i_off += 6;
                     }
-                }
+                },
                 UIElementData::InputField { .. } | UIElementData::Button { .. } => {
                     r_pass.set_bind_group(0, &self.default_bind_group, &[]);
                     r_pass.draw_indexed(i_off..(i_off + 6), 0, 0..1);
@@ -571,12 +571,12 @@ impl UIRenderer {
                         }
                         i_off += 6;
                     }
-                }
+                },
                 UIElementData::Panel { .. } | UIElementData::Divider { .. } => {
                     r_pass.set_bind_group(0, &self.default_bind_group, &[]);
                     r_pass.draw_indexed(i_off..(i_off + 6), 0, 0..1);
                     i_off += 6;
-                }
+                },
                 UIElementData::Label { .. } => {
                     if let Some(text) = element.get_text() {
                         let texture_key = format!("{}_{:?}", text, element.color);
@@ -586,7 +586,8 @@ impl UIRenderer {
                         }
                         i_off += 6;
                     }
-                }
+                },
+                _ => todo!(),
             }
         }
     }

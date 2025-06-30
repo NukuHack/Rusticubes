@@ -113,8 +113,8 @@ impl UIManager {
         self.add_element(memory_button);
 
         let tree_animation = UIElement::animation(self.next_id(), vec![
-                "happy-tree.png".to_string(),
-                "cube.jpg".to_string()
+                "happy-tree.png",
+                "cube.jpg"
             ])
             .with_position(-0.8, 0.5)
             .with_size(0.27, 0.45)

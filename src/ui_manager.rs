@@ -277,11 +277,11 @@ impl UIManager {
                     }
                     UIElementData::Checkbox { .. } => {
                         element.toggle_checked();
-                        element.trigger_click();
+                        element.trigger_callback();
                     }
                     UIElementData::Button { .. } => {
                         super::audio::play_sound("click.ogg".to_string());
-                        element.trigger_click();
+                        element.trigger_callback();
                     }
 
                     _ => {}
