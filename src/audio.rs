@@ -1,3 +1,4 @@
+
 use rodio::{Sink, Decoder, OutputStream, source::Source};
 use std::io::{Cursor, Write};
 use std::sync::atomic::{AtomicPtr, Ordering};
@@ -48,41 +49,11 @@ pub fn init_audio() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-// Play background music (longer sounds, loops, etc.)
-#[inline]
-pub fn play_background(path: String) {
-    if let Some(system) = get_ptr() {
-        match try_play_sound(path.clone(), system, true) {
-            Ok(_duration) => {}
-            Err(e) => {
-                println!("Failed to play background '{}': {}", path, e);
-            }
-        }
-    } else {
-        println!("Audio system not initialized");
-    }
-}
-
-// Play UI sound (short sounds, immediate playback)
-#[inline]
-pub fn play_sound(path: String) {
-    if let Some(system) = get_ptr() {
-        match try_play_sound(path.clone(), system, false) {
-            Ok(_duration) => {}
-            Err(e) => {
-                println!("Failed to play UI sound '{}': {}. Falling back to terminal ping.", path, e);
-                play_terminal_ping();
-            }
-        }
-    } else {
-        println!("Audio system not initialized, using terminal ping");
-        play_terminal_ping();
-    }
-}
 
 /// Set a new UI sound, stopping any currently playing UI sounds first
-#[allow(dead_code)]#[inline]
-pub fn set_sound(path: String) {
+#[inline]
+pub fn set_sound<T : Into<String>>(path: T) {
+    let path: String = path.into();
     if let Some(system) = get_ptr() {
         // Clear all currently playing UI sounds
         system.ui_sink.stop();
@@ -100,22 +71,49 @@ pub fn set_sound(path: String) {
     }
 }
 
-/// Set a new background sound, stopping any currently playing background music first
-#[allow(dead_code)]#[inline]
-pub fn set_background(path: String) {
+
+/// Set a new background sound with looping
+pub fn set_background<T : Into<String>>(path: T) {
+    let path = path.into();
     if let Some(system) = get_ptr() {
-        // Clear all currently playing background sounds
         system.bg_sink.stop();
         
-        match try_play_sound(path.clone(), system, true) {
-            Ok(_duration) => {}
-            Err(e) => {
-                println!("Failed to set background '{}': {}", path, e);
-            }
+        if let Ok(source) = load_audio_source(path, true) {
+            system.bg_sink.append(source);
         }
-    } else {
-        println!("Audio system not initialized");
     }
+}
+
+/// Play a one-time UI sound
+#[allow(dead_code)]
+pub fn play_sound<T : Into<String>>(path: T) {
+    let path = path.into();
+    if let Some(system) = get_ptr() {
+        if let Ok(source) = load_audio_source(path, false) {
+            system.ui_sink.append(source);
+        }
+    }
+}
+
+/// Helper function to load and prepare audio source
+fn load_audio_source(
+    path: String,
+    should_loop: bool
+) -> Result<Box<dyn Source<Item = i16> + Send>, Box<dyn std::error::Error>> {
+    let sound_bytes = crate::get_bytes!(path.clone());
+    let cursor = Cursor::new(sound_bytes);
+    let source = Decoder::new(cursor)?;
+    
+    let speed = super::math::random_float(0.8, 0.9);
+    let source = source.speed(speed);
+    
+    let source: Box<dyn Source<Item = i16> + Send> = if should_loop {
+        Box::new(source.repeat_infinite())
+    } else {
+        Box::new(source)
+    };
+    
+    Ok(source)
 }
 
 // Common sound playing function
@@ -128,10 +126,7 @@ fn try_play_sound(
     let sound_bytes = crate::get_bytes!(path.clone());
     let cursor = Cursor::new(sound_bytes);
     let source = Decoder::new(cursor)?;
-    /*
-    let volume = 1.0; // Volume is now controlled per-sink
-    let source = source.amplify(volume);
-    */
+    
     let speed = super::math::random_float(0.8, 0.9);
     let source = source.speed(speed);
     
@@ -143,6 +138,14 @@ fn try_play_sound(
     } else {
         &system.ui_sink
     };
+
+    // Convert to a boxed source to handle different types uniformly
+    let source: Box<dyn Source<Item = i16> + Send> = if is_background {
+        Box::new(source.repeat_infinite())
+    } else {
+        Box::new(source)
+    };
+    
     sink.append(source);
     
     Ok(duration)
@@ -155,14 +158,13 @@ fn play_terminal_ping() {
 }
 
 // Control functions
-#[allow(dead_code)]#[inline]
+#[inline]#[allow(dead_code)]
 pub fn set_background_volume(volume: f32) {
     if let Some(system) = get_ptr() {
         system.bg_sink.set_volume(volume);
     }
 }
-
-#[allow(dead_code)]#[inline]
+#[inline]#[allow(dead_code)]
 pub fn set_volume(volume: f32) {
     if let Some(system) = get_ptr() {
         system.ui_sink.set_volume(volume);
