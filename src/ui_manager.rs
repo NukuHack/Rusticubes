@@ -280,7 +280,7 @@ impl UIManager {
                         element.trigger_callback();
                     }
                     UIElementData::Button { .. } => {
-                        super::audio::play_sound("click.ogg".to_string());
+                        super::audio::set_sound("click.ogg");
                         element.trigger_callback();
                     }
 

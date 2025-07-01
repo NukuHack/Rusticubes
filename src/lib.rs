@@ -566,7 +566,7 @@ pub async fn run() {
 
     // Initialize once at startup
     audio::init_audio().expect("Failed to initialize audio");
-    audio::play_background("background_music.ogg".to_string());
+    audio::set_background("background_music.ogg");
     // Control audio
     // audio::stop_all_sounds();
     // audio::clear_sound_queue();

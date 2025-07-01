@@ -363,28 +363,11 @@ impl Chunk {
         Some(Self::new())
     }
 
-    /// Converts (x, y, z) to array index (0..4095)
-    #[inline]
-    pub fn xyz_to_index(x: usize, y: usize, z: usize) -> usize {
-        (x << 8) | (y << 4) | z
-    }
-
-    #[inline]
-    pub fn local_to_index(local_pos: Vec3) -> usize {
-        debug_assert!(
-            local_pos.x >= 0.0
-                && local_pos.x < Self::SIZE as f32
-                && local_pos.y >= 0.0
-                && local_pos.y < Self::SIZE as f32
-                && local_pos.z >= 0.0
-                && local_pos.z < Self::SIZE as f32,
-            "Local position out of bounds: {:?}",
-            local_pos
-        );
-        let x = local_pos.x as usize;
-        let y = local_pos.y as usize;
-        let z = local_pos.z as usize;
-        Self::xyz_to_index(x, y, z)
+    pub fn world_to_local_pos(world_pos: Vec3) -> BlockPosition {
+        let x = (world_pos.x.floor() as i32).rem_euclid(Self::SIZE_I) as u8;
+        let y = (world_pos.y.floor() as i32).rem_euclid(Self::SIZE_I) as u8;
+        let z = (world_pos.z.floor() as i32).rem_euclid(Self::SIZE_I) as u8;
+        BlockPosition::new(x, y, z)
     }
 
     #[inline]
@@ -420,28 +403,6 @@ impl Chunk {
         }
     }
 
-    /// Converts world position to local chunk coordinates
-    #[inline]
-    pub fn world_to_local_pos(world_pos: Vec3) -> Vec3 {
-        Vec3::new(
-            world_pos.x.rem_euclid(Self::SIZE as f32),
-            world_pos.y.rem_euclid(Self::SIZE as f32),
-            world_pos.z.rem_euclid(Self::SIZE as f32),
-        )
-    }
-
-    /// Packs local coordinates into u16
-    #[inline]
-    pub fn pack_position(local_pos: Vec3) -> BlockPosition {
-        local_pos.into()
-    }
-
-    /// Unpacks position key to local coordinates
-    #[inline]
-    pub fn unpack_position(pos: BlockPosition) -> Vec3 {
-        pos.into()
-    }
-
     pub fn make_mesh(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, force: bool) {
         if !force && !self.dirty && self.mesh.is_some() {
             return;
@@ -464,7 +425,7 @@ impl Chunk {
                 continue;
             }
 
-            let local_pos = Self::unpack_position(BlockPosition::from(pos));
+            let local_pos = BlockPosition::from(pos).into();
             match block {
                 Block::Marching(_, points) => {
                     builder.add_marching_cube(points, local_pos);
@@ -501,7 +462,7 @@ impl Chunk {
             return true;
         }
 
-        let idx = Chunk::local_to_index(pos);
+        let idx:usize = BlockPosition::from(pos).into();
         let block = *self.get_block(idx);
         block.is_empty() || block.is_marching()
     }
@@ -518,8 +479,6 @@ impl Chunk {
         self.bind_group.as_ref()
     }
 }
-
-/// Represents the game world containing chunks
 
 /// Represents the game world containing chunks
 #[derive(Debug, Clone)]
@@ -558,11 +517,11 @@ impl World {
     pub fn get_block(&self, world_pos: Vec3) -> &Block {
         let chunk_coord = ChunkCoord::from_world_pos(world_pos);
         let local_pos = Chunk::world_to_local_pos(world_pos);
-        let idx = Chunk::local_to_index(local_pos);
+        let index:usize = local_pos.into();
 
         self.chunks
             .get(&chunk_coord)
-            .map(|chunk| chunk.get_block(idx))
+            .map(|chunk| chunk.get_block(index))
             .unwrap_or(&Block::None)
     }
 
@@ -575,7 +534,7 @@ impl World {
 
         if let Some(chunk) = self.chunks.get_mut(&chunk_coord) {
             let local_pos = Chunk::world_to_local_pos(world_pos);
-            let index = Chunk::local_to_index(local_pos);
+            let index:usize = local_pos.into();
 
             // Only set if the block is actually different
             if chunk.get_block(index) != &block {

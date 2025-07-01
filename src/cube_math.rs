@@ -96,9 +96,9 @@ pub struct BlockPosition(u16);
 impl BlockPosition {
     /// Creates a new BlockPosition from x,y,z coordinates (0-15)
     #[inline]
+    // Current implementation:
     pub const fn new(x: u8, y: u8, z: u8) -> Self {
-        debug_assert!(x < 16 && y < 16 && z < 16, "Coordinates must be 0-15");
-        Self((x as u16) | ((y as u16) << 4) | ((z as u16) << 8))
+        Self((x as u16) << 0 | ((y as u16) << 4) | ((z as u16) << 8))
     }
 
     /// Universal constructor from any convertible type
@@ -137,12 +137,6 @@ impl BlockPosition {
         self.0
     }
 
-    /// Converts to a Vec3 (f32)
-    #[inline]
-    pub fn to_vec3(&self) -> glam::Vec3 {
-        glam::Vec3::new(self.x() as f32, self.y() as f32, self.z() as f32)
-    }
-
     /// Offsets the position by dx, dy, dz (wrapping within chunk)
     #[inline]
     pub fn offset(&self, dx: i8, dy: i8, dz: i8) -> Self {
@@ -155,10 +149,9 @@ impl BlockPosition {
     /// Checks if this position is adjacent to another position
     #[inline]
     pub fn is_adjacent(&self, other: BlockPosition) -> bool {
-        let dx = (self.x() as i16 - other.x() as i16).abs();
-        let dy = (self.y() as i16 - other.y() as i16).abs();
-        let dz = (self.z() as i16 - other.z() as i16).abs();
-        
+        let dx = self.x().abs_diff(other.x());
+        let dy = self.y().abs_diff(other.y());
+        let dz = self.z().abs_diff(other.z());
         dx <= 1 && dy <= 1 && dz <= 1 && (dx + dy + dz) > 0
     }
 
