@@ -1,18 +1,5 @@
 
-use std::f32::consts::PI;
-use glam::Quat;
 use super::cube::Chunk;
-use std::f32::consts::FRAC_PI_2;
-use glam::Vec3;
-
-/// Axis enumeration for rotation
-#[allow(dead_code)]
-#[derive(Debug, Clone, Copy)]
-pub enum AxisBasic {
-    X,
-    Y,
-    Z,
-}
 
 /// Compact chunk coordinate representation (64 bits)
 /// Format: [X:26 (signed), Y:12 (signed), Z:26 (signed)]
@@ -102,8 +89,166 @@ impl ChunkCoord {
     }
 }
 
+/// Compact position within a chunk (0-15 on each axis)
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct BlockPosition(u16);
+
+impl BlockPosition {
+    /// Creates a new BlockPosition from x,y,z coordinates (0-15)
+    #[inline]
+    pub const fn new(x: u8, y: u8, z: u8) -> Self {
+        debug_assert!(x < 16 && y < 16 && z < 16, "Coordinates must be 0-15");
+        Self((x as u16) | ((y as u16) << 4) | ((z as u16) << 8))
+    }
+
+    /// Universal constructor from any convertible type
+    #[inline]
+    pub fn from<T: Into<BlockPosition>>(value: T) -> Self {
+        value.into()
+    }
+    /// Creates a new BlockPosition from a linear index (0-4095)
+    #[inline]
+    pub const fn from_index(index: u16) -> Self {
+        debug_assert!(index < 4096, "Index must be 0-4095");
+        Self(index)
+    }
+
+    /// Gets the x coordinate (0-15)
+    #[inline]
+    pub const fn x(&self) -> u8 {
+        (self.0 & 0x000F) as u8
+    }
+
+    /// Gets the y coordinate (0-15)
+    #[inline]
+    pub const fn y(&self) -> u8 {
+        ((self.0 >> 4) & 0x000F) as u8
+    }
+
+    /// Gets the z coordinate (0-15)
+    #[inline]
+    pub const fn z(&self) -> u8 {
+        ((self.0 >> 8) & 0x000F) as u8
+    }
+
+    /// Gets the linear index (0-4095)
+    #[inline]
+    pub const fn index(&self) -> u16 {
+        self.0
+    }
+
+    /// Converts to a Vec3 (f32)
+    #[inline]
+    pub fn to_vec3(&self) -> glam::Vec3 {
+        glam::Vec3::new(self.x() as f32, self.y() as f32, self.z() as f32)
+    }
+
+    /// Offsets the position by dx, dy, dz (wrapping within chunk)
+    #[inline]
+    pub fn offset(&self, dx: i8, dy: i8, dz: i8) -> Self {
+        let x = (self.x() as i16 + dx as i16).rem_euclid(16) as u8;
+        let y = (self.y() as i16 + dy as i16).rem_euclid(16) as u8;
+        let z = (self.z() as i16 + dz as i16).rem_euclid(16) as u8;
+        Self::new(x, y, z)
+    }
+
+    /// Checks if this position is adjacent to another position
+    #[inline]
+    pub fn is_adjacent(&self, other: BlockPosition) -> bool {
+        let dx = (self.x() as i16 - other.x() as i16).abs();
+        let dy = (self.y() as i16 - other.y() as i16).abs();
+        let dz = (self.z() as i16 - other.z() as i16).abs();
+        
+        dx <= 1 && dy <= 1 && dz <= 1 && (dx + dy + dz) > 0
+    }
+
+    /// Returns an iterator over all 26 neighboring positions
+    pub fn neighbors(&self) -> impl Iterator<Item = BlockPosition> {
+        let pos = *self;
+        (-1..=1).flat_map(move |dx| {
+            (-1..=1).flat_map(move |dy| {
+                (-1..=1).filter_map(move |dz| {
+                    if dx == 0 && dy == 0 && dz == 0 {
+                        None
+                    } else {
+                        Some(pos.offset(dx, dy, dz))
+                    }
+                })
+            })
+        })
+    }
+}
 
 
+// Bidirectional conversions grouped by type
+mod conversions {
+    use super::*;
+
+    // (u8, u8, u8) conversions
+    impl From<(u8, u8, u8)> for BlockPosition {
+        #[inline]
+        fn from((x, y, z): (u8, u8, u8)) -> Self {
+            Self::new(x, y, z)
+        }
+    }
+    impl From<BlockPosition> for (u8, u8, u8) {
+        #[inline]
+        fn from(pos: BlockPosition) -> Self {
+            (pos.x(), pos.y(), pos.z())
+        }
+    }
+
+    // Vec3 conversions
+    impl From<Vec3> for BlockPosition {
+        #[inline]
+        fn from(vec: Vec3) -> Self {
+            Self::new(vec.x as u8, vec.y as u8, vec.z as u8)
+        }
+    }
+    impl From<BlockPosition> for Vec3 {
+        #[inline]
+        fn from(pos: BlockPosition) -> Self {
+            Vec3::new(pos.x().into(), pos.y().into(), pos.z().into())
+        }
+    }
+
+    // u16 conversions
+    impl From<u16> for BlockPosition {
+        #[inline]
+        fn from(index: u16) -> Self {
+            Self::from_index(index)
+        }
+    }
+    impl From<BlockPosition> for u16 {
+        #[inline]
+        fn from(pos: BlockPosition) -> Self {
+            pos.index()
+        }
+    }
+
+    // usize conversions (example of additional type)
+    impl From<usize> for BlockPosition {
+        #[inline]
+        fn from(index: usize) -> Self {
+            Self::from_index(index as u16)
+        }
+    }
+    impl From<BlockPosition> for usize {
+        #[inline]
+        fn from(pos: BlockPosition) -> Self {
+            pos.index() as usize
+        }
+    }
+}
+
+/// Axis enumeration for rotation
+#[allow(dead_code)]
+#[derive(Debug, Clone, Copy)]
+pub enum AxisBasic {
+    X,
+    Y,
+    Z,
+}
 
 /// Axis enumeration with positive/negative variants
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -116,115 +261,102 @@ pub enum Axis {
     Zminus,
 }
 
-/// Represents all 36 possible block rotations (6 front directions × 6 up directions)
-/// The enum variants follow the pattern "FrontFaceUpFace" (e.g., XplusYplus means front faces +X and up faces +Y).
+use glam::{Quat,Vec3};
+
+/// All 24 possible block rotations (6 faces × 4 orientations each).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-#[repr(u8)]
+#[repr(u8)] // Ensures `as u8` is safe
 pub enum BlockRotation {
-    // X+ front facing (with all possible up directions)
     XplusYplus, XplusYminus, XplusZplus, XplusZminus,
-    // X- front facing
     XminusYplus, XminusYminus, XminusZplus, XminusZminus,
-    // Y+ front facing
     YplusXplus, YplusXminus, YplusZplus, YplusZminus,
-    // Y- front facing
     YminusXplus, YminusXminus, YminusZplus, YminusZminus,
-    // Z+ front facing
     ZplusXplus, ZplusXminus, ZplusYplus, ZplusYminus,
-    // Z- front facing
     ZminusXplus, ZminusXminus, ZminusYplus, ZminusYminus,
 }
 
+// ===== Lookup Tables ===== //
+
+/// Precomputed quaternions for all 24 rotations.
+#[allow(dead_code)]
+const QUATERNIONS: [Quat; 24] = [
+    // +X facing (front)
+    Quat::from_xyzw(0.0, 0.0, 0.0, 1.0),                     // X+Y+ (identity)
+    Quat::from_xyzw(1.0, 0.0, 0.0, 0.0),                     // X+Y- (180° X)
+    Quat::from_xyzw(0.0, 0.70710678, 0.0, 0.70710678),       // X+Z+ (90° Y)
+    Quat::from_xyzw(0.0, -0.70710678, 0.0, 0.70710678),      // X+Z- (270° Y)
+    // -X facing
+    Quat::from_xyzw(0.0, 0.0, 1.0, 0.0),                     // X-Y+ (180° Z)
+    Quat::from_xyzw(0.70710678, 0.0, 0.70710678, 0.0),       // X-Y- (180° X + Z)
+    Quat::from_xyzw(0.5, -0.5, 0.5, 0.5),                    // X-Z+ (90° Y + 180° Z)
+    Quat::from_xyzw(-0.5, -0.5, 0.5, 0.5),                   // X-Z- (270° Y + 180° Z)
+    // +Y facing
+    Quat::from_xyzw(-0.70710678, 0.0, 0.0, 0.70710678),      // Y+X+ (270° X)
+    Quat::from_xyzw(-0.5, 0.5, 0.5, 0.5),                    // Y+X- (270° X + 180° Z)
+    Quat::from_xyzw(-0.5, 0.5, -0.5, 0.5),                   // Y+Z+ (270° X + 90° Y)
+    Quat::from_xyzw(-0.5, 0.5, 0.5, -0.5),                   // Y+Z- (270° X + 270° Y)
+    // -Y facing
+    Quat::from_xyzw(0.70710678, 0.0, 0.0, 0.70710678),       // Y-X+ (90° X)
+    Quat::from_xyzw(0.5, 0.5, 0.5, 0.5),                     // Y-X- (90° X + 180° Z)
+    Quat::from_xyzw(0.5, 0.5, -0.5, 0.5),                    // Y-Z+ (90° X + 90° Y)
+    Quat::from_xyzw(0.5, 0.5, 0.5, -0.5),                    // Y-Z- (90° X + 270° Y)
+    // +Z facing
+    Quat::from_xyzw(0.0, 1.0, 0.0, 0.0),                     // Z+X+ (180° Y)
+    Quat::from_xyzw(0.70710678, 0.70710678, 0.0, 0.0),       // Z+X- (180° Y + 180° Z)
+    Quat::from_xyzw(0.0, 0.70710678, 0.70710678, 0.0),       // Z+Y+ (180° Y + 90° X)
+    Quat::from_xyzw(0.0, 0.70710678, -0.70710678, 0.0),      // Z+Y- (180° Y + 270° X)
+    // -Z facing
+    Quat::from_xyzw(0.0, 0.0, 0.0, 1.0),                     // Z-X+ (identity)
+    Quat::from_xyzw(0.0, 0.0, 1.0, 0.0),                     // Z-X- (180° Z)
+    Quat::from_xyzw(0.70710678, 0.0, 0.0, 0.70710678),       // Z-Y+ (90° X)
+    Quat::from_xyzw(-0.70710678, 0.0, 0.0, 0.70710678),      // Z-Y- (270° X)
+];
+/// Maps `BlockRotation` variants to their `u8` values (0..23).
+#[allow(dead_code)]
+const ROTATION_TO_BYTE: [u8; 24] = [
+    0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23,
+];
+/// Maps `u8` values (0..23) back to `BlockRotation`.
+#[allow(dead_code)]
+const BYTE_TO_ROTATION: [BlockRotation; 24] = [
+    BlockRotation::XplusYplus, BlockRotation::XplusYminus, BlockRotation::XplusZplus, BlockRotation::XplusZminus,
+    BlockRotation::XminusYplus, BlockRotation::XminusYminus, BlockRotation::XminusZplus, BlockRotation::XminusZminus,
+    BlockRotation::YplusXplus, BlockRotation::YplusXminus, BlockRotation::YplusZplus, BlockRotation::YplusZminus,
+    BlockRotation::YminusXplus, BlockRotation::YminusXminus, BlockRotation::YminusZplus, BlockRotation::YminusZminus,
+    BlockRotation::ZplusXplus, BlockRotation::ZplusXminus, BlockRotation::ZplusYplus, BlockRotation::ZplusYminus,
+    BlockRotation::ZminusXplus, BlockRotation::ZminusXminus, BlockRotation::ZminusYplus, BlockRotation::ZminusYminus,
+];
+
+// ===== Safe Conversions ===== //
 #[allow(dead_code)]
 impl BlockRotation {
-    /// Converts from the old packed u8 format to the new enum
-    pub fn from_packed(packed: u8) -> Self {
-        // Extract the 3 axes (each 2 bits)
-        let x = (packed & 0b0000_0011) >> 0;
-        let y = (packed & 0b0000_1100) >> 2;
-        let z = (packed & 0b0011_0000) >> 4;
-        
-        // Convert to the new enum (implementation depends on your exact rotation mapping)
-        // This is a placeholder - you'll need to define your exact conversion logic
-        match (x, y, z) {
-            (0, 0, 0) => BlockRotation::XplusYplus,
-            // ... fill in all 36 cases
-            _ => BlockRotation::XplusYplus, // default
-        }
-    }
-
-    /// Converts to the old packed u8 format (for compatibility if needed)
-    pub fn to_packed(self) -> u8 {
-        match self {
-            BlockRotation::XplusYplus => 0b0000_0000,
-            // ... fill in all 36 cases
-            _ => 0,
-        }
-    }
-
-    /// Converts to a byte for storage
+    /// Converts to a byte (0..23).
     #[inline]
     pub fn to_byte(self) -> u8 {
-        self as u8
+        ROTATION_TO_BYTE[self as usize]
     }
-    
-    /// Creates from a byte
+
+    /// Converts from a byte (returns `None` if invalid).
     #[inline]
     pub fn from_byte(byte: u8) -> Option<Self> {
-        if byte < 36 {
-            // SAFETY: We've verified the value is within enum bounds
-            Some(unsafe { std::mem::transmute(byte) })
+        if byte < 24 {
+            Some(BYTE_TO_ROTATION[byte as usize])
         } else {
             None
         }
     }
 
-    /// Converts to a quaternion
+    /// Converts to a quaternion (uses precomputed LUT).
+    #[inline]
     pub fn to_quat(self) -> Quat {
-        match self {
-            // +X facing
-            BlockRotation::XplusYplus => Quat::IDENTITY,
-            BlockRotation::XplusYminus => Quat::from_rotation_x(PI),
-            BlockRotation::XplusZplus => Quat::from_rotation_y(FRAC_PI_2),
-            BlockRotation::XplusZminus => Quat::from_rotation_y(-FRAC_PI_2),
-            
-            // -X facing
-            BlockRotation::XminusYplus => Quat::from_rotation_z(PI),
-            BlockRotation::XminusYminus => Quat::from_rotation_x(PI) * Quat::from_rotation_z(PI),
-            BlockRotation::XminusZplus => Quat::from_rotation_y(FRAC_PI_2) * Quat::from_rotation_z(PI),
-            BlockRotation::XminusZminus => Quat::from_rotation_y(-FRAC_PI_2) * Quat::from_rotation_z(PI),
-            
-            // +Y facing
-            BlockRotation::YplusXplus => Quat::from_rotation_x(-FRAC_PI_2),
-            BlockRotation::YplusXminus => Quat::from_rotation_x(-FRAC_PI_2) * Quat::from_rotation_z(PI),
-            BlockRotation::YplusZplus => Quat::from_rotation_x(-FRAC_PI_2) * Quat::from_rotation_y(FRAC_PI_2),
-            BlockRotation::YplusZminus => Quat::from_rotation_x(-FRAC_PI_2) * Quat::from_rotation_y(-FRAC_PI_2),
-            
-            // -Y facing
-            BlockRotation::YminusXplus => Quat::from_rotation_x(FRAC_PI_2),
-            BlockRotation::YminusXminus => Quat::from_rotation_x(FRAC_PI_2) * Quat::from_rotation_z(PI),
-            BlockRotation::YminusZplus => Quat::from_rotation_x(FRAC_PI_2) * Quat::from_rotation_y(FRAC_PI_2),
-            BlockRotation::YminusZminus => Quat::from_rotation_x(FRAC_PI_2) * Quat::from_rotation_y(-FRAC_PI_2),
-            
-            // +Z facing
-            BlockRotation::ZplusXplus => Quat::from_rotation_y(PI),
-            BlockRotation::ZplusXminus => Quat::from_rotation_y(PI) * Quat::from_rotation_z(PI),
-            BlockRotation::ZplusYplus => Quat::from_rotation_x(FRAC_PI_2) * Quat::from_rotation_y(PI),
-            BlockRotation::ZplusYminus => Quat::from_rotation_x(-FRAC_PI_2) * Quat::from_rotation_y(PI),
-            
-            // -Z facing
-            BlockRotation::ZminusXplus => Quat::IDENTITY,
-            BlockRotation::ZminusXminus => Quat::from_rotation_z(PI),
-            BlockRotation::ZminusYplus => Quat::from_rotation_x(FRAC_PI_2),
-            BlockRotation::ZminusYminus => Quat::from_rotation_x(-FRAC_PI_2),
-        }
+        QUATERNIONS[self as usize]
     }
-    
-    /// Creates from a quaternion (finds closest matching orientation)
+
+    /// Finds the closest `BlockRotation` from a quaternion.
     pub fn from_quat(quat: Quat) -> Self {
         let forward = quat * Vec3::Z;
         let up = quat * Vec3::Y;
-        
+
         // Determine primary axis (front face)
         let primary_axis = if forward.x.abs() >= forward.y.abs() && forward.x.abs() >= forward.z.abs() {
             if forward.x > 0.0 { Axis::Xplus } else { Axis::Xminus }
@@ -233,27 +365,32 @@ impl BlockRotation {
         } else {
             if forward.z > 0.0 { Axis::Zplus } else { Axis::Zminus }
         };
-        
-        // Determine secondary axis (up face), excluding the primary axis
-        let secondary_axis = {
-            let candidates = match primary_axis {
-                Axis::Xplus | Axis::Xminus => [
-                    (up.y.abs(), if up.y > 0.0 { Axis::Yplus } else { Axis::Yminus }),
-                    (up.z.abs(), if up.z > 0.0 { Axis::Zplus } else { Axis::Zminus }),
-                ],
-                Axis::Yplus | Axis::Yminus => [
-                    (up.x.abs(), if up.x > 0.0 { Axis::Xplus } else { Axis::Xminus }),
-                    (up.z.abs(), if up.z > 0.0 { Axis::Zplus } else { Axis::Zminus }),
-                ],
-                Axis::Zplus | Axis::Zminus => [
-                    (up.x.abs(), if up.x > 0.0 { Axis::Xplus } else { Axis::Xminus }),
-                    (up.y.abs(), if up.y > 0.0 { Axis::Yplus } else { Axis::Yminus }),
-                ],
-            };
-            // Select the axis with the larger component
-            if candidates[0].0 >= candidates[1].0 { candidates[0].1 } else { candidates[1].1 }
+
+        // Determine secondary axis (up face)
+        let secondary_axis = match primary_axis {
+            Axis::Xplus | Axis::Xminus => {
+                if up.y.abs() >= up.z.abs() {
+                    if up.y > 0.0 { Axis::Yplus } else { Axis::Yminus }
+                } else {
+                    if up.z > 0.0 { Axis::Zplus } else { Axis::Zminus }
+                }
+            }
+            Axis::Yplus | Axis::Yminus => {
+                if up.x.abs() >= up.z.abs() {
+                    if up.x > 0.0 { Axis::Xplus } else { Axis::Xminus }
+                } else {
+                    if up.z > 0.0 { Axis::Zplus } else { Axis::Zminus }
+                }
+            }
+            Axis::Zplus | Axis::Zminus => {
+                if up.x.abs() >= up.y.abs() {
+                    if up.x > 0.0 { Axis::Xplus } else { Axis::Xminus }
+                } else {
+                    if up.y > 0.0 { Axis::Yplus } else { Axis::Yminus }
+                }
+            }
         };
-        
+
         // Combine into enum variant
         match (primary_axis, secondary_axis) {
             (Axis::Xplus, Axis::Yplus) => BlockRotation::XplusYplus,
@@ -285,11 +422,11 @@ impl BlockRotation {
             (Axis::Zminus, Axis::Xminus) => BlockRotation::ZminusXminus,
             (Axis::Zminus, Axis::Yplus) => BlockRotation::ZminusYplus,
             (Axis::Zminus, Axis::Yminus) => BlockRotation::ZminusYminus,
-            
             // These cases shouldn't happen due to our secondary axis selection
             _ => BlockRotation::XplusYplus,
         }
     }
+    
     
     /// Rotates the block around an axis by 90° steps
     pub fn rotate(self, axis: AxisBasic, steps: u8) -> Self {

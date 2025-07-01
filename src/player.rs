@@ -1,4 +1,3 @@
-
 use glam::Vec3;
 use winit::event::*;
 use winit::keyboard::KeyCode as Key;
@@ -95,69 +94,80 @@ impl Player {
 
     /// Updates camera rotation based on controller input
     fn update_rotation(&mut self, camera: &mut Camera, dt: f32) {
-        // Apply rotation with sensitivity (fixed yaw/pitch mapping)
-        self.controller.target_rotation += Vec3::new(
-            -self.controller.rotation.y, // Pitch (vertical) from mouse Y
-            -self.controller.rotation.x,  // Yaw (horizontal) from mouse X
-            0.0
-        ) * self.config.sensitivity * 0.05;
+        // Apply mouse input to target rotation
+        // mouse_x controls yaw (horizontal rotation)
+        // mouse_y controls pitch (vertical rotation)
+        self.controller.target_yaw -= self.controller.mouse_delta.x * self.config.sensitivity * 0.05;
+        self.controller.target_pitch -= self.controller.mouse_delta.y * self.config.sensitivity * 0.05;
         
         // Clamp pitch to prevent over-rotation
-        self.controller.target_rotation.x = self.controller.target_rotation.x
+        self.controller.target_pitch = self.controller.target_pitch
             .clamp(-SAFE_FRAC_PI_2, SAFE_FRAC_PI_2);
 
         match self.camera_mode {
             CameraMode::Smooth => {
                 // Smooth rotation interpolation
                 let smooth_factor = 1.0 - (-self.config.smoothness * dt).exp();
-                self.controller.current_rotation = self.controller.current_rotation
-                    .lerp(self.controller.target_rotation, smooth_factor);
+                self.controller.current_yaw = lerp_angle(
+                    self.controller.current_yaw,
+                    self.controller.target_yaw,
+                    smooth_factor
+                );
+                self.controller.current_pitch = lerp_f32(
+                    self.controller.current_pitch,
+                    self.controller.target_pitch,
+                    smooth_factor
+                );
             }
             CameraMode::Instant => {
                 // Set rotation instantly
-                self.controller.current_rotation = self.controller.target_rotation;
+                self.controller.current_yaw = self.controller.target_yaw;
+                self.controller.current_pitch = self.controller.target_pitch;
             }
         }
 
-        camera.set_rotation(self.controller.current_rotation);
-        self.controller.rotation = Vec3::ZERO;
+        // Apply rotation to camera
+        camera.set_rotation(Vec3::new(
+            self.controller.current_pitch,
+            self.controller.current_yaw,
+            0.0
+        ));
+        
+        // Reset mouse delta for next frame
+        self.controller.mouse_delta = Vec3::ZERO;
     }
 
     /// Calculates movement vector based on current inputs
     fn calculate_movement(&mut self, camera: &Camera, dt: f32) -> Vec3 {
-        let run_multiplier = if self.controller.movement.run {
+        let run_multiplier = if self.controller.movement.is_running() {
             self.config.run_multiplier
         } else {
             1.0
         };
         let speed = self.config.speed * run_multiplier;
 
-        // Calculate movement direction based on input
-        let movement = Vec3::new(
-            (self.controller.movement.right as i8 - self.controller.movement.left as i8) as f32,
-            (self.controller.movement.up as i8 - self.controller.movement.down as i8) as f32,
-            (self.controller.movement.forward as i8 - self.controller.movement.backward as i8) as f32,
-        ).normalize_or_zero();
+        // Get movement direction from packed input
+        let movement_dir = self.controller.movement.get_direction();
 
         // Calculate target velocity based on movement mode
         let target_velocity = match self.movement_mode {
             MovementMode::CameraRelative => {
                 // Relative to camera orientation
-                camera.right() * movement.x 
-                    + camera.up() * movement.y 
-                    + camera.forward() * movement.z
+                camera.right() * movement_dir.x 
+                    + camera.up() * movement_dir.y 
+                    + camera.forward() * movement_dir.z 
             }
             MovementMode::Flat => {
-                let ff = camera.right() * movement.x + camera.forward() * movement.z;
-                // Relative to world axes (ignores camera rotation)
-                Vec3::new(ff.x,0.0,ff.z)
-                    + Vec3::Y * movement.y 
+                // Relative to camera yaw only (ignores camera pitch) 
+                camera.right() * movement_dir.x 
+                    + Vec3::Y * movement_dir.y 
+                    + camera.flat_forward() * movement_dir.z
             }
             MovementMode::WorldRelative => {
-                // Relative to camera orientation
-                Vec3::X * movement.x 
-                    + Vec3::Y * movement.y 
-                    + Vec3::Z * movement.z
+                // Relative to world axes 
+                Vec3::X * movement_dir.x 
+                    + Vec3::Y * movement_dir.y 
+                    + Vec3::NEG_Z * movement_dir.z  // -Z is forward in right-handed system
             }
         } * speed;
 
@@ -198,35 +208,100 @@ impl Player {
 /// Handles player input and movement state
 pub struct PlayerController {
     movement: MovementInputs,
-    rotation: Vec3,        // Stores raw mouse input (x = horizontal, y = vertical)
+    mouse_delta: Vec3,     // Raw mouse input for this frame
     scroll: f32,
     velocity: Vec3,
-    target_rotation: Vec3, // Stores target Euler angles (x = pitch, y = yaw)
-    current_rotation: Vec3, // Stores smoothed Euler angles
+    target_yaw: f32,       // Target yaw angle
+    target_pitch: f32,     // Target pitch angle
+    current_yaw: f32,      // Current smoothed yaw angle
+    current_pitch: f32,    // Current smoothed pitch angle
 }
 
-/// Tracks movement input states
-#[derive(Debug, Default)]
+/// Tracks movement input states using bit flags
+#[derive(Debug, Default, Clone, Copy)]
 pub struct MovementInputs {
-    pub forward: bool,
-    pub backward: bool,
-    pub left: bool,
-    pub right: bool,
-    pub up: bool,
-    pub down: bool,
-    pub run: bool,
+    // Packed movement state: bits 0-5 for directions, bit 6 for run
+    // Bit 0: Forward, Bit 1: Backward, Bit 2: Left, Bit 3: Right, Bit 4: Up, Bit 5: Down, Bit 6: Run
+    state: u8,
 }
+
+impl MovementInputs {
+    const FORWARD: u8 = 1 << 0;
+    const BACKWARD: u8 = 1 << 1;
+    const LEFT: u8 = 1 << 2;
+    const RIGHT: u8 = 1 << 3;
+    const UP: u8 = 1 << 4;
+    const DOWN: u8 = 1 << 5;
+    const RUN: u8 = 1 << 6;
+
+    pub fn set_forward(&mut self, pressed: bool) {
+        self.set_bit(Self::FORWARD, pressed);
+    }
+
+    pub fn set_backward(&mut self, pressed: bool) {
+        self.set_bit(Self::BACKWARD, pressed);
+    }
+
+    pub fn set_left(&mut self, pressed: bool) {
+        self.set_bit(Self::LEFT, pressed);
+    }
+
+    pub fn set_right(&mut self, pressed: bool) {
+        self.set_bit(Self::RIGHT, pressed);
+    }
+
+    pub fn set_up(&mut self, pressed: bool) {
+        self.set_bit(Self::UP, pressed);
+    }
+
+    pub fn set_down(&mut self, pressed: bool) {
+        self.set_bit(Self::DOWN, pressed);
+    }
+
+    pub fn set_run(&mut self, pressed: bool) {
+        self.set_bit(Self::RUN, pressed);
+    }
+
+    pub fn is_running(&self) -> bool {
+        self.state & Self::RUN != 0
+    }
+
+    /// Gets the normalized movement direction vector
+    pub fn get_direction(&self) -> Vec3 {
+        let x = (self.state & Self::RIGHT != 0) as i8 - (self.state & Self::LEFT != 0) as i8;
+        let y = (self.state & Self::UP != 0) as i8 - (self.state & Self::DOWN != 0) as i8;
+        let z = (self.state & Self::FORWARD != 0) as i8 - (self.state & Self::BACKWARD != 0) as i8;
+        
+        Vec3::new(x as f32, y as f32, z as f32).normalize_or_zero()
+    }
+
+    /// Clears all movement inputs
+    pub fn clear(&mut self) {
+        self.state = 0;
+    }
+
+    fn set_bit(&mut self, bit: u8, value: bool) {
+        if value {
+            self.state |= bit;
+        } else {
+            self.state &= !bit;
+        }
+    }
+}
+
 #[allow(dead_code)]
 impl PlayerController {
     /// Creates a new controller with initial state from camera config
     pub fn new(config: CameraConfig) -> Self {
         Self {
             movement: MovementInputs::default(),
-            rotation: Vec3::ZERO,
+            mouse_delta: Vec3::ZERO,
             scroll: 0.0,
             velocity: Vec3::ZERO,
-            target_rotation: config.rotation,
-            current_rotation: config.rotation,
+            target_yaw: config.rotation.y,
+            target_pitch: config.rotation.x,
+            current_yaw: config.rotation.y,
+            current_pitch: config.rotation.x,
         }
     }
 
@@ -235,13 +310,13 @@ impl PlayerController {
         let is_pressed = *state == ElementState::Pressed;
         
         match key {
-            Key::KeyW | Key::ArrowUp => self.movement.forward = is_pressed,
-            Key::KeyS | Key::ArrowDown => self.movement.backward = is_pressed,
-            Key::KeyA | Key::ArrowLeft => self.movement.left = is_pressed,
-            Key::KeyD | Key::ArrowRight => self.movement.right = is_pressed,
-            Key::Space => self.movement.up = is_pressed,
-            Key::ShiftLeft => self.movement.run = is_pressed,
-            Key::ControlLeft => self.movement.down = is_pressed,
+            Key::KeyW | Key::ArrowUp => self.movement.set_forward(is_pressed),
+            Key::KeyS | Key::ArrowDown => self.movement.set_backward(is_pressed),
+            Key::KeyA | Key::ArrowLeft => self.movement.set_left(is_pressed),
+            Key::KeyD | Key::ArrowRight => self.movement.set_right(is_pressed),
+            Key::Space => self.movement.set_up(is_pressed),
+            Key::ShiftLeft => self.movement.set_run(is_pressed),
+            Key::ControlLeft => self.movement.set_down(is_pressed),
             _ => return false,
         }
         true
@@ -249,13 +324,12 @@ impl PlayerController {
 
     /// Resets all keyboard inputs
     pub fn reset_keyboard(&mut self) {
-        self.movement = MovementInputs::default();
+        self.movement.clear();
     }
 
     /// Processes mouse movement input
     pub fn process_mouse(&mut self, delta_x: f32, delta_y: f32) {
-        // Store raw mouse movement - we'll convert to rotation in update_rotation
-        self.rotation = Vec3::new(delta_x, delta_y, 0.0);
+        self.mouse_delta = Vec3::new(delta_x, delta_y, 0.0);
     }
 
     /// Processes mouse scroll input
@@ -268,13 +342,28 @@ impl PlayerController {
 
     /// Resets controller state to match camera
     pub fn reset(&mut self, camera: &Camera) {
-        self.movement = MovementInputs::default();
+        self.movement.clear();
         self.velocity = Vec3::ZERO;
-        self.target_rotation = camera.rotation();
-        self.current_rotation = self.target_rotation;
+        let rotation = camera.rotation();
+        self.target_pitch = rotation.x;
+        self.target_yaw = rotation.y;
+        self.current_pitch = rotation.x;
+        self.current_yaw = rotation.y;
     }
 }
 
+/// Helper function to interpolate between two angles, handling wraparound
+fn lerp_angle(from: f32, to: f32, t: f32) -> f32 {
+    let diff = ((to - from + std::f32::consts::PI) % (2.0 * std::f32::consts::PI)) - std::f32::consts::PI;
+    from + diff * t
+}
+
+/// Helper function to linearly interpolate between two f32 values
+fn lerp_f32(from: f32, to: f32, t: f32) -> f32 {
+    from + (to - from) * t
+}
+
+// Rest of the code remains the same...
 use glam::{Mat4, Quat};
 use wgpu::util::DeviceExt;
 use winit::dpi::PhysicalSize;
@@ -388,7 +477,7 @@ impl CameraSystem {
     }
 }
 
-// Camera representation
+// Camera representation with improved rotation handling
 #[derive(Debug)]
 pub struct Camera {
     position: Vec3,
@@ -401,33 +490,49 @@ impl Camera {
     }
 
     pub fn view_matrix(&self) -> Mat4 {
+        // Create rotation quaternion from yaw then pitch
+        let yaw_quat = Quat::from_rotation_y(self.rotation.y);
+        let pitch_quat = Quat::from_rotation_x(self.rotation.x);
+        let _rotation_quat = yaw_quat * pitch_quat;
+        
+        // Create view matrix
         Mat4::look_to_rh(self.position, self.forward(), self.up())
     }
 
-    // Direction vectors
+    // Direction vectors with proper quaternion composition
     pub fn forward(&self) -> Vec3 {
-        Quat::from_rotation_y(self.rotation.y) * 
-        Quat::from_rotation_x(self.rotation.x) * 
-        Vec3::NEG_Z
+        // Apply yaw first, then pitch
+        let yaw_quat = Quat::from_rotation_y(self.rotation.y);
+        let pitch_quat = Quat::from_rotation_x(self.rotation.x);
+        let rotation_quat = yaw_quat * pitch_quat;
+        rotation_quat * Vec3::NEG_Z
+    }
+
+    pub fn flat_forward(&self) -> Vec3 {
+        // Only apply yaw rotation for flat forward
+        let yaw_quat = Quat::from_rotation_y(self.rotation.y);
+        (yaw_quat * Vec3::NEG_Z).normalize()
     }
 
     pub fn right(&self) -> Vec3 {
-        Quat::from_rotation_y(self.rotation.y) * Vec3::X
+        // Right vector only depends on yaw
+        let yaw_quat = Quat::from_rotation_y(self.rotation.y);
+        yaw_quat * Vec3::X
     }
 
     pub fn up(&self) -> Vec3 {
-        Quat::from_rotation_y(self.rotation.y) * 
-        Quat::from_rotation_x(self.rotation.x) * 
-        Vec3::Y
+        // Apply yaw first, then pitch
+        let yaw_quat = Quat::from_rotation_y(self.rotation.y);
+        let pitch_quat = Quat::from_rotation_x(self.rotation.x);
+        let rotation_quat = yaw_quat * pitch_quat;
+        rotation_quat * Vec3::Y
     }
 
     // Getters and setters
     pub fn position(&self) -> Vec3 { self.position }
     pub fn set_position(&mut self, position: Vec3) { self.position = position; }
-    
     pub fn rotation(&self) -> Vec3 { self.rotation }
     pub fn set_rotation(&mut self, rotation: Vec3) { self.rotation = rotation; }
-    
     pub fn translate(&mut self, translation: Vec3) { self.position += translation; }
 }
 

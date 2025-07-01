@@ -1,6 +1,5 @@
 
-use super::cube_math::BlockRotation;
-use super::cube_math::{self,ChunkCoord};
+use super::cube_math::{self,ChunkCoord,BlockPosition,BlockRotation};
 use super::cube_render::{ChunkMeshBuilder, GeometryBuffer};
 #[allow(unused_imports)]
 use super::debug;
@@ -16,14 +15,17 @@ use wgpu::util::DeviceExt;
 // Type aliases for better readability
 type FastMap<K, V> = HashMap<K, V, BuildHasherDefault<AHasher>>;
 
+type Material = u16;
+type DensityField = u32;
+
 
 /// Represents a block in the world with optimized storage
 #[derive(Clone, Copy, Debug, PartialEq)]
 #[repr(u8)]
 pub enum Block {
     None = 0,
-    Simple(u16, BlockRotation),  // material, rotation
-    Marching(u16, u32),         // material, density field (27 bits - 4)
+    Simple(Material, BlockRotation),  // material, rotation
+    Marching(Material, DensityField),         // material, density field (27 bits - 4)
 }
 
 #[allow(dead_code)]
@@ -44,7 +46,7 @@ impl Block {
 
     /// Creates a new simple block with default material
     #[inline]
-    pub const fn new(material: u16) -> Self {
+    pub const fn new(material: Material) -> Self {
         Self::Simple(material, BlockRotation::XplusYplus)
     }
 
@@ -106,7 +108,7 @@ impl Block {
     }
 
     #[inline]
-    pub fn material(&self) -> u16 {
+    pub fn material(&self) -> Material {
         match self {
             Block::Simple(material, _) | Block::Marching(material, _) => *material,
             Block::None => 0,
@@ -114,7 +116,7 @@ impl Block {
     }
 
     #[inline]
-    pub fn set_material(&mut self, material: u16) {
+    pub fn set_material(&mut self, material: Material) {
         match self {
             Block::Simple(mat, _) | Block::Marching(mat, _) => *mat = material,
             Block::None => {}
@@ -430,24 +432,14 @@ impl Chunk {
 
     /// Packs local coordinates into u16
     #[inline]
-    pub fn pack_position(local_pos: Vec3) -> u16 {
-        debug_assert!(
-            local_pos.x < (Self::SIZE as u32) as f32
-                && local_pos.y < (Self::SIZE as u32) as f32
-                && local_pos.z < (Self::SIZE as u32) as f32,
-            "Position out of bounds"
-        );
-        ((local_pos.x as u16) << 8) | ((local_pos.y as u16) << 4) | (local_pos.z as u16)
+    pub fn pack_position(local_pos: Vec3) -> BlockPosition {
+        local_pos.into()
     }
 
     /// Unpacks position key to local coordinates
     #[inline]
-    pub fn unpack_position(pos: u16) -> Vec3 {
-        Vec3::new(
-            (((pos >> 8) & 0xF) as u32) as f32,
-            (((pos >> 4) & 0xF) as u32) as f32,
-            ((pos & 0xF) as u32) as f32,
-        )
+    pub fn unpack_position(pos: BlockPosition) -> Vec3 {
+        pos.into()
     }
 
     pub fn make_mesh(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, force: bool) {
@@ -472,7 +464,7 @@ impl Chunk {
                 continue;
             }
 
-            let local_pos = Self::unpack_position(pos as u16);
+            let local_pos = Self::unpack_position(BlockPosition::from(pos));
             match block {
                 Block::Marching(_, points) => {
                     builder.add_marching_cube(points, local_pos);
