@@ -49,6 +49,11 @@ impl Block {
     pub const fn new(material: Material) -> Self {
         Self::Simple(material, BlockRotation::XplusYplus)
     }
+    /// Creates a new marching cubes block with no point set
+    #[inline]
+    pub const fn new_march(material: Material) -> Self {
+        Self::Marching(material, 0)
+    }
 
     /// Creates a block from a quaternion rotation
     #[inline]
@@ -172,7 +177,7 @@ impl Block {
     pub fn get_march(&mut self) -> Option<Block> {
         match self {
             Block::Marching(_, _) => None,
-            _ => Some(*self),
+            _ => Some(Self::new_march(self.material())),
         }
     }
 }
@@ -523,6 +528,20 @@ impl World {
             .get(&chunk_coord)
             .map(|chunk| chunk.get_block(index))
             .unwrap_or(&Block::None)
+    }
+
+    #[inline]
+    pub fn get_block_mut(&mut self, world_pos: Vec3) -> Option<&mut Block> {
+        let chunk_coord = ChunkCoord::from_world_pos(world_pos);
+        let local_pos = Chunk::world_to_local_pos(world_pos);
+        let index: usize = local_pos.into();
+
+        self.chunks
+            .get_mut(&chunk_coord)
+            .map(|chunk| {
+                let palette_idx = chunk.storage.get(index);
+                &mut chunk.palette[palette_idx as usize]
+            })
     }
 
     pub fn set_block(&mut self, world_pos: Vec3, block: Block) {

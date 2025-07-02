@@ -1,4 +1,4 @@
-#[allow(unused_imports)]
+
 use super::cube_math::ChunkCoord;
 use crate::player::Camera;
 use crate::cube::{Block, World};
@@ -259,30 +259,30 @@ pub fn raycast_to_cube_point(
 
 /// Toggles a point in the marching cube that the player is looking at
 #[inline]
-pub fn toggle_looked_point() -> Option<(bool, (u8, u8, u8))> {
+pub fn toggle_looked_point() {
     let state = super::config::get_state();
+    if !state.is_world_running {
+        return;
+    }
     let camera = &state.camera_system.camera();
-    let world = super::config::get_gamestate().world_mut();
+    let gamestate = super::config::get_gamestate();
+    let world = gamestate.world_mut();
 
-    let (block_pos, (x, y, z)) = raycast_to_cube_point(camera, world, REACH)?;
-
-    let block = world.get_block(block_pos);
-    if block.is_empty() {
-        return None;
-    }
-
-    let mut new_block = *block;
-
-    if !new_block.is_marching() {
-        new_block = new_block.get_march()?;
-    }
-
-    let is_dot = new_block.get_point(x, y, z).unwrap_or(false);
-    new_block.set_point(x, y, z, !is_dot);
-
-    world.set_block(block_pos, new_block);
-
+    // Find targeted block and point
+    let Some((block_pos, (x, y, z))) = raycast_to_cube_point(camera, world, REACH) else { return; };
+    let Some(block) = world.get_block_mut(block_pos) else { return; };
+    if block.is_empty() { return; }
+    // Convert to marching cube block if needed
+    if !block.is_marching() {
+        if let Some(march_block) = block.get_march() {
+            *block = march_block;
+        } else { return; }
+    } 
+    // Get current point state
+    let is_dot = block.get_point(x, y, z).unwrap_or(false); 
+    // Toggle
+    block.set_point(x, y, z, !is_dot); 
+    // Rebuild chunk mesh
     update_chunk_mesh(world, block_pos);
-
-    Some((is_dot, (x, y, z)))
 }
+
