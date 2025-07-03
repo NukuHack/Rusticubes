@@ -105,10 +105,8 @@ impl UIManager {
             .with_border((70, 90, 120, 255), 0.005)
             .with_z_index(6)
             .with_callback(|| {
-                super::memory::clean_gpu_memory(super::config::get_state().device());
-                super::memory::MemoryManager::light_trim();
-                super::memory::MemoryManager::aggressive_trim();
-                super::memory::force_memory_cleanup();
+                super::memory::light_trim();
+                super::memory::hard_clean(Some(super::config::get_state().device()));
             });
         self.add_element(memory_button);
 

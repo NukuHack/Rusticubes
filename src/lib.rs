@@ -11,6 +11,7 @@ mod memory;
 mod input;
 mod math;
 mod game_state;
+mod modding;
 
 mod resources;
 mod audio;
@@ -324,12 +325,14 @@ pub async fn run() {
     // Store the state pointer
     config::STATE_PTR.store(Box::into_raw(Box::new(state)), Ordering::Release);
 
+    match modding::load_mod_one() {
+        Ok(_) => { println!("Success loading the 1st mod"); },
+        Err(e) => { println!("Error loading 1st mod: {:?}",e); }
+    }
 
     // Post-init cleanup
-    memory::clean_gpu_memory(config::get_state().device());
-    memory::MemoryManager::light_trim();
-    memory::MemoryManager::aggressive_trim();
-    memory::force_memory_cleanup();
+    memory::light_trim();
+    memory::hard_clean(Some(config::get_state().device()));
 
     event_loop.run(move |event, control_flow| {
         if config::is_closed() {
