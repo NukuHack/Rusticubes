@@ -329,6 +329,10 @@ pub async fn run() {
         Ok(_) => { println!("Success loading the 1st mod"); },
         Err(e) => { println!("Error loading 1st mod: {:?}",e); }
     }
+    match modding::load_mod_two() {
+        Ok(_) => { println!("Success loading the 2nd mod"); },
+        Err(e) => { println!("Error loading 2nd mod: {:?}",e); }
+    }
 
     // Post-init cleanup
     memory::light_trim();

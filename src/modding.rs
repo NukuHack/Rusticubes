@@ -1,6 +1,7 @@
-use wasmtime::{Engine, Linker, Module, Store, Memory, Caller, Instance};
-use std::path::Path;
+
+use wasmtime::*;
 use std::error::Error;
+use std::path::Path;
 use std::fmt;
 
 // rustc mods/mod_one.rs --target=wasm32-unknown-unknown --crate-type=cdylib -O -o comp_mods/mod_one.wasm
@@ -51,7 +52,7 @@ pub fn load_mod_one() -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
     let greeting_len = (packed_result & 0xFFFFFFFF) as i32;
 
     // 4. Read the greeting string
-    let greeting = read_string_from_memory(&mut store, &memory, greeting_ptr, greeting_len as usize)?;
+    let greeting = read_from_memory(&mut store, &memory, greeting_ptr, greeting_len as usize)?;
     println!("{}", greeting);
 
     // 5. Free memory (both input and output)
@@ -64,44 +65,71 @@ pub fn load_mod_one() -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
     Ok(())
 }
 
+
 pub fn load_mod_two() -> Result<(), Box<dyn Error + Send + Sync>> {
     let engine = Engine::default();
     let mut linker = Linker::new(&engine);
+    let mut store = Store::new(&engine, ());
     
-    // Add host function with proper signature
+    // Define the memory first
+    let memory = Memory::new(&mut store, MemoryType::new(1, None))?;
+    linker.define(&store, "env", "memory", memory)?;
+
+    // Define the log function - fixed signature
     linker.func_wrap(
         "env", 
         "log", 
         |mut caller: Caller<'_, ()>, ptr: i32, len: i32| {
+            // Get memory from caller's exports
             let memory = caller.get_export("memory")
-                .ok_or_else(|| wasmtime::Error::msg("no memory export"))?
-                .into_memory()
-                .ok_or_else(|| wasmtime::Error::msg("not a memory"))?;
+                .and_then(|e| e.into_memory())
+                .ok_or_else(|| wasmtime::Error::msg("memory not found"))?;
                 
+            // Read string from memory
             let mut buffer = vec![0u8; len as usize];
-            memory.read(&mut caller, ptr as usize, &mut buffer)
-                .map_err(|e| wasmtime::Error::msg(format!("failed to read memory: {}", e)))?;
+            memory.read(&caller, ptr as usize, &mut buffer)
+                .map_err(|e| wasmtime::Error::msg(format!("memory read failed: {}", e)))?;
                 
+            // Convert to string and print
             let msg = String::from_utf8(buffer)
                 .map_err(|e| wasmtime::Error::msg(format!("invalid utf-8: {}", e)))?;
-                
             println!("[WASM] {}", msg);
+            
             Ok(())
         }
     )?;
     
-    // Load module
+    // Define alloc function
+    linker.func_wrap(
+        "env",
+        "alloc",
+        |size: i32| -> i32 {
+            let mut buf: Vec<u8> = Vec::with_capacity(size as usize);
+            let ptr = buf.as_mut_ptr() as i32;
+            std::mem::forget(buf);
+            ptr
+        }
+    )?;
+
+    // Define dealloc function
+    linker.func_wrap(
+        "env",
+        "dealloc",
+        |ptr: i32, size: i32| {
+            unsafe {
+                let _ = Vec::from_raw_parts(ptr as *mut u8, 0, size as usize);
+            }
+        }
+    )?;
+    
+    // Load and instantiate the module
     let path = Path::new("comp_mods").join("mod_two.wasm");
     let module = Module::from_file(&engine, path)?;
-    let mut store = Store::new(&engine, ());
-    
-    // Instantiate with linker
     let instance = linker.instantiate(&mut store, &module)?;
     
-    // Call main function if it exists
-    if let Ok(main_func) = instance.get_typed_func::<(), ()>(&mut store, "main") {
-        main_func.call(&mut store, ())?;
-    }
+    // Call main function
+    let main = instance.get_typed_func::<(), ()>(&mut store, "main")?;
+    main.call(&mut store, ())?;
     
     Ok(())
 }
@@ -124,7 +152,7 @@ fn write_to_memory(
     Ok(ptr)
 }
 
-fn read_string_from_memory(
+fn read_from_memory(
     store: &mut Store<()>,
     memory: &Memory,
     ptr: i32,
