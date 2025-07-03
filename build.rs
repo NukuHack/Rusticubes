@@ -69,8 +69,9 @@ fn handle_resource_compression() {
                 }
             };
 
-            let compressed_path = comp_resource_path.join(relative_path);
-            let compressed_path = add_extension(compressed_path, "lz4");
+            let mut compressed_path = comp_resource_path.join(relative_path).to_string_lossy().into_owned();
+            compressed_path.push_str(".lz4");
+            let compressed_path = PathBuf::from(compressed_path);
 
             match needs_update(path, &compressed_path) {
                 Ok(true) => files_to_process.push((path.to_owned(), compressed_path)),
@@ -120,6 +121,30 @@ fn handle_resource_compression() {
         processed_count, skipped_count, up_to_date_files
     );
 }
+
+
+fn process_file(source_path: &Path, compressed_path: &Path) -> io::Result<()> {
+    let data = fs::read(source_path)?;
+    let compressed = lz4_flex::compress_prepend_size(&data);
+
+    if let Some(parent) = compressed_path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+
+    fs::write(compressed_path, compressed)?;
+
+    if let Ok(metadata) = fs::metadata(source_path) {
+        if let Ok(time) = metadata.modified() {
+            let _ = filetime::set_file_mtime(
+                compressed_path,
+                filetime::FileTime::from_system_time(time),
+            );
+        }
+    }
+
+    Ok(())
+}
+
 
 fn handle_wasm_compilation() {
     println!("cargo:rerun-if-changed=mods");
@@ -177,33 +202,11 @@ fn handle_wasm_compilation() {
         up_to_date_plugins
     );
 
-
     // Check if wasm32-unknown-unknown target is installed
-    let target_list = Command::new("rustc")
-        .arg("--print")
-        .arg("target-list")
-        .output();
-
-    if let Ok(output) = target_list {
-        let targets = String::from_utf8_lossy(&output.stdout);
-        if !targets.contains("wasm32-unknown-unknown") {
-            eprintln!("ERROR: wasm32-unknown-unknown target not installed!");
-            eprintln!("Install it with: rustup target add wasm32-unknown-unknown");
-            return;
-        } else {
-            println!("DEBUG: wasm32-unknown-unknown target is available");
-        }
-    }
-    // Check if rustc is available
-    let rustc_version = Command::new("rustc").arg("--version").output();
-    match rustc_version {
-        Ok(output) => {
-            println!("DEBUG: rustc version: {}", String::from_utf8_lossy(&output.stdout).trim());
-        }
-        Err(e) => {
-            println!("rustc not found in PATH: {}", e);
-            return;
-        }
+    if !is_wasm_target_installed() {
+        eprintln!("ERROR: wasm32-unknown-unknown target not installed!");
+        eprintln!("Install it with: rustup target add wasm32-unknown-unknown");
+        return;
     }
 
     let mut success_count = 0;
@@ -227,30 +230,90 @@ fn handle_wasm_compilation() {
     );
 }
 
-fn compile_plugin(source_path: &Path, wasm_output: &Path) -> io::Result<()> {
-    println!("DEBUG: Compiling {} to {}", source_path.display(), wasm_output.display());
+fn is_wasm_target_installed() -> bool {
+    let target_list = Command::new("rustc")
+        .arg("--print")
+        .arg("target-list")
+        .output()
+        .map(|output| String::from_utf8_lossy(&output.stdout).into_owned())
+        .unwrap_or_default();
     
-    // Try simple compilation first
+    target_list.contains("wasm32-unknown-unknown")
+}
+
+fn compile_plugin(source_path: &Path, wasm_output: &Path) -> io::Result<()> {
+    // First try with cargo if there's a Cargo.toml in the mods directory
+    if let Ok(cargo_result) = try_compile_with_cargo(source_path, wasm_output) {
+        return cargo_result;
+    }
+
+    // Fall back to rustc if cargo fails or isn't available
+    compile_with_rustc(source_path, wasm_output)
+}
+
+fn try_compile_with_cargo(source_path: &Path, wasm_output: &Path) -> io::Result<io::Result<()>> {
+    let mods_dir = source_path.parent().expect("Source file has no parent directory");
+    let cargo_toml = mods_dir.join("Cargo.toml");
+    
+    if !cargo_toml.exists() {
+        return Err(io::Error::new(io::ErrorKind::NotFound, "No Cargo.toml found"));
+    }
+
+    let crate_name = source_path.file_stem()
+        .and_then(|s| s.to_str())
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "Invalid file name"))?;
+
+    let output = Command::new("cargo")
+        .current_dir(mods_dir)
+        .arg("build")
+        .arg("--release")
+        .arg("--target")
+        .arg("wasm32-unknown-unknown")
+        .arg("--target-dir")
+        .arg(wasm_output.parent().expect("WASM output has no parent directory"))
+        .output()?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Ok(Err(io::Error::new(
+            io::ErrorKind::Other,
+            format!("Cargo build failed: {}", stderr),
+        )));
+    }
+
+    // Cargo puts the output in target/wasm32-unknown-unknown/release/[crate_name].wasm
+    let cargo_output_path = wasm_output.parent()
+        .unwrap()
+        .join("wasm32-unknown-unknown")
+        .join("release")
+        .join(format!("{}.wasm", crate_name));
+
+    if cargo_output_path.exists() {
+        fs::rename(&cargo_output_path, wasm_output)?;
+        Ok(Ok(()))
+    } else {
+        Ok(Err(io::Error::new(
+            io::ErrorKind::NotFound,
+            format!("Cargo didn't produce expected output at {}", cargo_output_path.display()),
+        )))
+    }
+}
+
+fn compile_with_rustc(source_path: &Path, wasm_output: &Path) -> io::Result<()> {
     let mut cmd = Command::new("rustc");
     cmd.arg(source_path)
         .arg("--target=wasm32-unknown-unknown")
         .arg("--crate-type=cdylib")
-        .arg("-O")
+        .arg("-C")
+        .arg("opt-level=3")  // Equivalent to --release optimizations
+        .arg("-C")
+        .arg("debug-assertions=off")
+        .arg("-C")
+        .arg("lto")  // Link-time optimization
         .arg("-o")
         .arg(wasm_output);
 
-    println!("DEBUG: Running command: {:?}", cmd);
     let output = cmd.output()?;
-
-    println!("DEBUG: Command exit status: {}", output.status);
-    
-    if !output.stdout.is_empty() {
-        println!("DEBUG: STDOUT: {}", String::from_utf8_lossy(&output.stdout));
-    }
-    
-    if !output.stderr.is_empty() {
-        println!("DEBUG: STDERR: {}", String::from_utf8_lossy(&output.stderr));
-    }
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
@@ -260,11 +323,7 @@ fn compile_plugin(source_path: &Path, wasm_output: &Path) -> io::Result<()> {
         ));
     }
 
-    // Check if the output file was actually created
-    if wasm_output.exists() {
-        let metadata = fs::metadata(wasm_output)?;
-        println!("DEBUG: Successfully created WASM file: {} bytes", metadata.len());
-    } else {
+    if !wasm_output.exists() {
         return Err(io::Error::new(
             io::ErrorKind::Other,
             format!("WASM file was not created: {}", wasm_output.display()),
@@ -273,8 +332,6 @@ fn compile_plugin(source_path: &Path, wasm_output: &Path) -> io::Result<()> {
 
     Ok(())
 }
-
-// Removed the temp wrapper function for now - we'll use simpler compilation
 
 fn needs_update(source_path: &Path, target_path: &Path) -> io::Result<bool> {
     if !target_path.exists() {
@@ -285,33 +342,4 @@ fn needs_update(source_path: &Path, target_path: &Path) -> io::Result<bool> {
     let target_modified = fs::metadata(target_path)?.modified()?;
 
     Ok(source_modified > target_modified)
-}
-
-fn process_file(source_path: &Path, compressed_path: &Path) -> io::Result<()> {
-    let data = fs::read(source_path)?;
-    let compressed = lz4_flex::compress_prepend_size(&data);
-
-    if let Some(parent) = compressed_path.parent() {
-        fs::create_dir_all(parent)?;
-    }
-
-    fs::write(compressed_path, compressed)?;
-
-    if let Ok(metadata) = fs::metadata(source_path) {
-        if let Ok(time) = metadata.modified() {
-            let _ = filetime::set_file_mtime(
-                compressed_path,
-                filetime::FileTime::from_system_time(time),
-            );
-        }
-    }
-
-    Ok(())
-}
-
-fn add_extension(path: PathBuf, extension: &str) -> PathBuf {
-    let mut os_string = path.into_os_string();
-    os_string.push(".");
-    os_string.push(extension);
-    PathBuf::from(os_string)
 }

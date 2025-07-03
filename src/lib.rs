@@ -325,14 +325,16 @@ pub async fn run() {
     // Store the state pointer
     config::STATE_PTR.store(Box::into_raw(Box::new(state)), Ordering::Release);
 
-    match modding::load_mod_one() {
-        Ok(_) => { println!("Success loading the 1st mod"); },
-        Err(e) => { println!("Error loading 1st mod: {:?}",e); }
+    let mut wasm_modder = modding::WasmRuntime::new().expect("you won't fail right ?");
+    match wasm_modder.load_mod_one() {
+        Ok(..) => {},
+        Err(e) => { println!("Error for mod1 : {}",e)}
     }
-    match modding::load_mod_two() {
-        Ok(_) => { println!("Success loading the 2nd mod"); },
-        Err(e) => { println!("Error loading 2nd mod: {:?}",e); }
+    match wasm_modder.load_mod_two() {
+        Ok(..) => {},
+        Err(e) => { println!("Error for mod1 : {}",e)}
     }
+
 
     // Post-init cleanup
     memory::light_trim();
