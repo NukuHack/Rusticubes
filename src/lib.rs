@@ -12,6 +12,7 @@ mod input;
 mod math;
 mod game_state;
 mod modding;
+mod modding_override;
 
 mod resources;
 mod audio;
@@ -348,10 +349,13 @@ pub async fn run() {
         }
         Err(e) => {
             eprintln!("💥 Critical: Failed to create WASM sandbox: {}", e);
-            std::process::exit(1); // Exit if we can't even create the sandbox
         }
     }
 
+    match modding_override::main() {
+        Ok(..) => (), // Success case
+        Err(e) => { println!("💥Failed to create override: {}", e); }
+    }
 
     // Post-init cleanup
     memory::light_trim();

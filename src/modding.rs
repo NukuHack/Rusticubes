@@ -1,3 +1,4 @@
+
 use wasmtime::*;
 use std::collections::HashMap;
 use std::error::Error;
@@ -8,6 +9,7 @@ use std::path::{Path,PathBuf};
 
 // cargo mods/mod_one.rs build --release --target wasm32-unknown-unknown --target-dir comp_mods/mod_one.wasm
 
+// Error types remain the same as your original code
 #[derive(Debug)]
 #[allow(dead_code)]
 pub enum WasmError {
@@ -18,7 +20,8 @@ pub enum WasmError {
     MemoryAccess { error: MemoryAccessError },
     IOError { error: String },
     InvalidModuleName,
-    BulkError { errors: Vec<(String, WasmError)> },  // Store module names with their errors
+    BulkError { errors: Vec<(String, WasmError)> },
+    FunctionNotFound { function: String },
     Unexpected,
 }
 
@@ -41,7 +44,8 @@ impl fmt::Display for WasmError {
                     write!(f, "  - {}: {}\n", module, error)?;
                 }
                 Ok(())
-            }
+            },
+            Self::FunctionNotFound { .. } => write!(f, "Unexpected error occurred"),
         }
     }
 }
@@ -66,16 +70,19 @@ impl From<MemoryAccessError> for WasmError {
     }
 }
 
-struct ModuleData {
-    instance: Instance,
-    memory: Memory,
+#[derive(Clone)]
+pub struct ModuleData {
+    pub instance: Instance,
+    pub memory: Memory,
+    pub module: Module,  // Added to store the module for inspection
 }
+
 #[allow(dead_code)]
 pub struct WasmRuntime {
-    engine: Engine,
-    store: Store<()>,
-    linker: Linker<()>,
-    instances: HashMap<String, ModuleData>,
+    pub engine: Engine,
+    pub store: Store<()>,
+    pub linker: Linker<()>,
+    pub instances: HashMap<String, ModuleData>,
 }
 #[allow(dead_code)]
 impl WasmRuntime {
@@ -143,20 +150,26 @@ impl WasmRuntime {
         Ok(())
     }
     
+
     pub fn load_module(&mut self, name: &str, path: &Path) -> Result<(), WasmError> {
         let module = Module::from_file(&self.engine, path)?;
-        
-        // Use the main linker that already has all host functions defined
         let instance = self.linker.instantiate(&mut self.store, &module)?;
         let memory = instance.get_memory(&mut self.store, "memory")
-            .ok_or_else(|| WasmError::MemoryNotFound)?;
+            .ok_or(WasmError::MemoryNotFound)?;
         
         self.instances.insert(name.to_string(), ModuleData {
             instance,
             memory,
+            module,
         });
         
         Ok(())
+    }
+    
+    pub fn get_module(&self, name: &str) -> Result<&Module, WasmError> {
+        self.instances.get(name)
+            .map(|data| &data.module)
+            .ok_or_else(|| WasmError::ModuleNotFound { module: name.to_string() })
     }
         
     pub fn call_function_with_data(&mut self, module: &str, func: &str, data: &[u8]) -> Result<String, WasmError> {
@@ -221,10 +234,24 @@ impl WasmRuntime {
         Ok(result)
     }
     
-    fn get_instance_mut(&mut self, name: &str) -> Result<&mut ModuleData, WasmError> {
+    pub fn get_instance_mut(&mut self, name: &str) -> Result<&mut ModuleData, WasmError> {
         self.instances.get_mut(name)
             .ok_or_else(|| WasmError::ModuleNotFound { module: name.to_string() })
     }
+
+    // Renamed to be more explicit and avoid confusion
+    pub fn execute_wasm_fn<F, R>(&mut self, module: &str, f: F) -> Result<R, WasmError>
+    where
+        F: FnOnce(&mut Instance, &mut Store<()>) -> Result<R, WasmError>,
+    {
+        // Get the ModuleData first
+        let module_data = self.instances.get_mut(module)
+            .ok_or_else(|| WasmError::ModuleNotFound { module: module.to_string() })?;
+        
+        // Then execute with both components
+        f(&mut module_data.instance, &mut self.store)
+    }
+
     
     pub fn list_modules(&self) -> Vec<String> {
         self.instances.keys().cloned().collect()
@@ -333,3 +360,4 @@ impl WasmRuntime {
 }
 
 // I would like to make some "listeners" or idk to modify / overwrite the vanilla code
+
