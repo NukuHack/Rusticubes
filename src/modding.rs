@@ -361,3 +361,16 @@ impl WasmRuntime {
 
 // I would like to make some "listeners" or idk to modify / overwrite the vanilla code
 
+
+
+pub fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let mut wasm_modder = WasmRuntime::new()?;
+        
+    // Propagate initialization errors
+    wasm_modder.initialize_all_modules()?;
+    
+    // Run extra mod and propagate any errors
+    wasm_modder.run_extra_mod()?;
+    
+    Ok(())
+}

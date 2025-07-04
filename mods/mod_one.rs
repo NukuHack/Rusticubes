@@ -1,5 +1,5 @@
 // ================================
-// mod_one.rs - Fixed Module One
+// mod_one.rs
 // ================================
 
 // Import the functions from the host environment
@@ -9,20 +9,33 @@ extern "C" {
     //fn alloc(size: i32) -> i32;
     //fn dealloc(ptr: i32, size: i32);
 }
+/*
+// only used with the "no-std" 
+#[panic_handler]
+fn panic(_info: &core::panic::PanicInfo) -> ! {
+    let msg = "Panic occurred";
+    unsafe {
+        log(
+            msg.as_ptr() as i32,
+            msg.len() as i32
+        );
+    }
+    loop {}
+}
+*/
 
 #[no_mangle]
 pub extern "C" fn greet(name_ptr: i32, name_len: i32) -> i64 {
     let name = unsafe {
-        std::str::from_utf8(std::slice::from_raw_parts(
-            name_ptr as *const u8, 
-            name_len as usize
-        )).unwrap_or("invalid utf-8")
+        let slice = std::slice::from_raw_parts(name_ptr as *const u8, name_len as usize);
+        str::from_utf8(slice).unwrap_or("invalid utf-8")
     };
-    let greeting = format!("Hello, {}!", name);
+    
+    let greeting = String::from("Hello, ") + name + "!";
     let greeting_bytes = greeting.into_bytes();
     let ptr = greeting_bytes.as_ptr() as i32;
     let len = greeting_bytes.len() as i32;
-    std::mem::forget(greeting_bytes);
+    core::mem::forget(greeting_bytes);
     ((ptr as i64) << 32) | (len as i64)
 }
 
@@ -39,21 +52,10 @@ pub extern "C" fn main() {
 }
 
 #[no_mangle]
-pub extern "C" fn get_string_len(ptr: i32) -> i32 {
-    unsafe {
-        let mut len = 0;
-        while *((ptr as *const u8).add(len)) != 0 {
-            len += 1;
-        }
-        len as i32
-    }
-}
-
-#[no_mangle]
 pub extern "C" fn alloc(size: i32) -> i32 {
     let mut buf: Vec<u8> = Vec::with_capacity(size as usize);  // Explicit u8 type here
     let ptr = buf.as_mut_ptr() as usize as i32;
-    std::mem::forget(buf);
+    core::mem::forget(buf);
     ptr
 }
 

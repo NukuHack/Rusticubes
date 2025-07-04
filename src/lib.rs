@@ -327,34 +327,13 @@ pub async fn run() {
     // Store the state pointer
     config::STATE_PTR.store(Box::into_raw(Box::new(state)), Ordering::Release);
 
-    let wasm_sandbox = modding::WasmRuntime::new();
-    match wasm_sandbox {
-        Ok(mut wasm_modder) => {
-            // Initialize modules with detailed error reporting
-            match wasm_modder.initialize_all_modules() {
-                Err(modding::WasmError::BulkError { errors }) => {
-                    eprintln!("⚠️ Failed to initialize some modules:");
-                    for (module, error) in errors {
-                        eprintln!("  • {}: {}", module, error);
-                    }
-                }
-                Err(e) => eprintln!("⚠️ Initialization error: {}", e),
-                _ => (), // Success case
-            }
-
-            // Run extra mod with context
-            if let Err(e) = wasm_modder.run_extra_mod() {
-                eprintln!("⚠️ Failed to run extra modifications: {}", e);
-            }
-        }
-        Err(e) => {
-            eprintln!("💥 Critical: Failed to create WASM sandbox: {}", e);
-        }
+    match modding::main() {
+        Ok(_) => (), // Success case
+        Err(e) => println!("⚠Error modding: {}", e),
     }
-
     match modding_override::main() {
-        Ok(..) => (), // Success case
-        Err(e) => { println!("💥Failed to create override: {}", e); }
+        Ok(_) => (), // Success case
+        Err(e) => { println!("💥Error mod function override: {}", e); }
     }
 
     // Post-init cleanup

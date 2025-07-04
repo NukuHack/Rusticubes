@@ -140,7 +140,7 @@ define_overridable! {
     }
 }
 
-#[allow(dead_code)]
+
 pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Basic Add: {}", example::add(2, 3)); // Should be 5 (2+3)
     println!("Basic Complex: {}", example::complex_calc(1, 3, 4)); // Should be 7 (1*3+4)
@@ -151,13 +151,9 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     
     // Load the WASM module with error handling
     let wasm_path = Path::new("comp_mods/math.wasm");
-    match override_system.load_module(wasm_path) {
-        Ok(_) => {},
-        Err(e) => {
-            println!("Failed to load module: {}", e);
-            ()
-        }
-    } 
+    override_system.load_module(wasm_path)
+        .map_err(|e| format!("Failed to load module: {}", e))?;
+    
     // Set the override system
     example::set_override_system(override_system.clone());
     println!("Wasm Add: {}", example::add(2, 3)); // Should be -1 (2-3)
