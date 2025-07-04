@@ -21,20 +21,53 @@ mod time;
 mod cursor;
 mod event_handler;
 
-mod cube;
-mod world;
-mod cube_math;
-mod cube_extra;
-mod cube_render;
-mod cube_tables;
+pub mod world {
+    pub mod main;
+    pub mod manager;
+    pub mod builder;
+}
+pub mod block {
+    pub mod main;
+    pub mod math;
+    pub mod extra;
+    pub mod render;
+    pub mod lut;
+}
+pub mod ui {
+    pub mod element;
+    pub mod render;
+    pub mod manager;
+    pub mod setup;
+}
 
-mod world_manager;
-mod world_builder;
-
-mod ui_element;
-mod ui_render;
-mod ui_manager;
-mod ui_setup;
+/*
+// Core game systems
+pub mod game {
+    pub mod player;
+    pub mod state;
+}
+// Engine systems
+pub mod systems {
+    pub mod input;
+    pub mod time;
+    pub mod event_handler;
+    pub mod file_manager;
+    pub mod audio;
+    pub mod resources;
+    pub mod cursor;
+    pub mod pipeline;
+    pub mod modding;
+    pub mod modding_override;
+}
+// Utility modules
+pub mod utils {
+    pub mod math;
+    pub mod geometry;
+    pub mod debug;
+    pub mod memory;
+    pub mod config;
+}
+*/
 
 
 use std::sync::atomic::Ordering;
@@ -51,7 +84,7 @@ pub struct State<'a> {
     previous_frame_time: std::time::Instant,
     input_system: input::InputSystem,
     pipeline: pipeline::Pipeline,
-    ui_manager: ui_manager::UIManager,
+    ui_manager: ui::manager::UIManager,
     camera_system: player::CameraSystem,
     texture_manager: geometry::TextureManager,
     is_world_running: bool,
@@ -165,7 +198,7 @@ impl<'a> State<'a> {
 
         let pipeline: pipeline::Pipeline = pipeline::Pipeline::new(&device, &config, &render_pipeline_layout);
 
-        let mut ui_manager:ui_manager::UIManager = ui_manager::UIManager::new(&device, &config, &queue);
+        let mut ui_manager:ui::manager::UIManager = ui::manager::UIManager::new(&device, &config, &queue);
         ui_manager.setup_ui();
         
         let render_context: RenderContext = RenderContext{
@@ -235,7 +268,7 @@ impl<'a> State<'a> {
         &self.texture_manager
     }
     #[inline]
-    pub fn ui_manager(&self) -> &ui_manager::UIManager {
+    pub fn ui_manager(&self) -> &ui::manager::UIManager {
         &self.ui_manager
     }
     #[inline]
@@ -351,7 +384,7 @@ pub async fn run() {
                 config::get_state().handle_events(event);
 
                 if config::get_state().is_world_running {
-                    cube_extra::update_full_world();
+                    block::extra::update_full_world();
                 }
             }
             _ => {}

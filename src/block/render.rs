@@ -1,6 +1,7 @@
 
-use super::cube_tables::{EDGE_TABLE, TRI_TABLE};
-use super::cube::Chunk;
+use crate::world::main::World;
+use crate::block::lut::{EDGE_TABLE, TRI_TABLE};
+use crate::block::main::Chunk;
 use glam::{Mat4, Quat, Vec3};
 use std::mem;
 use wgpu::util::DeviceExt;
@@ -453,8 +454,7 @@ impl GeometryBuffer {
 
 
 
-impl super::world::World {
-    
+impl World {
     pub fn render_chunks<'a>(&'a self, render_pass: &mut wgpu::RenderPass<'a>) {
         for chunk in self.chunks.values() {
             // Skip empty chunks entirely - no mesh or bind group needed

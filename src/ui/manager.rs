@@ -1,7 +1,10 @@
 
-use super::ui_element::{self,UIElement,UIElementData};
-use super::ui_render::{UIRenderer,Vertex};
-use super::get_string;
+use crate::ui::element;
+use crate::audio;
+use crate::config;
+use crate::ui::element::{UIElement, UIElementData};
+use crate::ui::render::{UIRenderer, Vertex};
+use crate::get_string;
 use winit::keyboard::KeyCode as Key;
 
 #[derive(Default, PartialEq)]
@@ -212,7 +215,7 @@ impl UIManager {
             Key::Enter => self.handle_enter(),
             Key::Escape => self.blur_current_element(),
             _ => {
-                if let Some(c) = ui_element::key_to_char(key, shift) {
+                if let Some(c) = element::key_to_char(key, shift) {
                     self.process_text_input(c);
                 }
             }
@@ -224,7 +227,7 @@ impl UIManager {
             if let Some(element) = self.elements.get_mut(focused_idx) {
                 if element.is_input() && element.enabled {
                     if let Some(text_mut) = element.get_text_mut() {
-                        ui_element::handle_backspace(text_mut);
+                        element::handle_backspace(text_mut);
                     }
                 }
             }
@@ -247,7 +250,7 @@ impl UIManager {
                 }
 
                 if let Some(text_mut) = element.get_text_mut() {
-                    ui_element::process_text_input(text_mut, c);
+                    element::process_text_input(text_mut, c);
                 }
             }
         }
@@ -280,7 +283,7 @@ impl UIManager {
                         element.trigger_callback();
                     }
                     UIElementData::Button { .. } => {
-                        super::audio::set_sound("click.ogg");
+                        audio::set_sound("click.ogg");
                         element.trigger_callback();
                     }
 
@@ -322,22 +325,22 @@ impl UIManager {
 
 
 pub fn close_pressed() {
-    match super::config::get_state().ui_manager.state {
+    match config::get_state().ui_manager.state {
         UIState::WorldSelection => {
-            let state = super::config::get_state();
+            let state = config::get_state();
             state.ui_manager.state = UIState::BootScreen;
             state.ui_manager.setup_ui();
         }
         UIState::BootScreen => {
-            super::config::close_app();
+            config::close_app();
         }
         UIState::InGame => {
-            let state = super::config::get_state();
+            let state = config::get_state();
             state.is_world_running = false;
             state.ui_manager.state = UIState::BootScreen;
             state.ui_manager.setup_ui();
 
-            super::config::drop_gamestate();
+            config::drop_gamestate();
         }
         UIState::Loading => {
             return; // hell nah- exiting while loading it like Bruh
@@ -346,7 +349,7 @@ pub fn close_pressed() {
             return; // why ???
         }
         UIState::NewWorld => {
-            let ui_manager = &mut super::config::get_state().ui_manager;
+            let ui_manager = &mut config::get_state().ui_manager;
             ui_manager.state = UIState::WorldSelection;
             ui_manager.setup_ui();
         }

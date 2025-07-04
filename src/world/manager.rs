@@ -1,9 +1,11 @@
 
+use crate::config;
+use crate::time;
 use std::io::{Write,Read};
 use std::path::{Path,PathBuf};
 
 pub fn get_world_names() -> std::io::Result<Vec<String>> {
-    let path = super::config::get_save_path().join("saves");
+    let path = config::get_save_path().join("saves");
 
     let mut folders = Vec::new();
 
@@ -25,7 +27,7 @@ pub fn get_world_names() -> std::io::Result<Vec<String>> {
 
 pub fn del_world(world_name: &str) {
     // Get the saves path
-    let saves_path = match super::config::get_save_path().join("saves").canonicalize() {
+    let saves_path = match config::get_save_path().join("saves").canonicalize() {
         Ok(p) => p,
         Err(e) => {
             println!("Failed to access saves directory: {}", e);
@@ -47,7 +49,7 @@ pub fn del_world(world_name: &str) {
         Ok(_) => {
             println!("Successfully deleted world '{}'", world_name);
             // Refresh UI after successful deletion
-            let state = super::config::get_state();
+            let state = config::get_state();
             state.ui_manager.setup_ui();
         },
         Err(e) => {
@@ -61,21 +63,21 @@ pub fn del_world(world_name: &str) {
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct WorldData {
     pub version: String,
-    pub creation_date: super::time::Time,
-    pub last_opened_date: super::time::Time,
+    pub creation_date: time::Time,
+    pub last_opened_date: time::Time,
 }
 
 impl WorldData {
     pub fn new() -> Self {
         WorldData {
             version: std::env!("CARGO_PKG_VERSION").to_string(),
-            creation_date: super::time::Time::now(),
-            last_opened_date: super::time::Time::now(),
+            creation_date: time::Time::now(),
+            last_opened_date: time::Time::now(),
         }
     }
     
     pub fn update_last_opened(&mut self) {
-        self.last_opened_date = super::time::Time::now();
+        self.last_opened_date = time::Time::now();
     }
 }
 
@@ -124,7 +126,7 @@ pub fn update_world_data(path: &PathBuf) -> std::io::Result<()> {
     if world_data.version != current_version {
         world_data.version = current_version.to_string();
         // Optionally update creation_date if you want to track version changes
-        // world_data.creation_date = super::time::Time::now();
+        // world_data.creation_date = time::Time::now();
     }
     
     world_data.update_last_opened();

@@ -1,5 +1,9 @@
-use crate::ui_manager::*;
-use crate::ui_element::UIElement;
+use crate::block;
+use crate::config;
+use crate::memory;
+use crate::world;
+use crate::ui::manager::*;
+use crate::ui::element::UIElement;
 
 impl UIManager {
     #[inline]
@@ -69,7 +73,7 @@ impl UIManager {
             .with_border((70, 110, 180, 255), 0.005)
             .with_z_index(6)
             .with_callback(|| {
-                let state = super::config::get_state();
+                let state = config::get_state();
                 state.ui_manager.state = UIState::WorldSelection;
                 state.ui_manager.setup_ui();
             });
@@ -105,8 +109,8 @@ impl UIManager {
             .with_border((70, 90, 120, 255), 0.005)
             .with_z_index(6)
             .with_callback(|| {
-                super::memory::light_trim();
-                super::memory::hard_clean(Some(super::config::get_state().device()));
+                memory::light_trim();
+                memory::hard_clean(Some(config::get_state().device()));
             });
         self.add_element(memory_button);
 
@@ -164,13 +168,13 @@ impl UIManager {
             .with_border((80, 110, 160, 255), 0.005)
             .with_z_index(8)
             .with_callback(|| {
-                let state = super::config::get_state();
+                let state = config::get_state();
                 state.ui_manager.state = UIState::NewWorld;
                 state.ui_manager.setup_ui();
             });
         self.add_element(new_button);
 
-        let worlds = match super::world_manager::get_world_names() {
+        let worlds:Vec<String> = match world::manager::get_world_names() {
             Ok(worlds) => worlds,
             Err(e) => {
                 eprintln!("Error loading world names: {}", e);
@@ -193,7 +197,7 @@ impl UIManager {
                 .with_callback({
                     let name_clone = name_clone.clone();  // Clone for this closure
                     move || {
-                        super::world_builder::join_world(&name_clone);
+                        world::builder::join_world(&name_clone);
                     }
                 });
             self.add_element(world_button);
@@ -207,7 +211,7 @@ impl UIManager {
                 .with_border((150, 60, 60, 255), 0.005)
                 .with_z_index(5)
                 .with_callback(move || {
-                    super::world_manager::del_world(&name_clone);
+                    world::manager::del_world(&name_clone);
                 });
             self.add_element(delete_button);
         }
@@ -222,7 +226,7 @@ impl UIManager {
             .with_border((90, 100, 130, 255), 0.005)
             .with_z_index(8)
             .with_callback(|| {
-                let state = super::config::get_state();
+                let state = config::get_state();
                 state.ui_manager.state = UIState::BootScreen;
                 state.ui_manager.setup_ui();
             });
@@ -280,7 +284,7 @@ impl UIManager {
             .with_border((80, 110, 160, 255), 0.005)
             .with_z_index(6)
             .with_callback(move || {
-                super::world_builder::try_join_world(input_id);
+                world::builder::try_join_world(input_id);
             });
         self.add_element(gen_button);
 
@@ -293,7 +297,7 @@ impl UIManager {
             .with_border((90, 100, 130, 255), 0.005)
             .with_z_index(8)
             .with_callback(|| {
-                let state = super::config::get_state();
+                let state = config::get_state();
                 state.ui_manager.state = UIState::WorldSelection;
                 state.ui_manager.setup_ui();
             });
@@ -367,7 +371,7 @@ impl UIManager {
             .with_text_color(255, 180, 180) // Light red
             .with_border((140, 80, 80, 255), 0.005)
             .with_z_index(8)
-            .with_callback(|| super::cube_extra::add_full_world());
+            .with_callback(|| block::extra::add_full_world());
         self.add_element(clean_button);
 
         // Help text with better contrast

@@ -1,12 +1,14 @@
 
 use std::sync::atomic::Ordering;
 use glam::Vec3;
+use crate::player;
+use crate::world;
 
 #[allow(dead_code)]
 pub struct GameState {
     worldname: String,
-    player: super::player::Player,
-    world: super::world::World, // lol main data storage :)
+    player: player::Player,
+    world: world::main::World, // lol main data storage :)
     save_path: std::path::PathBuf,
 }
 #[allow(dead_code)]
@@ -47,7 +49,7 @@ impl GameState {
             }
         }
         
-        match super::world_manager::update_world_data(&save_path) {
+        match world::manager::update_world_data(&save_path) {
             Ok(_) => (), // Everything is fine, do nothing
             Err(e) => println!("Error updating world data: {}", e),
         }
@@ -55,16 +57,16 @@ impl GameState {
         Self {
             worldname: worldname.to_string(),
             player,
-            world: super::world::World::empty(),
+            world: world::main::World::empty(),
             save_path,
         }
     }
     #[inline]
-    pub fn world_mut(&mut self) -> &mut super::world::World {
+    pub fn world_mut(&mut self) -> &mut world::main::World {
         &mut self.world
     }
     #[inline]
-    pub fn player_mut(&mut self) -> &mut super::player::Player {
+    pub fn player_mut(&mut self) -> &mut player::Player {
         &mut self.player
     }
 
@@ -73,11 +75,11 @@ impl GameState {
         &self.worldname
     }
     #[inline]
-    pub fn player(&self) -> &super::player::Player {
+    pub fn player(&self) -> &player::Player {
         &self.player
     }
     #[inline]
-    pub fn world(&self) -> &super::world::World {
+    pub fn world(&self) -> &world::main::World {
         &self.world
     }
     #[inline]

@@ -1,7 +1,10 @@
+
+use crate::config;
+use crate::resources;
+use crate::ui::element::{UIElement, UIElementData};
 use rusttype::{Font, Scale, point};
 use image::{ImageBuffer, Rgba};
 use std::collections::HashMap;
-use super::ui_element::{UIElement, UIElementData};
 
 #[repr(C)]
 #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
@@ -186,7 +189,7 @@ impl UIRenderer {
 
     #[inline] fn process_text_element(&mut self, element: &UIElement, vertices: &mut Vec<Vertex>, 
         indices: &mut Vec<u32>, current_index: &mut u32) {
-        let state = super::config::get_state();
+        let state = config::get_state();
         
         match &element.data {
             UIElementData::InputField { .. } | UIElementData::Button { .. } => {
@@ -323,7 +326,7 @@ impl UIRenderer {
     #[inline] fn process_image_element(&mut self, element: &UIElement, vertices: &mut Vec<Vertex>, 
         indices: &mut Vec<u32>, current_index: &mut u32) {
         if let UIElementData::Image { path } = &element.data {
-            let state = super::config::get_state();
+            let state = config::get_state();
             let image_key = format!("{}_{}", path, element.color.map(|c| c.to_string()).join("|"));
             
             if !self.image_textures.contains_key(&image_key) {
@@ -353,7 +356,7 @@ impl UIRenderer {
     }
 
     fn create_image_texture(&self, device: &wgpu::Device, queue: &wgpu::Queue, path: String) -> wgpu::Texture {
-        let (rgba, width, height) = super::resources::load_image_from_bytes(path.to_string()).unwrap();
+        let (rgba, width, height) = resources::load_image_from_bytes(path.to_string()).unwrap();
         let texture = device.create_texture(&wgpu::TextureDescriptor {
             label: Some("Image Texture"),
             size: wgpu::Extent3d { width, height, depth_or_array_layers: 1 },
@@ -376,7 +379,7 @@ impl UIRenderer {
     #[inline] fn process_animation_element(&mut self, element: &UIElement, vertices: &mut Vec<Vertex>, 
         indices: &mut Vec<u32>, current_index: &mut u32) {
         if let UIElementData::Animation {frames,..} = &element.data {
-            let state = super::config::get_state();
+            let state = config::get_state();
             let animation_key = frames.join("|");
             
             if !self.animation_textures.contains_key(&animation_key) {
@@ -399,7 +402,7 @@ impl UIRenderer {
     fn create_animation_texture_array(&self, device: &wgpu::Device, queue: &wgpu::Queue, 
         frames: &[String]) -> Option<(wgpu::Texture, wgpu::BindGroup)> {
         if frames.is_empty() { return None; }
-        let (_, width, height) = super::resources::load_image_from_bytes(frames[0].clone())?;
+        let (_, width, height) = resources::load_image_from_bytes(frames[0].clone())?;
         let layer_count = frames.len() as u32;
         let texture = device.create_texture(&wgpu::TextureDescriptor {
             label: Some("animation_texture_array"),
@@ -411,7 +414,7 @@ impl UIRenderer {
         });
 
         for (i, frame_path) in frames.iter().enumerate() {
-            if let Some((rgba, _, _)) = super::resources::load_image_from_bytes(frame_path.clone()) {
+            if let Some((rgba, _, _)) = resources::load_image_from_bytes(frame_path.clone()) {
                 queue.write_texture(
                     wgpu::TexelCopyTextureInfo { texture: &texture, mip_level: 0, 
                         origin: wgpu::Origin3d { x: 0, y: 0, z: i as u32 }, aspect: wgpu::TextureAspect::All },
@@ -500,7 +503,7 @@ impl UIRenderer {
         [base, base + 1, base + 2, base + 1, base + 3, base + 2]
     }
 
-    #[inline] pub fn render<'a>(&'a self, ui_manager: &super::ui_manager::UIManager, 
+    #[inline] pub fn render<'a>(&'a self, ui_manager: &crate::ui::manager::UIManager, 
         r_pass: &mut wgpu::RenderPass<'a>) {
         r_pass.set_pipeline(&ui_manager.pipeline);
         r_pass.set_vertex_buffer(0, ui_manager.vertex_buffer.slice(..));
@@ -533,7 +536,7 @@ impl UIRenderer {
                         let packed_frames = (*current_frame & 0xFFFF) | ((next_frame & 0xFFFF) << 16);
                         let raw_progress = ((elapsed_time / frame_duration) * 100.0) as u32;
                         let packed_progress = (raw_progress & 0xFFFF) | ((blend_delay & 0xFFFF) << 16);
-                        super::config::get_state().queue().write_buffer(
+                        config::get_state().queue().write_buffer(
                             &self.uniform_buffer, 0,
                             bytemuck::cast_slice(&[packed_frames, packed_progress])
                         );

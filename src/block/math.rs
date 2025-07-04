@@ -1,5 +1,5 @@
 
-use super::cube::Chunk;
+use crate::block::main::Chunk;
 
 /// Compact chunk coordinate representation (64 bits)
 /// Format: [X:26 (signed), Y:12 (signed), Z:26 (signed)]

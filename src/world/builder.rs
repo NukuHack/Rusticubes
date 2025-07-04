@@ -1,11 +1,13 @@
 
-use super::ui_manager::UIState;
+use crate::ui::manager::UIState;
+use crate::game_state;
+use crate::config;
 
 pub fn join_world(world_name: &str) {
     println!("Loading world: {}", world_name);
 
-    super::game_state::start_world(&world_name);
-    let state = super::config::get_state();
+    game_state::start_world(&world_name);
+    let state = config::get_state();
     state.ui_manager.state = UIState::Loading;
     state.ui_manager.setup_ui();
     state.ui_manager.state = UIState::InGame;
@@ -13,7 +15,7 @@ pub fn join_world(world_name: &str) {
 }
 
 pub fn try_join_world(id: usize) {
-	let world_name = super::config::get_state()
+	let world_name = config::get_state()
 	    .ui_manager()
 	    .get_input_text(id)
 	    .map(|s| s.trim())  // Trim whitespace first
@@ -23,5 +25,5 @@ pub fn try_join_world(id: usize) {
 	        // You might want to log this fallback behavior
 	        "New World".to_string()
 	    });
-    super::world_builder::join_world(&world_name);
+    join_world(&world_name);
 }

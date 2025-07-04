@@ -1,4 +1,5 @@
 
+use crate::block;
 use std::iter::Iterator;
 use winit::{
     event::{ElementState, MouseButton, WindowEvent},
@@ -100,28 +101,28 @@ impl<'a> super::State<'a> {
                     match key {
                         Key::KeyF => {
                             if *state == ElementState::Pressed {
-                                super::cube_extra::place_looked_cube();
+                                block::extra::place_looked_cube();
                                 return true
                             }
                             return false;
                         },
                         Key::KeyR => {
                             if *state == ElementState::Pressed {
-                                super::cube_extra::remove_targeted_block();
+                                block::extra::remove_targeted_block();
                                 return true
                             }
                             return false;
                         },
                         Key::KeyE => {
                             if *state == ElementState::Pressed {
-                                super::cube_extra::toggle_looked_point();
+                                block::extra::toggle_looked_point();
                                 return true
                             }
                             return false;
                         },
                         Key::KeyL => {
                             if *state == ElementState::Pressed {
-                                super::cube_extra::add_full_chunk();
+                                block::extra::add_full_chunk();
                                 return true
                             }
                             return false;
@@ -136,7 +137,7 @@ impl<'a> super::State<'a> {
                     },
                     Key::Escape => {
                         if *state == ElementState::Pressed {
-                            super::ui_manager::close_pressed();
+                            crate::ui::manager::close_pressed();
                             return true;
                         }
                         false
@@ -183,7 +184,7 @@ impl<'a> super::State<'a> {
                         if self.ui_manager.visibility!=false{
                         // Use the stored current mouse position
                         if let Some(current_position) = self.input_system.previous_mouse {
-                            super::ui_manager::handle_ui_click(&mut self.ui_manager, self.render_context.size.into(), &current_position);
+                            crate::ui::manager::handle_ui_click(&mut self.ui_manager, self.render_context.size.into(), &current_position);
                         }
                         }
                         true
@@ -235,7 +236,7 @@ impl<'a> super::State<'a> {
                     }
                     
                     // Handle UI hover
-                    super::ui_manager::handle_ui_hover(&mut self.ui_manager, self.render_context.size.into(), position);
+                    crate::ui::manager::handle_ui_hover(&mut self.ui_manager, self.render_context.size.into(), position);
                     self.input_system.previous_mouse = Some(*position);
                     return true;
                 }

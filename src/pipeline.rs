@@ -1,5 +1,7 @@
 
-use super::get_string;
+use crate::block::render::Vertex;
+
+use crate::get_string;
 use wgpu;
 
 /// Struct holding all render pipelines and their associated shaders
@@ -10,13 +12,11 @@ pub struct Pipeline {
     chunk_pipeline: wgpu::RenderPipeline,
     post_pipeline: wgpu::RenderPipeline,
     sky_pipeline: wgpu::RenderPipeline,
-
     // Private shaders
     inside_shader: wgpu::ShaderModule,
     chunk_shader: wgpu::ShaderModule,
     post_shader: wgpu::ShaderModule,
     sky_shader: wgpu::ShaderModule,
-
     // Cached layouts
     post_bind_group_layout: wgpu::BindGroupLayout,
     post_pipeline_layout: wgpu::PipelineLayout,
@@ -175,7 +175,7 @@ fn create_chunk_pipeline(
         Some(layout),
         shader,
         format,
-        &[super::cube_render::Vertex::desc()],
+        &[Vertex::desc()],
         Some(depth_stencil_state(true)),
         default_primitive_state(),
         "Chunk Render Pipeline",
@@ -193,7 +193,7 @@ fn create_inside_pipeline(
         Some(layout),
         shader,
         format,
-        &[super::cube_render::Vertex::desc()],
+        &[Vertex::desc()],
         Some(inside_depth_stencil()),
         inside_primitive_state(),
         "Inside Render Pipeline",

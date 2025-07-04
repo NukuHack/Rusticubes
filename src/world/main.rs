@@ -1,9 +1,10 @@
 
-use crate::cube::Block;
-use crate::cube::Chunk;
-use super::cube_math::ChunkCoord;
+use crate::config;
+use crate::block::main::Block;
+use crate::block::main::Chunk;
+use crate::block::math::ChunkCoord;
 #[allow(unused_imports)]
-use super::debug;
+use crate::debug;
 use ahash::AHasher;
 use glam::Vec3;
 use std::{
@@ -94,7 +95,7 @@ impl World {
 
     /// Loads a chunk from storage
     pub fn load_chunk(&mut self, chunk_coord: ChunkCoord, force: bool) -> bool {
-        let state = super::config::get_state();
+        let state = config::get_state();
         let device = &state.render_context.device;
         let chunk_bind_group_layout = &state.render_context.chunk_bind_group_layout;
 

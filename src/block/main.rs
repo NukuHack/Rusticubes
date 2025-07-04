@@ -1,8 +1,8 @@
 
-use super::cube_math::{self,BlockPosition,BlockRotation};
-use super::cube_render::{ChunkMeshBuilder, GeometryBuffer};
+use crate::block::math::{self, BlockPosition, BlockRotation};
+use crate::block::render::{ChunkMeshBuilder, GeometryBuffer};
 #[allow(unused_imports)]
-use super::debug;
+use crate::debug;
 use glam::{Quat, Vec3};
 use std::f32::consts::{PI, TAU};
 
@@ -77,7 +77,7 @@ impl Block {
 
     /// Rotates the block around an axis by N 90° steps
     #[inline]
-    pub fn rotate(&mut self, axis: cube_math::AxisBasic, steps: u8) {
+    pub fn rotate(&mut self, axis: math::AxisBasic, steps: u8) {
         if let Block::Simple(_, rotation) = self {
             *rotation = rotation.rotate(axis, steps);
         }
