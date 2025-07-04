@@ -21,6 +21,7 @@ mod cursor;
 mod event_handler;
 
 mod cube;
+mod world;
 mod cube_math;
 mod cube_extra;
 mod cube_render;
@@ -325,14 +326,30 @@ pub async fn run() {
     // Store the state pointer
     config::STATE_PTR.store(Box::into_raw(Box::new(state)), Ordering::Release);
 
-    let mut wasm_modder = modding::WasmRuntime::new().expect("you won't fail right ?");
-    match wasm_modder.load_mod_one() {
-        Ok(..) => {},
-        Err(e) => { println!("Error for mod1 : {}",e)}
-    }
-    match wasm_modder.load_mod_two() {
-        Ok(..) => {},
-        Err(e) => { println!("Error for mod1 : {}",e)}
+    let wasm_sandbox = modding::WasmRuntime::new();
+    match wasm_sandbox {
+        Ok(mut wasm_modder) => {
+            // Initialize modules with detailed error reporting
+            match wasm_modder.initialize_all_modules() {
+                Err(modding::WasmError::BulkError { errors }) => {
+                    eprintln!("⚠️ Failed to initialize some modules:");
+                    for (module, error) in errors {
+                        eprintln!("  • {}: {}", module, error);
+                    }
+                }
+                Err(e) => eprintln!("⚠️ Initialization error: {}", e),
+                _ => (), // Success case
+            }
+
+            // Run extra mod with context
+            if let Err(e) = wasm_modder.run_extra_mod() {
+                eprintln!("⚠️ Failed to run extra modifications: {}", e);
+            }
+        }
+        Err(e) => {
+            eprintln!("💥 Critical: Failed to create WASM sandbox: {}", e);
+            std::process::exit(1); // Exit if we can't even create the sandbox
+        }
     }
 
 

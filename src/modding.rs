@@ -1,45 +1,68 @@
 use wasmtime::*;
 use std::collections::HashMap;
 use std::error::Error;
-use std::fmt;
-use std::path::Path;
+use std::{fmt,fs};
+use std::path::{Path,PathBuf};
 
 // rustc mods/mod_one.rs --target=wasm32-unknown-unknown --crate-type=cdylib -O -o comp_mods/mod_one.wasm
 
 // cargo mods/mod_one.rs build --release --target wasm32-unknown-unknown --target-dir comp_mods/mod_one.wasm
 
 #[derive(Debug)]
-pub struct WasmError {
-    message: String,
-}
-
-impl fmt::Display for WasmError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.message)
-    }
+#[allow(dead_code)]
+pub enum WasmError {
+    ModuleNotFound { module: String },
+    MemoryNotFound,
+    Utf8Conversion { error: String },
+    Wasmtime { error: wasmtime::Error },
+    MemoryAccess { error: MemoryAccessError },
+    IOError { error: String },
+    InvalidModuleName,
+    BulkError { errors: Vec<(String, WasmError)> },  // Store module names with their errors
+    Unexpected,
 }
 
 impl Error for WasmError {}
 
+impl fmt::Display for WasmError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Self::ModuleNotFound { module } => write!(f, "Module '{}' not found", module),
+            Self::MemoryNotFound => write!(f, "Module has no memory"),
+            Self::Utf8Conversion { error } => write!(f, "UTF-8 conversion error: {}", error),
+            Self::Wasmtime { error } => write!(f, "Wasmtime error: {}", error),
+            Self::MemoryAccess { error } => write!(f, "Memory access error: {}", error),
+            Self::IOError { error } => write!(f, "IO failed: {}", error),
+            Self::InvalidModuleName => write!(f, "Invalid module name"),
+            Self::Unexpected => write!(f, "Unexpected error occurred"),
+            Self::BulkError { errors } => {
+                write!(f, "Multiple errors occurred:\n")?;
+                for (module, error) in errors {
+                    write!(f, "  - {}: {}\n", module, error)?;
+                }
+                Ok(())
+            }
+        }
+    }
+}
 impl From<wasmtime::Error> for WasmError {
     fn from(err: wasmtime::Error) -> Self {
-        WasmError {
-            message: err.to_string(),
-        }
+        Self::Wasmtime{error: err}
     }
 }
 impl From<std::string::FromUtf8Error> for WasmError {
     fn from(err: std::string::FromUtf8Error) -> Self {
-        WasmError {
-            message: format!("UTF-8 conversion error: {}", err),
-        }
+        Self::Utf8Conversion{error : err.to_string()}
+    }
+}
+impl From<std::io::Error> for WasmError {
+    fn from(err: std::io::Error) -> Self {
+        Self::Utf8Conversion{error : err.to_string()}
     }
 }
 impl From<MemoryAccessError> for WasmError {
     fn from(err: MemoryAccessError) -> Self {
-        WasmError {
-            message: format!("Memory access error: {}", err),
-        }
+        Self::MemoryAccess{error: err}
     }
 }
 
@@ -74,10 +97,7 @@ impl WasmRuntime {
     
     fn setup_host_functions(linker: &mut Linker<()>) -> Result<(), WasmError> {
         // Define the log function
-        linker.func_wrap(
-            "env", 
-            "log", 
-            |mut caller: Caller<'_, ()>, ptr: i32, len: i32| {
+        linker.func_wrap( "env", "log", |mut caller: Caller<'_, ()>, ptr: i32, len: i32| {
                 let memory = caller.get_export("memory")
                     .and_then(|e| e.into_memory())
                     .ok_or_else(|| wasmtime::Error::msg("memory not found"))?;
@@ -95,10 +115,7 @@ impl WasmRuntime {
         )?;
         
         // Define alloc function - using WASM memory allocation
-        linker.func_wrap(
-            "env",
-            "alloc",
-            |mut caller: Caller<'_, ()>, size: i32| -> Result<i32, wasmtime::Error> {
+        linker.func_wrap( "env", "alloc", |mut caller: Caller<'_, ()>, size: i32| -> Result<i32, wasmtime::Error> {
                 let memory = caller.get_export("memory")
                     .and_then(|e| e.into_memory())
                     .ok_or_else(|| wasmtime::Error::msg("memory not found"))?;
@@ -118,10 +135,7 @@ impl WasmRuntime {
         )?;
 
         // Define dealloc function (no-op for simplicity)
-        linker.func_wrap(
-            "env",
-            "dealloc",
-            |_ptr: i32, _size: i32| {
+        linker.func_wrap( "env", "dealloc", |_ptr: i32, _size: i32| {
                 // No-op for now
             }
         )?;
@@ -135,7 +149,7 @@ impl WasmRuntime {
         // Use the main linker that already has all host functions defined
         let instance = self.linker.instantiate(&mut self.store, &module)?;
         let memory = instance.get_memory(&mut self.store, "memory")
-            .ok_or_else(|| WasmError { message: "Module has no memory".to_string() })?;
+            .ok_or_else(|| WasmError::MemoryNotFound)?;
         
         self.instances.insert(name.to_string(), ModuleData {
             instance,
@@ -149,7 +163,7 @@ impl WasmRuntime {
         // Split into discrete operations to avoid overlapping borrows
         let input_ptr = {
             let m_data = self.instances.get_mut(module)
-                .ok_or_else(|| WasmError { message: format!("Module '{}' not found", module) })?;
+                .ok_or_else(|| WasmError::ModuleNotFound { module: module.to_string() })?;
             
             let alloc = m_data.instance.get_typed_func::<i32, i32>(&mut self.store, "alloc")?;
             let ptr = alloc.call(&mut self.store, data.len() as i32)?;
@@ -159,7 +173,7 @@ impl WasmRuntime {
 
         let packed_result = {
             let m_data = self.instances.get_mut(module)
-                .ok_or_else(|| WasmError { message: format!("Module '{}' not found", module) })?;
+                .ok_or_else(|| WasmError::ModuleNotFound { module: module.to_string() })?;
             
             let greet = m_data.instance.get_typed_func::<(i32, i32), i64>(&mut self.store, func)?;
             greet.call(&mut self.store, (input_ptr, data.len() as i32))?
@@ -167,7 +181,7 @@ impl WasmRuntime {
 
         let result = {
             let m_data = self.instances.get_mut(module)
-                .ok_or_else(|| WasmError { message: format!("Module '{}' not found", module) })?;
+                .ok_or_else(|| WasmError::ModuleNotFound { module: module.to_string() })?;
             
             let result_ptr = (packed_result >> 32) as i32;
             let result_len = (packed_result & 0xFFFFFFFF) as i32;
@@ -182,7 +196,7 @@ impl WasmRuntime {
 
     pub fn call_function_simple(&mut self, module: &str, func: &str) -> Result<(), WasmError> {
         let m_data = self.instances.get_mut(module)
-            .ok_or_else(|| WasmError { message: format!("Module '{}' not found", module) })?;
+            .ok_or_else(|| WasmError::ModuleNotFound { module: module.to_string() })?;
         
         let func = m_data.instance.get_typed_func::<(), ()>(&mut self.store, func)?;
         func.call(&mut self.store, ())?;
@@ -191,7 +205,7 @@ impl WasmRuntime {
 
     pub fn call_function_i32(&mut self, module: &str, func: &str, arg: i32) -> Result<i32, WasmError> {
         let m_data = self.instances.get_mut(module)
-            .ok_or_else(|| WasmError { message: format!("Module '{}' not found", module) })?;
+            .ok_or_else(|| WasmError::ModuleNotFound { module: module.to_string() })?;
         
         let func = m_data.instance.get_typed_func::<i32, i32>(&mut self.store, func)?;
         let result = func.call(&mut self.store, arg)?;
@@ -200,7 +214,7 @@ impl WasmRuntime {
 
     pub fn call_function_two_i32(&mut self, module: &str, func: &str, arg1: i32, arg2: i32) -> Result<i32, WasmError> {
         let m_data = self.instances.get_mut(module)
-            .ok_or_else(|| WasmError { message: format!("Module '{}' not found", module) })?;
+            .ok_or_else(|| WasmError::ModuleNotFound { module: module.to_string() })?;
         
         let func = m_data.instance.get_typed_func::<(i32, i32), i32>(&mut self.store, func)?;
         let result = func.call(&mut self.store, (arg1, arg2))?;
@@ -209,15 +223,33 @@ impl WasmRuntime {
     
     fn get_instance_mut(&mut self, name: &str) -> Result<&mut ModuleData, WasmError> {
         self.instances.get_mut(name)
-            .ok_or_else(|| WasmError { message: format!("Module '{}' not found", name) })
+            .ok_or_else(|| WasmError::ModuleNotFound { module: name.to_string() })
     }
     
     pub fn list_modules(&self) -> Vec<String> {
         self.instances.keys().cloned().collect()
     }
-    
+
     pub fn unload_module(&mut self, name: &str) -> Result<(), WasmError> {
-        self.instances.remove(name);
+        self.instances.remove(name)
+            .map(|_| ())
+            .ok_or(WasmError::ModuleNotFound{module : name.to_string()})
+    }
+
+    pub fn clear_all_modules(&mut self) -> Result<(), WasmError> {
+        let modules = self.list_modules();
+        let mut errors = Vec::new();
+
+        for module in modules {
+            if let Err(e) = self.unload_module(&module) {
+                errors.push((module.clone(), e));
+            }
+        }
+
+        if !errors.is_empty() {
+            return Err(WasmError::BulkError{errors});
+        }
+
         Ok(())
     }
     
@@ -226,25 +258,78 @@ impl WasmRuntime {
     }
 }
 
-// Example usage functions
 impl WasmRuntime {
-    // mod one focuses on variable passing (alloc de-alloc) and stuff
-    pub fn load_mod_one(&mut self) -> Result<(), WasmError> {
-        let path = Path::new("comp_mods").join("mod_one.wasm");
-        self.load_module("mod_one", &path)?;
-        
-        let greeting = self.call_function_with_data("mod_one", "greet", "User".as_bytes())?;
-        println!("{}", greeting);
-        
+    /// Scans a directory for all .wasm files
+    pub fn find_wasm_modules(directory: &str) -> Result<Vec<PathBuf>, WasmError> {
+        let dir_path = Path::new(directory);
+        if !dir_path.exists() {
+            return Err(WasmError::IOError{ error: "Directory does not exists".to_string()});
+        }
+
+        let wasm_files = fs::read_dir(dir_path)?
+            .filter_map(|entry| {
+                let entry = entry.ok()?;
+                let path = entry.path();
+                if path.extension()?.to_str()? == "wasm" {
+                    Some(path)
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        Ok(wasm_files)
+    }
+
+    /// Executes a function in a loaded module with optional data
+    fn execute_module_function(
+        &mut self,
+        module_name: &str,
+        function_name: &str,
+        data: Option<&[u8]>,
+    ) -> Result<Option<String>, WasmError> {
+        match data {
+            Some(d) => {
+                let result = self.call_function_with_data(module_name, function_name, d)?;
+                Ok(Some(result))
+            }
+            None => {
+                self.call_function_simple(module_name, function_name)?;
+                Ok(None)
+            }
+        }
+    }
+
+    /// Initializes all modules by running their "main" function
+    pub fn initialize_all_modules(&mut self) -> Result<(), WasmError> {
+        let modules = WasmRuntime::find_wasm_modules("comp_mods")?;
+
+        for path in modules {
+            let module_name = path.file_stem()
+                .and_then(|s| s.to_str())
+                .ok_or(WasmError::InvalidModuleName)?;
+
+            self.load_module(module_name, &path)?;
+            self.execute_module_function(module_name, "main", None)?;
+        }
+
         Ok(())
     }
-    // mod two focuses on function passing, using function from main code
-    pub fn load_mod_two(&mut self) -> Result<(), WasmError> {
-        let path = Path::new("comp_mods").join("mod_two.wasm");
-        self.load_module("mod_two", &path)?;
-        
-        self.call_function_simple("mod_two", "main")?;
-        
+
+    /// Example usage showing how to work with specific modules
+    pub fn run_extra_mod(&mut self) -> Result<(), WasmError> {
+        // Interact with specific modules as needed
+        let greeting = self.execute_module_function(
+            "mod_one", 
+            "greet", 
+            Some("User".as_bytes())
+        )?;
+        if let Some(g) = greeting {
+            println!("{}", g);
+        }
+
         Ok(())
     }
 }
+
+// I would like to make some "listeners" or idk to modify / overwrite the vanilla code

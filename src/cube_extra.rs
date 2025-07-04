@@ -1,7 +1,8 @@
 
 use super::cube_math::ChunkCoord;
-use crate::player::Camera;
-use crate::cube::{Block, World};
+use super::player::Camera;
+use super::cube::Block;
+use super::world::World;
 use glam::Vec3;
 
 const REACH: f32 = 6.0;

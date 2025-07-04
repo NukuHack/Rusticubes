@@ -27,6 +27,18 @@ pub extern "C" fn greet(name_ptr: i32, name_len: i32) -> i64 {
 }
 
 #[no_mangle]
+pub extern "C" fn main() {
+    let greeting = "Hello from mod_one!";
+    
+    unsafe {
+        log(
+            greeting.as_ptr() as i32, 
+            greeting.len() as i32
+        );
+    }
+}
+
+#[no_mangle]
 pub extern "C" fn get_string_len(ptr: i32) -> i32 {
     unsafe {
         let mut len = 0;

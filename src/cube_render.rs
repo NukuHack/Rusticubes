@@ -453,7 +453,7 @@ impl GeometryBuffer {
 
 
 
-impl super::cube::World {
+impl super::world::World {
     
     pub fn render_chunks<'a>(&'a self, render_pass: &mut wgpu::RenderPass<'a>) {
         for chunk in self.chunks.values() {
