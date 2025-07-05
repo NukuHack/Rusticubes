@@ -5,39 +5,6 @@ use winit::{
     window::WindowBuilder,
 };
 
-// Uniform structure for passing texture index to shader
-#[repr(C)]
-#[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
-struct Uniforms {
-    current_texture_index: u32,
-    _padding: [u32; 3], // WGSL requires 16-byte alignment
-}
-
-// Mock function to simulate getting image data from memory
-// In real usage, this would decompress your embedded images
-fn get_image_bytes(index: usize) -> Vec<u8> {
-    let width = 512;
-    let height = 512;
-    let mut data = vec![0u8; width * height * 4]; // RGBA format
-    
-    // Generate a simple pattern for each image based on index
-    for y in 0..height {
-        for x in 0..width {
-            let pixel_index = (y * width + x) * 4;
-            let r = ((index * 50) % 255) as u8;
-            let g = ((x + index * 30) % 255) as u8;
-            let b = ((y + index * 20) % 255) as u8;
-            let a = 255u8;
-            
-            data[pixel_index] = r;
-            data[pixel_index + 1] = g;
-            data[pixel_index + 2] = b;
-            data[pixel_index + 3] = a;
-        }
-    }
-    data
-}
-
 struct TextureArrayApp {
     device: wgpu::Device,
     queue: wgpu::Queue,
@@ -341,55 +308,7 @@ fn fs_main(@builtin(position) frag_coord: vec4<f32>) -> @location(0) vec4<f32> {
         
         (texture_array, uniform_buffer, bind_group, render_pipeline, image_count)
     }
-    
-    fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {
-        if new_size.width > 0 && new_size.height > 0 {
-            self.size = new_size;
-            self.config.width = new_size.width;
-            self.config.height = new_size.height;
-            self.surface.configure(&self.device, &self.config);
-        }
-    }
-    
-    fn input(&mut self, event: &WindowEvent) -> bool {
-        match event {
-            WindowEvent::KeyboardInput {
-                input: KeyboardInput {
-                    state: ElementState::Pressed,
-                    virtual_keycode: Some(key),
-                    ..
-                },
-                ..
-            } => {
-                match key {
-                    VirtualKeyCode::Right => {
-                        self.current_texture_index = (self.current_texture_index + 1) % self.image_count;
-                        self.update_uniform_buffer();
-                        true
-                    }
-                    VirtualKeyCode::Left => {
-                        self.current_texture_index = (self.current_texture_index + self.image_count - 1) % self.image_count;
-                        self.update_uniform_buffer();
-                        true
-                    }
-                    _ => false,
-                }
-            }
-            _ => false,
-        }
-    }
-    
-    fn update_uniform_buffer(&self) {
-        self.queue.write_buffer(
-            &self.uniform_buffer,
-            0,
-            bytemuck::cast_slice(&[Uniforms {
-                current_texture_index: self.current_texture_index as u32,
-                _padding: [0; 3],
-            }]),
-        );
-    }
-    
+        
     fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
         let output = self.surface.get_current_texture()?;
         let view = output.texture.create_view(&wgpu::TextureViewDescriptor::default());
@@ -427,51 +346,4 @@ fn fs_main(@builtin(position) frag_coord: vec4<f32>) -> @location(0) vec4<f32> {
         
         Ok(())
     }
-}
-
-#[tokio::main]
-async fn main() {
-    env_logger::init();
-    
-    let event_loop = EventLoop::new();
-    let window = WindowBuilder::new()
-        .with_title("WGPU Texture Array Example")
-        .build(&event_loop)
-        .unwrap();
-    
-    let mut app = TextureArrayApp::new(&window).await;
-    
-    event_loop.run(move |event, _, control_flow| {
-        match event {
-            Event::WindowEvent {
-                ref event,
-                window_id,
-            } if window_id == window.id() => {
-                if !app.input(event) {
-                    match event {
-                        WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,
-                        WindowEvent::Resized(physical_size) => {
-                            app.resize(*physical_size);
-                        }
-                        WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {
-                            app.resize(**new_inner_size);
-                        }
-                        _ => {}
-                    }
-                }
-            }
-            Event::RedrawRequested(window_id) if window_id == window.id() => {
-                match app.render() {
-                    Ok(_) => {}
-                    Err(wgpu::SurfaceError::Lost) => app.resize(app.size),
-                    Err(wgpu::SurfaceError::OutOfMemory) => *control_flow = ControlFlow::Exit,
-                    Err(e) => eprintln!("{:?}", e),
-                }
-            }
-            Event::MainEventsCleared => {
-                window.request_redraw();
-            }
-            _ => {}
-        }
-    });
 }
