@@ -1,4 +1,5 @@
 
+use crate::math;
 use rodio::{Sink, Decoder, OutputStream, source::Source};
 use std::io::{Cursor, Write};
 use std::sync::atomic::{AtomicPtr, Ordering};
@@ -104,7 +105,7 @@ fn load_audio_source(
     let cursor = Cursor::new(sound_bytes);
     let source = Decoder::new(cursor)?;
     
-    let speed = super::math::random_float(0.8, 0.9);
+    let speed = math::random_float(0.8, 0.9);
     let source = source.speed(speed);
     
     let source: Box<dyn Source<Item = i16> + Send> = if should_loop {
@@ -127,7 +128,7 @@ fn try_play_sound(
     let cursor = Cursor::new(sound_bytes);
     let source = Decoder::new(cursor)?;
     
-    let speed = super::math::random_float(0.8, 0.9);
+    let speed = math::random_float(0.8, 0.9);
     let source = source.speed(speed);
     
     let original_duration = source.total_duration().unwrap_or(std::time::Duration::from_secs(1));

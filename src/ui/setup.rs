@@ -1,6 +1,8 @@
+
+use crate::ext::network;
 use crate::block;
 use crate::config;
-use crate::memory;
+use crate::ext::memory;
 use crate::world;
 use crate::ui::manager::*;
 use crate::ui::element::UIElement;
@@ -120,6 +122,10 @@ impl UIManager {
                 let state = config::get_state();
                 state.ui_manager.state = UIState::Multiplayer;
                 state.ui_manager.setup_ui();
+                match network::begin_online_search() {
+                     Ok(o) => println!("worked: {}", o),
+                     Err(e) => println!("not worked: {}", e),
+                };
             });
         self.add_element(multiplayer_button);
 
@@ -272,13 +278,11 @@ impl UIManager {
             .with_z_index(1);
         self.add_element(list_panel);
 
-        let worlds:Vec<String> = match world::manager::get_local_world_names() {
-            Ok(worlds) => worlds,
-            Err(e) => {
-                println!("Error loading world names: {}", e);
-                Vec::new()
-            }
-        };
+        let worlds:Vec<String> = network::get_discovered_hosts()
+            .iter()
+            .map(|s| s.world_name.clone())
+            .collect();
+        println!("hosts: {:?}", worlds);
 
         // World buttons with improved styling
         for (i, name) in worlds.iter().enumerate() {
@@ -300,6 +304,18 @@ impl UIManager {
             self.add_element(world_button);
         }
 
+        let re_button = UIElement::button(self.next_id(), "refresh")
+            .with_position(-0.4, -0.8)
+            .with_size(0.2, 0.08)
+            .with_color(60, 60, 80)  // Dark gray-blue
+            .with_text_color(180, 190, 210) // Light blue-gray
+            .with_border((90, 100, 130, 255), 0.005)
+            .with_z_index(8)
+            .with_callback(|| {
+                let state = config::get_state();
+                state.ui_manager.setup_ui();
+            });
+        self.add_element(re_button);
 
         // Back button with consistent styling
         let back_button = UIElement::button(self.next_id(), "Back")
@@ -457,6 +473,23 @@ impl UIManager {
             .with_z_index(8)
             .with_callback(|| block::extra::add_full_world());
         self.add_element(clean_button);
+
+        // Clean world button with better contrast
+        let host_button = UIElement::button(self.next_id(), "Host World")
+            .with_position(0.5, 0.22)
+            .with_size(0.4, 0.08)
+            .with_color(90, 50, 50)  // Dark reddish
+            .with_text_color(255, 180, 180) // Light red
+            .with_border((140, 80, 80, 255), 0.005)
+            .with_z_index(8)
+            .with_callback(|| 
+                {
+                    match network::begin_online_giveaway() {
+                        Ok(o) => println!("worked: {}", o),
+                        Err(e) => println!("not worked: {}", e),
+                    };
+                });
+        self.add_element(host_button);
 
         // Help text with better contrast
         let help_texts = [

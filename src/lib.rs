@@ -1,26 +1,23 @@
 ﻿
 //mod camera;
 mod player;
-
 mod config;
 mod geometry;
 mod pipeline;
-
 mod debug;
-mod memory;
 mod input;
 mod math;
 mod game_state;
-
-mod audio;
-mod time;
 mod cursor;
 mod event_handler;
 
 pub mod ext{
-    pub mod mods;
-    pub mod mods_over;
-    pub mod network;
+    pub mod audio; // audio manager, in extra thread
+    pub mod time; // a nicely formatted time, just a struct
+    pub mod memory; // memory management mainly focusing on memory clean up
+    pub mod mods; // mod loading and wasm sandbox 
+    pub mod mods_over; // this is an overlay made by mods so they would execute instead of the real rust functions
+    pub mod network; // the networking system
     pub mod rs; // app-compiled resources
     pub mod fs; // file system - from the disk
 }
@@ -295,6 +292,7 @@ impl<'a> State<'a> {
         let current_time: std::time::Instant = std::time::Instant::now();
         let delta_seconds: f32 = (current_time - self.previous_frame_time).as_secs_f32();
         self.previous_frame_time = current_time;
+        ext::network::update_network(); // theoretically it should run in other thread so calling it each frame should not be a problem ...
         
         if self.is_world_running {
             let movement_delta = {
@@ -331,8 +329,8 @@ pub async fn run() {
 
 
     // Initialize once at startup
-    audio::init_audio().expect("Failed to initialize audio");
-    audio::set_background("background_music.ogg");
+    ext::audio::init_audio().expect("Failed to initialize audio");
+    ext::audio::set_background("background_music.ogg");
     // Control audio
     // audio::stop_all_sounds();
     // audio::clear_sound_queue();
@@ -373,8 +371,8 @@ pub async fn run() {
     }
 
     // Post-init cleanup
-    memory::light_trim();
-    memory::hard_clean(Some(config::get_state().device()));
+    ext::memory::light_trim();
+    ext::memory::hard_clean(Some(config::get_state().device()));
 
     event_loop.run(move |event, control_flow| {
         if config::is_closed() {

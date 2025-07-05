@@ -1,5 +1,7 @@
 ﻿
-use super::game_state::GameState;
+use crate::ext::network;
+use crate::game_state::GameState;
+use crate::ext::audio;
 use super::State;
 use std::sync::atomic::{AtomicBool,AtomicPtr, Ordering};
 use std::path::PathBuf;
@@ -132,8 +134,8 @@ pub fn is_closed() -> bool {
 #[inline]
 pub fn cleanup_resources() {
     // dropping the audio first (if not cleaned up properly it might play after app close)
-    super::audio::stop_all_sounds();
-    super::audio::cleanup_audio();
+    audio::stop_all_sounds();
+    audio::cleanup_audio();
     // 1. Take ownership of the state pointer (atomically setting it to null)
     let state_ptr = STATE_PTR.swap(std::ptr::null_mut(), Ordering::AcqRel);
     // 2. If we got a non-null pointer, convert it back to Box to drop it
@@ -141,6 +143,7 @@ pub fn cleanup_resources() {
         unsafe { let _ = Box::from_raw(state_ptr); }; // Drops when goes out of scope
     }
     drop_gamestate();
+    network::cleanup_network();
     // 3. Do the same for the window
     let window_ptr = WINDOW_PTR.swap(std::ptr::null_mut(), Ordering::AcqRel);
     if !window_ptr.is_null() {

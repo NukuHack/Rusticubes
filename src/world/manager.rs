@@ -1,11 +1,11 @@
 
 use crate::config;
-use crate::time;
-use crate::ext::network;
+use crate::ext::time;
 use std::io::{Write,Read};
 use std::path::{Path,PathBuf};
+use std::io::Result;
 
-pub fn get_world_names() -> std::io::Result<Vec<String>> {
+pub fn get_world_names() -> Result<Vec<String>> {
     let path = config::get_save_path().join("saves");
 
     let mut folders = Vec::new();
@@ -24,12 +24,6 @@ pub fn get_world_names() -> std::io::Result<Vec<String>> {
     }
 
     Ok(folders)
-}
-
-pub fn get_local_world_names() -> std::io::Result<Vec<String>> {
-    //will use something like 
-    network::discover_hosts(100u64);
-    Ok(Vec::new())
 }
 
 pub fn del_world(world_name: &str) {
