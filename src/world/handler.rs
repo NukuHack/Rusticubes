@@ -14,7 +14,7 @@ pub fn join_world(world_name: &str) {
     state.ui_manager.setup_ui();
 }
 
-pub fn try_join_world(id: usize) {
+pub fn create_world(id: usize) {
 	let world_name = config::get_state()
 	    .ui_manager()
 	    .get_input_text(id)
@@ -26,4 +26,8 @@ pub fn try_join_world(id: usize) {
 	        "New World".to_string()
 	    });
     join_world(&world_name);
+}
+
+pub fn join_local_world(world_name: &str) {
+	println!("joining world : {}", world_name);
 }

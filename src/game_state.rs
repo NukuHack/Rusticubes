@@ -1,4 +1,5 @@
 
+use crate::ext::network;
 use std::sync::atomic::Ordering;
 use glam::Vec3;
 use crate::player;
@@ -52,6 +53,10 @@ impl GameState {
         match world::manager::update_world_data(&save_path) {
             Ok(_) => (), // Everything is fine, do nothing
             Err(e) => println!("Error updating world data: {}", e),
+        }
+        
+        #[cfg(debug_assertions)] {
+            network::initialize(true, 0);
         }
 
         Self {

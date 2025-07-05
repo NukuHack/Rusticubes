@@ -3,8 +3,8 @@ use winit::event::*;
 use winit::keyboard::KeyCode as Key;
 
 /// Movement mode enum
-#[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(dead_code)]
 pub enum MovementMode {
     /// Movement is relative to camera orientation (default)
     CameraRelative,
@@ -15,7 +15,6 @@ pub enum MovementMode {
 }
 
 /// Camera rotation mode enum
-#[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CameraMode {
     /// Camera rotation is smoothly interpolated (default)
@@ -289,7 +288,6 @@ impl MovementInputs {
     }
 }
 
-#[allow(dead_code)]
 impl PlayerController {
     /// Creates a new controller with initial state from camera config
     pub fn new(config: CameraConfig) -> Self {
@@ -338,17 +336,6 @@ impl PlayerController {
             MouseScrollDelta::LineDelta(_, y) => y * 0.5,
             MouseScrollDelta::PixelDelta(pos) => pos.y as f32 * 0.01,
         };
-    }
-
-    /// Resets controller state to match camera
-    pub fn reset(&mut self, camera: &Camera) {
-        self.movement.clear();
-        self.velocity = Vec3::ZERO;
-        let rotation = camera.rotation();
-        self.target_pitch = rotation.x;
-        self.target_yaw = rotation.y;
-        self.current_pitch = rotation.x;
-        self.current_yaw = rotation.y;
     }
 }
 

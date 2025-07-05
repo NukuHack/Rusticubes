@@ -1,3 +1,4 @@
+use std::io::BufRead;
 use ggrs::{Config, PlayerType, SessionBuilder, UdpNonBlockingSocket, SessionState};
 use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
@@ -13,21 +14,17 @@ enum NetworkMessage {
     JoinRequest(u32), // PID of requesting peer
     JoinResponse(SocketAddr), // Host's UDP address
 }
-
 #[derive(Debug)]
 struct GameConfig;
-
 impl Config for GameConfig {
     type Input = i32;
     type State = i32;
     type Address = SocketAddr;
 }
-
 /// Custom waker implementation for manual future polling
 struct ManualWaker {
     wake_flag: atomic::AtomicBool,
 }
-
 impl std::task::Wake for ManualWaker {
     #[inline]
     fn wake(self: Arc<Self>) {
@@ -40,6 +37,7 @@ impl std::task::Wake for ManualWaker {
 }
 
 /// Simple TCP-based peer discovery for local network
+#[allow(dead_code)]
 struct PeerDiscovery {
     port: u16,
     is_host: bool,
@@ -57,8 +55,7 @@ impl PeerDiscovery {
         use std::io::{BufRead, BufReader};
 
         let listener = TcpListener::bind(format!("127.0.0.1:{}", self.port))?;
-        println!("🏠 Host listening on port {}", self.port);
-        println!("📡 Waiting for peer to connect...");
+        println!("Host listening on port {}", self.port);
 
         // Create UDP socket for game traffic
         let udp_port = 7000 + (self.pid % 1000) as u16;
@@ -82,7 +79,7 @@ impl PeerDiscovery {
                             if let Ok(msg) = serde_json::from_str::<NetworkMessage>(&line.trim()) {
                                 match msg {
                                     NetworkMessage::JoinRequest(peer_pid) => {
-                                        println!("📨 Received join request from peer PID: {}", peer_pid);
+                                        println!("Received join request from peer PID: {}", peer_pid);
                                         
                                         // Drop the reader so we can use stream mutably
                                         drop(reader);
@@ -101,7 +98,7 @@ impl PeerDiscovery {
                                             if let Ok(peer_msg) = serde_json::from_str::<NetworkMessage>(&peer_line.trim()) {
                                                 match peer_msg {
                                                     NetworkMessage::PeerAddress(peer_udp_addr) => {
-                                                        println!("✅ Received peer UDP address: {}", peer_udp_addr);
+                                                        println!("Received peer UDP address: {}", peer_udp_addr);
                                                         return Ok((udp_addr, peer_udp_addr));
                                                     }
                                                     _ => {}
@@ -116,7 +113,7 @@ impl PeerDiscovery {
                     }
                 }
                 Err(e) => {
-                    println!("❌ Connection error: {}", e);
+                    println!("❌Connection error: {}", e);
                 }
             }
         }
@@ -131,7 +128,7 @@ impl PeerDiscovery {
         let host_port = 9000;
         let host_addr = format!("127.0.0.1:{}", host_port);
         
-        println!("🔗 Attempting to connect to host PID {} at {}", host_pid, host_addr);
+        println!("Attempting to connect to host PID {} at {}", host_pid, host_addr);
         
         // Create our UDP socket first
         let udp_port = 7000 + (self.pid % 1000) as u16;
@@ -145,7 +142,7 @@ impl PeerDiscovery {
         // Connect to host
         let mut stream = TcpStream::connect(&host_addr)
             .map_err(|e| {
-                println!("❌ Failed to connect to host: {}", e);
+                println!("❌Failed to connect to host: {}", e);
                 e
             })?;
 
@@ -162,14 +159,14 @@ impl PeerDiscovery {
         if let Ok(msg) = serde_json::from_str::<NetworkMessage>(&line.trim()) {
             match msg {
                 NetworkMessage::JoinResponse(host_udp_addr) => {
-                    println!("✅ Received host UDP address: {}", host_udp_addr);
+                    println!("Received host UDP address: {}", host_udp_addr);
                     
                     // Send our UDP address to host
                     let peer_msg = NetworkMessage::PeerAddress(local_udp_addr);
                     let peer_json = serde_json::to_string(&peer_msg).unwrap();
                     writeln!(stream, "{}", peer_json)?;
                     
-                    println!("✅ Sent our UDP address {} to host", local_udp_addr);
+                    println!("Sent our UDP address {} to host", local_udp_addr);
                     return Ok((local_udp_addr, host_udp_addr));
                 }
                 _ => {}
@@ -178,97 +175,20 @@ impl PeerDiscovery {
         
         Err(io::Error::new(io::ErrorKind::InvalidData, "Invalid response from host"))
     }
+
 }
 
-fn get_user_choice() -> (bool, Option<u32>) {
-    println!("\n🎮 Choose your role:");
-    println!("1. Host (wait for others to connect)");
-    println!("2. Peer (connect to existing host)");
-    
-    print!("Enter your choice (1 or 2): ");
-    io::stdout().flush().unwrap();
-    
-    let mut input = String::new();
-    io::stdin().read_line(&mut input).unwrap();
-    
-    match input.trim() {
-        "1" => {
-            println!("🏠 You selected: HOST");
-            (true, None)
-        }
-        "2" => {
-            println!("🔗 You selected: PEER");
-            print!("Enter the PID of the host to connect to: ");
-            io::stdout().flush().unwrap();
-            
-            let mut pid_input = String::new();
-            io::stdin().read_line(&mut pid_input).unwrap();
-            
-            match pid_input.trim().parse::<u32>() {
-                Ok(pid) => (false, Some(pid)),
-                Err(_) => {
-                    println!("❌ Invalid PID. Using default connection attempt.");
-                    (false, Some(0))
-                }
-            }
-        }
-        _ => {
-            println!("❌ Invalid choice. Defaulting to HOST mode.");
-            (true, None)
-        }
-    }
-}
-
-/// Error throttling helper
-struct ErrorThrottler {
-    last_error_time: Instant,
-    error_interval: Duration,
-    error_count: u32,
-}
-
-impl ErrorThrottler {
-    fn new(interval_ms: u64) -> Self {
-        Self {
-            last_error_time: Instant::now() - Duration::from_millis(interval_ms),
-            error_interval: Duration::from_millis(interval_ms),
-            error_count: 0,
-        }
-    }
-
-    fn should_print(&mut self) -> bool {
-        let now = Instant::now();
-        if now.duration_since(self.last_error_time) >= self.error_interval {
-            self.last_error_time = now;
-            let should_print = self.error_count > 0;
-            self.error_count = 0;
-            should_print
-        } else {
-            self.error_count += 1;
-            false
-        }
-    }
-
-    fn get_count(&self) -> u32 {
-        self.error_count
-    }
-}
-
-// FIXED: Pass local_player_id to the game loop
 fn run_game_loop(mut session: ggrs::P2PSession<GameConfig>, local_player_id: usize) {
-    println!("\n🎮 Starting game loop...");
-    println!("📊 You'll see state updates every second");
-    println!("👤 Local player ID: {}", local_player_id);
-    println!("⏹️  Press Ctrl+C to stop\n");
+    println!("Starting game loop...");
+    println!("You'll see state updates every second");
+    println!("Local player ID: {}", local_player_id);
     
     let mut frame_count = 0;
     let mut last_update = Instant::now();
     let frame_duration = Duration::from_secs_f32(1.0 / 60.0);
-    
-    // Error throttling - only print errors every 500ms
-    let mut error_throttler = ErrorThrottler::new(500);
-    
+        
     // Wait for synchronization with more thorough checking
-    println!("🔄 Waiting for peer synchronization...");
+    println!("Waiting for peer synchronization...");
     let sync_start = Instant::now();
     let sync_timeout = Duration::from_secs(15);
     
@@ -279,13 +199,13 @@ fn run_game_loop(mut session: ggrs::P2PSession<GameConfig>, local_player_id: usi
         // Check if we're synchronized
         match session.current_state() {
             SessionState::Running => {
-                println!("✅ Session is running and synchronized!");
+                println!("✅Session is running and synchronized!");
                 break;
             }
             SessionState::Synchronizing => {
                 // Still synchronizing, keep waiting
                 if sync_start.elapsed() > sync_timeout {
-                    println!("⚠️  Sync timeout reached, but continuing...");
+                    println!("⚠️Sync timeout reached, but continuing...");
                     break;
                 }
             }
@@ -294,7 +214,7 @@ fn run_game_loop(mut session: ggrs::P2PSession<GameConfig>, local_player_id: usi
         std::thread::sleep(Duration::from_millis(16)); // ~60 FPS
     }
     
-    println!("🎮 Game loop synchronized and running!\n");
+    println!("Game loop synchronized and running!\n");
     
     // Game state - simple counter that both peers should maintain
     let mut game_state = 0i32;
@@ -308,7 +228,7 @@ fn run_game_loop(mut session: ggrs::P2PSession<GameConfig>, local_player_id: usi
         // Check session state for critical issues
         match session.current_state() {
             SessionState::Synchronizing => {
-                println!("⚠️  Session went back to synchronizing, waiting...");
+                println!("⚠️Session went back to synchronizing, waiting...");
                 std::thread::sleep(Duration::from_millis(100));
                 continue;
             }
@@ -327,15 +247,13 @@ fn run_game_loop(mut session: ggrs::P2PSession<GameConfig>, local_player_id: usi
         match session.add_local_input(local_player_id, input) {
             Ok(_) => {},
             Err(e) => {
-                if error_throttler.should_print() {
-                    println!("❌ Error adding local input for player {}: {:?} ({}x)", local_player_id, e, error_throttler.get_count());
-                }
+                println!("❌Error adding local input for player '{}' : {:?}", local_player_id, e);
                 consecutive_errors += 1;
                 if consecutive_errors > max_consecutive_errors {
-                    println!("❌ Too many consecutive errors, exiting...");
+                    println!("❌Too many consecutive errors, exiting...");
                     return;
                 }
-                std::thread::sleep(Duration::from_millis(50));
+                std::thread::sleep(Duration::from_millis(100));
                 continue;
             }
         }
@@ -351,28 +269,22 @@ fn run_game_loop(mut session: ggrs::P2PSession<GameConfig>, local_player_id: usi
                 
                 match e {
                     ggrs::GgrsError::PredictionThreshold => {
-                        if error_throttler.should_print() {
-                            println!("⚠️  Prediction threshold reached - slowing down ({}x)", error_throttler.get_count());
-                        }
+                        println!("⚠️Prediction threshold reached");
                         // More aggressive slowdown when prediction threshold is hit
                         std::thread::sleep(Duration::from_millis(200));
                         
                         // If we hit prediction threshold too many times, something is wrong
                         if consecutive_errors > max_consecutive_errors {
-                            println!("❌ Too many prediction threshold errors, network may be unstable");
+                            println!("❌Too many prediction threshold errors, network may be unstable");
                             return;
                         }
                     }
                     ggrs::GgrsError::NotSynchronized => {
-                        if error_throttler.should_print() {
-                            println!("⚠️  Not synchronized - waiting ({}x)", error_throttler.get_count());
-                        }
+                        println!("⚠️Not synchronized");
                         std::thread::sleep(Duration::from_millis(100));
                     }
                     _ => {
-                        if error_throttler.should_print() {
-                            println!("❌ Error advancing frame: {:?} ({}x)", e, error_throttler.get_count());
-                        }
+                        println!("❌Error advancing frame: {:?}", e);
                         std::thread::sleep(Duration::from_millis(100));
                     }
                 }
@@ -383,7 +295,7 @@ fn run_game_loop(mut session: ggrs::P2PSession<GameConfig>, local_player_id: usi
         // Print state every second
         if frame_count % 60 == 0 {
             let session_state = session.current_state();
-            println!("📈 Frame {}: Game State: {}, Session: {:?}", frame_count, game_state, session_state);
+            println!("Frame {}: Game State: {}, Session: {:?}", frame_count, game_state, session_state);
         }
 
         // Maintain frame rate but be more lenient
@@ -395,30 +307,63 @@ fn run_game_loop(mut session: ggrs::P2PSession<GameConfig>, local_player_id: usi
     }
 }
 
-fn main() {
-    println!("=== P2P Networking App ===");
-    println!("Starting instance with PID: {}", std::process::id());
-    println!("🌐 Local network P2P connection");
-    println!("==============================");
+/// Discovers potential hosts in the network by scanning common ports
+pub fn discover_hosts(timeout_ms: u64) -> Vec<(u32, SocketAddr)> {
+    use std::net::{TcpStream, IpAddr, Ipv4Addr};
+    use std::time::Duration;
+
+    println!("Scanning for potential hosts...");
+    let mut hosts = Vec::new();
+
+    // Scan a range of possible host ports (9000-9009 in this example)
+    for port in 9000..=9009 {
+        let addr = SocketAddr::new(
+            IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
+            port,
+        );
+
+        // Try to connect with a short timeout
+        if let Ok(mut stream) = TcpStream::connect_timeout(&addr, Duration::from_millis(timeout_ms)) {
+            println!("Found potential host at {}", addr);
+
+            // Send a discovery message
+            let discovery_msg = NetworkMessage::Ping;
+            let discovery_json = serde_json::to_string(&discovery_msg).unwrap();
+            if writeln!(stream, "{}", discovery_json).is_ok() {
+                // Read response to get PID
+                let mut reader = std::io::BufReader::new(&stream);
+                let mut line = String::new();
+                if reader.read_line(&mut line).is_ok() {
+                    if let Ok(NetworkMessage::JoinRequest(pid)) = serde_json::from_str(&line.trim()) {
+                        hosts.push((pid, addr));
+                    }
+                }
+            }
+        }
+    }
+
+    hosts
+}
+
+// will rework it to make it completely different for host and peer
+pub fn initialize(is_host: bool, target_pid: u32) {
     
     let current_pid = std::process::id();
-    let (is_host, target_pid) = get_user_choice();
     
     let discovery = PeerDiscovery::new(is_host, current_pid);
     
     let (local_udp_addr, remote_udp_addr) = if is_host {
-        println!("\n🏠 Starting as HOST...");
+        println!("\nStarting as HOST...");
         match discovery.start_host() {
             Ok((local_addr, remote_addr)) => (local_addr, remote_addr),
             Err(e) => {
-                println!("❌ Failed to start host: {}", e);
+                println!("❌Failed to start host: {}", e);
                 return;
             }
         }
     } else {
-        println!("\n🔗 Starting as PEER...");
-        let host_pid = target_pid.unwrap_or(0);
-        match discovery.connect_to_host(host_pid) {
+        println!("\nStarting as PEER...");
+        match discovery.connect_to_host(target_pid) {
             Ok((local_addr, remote_addr)) => (local_addr, remote_addr),
             Err(e) => {
                 println!("❌ Failed to connect to host: {}", e);
@@ -427,15 +372,14 @@ fn main() {
         }
     };
 
-    println!("\n🔧 Setting up GGRS session...");
-    println!("📍 Local UDP:  {}", local_udp_addr);
-    println!("📍 Remote UDP: {}", remote_udp_addr);
+    println!("\nSetting up GGRS session...");
+    println!("Local UDP:  {}, Remote UDP: {}", local_udp_addr, remote_udp_addr);
 
     // Create UDP socket for GGRS
     let udp_socket = match UdpNonBlockingSocket::bind_to_port(local_udp_addr.port()) {
         Ok(socket) => socket,
         Err(e) => {
-            println!("❌ Failed to bind UDP socket: {:?}", e);
+            println!("❌Failed to bind UDP socket: {:?}", e);
             return;
         }
     };
@@ -444,7 +388,9 @@ fn main() {
     let local_player_id = if is_host { 0 } else { 1 };
     let remote_player_id = if is_host { 1 } else { 0 };
     
-    println!("👤 Local player ID: {}, Remote player ID: {}", local_player_id, remote_player_id);
+    println!("Local player ID: {}, Remote player ID: {}", local_player_id, remote_player_id);
+
+    // adding players should be handled a bit differently so logging in-out could actually work, while the host still continues
     
     let session = match SessionBuilder::<GameConfig>::new()
         .with_num_players(2)
@@ -452,8 +398,8 @@ fn main() {
         .with_fps(60)
         .unwrap()
         .with_max_prediction_window(6) // Reduced prediction window to prevent runaway prediction
-        .expect("❌ Failed to set prediction_window")
-        .with_check_distance(3) // Add check distance for better desync detection
+        .expect("❌Failed to set prediction_window")
+        .with_check_distance(30) // Add check distance for better desync detection
         .add_player(PlayerType::Local, local_player_id)
         .unwrap()
         .add_player(PlayerType::Remote(remote_udp_addr), remote_player_id)
@@ -462,13 +408,14 @@ fn main() {
     {
         Ok(session) => session,
         Err(e) => {
-            println!("❌ Failed to create GGRS session: {:?}", e);
+            println!("❌Failed to create GGRS session: {:?}", e);
             return;
         }
     };
 
-    println!("✅ GGRS session created successfully!");
+    println!("GGRS session created successfully!");
     
-    // FIXED: Pass the local player ID to the game loop
     run_game_loop(session, local_player_id);
 }
+
+

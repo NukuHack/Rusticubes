@@ -1,6 +1,7 @@
 
 use crate::config;
 use crate::time;
+use crate::ext::network;
 use std::io::{Write,Read};
 use std::path::{Path,PathBuf};
 
@@ -23,6 +24,12 @@ pub fn get_world_names() -> std::io::Result<Vec<String>> {
     }
 
     Ok(folders)
+}
+
+pub fn get_local_world_names() -> std::io::Result<Vec<String>> {
+    //will use something like 
+    network::discover_hosts(100u64);
+    Ok(Vec::new())
 }
 
 pub fn del_world(world_name: &str) {

@@ -32,7 +32,7 @@ impl<'de> Deserialize<'de> for Time {
         Time::from_str(&s).map_err(serde::de::Error::custom)
     }
 }
-#[allow(dead_code)]
+
 impl Time {
     pub fn now() -> Self {
         let now = SystemTime::now()

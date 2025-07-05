@@ -11,20 +11,23 @@ mod memory;
 mod input;
 mod math;
 mod game_state;
-mod modding;
-mod modding_override;
 
-mod resources;
 mod audio;
-mod file_manager;
 mod time;
 mod cursor;
 mod event_handler;
 
+pub mod ext{
+    pub mod mods;
+    pub mod mods_over;
+    pub mod network;
+    pub mod rs; // app-compiled resources
+    pub mod fs; // file system - from the disk
+}
 pub mod world {
     pub mod main;
     pub mod manager;
-    pub mod builder;
+    pub mod handler;
 }
 pub mod block {
     pub mod main;
@@ -341,7 +344,7 @@ pub async fn run() {
         .with_inner_size(*config.initial_window_size())
         .with_min_inner_size(*config.min_window_size())
         .with_position(*config.initial_window_position())
-        .with_window_icon(resources::load_icon_from_bytes())
+        .with_window_icon(ext::rs::load_icon_from_bytes())
         .with_theme(*config.theme())
         .with_active(true)
         .build(&event_loop)
@@ -360,11 +363,11 @@ pub async fn run() {
     // Store the state pointer
     config::STATE_PTR.store(Box::into_raw(Box::new(state)), Ordering::Release);
 
-    match modding::main() {
+    match ext::mods::main() {
         Ok(_) => (), // Success case
         Err(e) => println!("⚠Error modding: {}", e),
     }
-    match modding_override::main() {
+    match ext::mods_over::main() {
         Ok(_) => (), // Success case
         Err(e) => { println!("💥Error mod function override: {}", e); }
     }

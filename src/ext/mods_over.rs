@@ -3,7 +3,7 @@ use wasmtime::*;
 use std::sync::{Arc, RwLock};
 use std::collections::HashMap;
 use std::path::Path;
-use super::modding::{WasmError, WasmRuntime};
+use crate::ext::mods::{WasmError, WasmRuntime};
 
 // Core override system
 #[derive(Clone)]
@@ -93,10 +93,10 @@ macro_rules! define_overridable {
     ($vis:vis mod $module_name:ident { $($rest:tt)* }) => {
         $vis mod $module_name {
             thread_local! {
-                static OVERRIDE_SYSTEM: std::cell::RefCell<Option<crate::modding_override::WasmOverrideSystem>> = std::cell::RefCell::new(None);
+                static OVERRIDE_SYSTEM: std::cell::RefCell<Option<crate::ext::mods_over::WasmOverrideSystem>> = std::cell::RefCell::new(None);
             }
             #[allow(dead_code)]
-            $vis fn set_override_system(system: crate::modding_override::WasmOverrideSystem) {
+            $vis fn set_override_system(system: crate::ext::mods_over::WasmOverrideSystem) {
                 OVERRIDE_SYSTEM.with(|s| *s.borrow_mut() = Some(system));
             }
 

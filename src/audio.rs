@@ -150,7 +150,6 @@ fn try_play_sound(
     
     Ok(duration)
 }
-
 #[inline]
 fn play_terminal_ping() {
     print!("\x07");
@@ -158,13 +157,15 @@ fn play_terminal_ping() {
 }
 
 // Control functions
-#[inline]#[allow(dead_code)]
+#[inline]
+#[allow(dead_code)]
 pub fn set_background_volume(volume: f32) {
     if let Some(system) = get_ptr() {
         system.bg_sink.set_volume(volume);
     }
 }
-#[inline]#[allow(dead_code)]
+#[inline]
+#[allow(dead_code)]
 pub fn set_volume(volume: f32) {
     if let Some(system) = get_ptr() {
         system.ui_sink.set_volume(volume);

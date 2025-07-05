@@ -15,6 +15,7 @@ pub enum UIState {
     InGame,         // Normal game UI
     Loading,        // Loading screen
     NewWorld,       // Make a new world
+    Multiplayer,    // Yeah boyyy multiplayer
     #[default]
     None, // Baiscally not yet initialized
     //Custom,       // this will be the exeption, aka we do not know the contents at compile time
@@ -327,6 +328,11 @@ impl UIManager {
 pub fn close_pressed() {
     match config::get_state().ui_manager.state {
         UIState::WorldSelection => {
+            let state = config::get_state();
+            state.ui_manager.state = UIState::BootScreen;
+            state.ui_manager.setup_ui();
+        }
+        UIState::Multiplayer => {
             let state = config::get_state();
             state.ui_manager.state = UIState::BootScreen;
             state.ui_manager.setup_ui();

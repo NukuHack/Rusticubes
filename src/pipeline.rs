@@ -7,16 +7,11 @@ use wgpu;
 /// Struct holding all render pipelines and their associated shaders
 #[allow(dead_code)]
 pub struct Pipeline {
-    // Public pipelines
+    // Pipelines
     inside_pipeline: wgpu::RenderPipeline,
     chunk_pipeline: wgpu::RenderPipeline,
     post_pipeline: wgpu::RenderPipeline,
     sky_pipeline: wgpu::RenderPipeline,
-    // Private shaders
-    inside_shader: wgpu::ShaderModule,
-    chunk_shader: wgpu::ShaderModule,
-    post_shader: wgpu::ShaderModule,
-    sky_shader: wgpu::ShaderModule,
     // Cached layouts
     post_bind_group_layout: wgpu::BindGroupLayout,
     post_pipeline_layout: wgpu::PipelineLayout,
@@ -51,12 +46,6 @@ impl Pipeline {
                 &post_pipeline_layout,
             ),
             sky_pipeline: create_sky_pipeline(device, &shaders.sky, config.format),
-
-            // Store shaders
-            inside_shader: shaders.inside,
-            chunk_shader: shaders.chunk,
-            post_shader: shaders.post,
-            sky_shader: shaders.sky,
 
             // Store layouts for reuse
             post_bind_group_layout,

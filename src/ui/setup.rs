@@ -40,6 +40,10 @@ impl UIManager {
             UIState::InGame => {
                 self.setup_in_game_ui();
             }
+            UIState::Multiplayer => {
+                self.add_element(bg_panel);
+                self.setup_multiplayer_ui();
+            }
         }
     }
 
@@ -92,15 +96,6 @@ impl UIManager {
             });
         self.add_element(exit_button);
 
-        // Decorative elements
-        let tree_picture = UIElement::image(self.next_id(), "happy-tree.png")
-            .with_position(0.6, 0.5)
-            .with_size(0.27, 0.45)
-            .with_color(255, 255, 255)
-            .with_border((80, 120, 180, 255), 0.008)
-            .with_z_index(6);
-        self.add_element(tree_picture);
-
         let memory_button = UIElement::button(self.next_id(), "Memory")
             .with_position(0.55, 0.2)
             .with_size(0.35, 0.1)
@@ -113,6 +108,29 @@ impl UIManager {
                 memory::hard_clean(Some(config::get_state().device()));
             });
         self.add_element(memory_button);
+
+        let multiplayer_button = UIElement::button(self.next_id(), "Multi")
+            .with_position(0.55, -0.1)
+            .with_size(0.35, 0.1)
+            .with_color(40, 40, 60)  // Dark gray-blue
+            .with_text_color(150, 170, 200) // Light blue-gray
+            .with_border((70, 90, 120, 255), 0.005)
+            .with_z_index(6)
+            .with_callback(|| {
+                let state = config::get_state();
+                state.ui_manager.state = UIState::Multiplayer;
+                state.ui_manager.setup_ui();
+            });
+        self.add_element(multiplayer_button);
+
+        // Decorative elements
+        let tree_picture = UIElement::image(self.next_id(), "happy-tree.png")
+            .with_position(0.6, 0.5)
+            .with_size(0.27, 0.45)
+            .with_color(255, 255, 255)
+            .with_border((80, 120, 180, 255), 0.008)
+            .with_z_index(6);
+        self.add_element(tree_picture);
 
         let tree_animation = UIElement::animation(self.next_id(), vec![
                 "happy-tree.png",
@@ -177,7 +195,7 @@ impl UIManager {
         let worlds:Vec<String> = match world::manager::get_world_names() {
             Ok(worlds) => worlds,
             Err(e) => {
-                eprintln!("Error loading world names: {}", e);
+                println!("Error loading world names: {}", e);
                 Vec::new()
             }
         };
@@ -197,7 +215,7 @@ impl UIManager {
                 .with_callback({
                     let name_clone = name_clone.clone();  // Clone for this closure
                     move || {
-                        world::builder::join_world(&name_clone);
+                        world::handler::join_world(&name_clone);
                     }
                 });
             self.add_element(world_button);
@@ -214,6 +232,72 @@ impl UIManager {
                     world::manager::del_world(&name_clone);
                 });
             self.add_element(delete_button);
+        }
+
+
+        // Back button with consistent styling
+        let back_button = UIElement::button(self.next_id(), "Back")
+            .with_position(-0.1, -0.8)
+            .with_size(0.2, 0.08)
+            .with_color(60, 60, 80)  // Dark gray-blue
+            .with_text_color(180, 190, 210) // Light blue-gray
+            .with_border((90, 100, 130, 255), 0.005)
+            .with_z_index(8)
+            .with_callback(|| {
+                let state = config::get_state();
+                state.ui_manager.state = UIState::BootScreen;
+                state.ui_manager.setup_ui();
+            });
+        self.add_element(back_button);
+    }
+
+    #[inline]
+    fn setup_multiplayer_ui(&mut self) {
+        // Title with improved styling
+        let title = UIElement::label(self.next_id(), "Select World")
+            .with_position(-0.4, 0.6)
+            .with_size(0.8, 0.15)
+            .with_color(30, 30, 45)  // Dark panel
+            .with_text_color(180, 200, 220) // Light blue text
+            .with_border((80, 100, 140, 255), 0.008)
+            .with_z_index(10);
+        self.add_element(title);
+
+        // World list container with better contrast
+        let list_panel = UIElement::panel(self.next_id())
+            .with_position(-0.6, -0.4)
+            .with_size(1.2, 0.9)  // Slightly shorter
+            .with_color(25, 25, 40)  // Dark blue-gray
+            .with_border((60, 70, 100, 255), 0.01)
+            .with_z_index(1);
+        self.add_element(list_panel);
+
+        let worlds:Vec<String> = match world::manager::get_local_world_names() {
+            Ok(worlds) => worlds,
+            Err(e) => {
+                println!("Error loading world names: {}", e);
+                Vec::new()
+            }
+        };
+
+        // World buttons with improved styling
+        for (i, name) in worlds.iter().enumerate() {
+            let y_pos = 0.2 - (i as f32 * 0.12);
+            let name_clone = name.clone();  // Clone once here
+
+            let world_button = UIElement::button(self.next_id(), name)
+                .with_position(-0.4, y_pos)
+                .with_size(0.8, 0.1)
+                .with_color(40, 50, 80)
+                .with_text_color(180, 200, 220)
+                .with_border((70, 90, 130, 255), 0.005)
+                .with_z_index(5)
+                .with_callback({
+                    move || {
+                        world::handler::join_local_world(&name_clone);
+                    }
+                });
+            self.add_element(world_button);
         }
 
 
@@ -284,7 +368,7 @@ impl UIManager {
             .with_border((80, 110, 160, 255), 0.005)
             .with_z_index(6)
             .with_callback(move || {
-                world::builder::try_join_world(input_id);
+                world::handler::create_world(input_id);
             });
         self.add_element(gen_button);
 

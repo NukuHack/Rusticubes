@@ -38,6 +38,7 @@ impl fmt::Display for WasmError {
             Self::IOError { error } => write!(f, "IO failed: {}", error),
             Self::InvalidModuleName => write!(f, "Invalid module name"),
             Self::Unexpected => write!(f, "Unexpected error occurred"),
+            Self::FunctionNotFound { function } => write!(f, "Function Not Found: {}", function),
             Self::BulkError { errors } => {
                 write!(f, "Multiple errors occurred:\n")?;
                 for (module, error) in errors {
@@ -45,7 +46,6 @@ impl fmt::Display for WasmError {
                 }
                 Ok(())
             },
-            Self::FunctionNotFound { .. } => write!(f, "Unexpected error occurred"),
         }
     }
 }
@@ -77,13 +77,13 @@ pub struct ModuleData {
     pub module: Module,  // Added to store the module for inspection
 }
 
-#[allow(dead_code)]
 pub struct WasmRuntime {
     pub engine: Engine,
     pub store: Store<()>,
     pub linker: Linker<()>,
     pub instances: HashMap<String, ModuleData>,
 }
+
 #[allow(dead_code)]
 impl WasmRuntime {
     pub fn new() -> Result<Self, WasmError> {
