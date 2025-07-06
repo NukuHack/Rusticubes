@@ -10,6 +10,11 @@ impl Into<u64> for ChunkCoord {
         self.0 // Access the inner u64 value
     }
 }
+impl Into<ChunkCoord> for u64 {
+    fn into(self) -> ChunkCoord {
+        ChunkCoord(self) // Access the inner u64 value
+    }
+}
 #[allow(dead_code)]
 impl ChunkCoord {
     // Use bit shifts that are powers of 2 for better optimization
@@ -64,6 +69,12 @@ impl ChunkCoord {
         (self.0 as i32 & Self::Z_MASK as i32)
             .wrapping_shl(6)
             .wrapping_shr(6)
+    }
+
+    /// Converts to u64 
+    #[inline]
+    pub fn into_u64(self) -> u64 {
+        self.into()
     }
 
     /// Converts to world position (chunk min corner)
@@ -304,41 +315,8 @@ const QUATERNIONS: [Quat; 24] = [
     Quat::from_xyzw(0.70710678, 0.0, 0.0, 0.70710678),       // Z-Y+ (90° X)
     Quat::from_xyzw(-0.70710678, 0.0, 0.0, 0.70710678),      // Z-Y- (270° X)
 ];
-/// Maps `BlockRotation` variants to their `u8` values (0..23).
-#[allow(dead_code)]
-const ROTATION_TO_BYTE: [u8; 24] = [
-    0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23,
-];
-/// Maps `u8` values (0..23) back to `BlockRotation`.
-#[allow(dead_code)]
-const BYTE_TO_ROTATION: [BlockRotation; 24] = [
-    BlockRotation::XplusYplus, BlockRotation::XplusYminus, BlockRotation::XplusZplus, BlockRotation::XplusZminus,
-    BlockRotation::XminusYplus, BlockRotation::XminusYminus, BlockRotation::XminusZplus, BlockRotation::XminusZminus,
-    BlockRotation::YplusXplus, BlockRotation::YplusXminus, BlockRotation::YplusZplus, BlockRotation::YplusZminus,
-    BlockRotation::YminusXplus, BlockRotation::YminusXminus, BlockRotation::YminusZplus, BlockRotation::YminusZminus,
-    BlockRotation::ZplusXplus, BlockRotation::ZplusXminus, BlockRotation::ZplusYplus, BlockRotation::ZplusYminus,
-    BlockRotation::ZminusXplus, BlockRotation::ZminusXminus, BlockRotation::ZminusYplus, BlockRotation::ZminusYminus,
-];
 
-// ===== Safe Conversions ===== //
-#[allow(dead_code)]
 impl BlockRotation {
-    /// Converts to a byte (0..23).
-    #[inline]
-    pub fn to_byte(self) -> u8 {
-        ROTATION_TO_BYTE[self as usize]
-    }
-
-    /// Converts from a byte (returns `None` if invalid).
-    #[inline]
-    pub fn from_byte(byte: u8) -> Option<Self> {
-        if byte < 24 {
-            Some(BYTE_TO_ROTATION[byte as usize])
-        } else {
-            None
-        }
-    }
-
     /// Converts to a quaternion (uses precomputed LUT).
     #[inline]
     pub fn to_quat(self) -> Quat {

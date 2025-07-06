@@ -1,35 +1,41 @@
 use std::time::{SystemTime, UNIX_EPOCH};
-use serde::{Serialize, Deserialize};
-use serde::{Serializer, Deserializer};
 use std::fmt;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Time {
-    pub year: u16,
-    pub month: u8,    // 1-12
-    pub day: u8,      // 1-31
-    pub hour: u8,     // 0-23
-    pub minute: u8,   // 0-59
-    pub second: u8,   // 0-59
-    pub day_of_year: u16, // 1-366 (day counter)
+    pub year: u16,    // 0-65000 
+    pub month: u8,    // 1-12 
+    pub day: u8,      // 1-31 
+    pub hour: u8,     // 0-23 
+    pub minute: u8,   // 0-59 
+    pub second: u8,   // 0-59 
+    pub day_of_year: u16, // 1-366 (day counter) 
 }
 
-impl Serialize for Time {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        serializer.serialize_str(&self.to_string())
+impl Time {
+    pub fn to_bytes(&self) -> [u8; 10] {  // 10 bytes total
+        let mut bytes = [0u8; 10];
+        bytes[0..2].copy_from_slice(&self.year.to_le_bytes());
+        bytes[2] = self.month;
+        bytes[3] = self.day;
+        bytes[4] = self.hour;
+        bytes[5] = self.minute;
+        bytes[6] = self.second;
+        bytes[7..9].copy_from_slice(&self.day_of_year.to_le_bytes());
+        bytes[9] = 0; // Padding byte for alignment (optional)
+        bytes
     }
-}
 
-impl<'de> Deserialize<'de> for Time {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let s = String::deserialize(deserializer)?;
-        Time::from_str(&s).map_err(serde::de::Error::custom)
+    pub fn from_bytes(bytes: &[u8; 10]) -> Self {
+        Self {
+            year: u16::from_le_bytes([bytes[0], bytes[1]]),
+            month: bytes[2],
+            day: bytes[3],
+            hour: bytes[4],
+            minute: bytes[5],
+            second: bytes[6],
+            day_of_year: u16::from_le_bytes([bytes[7], bytes[8]]),
+        }
     }
 }
 

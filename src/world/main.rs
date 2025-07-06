@@ -1,7 +1,6 @@
 
 use crate::config;
-use crate::block::main::Block;
-use crate::block::main::Chunk;
+use crate::block::main::{Block, Chunk};
 use crate::block::math::ChunkCoord;
 #[allow(unused_imports)]
 use crate::stopwatch;

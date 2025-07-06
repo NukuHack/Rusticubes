@@ -1,4 +1,6 @@
 
+use crate::block::math::ChunkCoord;
+use crate::config;
 use crate::world::main::World;
 use crate::block::lut::{EDGE_TABLE, TRI_TABLE};
 use crate::block::main::Chunk;
@@ -452,7 +454,41 @@ impl GeometryBuffer {
     }
 }
 
+// =============================================
+// Extra Rendering related Implementations
+// =============================================
 
+impl Chunk {
+    /// Recreates chunk's bind group
+    pub fn recreate_bind_group(&mut self, chunk_coord: ChunkCoord) {
+        let state = config::get_state();
+        let device = state.device();
+        let chunk_bind_group_layout = &state.render_context.chunk_bind_group_layout;
+
+        // Create position buffer
+        let position_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Chunk Position Buffer"),
+            contents: bytemuck::cast_slice(&[
+                chunk_coord.into(),
+                0.0 as u64,
+            ]),
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        });
+
+        // Create bind group
+        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            layout: chunk_bind_group_layout,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: position_buffer.as_entire_binding(),
+            }],
+            label: Some("chunk_bind_group"),
+        });
+
+        self.bind_group = Some(bind_group);
+        self.make_mesh(device, state.queue(), true);
+    }
+}
 
 impl World {
     pub fn render_chunks<'a>(&'a self, render_pass: &mut wgpu::RenderPass<'a>) {
@@ -461,7 +497,6 @@ impl World {
             if chunk.is_empty() {
                 continue;
             }
-
             if let (Some(mesh), Some(bind_group)) = (&chunk.mesh, &chunk.bind_group) {
                 // Skip if mesh has no indices (shouldn't happen but good to check)
                 if mesh.num_indices == 0 {
@@ -474,6 +509,12 @@ impl World {
                     .set_index_buffer(mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
                 render_pass.draw_indexed(0..mesh.num_indices, 0, 0..1);
             }
+        }
+    }
+
+    pub fn remake_rendering(&mut self) {
+        for (coord, chunk) in &mut self.chunks {
+            chunk.recreate_bind_group(*coord);
         }
     }
 }
