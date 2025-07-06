@@ -22,10 +22,7 @@ pub mod ext {
     pub mod mods_over; // this is an overlay made by mods so they would execute instead of the real rust functions
     pub mod rs; // app-compiled resources
     pub mod fs; // file system - from the disk
-
-    pub mod network_api; // the networking system
-    pub mod network_discovery; // the networking system
-    pub mod network_types; // the networking system
+    pub mod network; // the networking system basically provided by steam
 }
 pub mod world {
     pub mod main;
@@ -295,7 +292,7 @@ impl<'a> State<'a> {
         let current_time: std::time::Instant = std::time::Instant::now();
         let delta_seconds: f32 = (current_time - self.previous_frame_time).as_secs_f32();
         self.previous_frame_time = current_time;
-        ext::network_api::update_network(); // theoretically it should run in other thread so calling it each frame should not be a problem ...
+        ext::network::update_network(); // theoretically it should run in other thread so calling it each frame should not be a problem ...
         
         if self.is_world_running {
             let movement_delta = {
