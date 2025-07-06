@@ -154,7 +154,6 @@ impl WorldData {
 
 pub fn load_world_data(path: &Path) -> Result<WorldData> {
     let file_path = path.join("world_data.dat");
-    fs::create_dir_all(&file_path.parent().unwrap())?;
     match File::open(&file_path) {
         Ok(mut file) => {
             let mut bytes = Vec::new();
@@ -238,7 +237,6 @@ pub fn load_entire_world(path: &PathBuf) -> Result<()> {
         
         config::get_gamestate().world_change(loaded_world);
     }
-    config::get_gamestate().world_mut().remake_rendering();
     Ok(())
 }
 

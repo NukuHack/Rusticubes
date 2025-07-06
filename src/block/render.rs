@@ -513,8 +513,12 @@ impl World {
     }
 
     pub fn remake_rendering(&mut self) {
-        for (coord, chunk) in &mut self.chunks {
+        for (coord, chunk) in self.chunks.iter_mut() {
             chunk.recreate_bind_group(*coord);
+            if !self.loaded_chunks.contains(&coord) {
+                self.loaded_chunks.insert(*coord);
+            }
         }
+
     }
 }

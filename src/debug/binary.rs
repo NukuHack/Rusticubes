@@ -20,7 +20,7 @@ use crate::game_state;
 use std::fs::{self, File};
 
 #[test]
-fn test_chunk_coord_conversion() {
+fn chunk_coord_conversion() {
     let original = ChunkCoord::new(1, 2, 3);
     let bytes = original.to_bytes();
     let restored = ChunkCoord::from_bytes(bytes);
@@ -28,7 +28,7 @@ fn test_chunk_coord_conversion() {
 }
 
 #[test]
-fn test_chunk_conversion() {
+fn chunk_conversion() {
     let original = Chunk::new();
     let bytes = original.to_binary();
     let restored = Chunk::from_binary(&bytes);
@@ -36,7 +36,7 @@ fn test_chunk_conversion() {
 }
 
 #[test]
-fn test_block_rotation_conversion() {
+fn block_rotation_conversion() {
     // Test all possible rotations
     for i in 0..24 {
         let rotation = BlockRotation::from_byte(i).unwrap();
@@ -45,13 +45,13 @@ fn test_block_rotation_conversion() {
 }
 
 #[test]
-fn test_block_rotation_invalid() {
+fn block_rotation_invalid() {
     assert!(BlockRotation::from_byte(24).is_none());
     assert!(BlockRotation::from_byte(255).is_none());
 }
 
 #[test]
-fn test_block_serialization() {
+fn block_serialization() {
     let test_blocks = [
         Block::None,
         Block::Simple(42, BlockRotation::XplusYplus),
@@ -67,21 +67,21 @@ fn test_block_serialization() {
 }
 
 #[test]
-fn test_block_no_data() {
+fn block_no_data() {
     // Too short for any block
     assert!(Block::from_binary(&[]).is_none());
     // Invalid block type
     assert!(Block::from_binary(&[3]).is_none());
 }
 #[test]
-fn test_block_missing_data() {
+fn block_missing_data() {
     // Simple block missing data
     assert!(Block::from_binary(&[1]).is_none());
     assert!(Block::from_binary(&[1, 0]).is_none());
     assert!(Block::from_binary(&[1, 0, 0]).is_none());
 }
 #[test]
-fn test_block_invalid_data() {
+fn block_invalid_data() {
     // Marching block missing data
     assert!(Block::from_binary(&[2]).is_none());
     assert!(Block::from_binary(&[2, 0]).is_none());
@@ -89,14 +89,14 @@ fn test_block_invalid_data() {
 }
 
 #[test]
-fn test_block_binary_size() {
+fn block_binary_size() {
     assert_eq!(Block::None.binary_size(), 1);
     assert_eq!(Block::Simple(0, BlockRotation::XplusYplus).binary_size(), 4);
     assert_eq!(Block::Marching(0, 0).binary_size(), 7);
 }
 
 #[test]
-fn test_empty_chunk_serialization() {
+fn empty_chunk_serialization() {
     let original = Chunk::new();
     let binary = original.to_binary();
     let restored = Chunk::from_binary(&binary).unwrap();
@@ -105,7 +105,7 @@ fn test_empty_chunk_serialization() {
 }
 
 #[test]
-fn test_uniform_chunk_serialization() {
+fn uniform_chunk_serialization() {
     let mut chunk = Chunk::new();
     chunk.palette = vec![Block::Simple(1, BlockRotation::XplusYplus)];
     chunk.storage = BlockStorage::Uniform(0);
@@ -117,7 +117,7 @@ fn test_uniform_chunk_serialization() {
 }
 
 #[test]
-fn test_sparse_chunk_serialization() {
+fn sparse_chunk_serialization() {
     let mut chunk = Chunk::new();
     chunk.palette = vec![
         Block::None,
@@ -138,7 +138,7 @@ fn test_sparse_chunk_serialization() {
 }
 
 #[test]
-fn test_chunk_no_data() {
+fn chunk_no_data() {
     // Empty data
     assert!(Chunk::from_binary(&[]).is_none());
     
@@ -146,7 +146,7 @@ fn test_chunk_no_data() {
     assert!(Chunk::from_binary(&[1]).is_none()); // Says palette has 1 entry but no data
 }
 #[test]
-fn test_chunk_invalid_data() {
+fn chunk_invalid_data() {
     // Invalid storage type
     let mut data = vec![1]; // 1 palette entry
     data.extend(Block::None.to_binary()); // Add the palette entry
@@ -154,7 +154,7 @@ fn test_chunk_invalid_data() {
     assert!(Chunk::from_binary(&data).is_none());
 }
 #[test]
-fn test_chunk_missing_data() { 
+fn chunk_missing_data() { 
     // Sparse storage missing data
     let mut data = vec![1]; // 1 palette entry
     data.extend(Block::None.to_binary()); // Add the palette entry
@@ -163,7 +163,7 @@ fn test_chunk_missing_data() {
 }
 
 #[test]
-fn test_chunk_binary_size() {
+fn chunk_binary_size() {
     let mut chunk = Chunk::new();
     assert_eq!(chunk.binary_size(), chunk.to_binary().len());
     
@@ -179,7 +179,7 @@ fn test_chunk_binary_size() {
 }
 
 #[test]
-fn test_empty_world_serialization() {
+fn empty_world_serialization() {
     let original = World::empty();
     let binary = original.to_binary();
     let restored = World::from_binary(&binary).unwrap();
@@ -187,7 +187,7 @@ fn test_empty_world_serialization() {
 }
 
 #[test]
-fn test_world_with_chunks_serialization() {
+fn world_with_chunks_serialization() {
     let mut world = World::empty();
     
     // Add some chunks
@@ -215,7 +215,7 @@ fn test_world_with_chunks_serialization() {
 }
 
 #[test]
-fn test_world_invalid_data() {
+fn world_invalid_data() {
     // Empty data
     assert!(World::from_binary(&[]).is_none());
     
@@ -230,7 +230,7 @@ fn test_world_invalid_data() {
 }
 
 #[test]
-fn test_save_load_single_chunk() {
+fn save_load_single_chunk() {
     let mut world = World::empty();
     let coord = ChunkCoord::new(1, 2, 3);
     
@@ -249,13 +249,13 @@ fn test_save_load_single_chunk() {
 }
 
 #[test]
-fn test_save_load_nonexistent_chunk() {
+fn save_load_nonexistent_chunk() {
     let world = World::empty();
     assert!(world.save_chunk(ChunkCoord::new(1, 2, 3)).is_none());
 }
 
 #[test]
-fn test_save_load_entire_world() {
+fn save_load_entire_world() {
     let temp_dir = std::env::temp_dir().join("world_test");
     let _ = std::fs::remove_dir_all(&temp_dir); // Cleanup if needed
     
@@ -265,7 +265,7 @@ fn test_save_load_entire_world() {
     game_state::start_world("some_test_world");
     
     // Set the game state
-    *config::get_gamestate().world_mut() = world.clone();
+    config::get_gamestate().world_change(world.clone());
 
     {
 	    let test_load = config::get_gamestate().world();
@@ -290,6 +290,7 @@ fn test_save_load_entire_world() {
     // Save and load
     save_entire_world(&temp_dir).unwrap();
     load_entire_world(&temp_dir).unwrap();
+
     {
         let restored = config::get_gamestate().world();
         
@@ -315,7 +316,7 @@ fn test_save_load_entire_world() {
 }
 
 #[test]
-fn test_world_serialization_roundtrip() {
+fn world_serialization_roundtrip() {
 
     let world = create_dummy_world();
     
@@ -342,7 +343,7 @@ fn test_world_serialization_roundtrip() {
 }
 
 #[test]
-fn test_load_invalid_world() {
+fn load_invalid_world() {
     let temp_dir = std::env::temp_dir().join("world_test_invalid");
     let _ = std::fs::remove_dir_all(&temp_dir); // Cleanup if needed
     
@@ -365,9 +366,9 @@ fn test_load_invalid_world() {
 }
 
 #[test]
-fn test_world_serialization_to_disc() {
+fn world_serialization_to_disc() {
 
-	let path = config::get_save_path().join("some_test_world");
+	let path = config::get_save_path().join("test");
 
     let world = create_dummy_world();
 

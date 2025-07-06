@@ -14,6 +14,7 @@ mod event_handler;
 pub mod debug {
     pub mod network_t;
     pub mod binary;
+    pub mod metadata;
 }
 pub mod ext {
     pub mod audio; // audio manager, in extra thread
