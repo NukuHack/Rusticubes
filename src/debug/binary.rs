@@ -256,8 +256,7 @@ fn save_load_nonexistent_chunk() {
 
 #[test]
 fn save_load_entire_world() {
-    let temp_dir = std::env::temp_dir().join("world_test");
-    let _ = std::fs::remove_dir_all(&temp_dir); // Cleanup if needed
+    let temp_dir = config::get_save_path().join("world_test");
     
     // Create a test world
     let world = create_dummy_world();
@@ -311,8 +310,6 @@ fn save_load_entire_world() {
         assert_eq!(original_sparse.palette, restored_sparse.palette);
         assert_eq!(original_sparse.storage, restored_sparse.storage);
     }
-    // Cleanup
-    std::fs::remove_dir_all(temp_dir).unwrap();
 }
 
 #[test]
@@ -344,25 +341,18 @@ fn world_serialization_roundtrip() {
 
 #[test]
 fn load_invalid_world() {
-    let temp_dir = std::env::temp_dir().join("world_test_invalid");
-    let _ = std::fs::remove_dir_all(&temp_dir); // Cleanup if needed
-    
-    // Create an empty directory
-    std::fs::create_dir_all(&temp_dir).unwrap();
-    
+    let temp_dir = config::get_save_path().join("world_test_invalid");
+        
     // Try to load - should fail
     assert!(load_entire_world(&temp_dir).is_err());
     
     // Create invalid data file
-    let world_dir = temp_dir.join("world");
+    let world_dir = temp_dir.join("test");
     std::fs::create_dir_all(&world_dir).unwrap();
     std::fs::write(world_dir.join("data.dat"), "invalid data").unwrap();
     
     // Try to load - should fail
     assert!(load_entire_world(&temp_dir).is_err());
-    
-    // Cleanup
-    std::fs::remove_dir_all(temp_dir).unwrap();
 }
 
 #[test]

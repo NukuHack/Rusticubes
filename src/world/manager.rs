@@ -197,48 +197,13 @@ pub fn update_world_data(path: &PathBuf) -> Result<()> {
     Ok(())
 }
 
-pub fn save_entire_world(path: &PathBuf) -> Result<()> {
-    let game_state = config::get_gamestate();
-    let world_data = game_state.world().to_binary();
 
-    let world_dir = path.join("world");
-    fs::create_dir_all(&world_dir)?;  // Create directory first
-    
-    let file_path = world_dir.join("data.dat");
-    let temp_path = file_path.with_extension("tmp");
-    
-    // Write to temp file first
-    {
-        let mut file = File::create(&temp_path)?;
-        file.write_all(&world_data)?;
-    }
-    
-    // Atomic rename
-    fs::rename(temp_path, file_path)?;
-    Ok(())
-}
-
-pub fn load_entire_world(path: &PathBuf) -> Result<()> {
-    let file_path = path.join("world").join("data.dat");
-    
-    let mut file = File::open(&file_path)?;
-    {
-        let mut bytes = Vec::new();
-        file.read_to_end(&mut bytes)?;
-        
-        // Verify we have at least the chunk count (4 bytes), but actually the smallest world is like over 13 bytes too
-        if bytes.len() < 4 {
-            return Err(Error::new(ErrorKind::InvalidData, "Invalid world data: too short".to_string()));
-        }
-        
-        let loaded_world = World::from_binary(&bytes).ok_or_else(|| {
-            Error::new(ErrorKind::InvalidData, "Failed to deserialize world".to_string())
-        })?;
-        
-        config::get_gamestate().world_change(loaded_world);
-    }
-    Ok(())
-}
+//
+//
+// binary conversions for all kinds of structs and enums just to make the world serialize-able
+//
+//
+//
 
 
 impl Chunk {
@@ -536,4 +501,62 @@ impl ChunkCoord {
     pub fn from_bytes(bytes: [u8; 8]) -> Self {
         u64::from_le_bytes(bytes).into()
     }
+}
+
+
+// 
+// Main world Save - Load functions
+// will have to rework them a bit, because the giant world size
+// currently a normal world is around 100Kb so it's fine for a single function
+// but theoretically it can get up to Billions of Tb, not like anyone will ever go that far
+// so yeah processing big worlds with a single function is bad
+// 
+
+
+pub fn save_entire_world(path: &PathBuf) -> Result<()> {
+    let game_state = config::get_gamestate();
+    let world = game_state.world();
+    let world_data = world.to_binary();
+    // Ensure safe writing
+    let world_dir = path.join("world");
+    fs::create_dir_all(&world_dir)?;
+    // Create correct paths
+    let file_path = world_dir.join("data.dat");
+    let temp_path = file_path.with_extension("tmp");
+    // Write to temp file first
+    {
+        let mut file = File::create(&temp_path)?;
+        file.write_all(&world_data)?;
+    }
+    // Atomic rename
+    fs::rename(temp_path, &file_path)?;
+    // Verify the file was written correctly
+    let written_size = fs::metadata(&file_path)?.len();
+    println!("File written successfully, size: {} bytes", written_size);
+    
+    Ok(())
+}
+
+pub fn load_entire_world(path: &PathBuf) -> Result<()> {
+    let file_path = path.join("world").join("data.dat");
+    // Check if file exists and get its size
+    if !file_path.exists() {
+        return Err(Error::new(ErrorKind::NotFound, "World file not found"));
+    }    
+    let mut file = File::open(&file_path)?;
+    let mut bytes = Vec::new();
+    file.read_to_end(&mut bytes)?;
+    // Verify we have at least the chunk count (4 bytes)
+    if bytes.len() < 4 {
+        return Err(Error::new(ErrorKind::InvalidData, "Invalid world data: too short"));
+    }
+    // Try to deserialize
+    let loaded_world = World::from_binary(&bytes).ok_or_else(|| {
+        Error::new(ErrorKind::InvalidData, "Failed to deserialize world")
+    })?;
+    // Apply the loaded world
+    config::get_gamestate().world_change(loaded_world);
+    config::get_gamestate().world_mut().remake_rendering();
+        
+    Ok(())
 }

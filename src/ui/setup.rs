@@ -491,7 +491,7 @@ impl UIManager {
         self.add_element(host_button);
 
         let save_button = UIElement::button(self.next_id(), "Save World")
-            .with_position(-0.5, 0.24)
+            .with_position(-0.7, 0.24)
             .with_size(0.4, 0.08)
             .with_color(90, 50, 50)  // Dark reddish
             .with_text_color(255, 180, 180) // Light red
@@ -507,7 +507,7 @@ impl UIManager {
                 });
         self.add_element(save_button);
         let load_button = UIElement::button(self.next_id(), "Load World")
-            .with_position(-0.5, 0.0)
+            .with_position(-0.7, 0.0)
             .with_size(0.4, 0.08)
             .with_color(90, 50, 50)  // Dark reddish
             .with_text_color(255, 180, 180) // Light red
@@ -522,19 +522,6 @@ impl UIManager {
                     };
                 });
         self.add_element(load_button);
-
-        let reload_button = UIElement::button(self.next_id(), "reload rendering")
-            .with_position(-0.5, -0.12)
-            .with_size(0.4, 0.08)
-            .with_color(90, 50, 50)  // Dark reddish
-            .with_text_color(255, 180, 180) // Light red
-            .with_border((140, 80, 80, 255), 0.005)
-            .with_z_index(8)
-            .with_callback(|| 
-                {
-                    config::get_gamestate().world_mut().remake_rendering();
-                });
-        self.add_element(reload_button);
 
         // Help text with better contrast
         let help_texts = [
