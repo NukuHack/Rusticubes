@@ -14,7 +14,7 @@ fn main() {
 
     let mut output = stdout().lock();
     print_header(&mut output);
-
+    
     run_app();
 
     print_footer(&mut output);

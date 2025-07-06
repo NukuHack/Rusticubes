@@ -2,7 +2,7 @@
 use crate::block::math::{self, BlockPosition, BlockRotation};
 use crate::block::render::{ChunkMeshBuilder, GeometryBuffer};
 #[allow(unused_imports)]
-use crate::debug;
+use crate::stopwatch;
 use glam::{Quat, Vec3};
 use std::f32::consts::{PI, TAU};
 

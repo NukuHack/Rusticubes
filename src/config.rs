@@ -1,5 +1,5 @@
 ﻿
-use crate::ext::network;
+use crate::ext::network_api;
 use crate::game_state::GameState;
 use crate::ext::audio;
 use super::State;
@@ -143,7 +143,7 @@ pub fn cleanup_resources() {
         unsafe { let _ = Box::from_raw(state_ptr); }; // Drops when goes out of scope
     }
     drop_gamestate();
-    network::cleanup_network();
+    network_api::cleanup_network();
     // 3. Do the same for the window
     let window_ptr = WINDOW_PTR.swap(std::ptr::null_mut(), Ordering::AcqRel);
     if !window_ptr.is_null() {

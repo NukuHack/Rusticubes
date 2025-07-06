@@ -1,8 +1,9 @@
 
-use std::sync::atomic::Ordering;
-use glam::Vec3;
+use crate::config;
 use crate::player;
 use crate::world;
+use std::sync::atomic::Ordering;
+use glam::Vec3;
 
 #[allow(dead_code)]
 pub struct GameState {
@@ -15,10 +16,10 @@ pub struct GameState {
 impl GameState {
     #[inline]
     pub fn new(worldname: &str) -> Self {
-        let player = super::player::Player::new(super::player::CameraConfig::new(Vec3::new(0.5, 1.8, 2.0)));
+        let player = player::Player::new(player::CameraConfig::new(Vec3::new(0.5, 1.8, 2.0)));
         
         // Create the save path
-        let save_path = std::path::PathBuf::from(&super::config::get_state().save_path)
+        let save_path = config::get_save_path()
             .join("saves")
             .join(worldname);
 
@@ -91,6 +92,10 @@ impl GameState {
 #[inline]
 pub fn start_world(worldname: &str) {
     let game_state = GameState::new(worldname);
-    super::config::GAMESTATE_PTR.store(Box::into_raw(Box::new(game_state)), Ordering::Release);
-    super::config::get_state().is_world_running= true;
+    config::GAMESTATE_PTR.store(Box::into_raw(Box::new(game_state)), Ordering::Release);
+    
+    // This will only execute when not in test configuration
+    if !cfg!(test) {
+        config::get_state().is_world_running = true;
+    }
 }

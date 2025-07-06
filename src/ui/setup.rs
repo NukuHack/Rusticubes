@@ -1,5 +1,5 @@
 
-use crate::ext::network;
+use crate::ext::network_api;
 use crate::block;
 use crate::config;
 use crate::ext::memory;
@@ -122,7 +122,7 @@ impl UIManager {
                 let state = config::get_state();
                 state.ui_manager.state = UIState::Multiplayer;
                 state.ui_manager.setup_ui();
-                match network::begin_online_search() {
+                match network_api::begin_online_search() {
                      Ok(o) => println!("worked: {}", o),
                      Err(e) => println!("not worked: {}", e),
                 };
@@ -278,7 +278,7 @@ impl UIManager {
             .with_z_index(1);
         self.add_element(list_panel);
 
-        let worlds:Vec<String> = network::get_discovered_hosts()
+        let worlds:Vec<String> = network_api::get_discovered_hosts()
             .iter()
             .map(|s| s.world_name.clone())
             .collect();
@@ -484,7 +484,7 @@ impl UIManager {
             .with_z_index(8)
             .with_callback(|| 
                 {
-                    match network::begin_online_giveaway() {
+                    match network_api::begin_online_giveaway() {
                         Ok(o) => println!("worked: {}", o),
                         Err(e) => println!("not worked: {}", e),
                     };

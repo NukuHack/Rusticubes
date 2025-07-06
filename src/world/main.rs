@@ -4,7 +4,7 @@ use crate::block::main::Block;
 use crate::block::main::Chunk;
 use crate::block::math::ChunkCoord;
 #[allow(unused_imports)]
-use crate::debug;
+use crate::stopwatch;
 use ahash::AHasher;
 use glam::Vec3;
 use std::{

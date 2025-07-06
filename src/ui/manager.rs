@@ -1,5 +1,5 @@
 
-use crate::ext::network;
+use crate::ext::network_api;
 use crate::ui::element;
 use crate::ext::audio;
 use crate::config;
@@ -348,7 +348,7 @@ pub fn close_pressed() {
             state.ui_manager.setup_ui();
 
             config::drop_gamestate();
-            network::cleanup_network();
+            network_api::cleanup_network();
         }
         UIState::Loading => {
             return; // hell nah- exiting while loading it like Bruh

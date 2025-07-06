@@ -4,22 +4,28 @@ mod player;
 mod config;
 mod geometry;
 mod pipeline;
-mod debug;
+mod stopwatch;
 mod input;
 mod math;
 mod game_state;
 mod cursor;
 mod event_handler;
 
-pub mod ext{
+pub mod debug {
+    pub mod network_t;
+}
+pub mod ext {
     pub mod audio; // audio manager, in extra thread
     pub mod time; // a nicely formatted time, just a struct
     pub mod memory; // memory management mainly focusing on memory clean up
     pub mod mods; // mod loading and wasm sandbox 
     pub mod mods_over; // this is an overlay made by mods so they would execute instead of the real rust functions
-    pub mod network; // the networking system
     pub mod rs; // app-compiled resources
     pub mod fs; // file system - from the disk
+
+    pub mod network_api; // the networking system
+    pub mod network_discovery; // the networking system
+    pub mod network_types; // the networking system
 }
 pub mod world {
     pub mod main;
@@ -88,7 +94,6 @@ pub struct State<'a> {
     camera_system: player::CameraSystem,
     texture_manager: geometry::TextureManager,
     is_world_running: bool,
-    save_path: std::path::PathBuf,
 }
 
 pub struct RenderContext<'a> {
@@ -213,7 +218,6 @@ impl<'a> State<'a> {
 
         // has to make the error handling better , make the error quit from world
         let _ = config::ensure_save_dir();
-        let save_path = config::get_save_path();
 
         Self {
             window,
@@ -225,7 +229,6 @@ impl<'a> State<'a> {
             texture_manager,
             ui_manager,
             is_world_running: false,
-            save_path,
         }
     }
     #[inline]
@@ -292,7 +295,7 @@ impl<'a> State<'a> {
         let current_time: std::time::Instant = std::time::Instant::now();
         let delta_seconds: f32 = (current_time - self.previous_frame_time).as_secs_f32();
         self.previous_frame_time = current_time;
-        ext::network::update_network(); // theoretically it should run in other thread so calling it each frame should not be a problem ...
+        ext::network_api::update_network(); // theoretically it should run in other thread so calling it each frame should not be a problem ...
         
         if self.is_world_running {
             let movement_delta = {
