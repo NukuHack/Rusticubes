@@ -1,4 +1,5 @@
 
+use crate::block::math::BlockPosition;
 use crate::config;
 use crate::block::main::{Block, Chunk};
 use crate::block::math::ChunkCoord;
@@ -51,7 +52,7 @@ impl World {
     #[inline]
     pub fn get_block(&self, world_pos: Vec3) -> &Block {
         let chunk_coord = ChunkCoord::from_world_pos(world_pos);
-        let local_pos = Chunk::world_to_local_pos(world_pos);
+        let local_pos: BlockPosition = world_pos.into();
         let index:usize = local_pos.into();
 
         self.chunks
@@ -63,7 +64,7 @@ impl World {
     #[inline]
     pub fn get_block_mut(&mut self, world_pos: Vec3) -> Option<&mut Block> {
         let chunk_coord = ChunkCoord::from_world_pos(world_pos);
-        let local_pos = Chunk::world_to_local_pos(world_pos);
+        let local_pos: BlockPosition = world_pos.into();
         let index: usize = local_pos.into();
 
         self.chunks
@@ -82,8 +83,8 @@ impl World {
         }
 
         if let Some(chunk) = self.chunks.get_mut(&chunk_coord) {
-            let local_pos = Chunk::world_to_local_pos(world_pos);
-            let index:usize = local_pos.into();
+            let local_pos: BlockPosition = world_pos.into();
+            let index: usize = local_pos.into();
 
             // Only set if the block is actually different
             if chunk.get_block(index) != &block {

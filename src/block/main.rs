@@ -1,10 +1,9 @@
 
 use crate::block::math::{self, BlockPosition, BlockRotation};
-use crate::render::meshing::{ChunkMeshBuilder, GeometryBuffer};
+use crate::render::meshing::GeometryBuffer;
 #[allow(unused_imports)]
 use crate::stopwatch;
-use glam::{Quat, Vec3};
-use std::f32::consts::{PI, TAU};
+use glam::Vec3;
 
 type Material = u16;
 type DensityField = u32;
@@ -45,12 +44,6 @@ impl Block {
         Self::Marching(material, 0)
     }
 
-    /// Creates a block from a quaternion rotation
-    #[inline]
-    pub fn new_quat(rotation: Quat) -> Self {
-        Self::Simple(1, BlockRotation::from_quat(rotation))
-    }
-
     /// Creates a new marching cubes block with center point set
     #[inline]
     pub const fn new_dot() -> Self {
@@ -65,14 +58,6 @@ impl Block {
             Block::Simple(_, rot) => Some(*rot),
             _ => None,
         }
-    }
-
-    /// Converts packed rotation to quaternion
-    #[inline]
-    pub fn to_quat(&self) -> Quat {
-        self.get_rotation()
-            .map(|rot| rot.to_quat())
-            .unwrap_or_else(|| Quat::IDENTITY)
     }
 
     /// Rotates the block around an axis by N 90° steps
@@ -116,21 +101,6 @@ impl Block {
             Block::Simple(mat, _) | Block::Marching(mat, _) => *mat = material,
             Block::None => {}
         }
-    }
-
-    /// Converts quaternion to packed rotation format
-    #[inline]
-    pub fn quat_to_rotation(rotation: Quat) -> u8 {
-        // Extract Euler angles using efficient quaternion conversion
-        let (x, y, z) = rotation.to_euler(glam::EulerRot::ZYX);
-
-        // Convert to 2-bit values (0-3) representing 90-degree increments
-        let x = ((x.rem_euclid(TAU) / (PI / 2.0)).round() as u8) & 0x3;
-        let y = ((y.rem_euclid(TAU) / (PI / 2.0)).round() as u8) & 0x3;
-        let z = ((z.rem_euclid(TAU) / (PI / 2.0)).round() as u8) & 0x3;
-
-        // Pack into a single byte
-        x | (y << 2) | (z << 4)
     }
 
     /// Sets all rotation axes at once
@@ -358,13 +328,6 @@ impl Chunk {
         Some(Self::new())
     }
 
-    pub fn world_to_local_pos(world_pos: Vec3) -> BlockPosition {
-        let x = (world_pos.x.floor() as i32).rem_euclid(Self::SIZE_I) as u8;
-        let y = (world_pos.y.floor() as i32).rem_euclid(Self::SIZE_I) as u8;
-        let z = (world_pos.z.floor() as i32).rem_euclid(Self::SIZE_I) as u8;
-        BlockPosition::new(x, y, z)
-    }
-
     #[inline]
     pub fn get_block(&self, index: usize) -> &Block {
         let palette_idx = self.storage.get(index);
@@ -396,51 +359,6 @@ impl Chunk {
         if self.palette.len() > 64 {
             self.palette_compact();
         }
-    }
-
-    pub fn make_mesh(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, force: bool) {
-        if !force && !self.dirty && self.mesh.is_some() {
-            return;
-        }
-
-        // Early return if chunk is empty
-        if self.is_empty() {
-            if self.mesh.is_some() {
-                self.mesh = Some(GeometryBuffer::empty(device));
-                self.dirty = false;
-            }
-            return;
-        }
-
-        let mut builder = ChunkMeshBuilder::new();
-
-        for pos in 0..Self::VOLUME {
-            let block = *self.get_block(pos);
-            if block.is_empty() {
-                continue;
-            }
-
-            let local_pos = BlockPosition::from(pos).into();
-            match block {
-                Block::Marching(_, points) => {
-                    builder.add_marching_cube(points, local_pos);
-                }
-                _ => {
-                    builder.add_cube(local_pos, block.to_quat(), block.texture_coords(), self);
-                }
-            }
-        }
-
-        if let Some(mesh) = &mut self.mesh {
-            mesh.update(device, queue, &builder.indices, &builder.vertices);
-        } else {
-            self.mesh = Some(GeometryBuffer::new(
-                device,
-                &builder.indices,
-                &builder.vertices,
-            ));
-        }
-        self.dirty = false;
     }
 
     /// Checks if a block position is empty or outside the chunk

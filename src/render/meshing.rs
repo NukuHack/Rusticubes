@@ -1,7 +1,7 @@
 
 use crate::block::lut::{EDGE_TABLE, TRI_TABLE};
 use crate::block::main::Chunk;
-use glam::{Mat4, Quat, Vec3};
+use glam::Vec3;
 use std::mem;
 use wgpu::util::DeviceExt;
 
@@ -207,13 +207,10 @@ impl ChunkMeshBuilder {
     pub fn add_cube(
         &mut self,
         position: Vec3,
-        rotation: Quat,
         texture_map: [f32; 2],
         chunk: &Chunk,
     ) {
         let [fs, fe] = texture_map;
-        let transform = Mat4::from_rotation_translation(rotation, position);
-
         // Check face visibility (culling)
         let face_visibility = [
             chunk.is_block_cull(position + Vec3::Z), // Front
@@ -232,7 +229,7 @@ impl ChunkMeshBuilder {
         // Transform all vertices upfront
         let mut transformed_vertices = [[0.0f32; 3]; 8];
         for (i, vertex) in CUBE_VERTICES.iter().enumerate() {
-            let pos = transform.transform_point3(Vec3::from(*vertex));
+            let pos = Vec3::from(*vertex)+position;
             transformed_vertices[i] = [pos.x, pos.y, pos.z];
         }
 
@@ -271,7 +268,7 @@ impl ChunkMeshBuilder {
 }
 
 // =============================================
-// Marching Cubes Constants
+// Block Constants
 // =============================================
 
 const HALF: f32 = 0.5;
@@ -291,10 +288,6 @@ const EDGE_VERTICES: [[Vec3; 2]; 12] = [
     [Vec3::new(HALF, 0.0, HALF), Vec3::new(HALF, HALF, HALF)], // Edge 10
     [Vec3::new(0.0, 0.0, HALF), Vec3::new(0.0, HALF, HALF)], // Edge 11
 ];
-
-// =============================================
-// Cube Geometry Constants
-// =============================================
 
 const CUBE_SIZE: f32 = 1.0; // Unit-sized cube
 

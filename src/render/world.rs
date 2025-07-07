@@ -1,5 +1,7 @@
 
-use crate::block::math::ChunkCoord;
+use crate::block::main::Block;
+use crate::block::math::{ChunkCoord, BlockPosition};
+use crate::render::meshing::{ChunkMeshBuilder, GeometryBuffer};
 use crate::config;
 use crate::world::main::World;
 use crate::block::main::Chunk;
@@ -8,8 +10,62 @@ use wgpu::util::DeviceExt;
 // =============================================
 // Extra Rendering related Implementations
 // =============================================
-
+/*
+#[derive(Clone, PartialEq)]
+pub struct Chunk {
+    pub palette: Vec<Block>, 
+    pub storage: BlockStorage, 
+    pub dirty: bool, 
+    pub mesh: Option<GeometryBuffer>, 
+    pub bind_group: Option<wgpu::BindGroup>, 
+}
+*/
 impl Chunk {
+    pub fn make_mesh(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, force: bool) {
+        if !force && !self.dirty && self.mesh.is_some() {
+            return;
+        }
+
+        // Early return if chunk is empty
+        if self.is_empty() {
+            if self.mesh.is_some() {
+                self.mesh = Some(GeometryBuffer::empty(device));
+                self.dirty = false;
+            }
+            return;
+        }
+
+        let mut builder = ChunkMeshBuilder::new();
+
+        for pos in 0..Self::VOLUME {
+            let block = *self.get_block(pos);
+            if block.is_empty() {
+                continue;
+            }
+
+            let local_pos = BlockPosition::from(pos).into();
+            match block {
+                Block::Marching(_, points) => {
+                    builder.add_marching_cube(points, local_pos);
+                }
+                _ => {
+                    builder.add_cube(local_pos, block.texture_coords(), self);
+                }
+            }
+        }
+
+        if let Some(mesh) = &mut self.mesh {
+            mesh.update(device, queue, &builder.indices, &builder.vertices);
+        } else {
+            self.mesh = Some(GeometryBuffer::new(
+                device,
+                &builder.indices,
+                &builder.vertices,
+            ));
+        }
+        self.dirty = false;
+    }
+
     /// Recreates chunk's bind group
     pub fn recreate_bind_group(&mut self, chunk_coord: ChunkCoord) {
         let state = config::get_state();

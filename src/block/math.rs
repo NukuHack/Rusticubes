@@ -1,4 +1,5 @@
 
+use glam::Vec3;
 use crate::block::main::Chunk;
 
 /// Compact chunk coordinate representation (64 bits)
@@ -98,6 +99,54 @@ impl ChunkCoord {
             world_pos.z.div_euclid(chunk_size as f32) as i32,
         )
     }
+
+    /// Offsets the chunk coordinate by `dx`, `dy`, `dz` (wrapping not applied since chunks are infinite)
+    #[inline]
+    pub fn offset(&self, dx: i32, dy: i32, dz: i32) -> Self {
+        Self::new(
+            self.x().wrapping_add(dx),
+            self.y().wrapping_add(dy),
+            self.z().wrapping_add(dz),
+        )
+    }
+
+    /// Returns the 6 directly adjacent chunk coordinates (no diagonals)
+    #[inline]
+    pub fn get_adjacent(&self) -> [ChunkCoord; 6] {
+        [
+            self.offset(1, 0, 0),  // +X
+            self.offset(-1, 0, 0), // -X
+            self.offset(0, 1, 0),  // +Y
+            self.offset(0, -1, 0), // -Y
+            self.offset(0, 0, 1),  // +Z
+            self.offset(0, 0, -1), // -Z
+        ]
+    }
+
+    /// Checks if this chunk is adjacent to another chunk (direct neighbors)
+    #[inline]
+    pub fn is_adjacent(&self, other: ChunkCoord) -> bool {
+        let dx = self.x().abs_diff(other.x());
+        let dy = self.y().abs_diff(other.y());
+        let dz = self.z().abs_diff(other.z());
+        dx <= 1 && dy <= 1 && dz <= 1 && (dx + dy + dz) > 0
+    }
+
+    /// Returns an iterator over all 26 neighboring chunks
+    pub fn neighbors(&self) -> impl Iterator<Item = ChunkCoord> {
+        let pos = *self;
+        (-1..=1).flat_map(move |dx| {
+            (-1..=1).flat_map(move |dy| {
+                (-1..=1).filter_map(move |dz| {
+                    if dx == 0 && dy == 0 && dz == 0 {
+                        None
+                    } else {
+                        Some(pos.offset(dx, dy, dz))
+                    }
+                })
+            })
+        })
+    }
 }
 
 /// Compact position within a chunk (0-15 on each axis)
@@ -151,10 +200,24 @@ impl BlockPosition {
     /// Offsets the position by dx, dy, dz (wrapping within chunk)
     #[inline]
     pub fn offset(&self, dx: i8, dy: i8, dz: i8) -> Self {
-        let x = (self.x() as i16 + dx as i16).rem_euclid(16) as u8;
-        let y = (self.y() as i16 + dy as i16).rem_euclid(16) as u8;
-        let z = (self.z() as i16 + dz as i16).rem_euclid(16) as u8;
+        let chunk_size = Chunk::SIZE_I;
+        let x = (self.x() as i32 + dx as i32).rem_euclid(chunk_size) as u8;
+        let y = (self.y() as i32 + dy as i32).rem_euclid(chunk_size) as u8;
+        let z = (self.z() as i32 + dz as i32).rem_euclid(chunk_size) as u8;
         Self::new(x, y, z)
+    }
+
+    /// Returns the 6 directly adjacent block positions within the chunk (no diagonals)
+    #[inline]
+    pub fn get_adjacent(&self) -> [BlockPosition; 6] {
+        [
+            self.offset(1, 0, 0),  // +X
+            self.offset(-1, 0, 0), // -X
+            self.offset(0, 1, 0),  // +Y
+            self.offset(0, -1, 0), // -Y
+            self.offset(0, 0, 1),  // +Z
+            self.offset(0, 0, -1), // -Z
+        ]
     }
 
     /// Checks if this position is adjacent to another position
@@ -206,7 +269,12 @@ mod conversions {
     impl From<Vec3> for BlockPosition {
         #[inline]
         fn from(vec: Vec3) -> Self {
-            Self::new(vec.x as u8, vec.y as u8, vec.z as u8)
+            let chunk_size = Chunk::SIZE_I;
+            Self::new(
+                (vec.x.floor() as i32).rem_euclid(chunk_size) as u8,
+                (vec.y.floor() as i32).rem_euclid(chunk_size) as u8,
+                (vec.z.floor() as i32).rem_euclid(chunk_size) as u8
+            )
         }
     }
     impl From<BlockPosition> for Vec3 {
@@ -265,8 +333,6 @@ pub enum Axis {
     Zminus,
 }
 
-use glam::{Quat,Vec3};
-
 /// All 24 possible block rotations (6 faces × 4 orientations each).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(u8)] // Ensures `as u8` is safe
@@ -279,91 +345,101 @@ pub enum BlockRotation {
     ZminusXplus, ZminusXminus, ZminusYplus, ZminusYminus,
 }
 
-// ===== Lookup Tables ===== //
-
-/// Precomputed quaternions for all 24 rotations.
-#[allow(dead_code)]
-const QUATERNIONS: [Quat; 24] = [
-    // +X facing (front)
-    Quat::from_xyzw(0.0, 0.0, 0.0, 1.0),                     // X+Y+ (identity)
-    Quat::from_xyzw(1.0, 0.0, 0.0, 0.0),                     // X+Y- (180° X)
-    Quat::from_xyzw(0.0, 0.70710678, 0.0, 0.70710678),       // X+Z+ (90° Y)
-    Quat::from_xyzw(0.0, -0.70710678, 0.0, 0.70710678),      // X+Z- (270° Y)
-    // -X facing
-    Quat::from_xyzw(0.0, 0.0, 1.0, 0.0),                     // X-Y+ (180° Z)
-    Quat::from_xyzw(0.70710678, 0.0, 0.70710678, 0.0),       // X-Y- (180° X + Z)
-    Quat::from_xyzw(0.5, -0.5, 0.5, 0.5),                    // X-Z+ (90° Y + 180° Z)
-    Quat::from_xyzw(-0.5, -0.5, 0.5, 0.5),                   // X-Z- (270° Y + 180° Z)
-    // +Y facing
-    Quat::from_xyzw(-0.70710678, 0.0, 0.0, 0.70710678),      // Y+X+ (270° X)
-    Quat::from_xyzw(-0.5, 0.5, 0.5, 0.5),                    // Y+X- (270° X + 180° Z)
-    Quat::from_xyzw(-0.5, 0.5, -0.5, 0.5),                   // Y+Z+ (270° X + 90° Y)
-    Quat::from_xyzw(-0.5, 0.5, 0.5, -0.5),                   // Y+Z- (270° X + 270° Y)
-    // -Y facing
-    Quat::from_xyzw(0.70710678, 0.0, 0.0, 0.70710678),       // Y-X+ (90° X)
-    Quat::from_xyzw(0.5, 0.5, 0.5, 0.5),                     // Y-X- (90° X + 180° Z)
-    Quat::from_xyzw(0.5, 0.5, -0.5, 0.5),                    // Y-Z+ (90° X + 90° Y)
-    Quat::from_xyzw(0.5, 0.5, 0.5, -0.5),                    // Y-Z- (90° X + 270° Y)
-    // +Z facing
-    Quat::from_xyzw(0.0, 1.0, 0.0, 0.0),                     // Z+X+ (180° Y)
-    Quat::from_xyzw(0.70710678, 0.70710678, 0.0, 0.0),       // Z+X- (180° Y + 180° Z)
-    Quat::from_xyzw(0.0, 0.70710678, 0.70710678, 0.0),       // Z+Y+ (180° Y + 90° X)
-    Quat::from_xyzw(0.0, 0.70710678, -0.70710678, 0.0),      // Z+Y- (180° Y + 270° X)
-    // -Z facing
-    Quat::from_xyzw(0.0, 0.0, 0.0, 1.0),                     // Z-X+ (identity)
-    Quat::from_xyzw(0.0, 0.0, 1.0, 0.0),                     // Z-X- (180° Z)
-    Quat::from_xyzw(0.70710678, 0.0, 0.0, 0.70710678),       // Z-Y+ (90° X)
-    Quat::from_xyzw(-0.70710678, 0.0, 0.0, 0.70710678),      // Z-Y- (270° X)
-];
-
 impl BlockRotation {
-    /// Converts to a quaternion (uses precomputed LUT).
-    #[inline]
-    pub fn to_quat(self) -> Quat {
-        QUATERNIONS[self as usize]
+
+    /// Returns the primary axis of this rotation
+    pub fn primary_axis(self) -> Axis {
+        match self {
+            BlockRotation::XplusYplus | BlockRotation::XplusYminus |
+            BlockRotation::XplusZplus | BlockRotation::XplusZminus => Axis::Xplus,
+            
+            BlockRotation::XminusYplus | BlockRotation::XminusYminus |
+            BlockRotation::XminusZplus | BlockRotation::XminusZminus => Axis::Xminus,
+            
+            BlockRotation::YplusXplus | BlockRotation::YplusXminus |
+            BlockRotation::YplusZplus | BlockRotation::YplusZminus => Axis::Yplus,
+            
+            BlockRotation::YminusXplus | BlockRotation::YminusXminus |
+            BlockRotation::YminusZplus | BlockRotation::YminusZminus => Axis::Yminus,
+            
+            BlockRotation::ZplusXplus | BlockRotation::ZplusXminus |
+            BlockRotation::ZplusYplus | BlockRotation::ZplusYminus => Axis::Zplus,
+            
+            BlockRotation::ZminusXplus | BlockRotation::ZminusXminus |
+            BlockRotation::ZminusYplus | BlockRotation::ZminusYminus => Axis::Zminus,
+        }
     }
 
-    /// Finds the closest `BlockRotation` from a quaternion.
-    pub fn from_quat(quat: Quat) -> Self {
-        let forward = quat * Vec3::Z;
-        let up = quat * Vec3::Y;
+    /// Returns the secondary axis of this rotation
+    pub fn secondary_axis(self) -> Axis {
+        match self {
+            BlockRotation::XplusYplus | BlockRotation::XminusYplus |
+            BlockRotation::YplusXplus | BlockRotation::YminusXplus  => Axis::Xplus,
+            
+            BlockRotation::YplusXminus | BlockRotation::YminusXminus |
+            BlockRotation::ZplusXminus | BlockRotation::ZminusXminus => Axis::Xminus,
+            
+            BlockRotation::XplusZplus | BlockRotation::XminusZplus |
+            BlockRotation::YplusZplus | BlockRotation::YminusZplus  => Axis::Zplus,
+            
+            BlockRotation::XplusZminus | BlockRotation::XminusZminus |
+            BlockRotation::YplusZminus | BlockRotation::YminusZminus  => Axis::Zminus,
+            
+            BlockRotation::XplusYminus | BlockRotation::XminusYminus |
+            BlockRotation::ZplusYminus | BlockRotation::ZminusYminus => Axis:: Yminus,
 
-        // Determine primary axis (front face)
-        let primary_axis = if forward.x.abs() >= forward.y.abs() && forward.x.abs() >= forward.z.abs() {
-            if forward.x > 0.0 { Axis::Xplus } else { Axis::Xminus }
-        } else if forward.y.abs() >= forward.z.abs() {
-            if forward.y > 0.0 { Axis::Yplus } else { Axis::Yminus }
-        } else {
-            if forward.z > 0.0 { Axis::Zplus } else { Axis::Zminus }
+            _ => Axis::Zplus, // Remaining cases are Z variants
+        }
+    }
+
+    /// Rotates the block around an axis by 90° steps (1 step = 90° clockwise)
+    pub fn rotate(self, axis: AxisBasic, steps: u8) -> Self {
+        let steps = steps % 4; // Normalize to 0-3
+        if steps == 0 {
+            return self;
+        }
+
+        let (primary, secondary) = match axis {
+            AxisBasic::X => {
+                // When rotating around X, Y and Z axes change
+                let y_axis = match self.secondary_axis() {
+                    Axis::Yplus | Axis::Yminus => self.secondary_axis(),
+                    _ => Axis::Yplus, // Default if not Y
+                };
+                let z_axis = match self.secondary_axis() {
+                    Axis::Zplus | Axis::Zminus => self.secondary_axis(),
+                    _ => Axis::Zplus, // Default if not Z
+                };
+                (self.primary_axis(), if steps % 2 == 1 { z_axis } else { y_axis })
+            },
+            AxisBasic::Y => {
+                // When rotating around Y, X and Z axes change
+                let x_axis = match self.secondary_axis() {
+                    Axis::Xplus | Axis::Xminus => self.secondary_axis(),
+                    _ => Axis::Xplus,
+                };
+                let z_axis = match self.secondary_axis() {
+                    Axis::Zplus | Axis::Zminus => self.secondary_axis(),
+                    _ => Axis::Zplus,
+                };
+                (self.primary_axis(), if steps % 2 == 1 { x_axis } else { z_axis })
+            },
+            AxisBasic::Z => {
+                // When rotating around Z, X and Y axes change
+                let x_axis = match self.secondary_axis() {
+                    Axis::Xplus | Axis::Xminus => self.secondary_axis(),
+                    _ => Axis::Xplus,
+                };
+                let y_axis = match self.secondary_axis() {
+                    Axis::Yplus | Axis::Yminus => self.secondary_axis(),
+                    _ => Axis::Yplus,
+                };
+                (self.primary_axis(), if steps % 2 == 1 { y_axis } else { x_axis })
+            },
         };
 
-        // Determine secondary axis (up face)
-        let secondary_axis = match primary_axis {
-            Axis::Xplus | Axis::Xminus => {
-                if up.y.abs() >= up.z.abs() {
-                    if up.y > 0.0 { Axis::Yplus } else { Axis::Yminus }
-                } else {
-                    if up.z > 0.0 { Axis::Zplus } else { Axis::Zminus }
-                }
-            }
-            Axis::Yplus | Axis::Yminus => {
-                if up.x.abs() >= up.z.abs() {
-                    if up.x > 0.0 { Axis::Xplus } else { Axis::Xminus }
-                } else {
-                    if up.z > 0.0 { Axis::Zplus } else { Axis::Zminus }
-                }
-            }
-            Axis::Zplus | Axis::Zminus => {
-                if up.x.abs() >= up.y.abs() {
-                    if up.x > 0.0 { Axis::Xplus } else { Axis::Xminus }
-                } else {
-                    if up.y > 0.0 { Axis::Yplus } else { Axis::Yminus }
-                }
-            }
-        };
-
-        // Combine into enum variant
-        match (primary_axis, secondary_axis) {
+        // Reconstruct the new rotation based on primary and secondary axes
+        match (primary, secondary) {
             (Axis::Xplus, Axis::Yplus) => BlockRotation::XplusYplus,
             (Axis::Xplus, Axis::Yminus) => BlockRotation::XplusYminus,
             (Axis::Xplus, Axis::Zplus) => BlockRotation::XplusZplus,
@@ -393,20 +469,9 @@ impl BlockRotation {
             (Axis::Zminus, Axis::Xminus) => BlockRotation::ZminusXminus,
             (Axis::Zminus, Axis::Yplus) => BlockRotation::ZminusYplus,
             (Axis::Zminus, Axis::Yminus) => BlockRotation::ZminusYminus,
-            // These cases shouldn't happen due to our secondary axis selection
-            _ => BlockRotation::XplusYplus,
+
+            _ => panic!("The rotation is incorrect"),
         }
     }
-    
-    
-    /// Rotates the block around an axis by 90° steps
-    pub fn rotate(self, axis: AxisBasic, steps: u8) -> Self {
-        let quat = self.to_quat();
-        let rotation = match axis {
-            AxisBasic::X => Quat::from_rotation_x(steps as f32 * std::f32::consts::FRAC_PI_2),
-            AxisBasic::Y => Quat::from_rotation_y(steps as f32 * std::f32::consts::FRAC_PI_2),
-            AxisBasic::Z => Quat::from_rotation_z(steps as f32 * std::f32::consts::FRAC_PI_2),
-        };
-        Self::from_quat(rotation * quat)
-    }
+
 }
