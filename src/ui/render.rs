@@ -356,7 +356,7 @@ impl UIRenderer {
     }
 
     fn create_image_texture(&self, device: &wgpu::Device, queue: &wgpu::Queue, path: String) -> wgpu::Texture {
-        let (rgba, width, height) = rs::load_image_from_bytes(path.to_string()).unwrap();
+        let (rgba, width, height) = rs::load_image_from_path(path.to_string()).unwrap();
         let texture = device.create_texture(&wgpu::TextureDescriptor {
             label: Some("Image Texture"),
             size: wgpu::Extent3d { width, height, depth_or_array_layers: 1 },
@@ -402,7 +402,7 @@ impl UIRenderer {
     fn create_animation_texture_array(&self, device: &wgpu::Device, queue: &wgpu::Queue, 
         frames: &[String]) -> Option<(wgpu::Texture, wgpu::BindGroup)> {
         if frames.is_empty() { return None; }
-        let (_, width, height) = rs::load_image_from_bytes(frames[0].clone())?;
+        let (_, width, height) = rs::load_image_from_path(frames[0].clone())?;
         let layer_count = frames.len() as u32;
         let texture = device.create_texture(&wgpu::TextureDescriptor {
             label: Some("animation_texture_array"),
@@ -414,7 +414,7 @@ impl UIRenderer {
         });
 
         for (i, frame_path) in frames.iter().enumerate() {
-            if let Some((rgba, _, _)) = rs::load_image_from_bytes(frame_path.clone()) {
+            if let Some((rgba, _, _)) = rs::load_image_from_path(frame_path.clone()) {
                 queue.write_texture(
                     wgpu::TexelCopyTextureInfo { texture: &texture, mip_level: 0, 
                         origin: wgpu::Origin3d { x: 0, y: 0, z: i as u32 }, aspect: wgpu::TextureAspect::All },

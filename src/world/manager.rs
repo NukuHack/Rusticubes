@@ -197,14 +197,11 @@ pub fn update_world_data(path: &PathBuf) -> Result<()> {
     Ok(())
 }
 
-
 //
 //
 // binary conversions for all kinds of structs and enums just to make the world serialize-able
 //
 //
-//
-
 
 impl Chunk {
     /// Serializes the chunk to a binary format
@@ -315,8 +312,6 @@ impl Chunk {
         size
     }
 }
-
-
 
 impl BlockRotation {
     /// Maps `u8` values (0..23) back to `BlockRotation`.
@@ -503,7 +498,6 @@ impl ChunkCoord {
     }
 }
 
-
 // 
 // Main world Save - Load functions
 // will have to rework them a bit, because the giant world size
@@ -511,7 +505,6 @@ impl ChunkCoord {
 // but theoretically it can get up to Billions of Tb, not like anyone will ever go that far
 // so yeah processing big worlds with a single function is bad
 // 
-
 
 pub fn save_entire_world(path: &PathBuf) -> Result<()> {
     let game_state = config::get_gamestate();
@@ -530,9 +523,6 @@ pub fn save_entire_world(path: &PathBuf) -> Result<()> {
     }
     // Atomic rename
     fs::rename(temp_path, &file_path)?;
-    // Verify the file was written correctly
-    let written_size = fs::metadata(&file_path)?.len();
-    println!("File written successfully, size: {} bytes", written_size);
     
     Ok(())
 }

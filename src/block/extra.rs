@@ -1,7 +1,7 @@
 
 use crate::config;
 use crate::block::math::ChunkCoord;
-use crate::player::Camera;
+use crate::game::player::Camera;
 use crate::block::main::Block;
 use crate::world::main::World;
 use glam::Vec3;

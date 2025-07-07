@@ -1,6 +1,6 @@
 
 use crate::block::math::{self, BlockPosition, BlockRotation};
-use crate::block::render::{ChunkMeshBuilder, GeometryBuffer};
+use crate::render::meshing::{ChunkMeshBuilder, GeometryBuffer};
 #[allow(unused_imports)]
 use crate::stopwatch;
 use glam::{Quat, Vec3};

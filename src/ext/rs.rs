@@ -1,5 +1,6 @@
 
-use include_dir::include_dir;
+use include_dir::{DirEntry, include_dir};
+use std::path::Path;
 
 // Include the assets directory at compile time
 pub const RESOURCE_DIR: include_dir::Dir = include_dir!("$CARGO_MANIFEST_DIR/comp_resources");
@@ -46,8 +47,8 @@ use image::io::Reader as ImageReader;
 use std::io::Cursor;
 use winit::window::Icon;
 #[inline]
-pub fn load_icon_from_bytes() -> Option<Icon> {
-    let Some((rgba,w,h)) = load_image_from_bytes("icon.png".to_string()) else { panic!() };
+pub fn load_main_icon() -> Option<Icon> {
+    let Some((rgba,w,h)) = load_image_from_path("icon.png".to_string()) else { panic!() };
 
     match Icon::from_rgba(rgba, w, h) {
         Ok(icon) => Some(icon),
@@ -58,7 +59,66 @@ pub fn load_icon_from_bytes() -> Option<Icon> {
     }
 }
 
-pub fn load_image_from_bytes(path: String) -> Option<(Vec<u8>,u32,u32)> {
+
+/// Scans a subdirectory of the included resources directory for PNG files
+/// (including compressed variants) and returns their paths as Strings relative
+/// to the resource directory.
+pub fn find_png_resources(subdir: &str) -> Vec<String> {
+    let mut png_paths = Vec::new();
+    let subdir_path = Path::new(subdir);
+
+    // Get the subdirectory within RESOURCE_DIR
+    let target_dir = match RESOURCE_DIR.get_dir(subdir_path) {
+        Some(dir) => dir,
+        None => {
+            println!("Subdirectory '{}' not found in resources", subdir);
+            return png_paths;
+        }
+    };
+
+    // Iterate through the target directory entries
+    for entry in target_dir.entries() {
+        if let DirEntry::File(file) = entry {
+            let path = file.path();
+            
+            // Get the full extension (e.g., "png.lz4")
+            let full_ext = path.extension()
+                .and_then(|e| e.to_str())
+                .unwrap_or("")
+                .to_lowercase();
+
+            // Get the file stem (name without extensions)
+            let stem = path.file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or("")
+                .to_lowercase();
+
+            // Check for either:
+            // 1. Direct .png files (full_ext == "png")
+            // 2. .png.lz4 files (full_ext == "lz4" and stem ends with ".png")
+            let is_png = full_ext == "png" || 
+                (full_ext == "lz4" && stem.ends_with(".png"));
+
+            if is_png {
+                // Convert to relative path string
+                if let Some(path_str) = path.to_str() {
+                    // Remove .lz4 suffix if present to get the base path
+                    let clean_path = if full_ext == "lz4" {
+                        path_str.trim_end_matches(".lz4")
+                    } else {
+                        path_str
+                    };
+                    png_paths.push(clean_path.to_string());
+                }
+            }
+        }
+    }
+
+    png_paths
+}
+
+pub fn load_image_from_path<T: Into<String>>(path: T) -> Option<(Vec<u8>,u32,u32)> {
+    let path:String = path.into();
     // Create a cursor to read from memory
     let reader_rgba = match ImageReader::new(Cursor::new(crate::get_bytes!(path.clone())))
         .with_guessed_format()

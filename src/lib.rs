@@ -1,13 +1,8 @@
 ﻿
-//mod camera;
-mod player;
 mod config;
-mod geometry;
-mod pipeline;
 mod stopwatch;
 mod input;
 mod math;
-mod game_state;
 mod cursor;
 mod event_handler;
 
@@ -29,6 +24,16 @@ pub mod ext {
     pub mod network_discovery; // the networking system
     pub mod network_types; // the networking system
 }
+pub mod render {
+    pub mod meshing;
+    pub mod texture;
+    pub mod pipeline;
+    pub mod world;
+}
+pub mod game {
+    pub mod player;
+    pub mod state;
+}
 pub mod world {
     pub mod main;
     pub mod manager;
@@ -38,7 +43,6 @@ pub mod block {
     pub mod main;
     pub mod math;
     pub mod extra;
-    pub mod render;
     pub mod lut;
 }
 pub mod ui {
@@ -48,36 +52,8 @@ pub mod ui {
     pub mod setup;
 }
 
-/*
-// Core game systems
-pub mod game {
-    pub mod player;
-    pub mod state;
-}
-// Engine systems
-pub mod systems {
-    pub mod input;
-    pub mod time;
-    pub mod event_handler;
-    pub mod file_manager;
-    pub mod audio;
-    pub mod resources;
-    pub mod cursor;
-    pub mod pipeline;
-    pub mod modding;
-    pub mod modding_override;
-}
-// Utility modules
-pub mod utils {
-    pub mod math;
-    pub mod geometry;
-    pub mod debug;
-    pub mod memory;
-    pub mod config;
-}
-*/
 
-
+use crate::game::player;
 use std::sync::atomic::Ordering;
 use glam::Vec3;
 use std::iter::Iterator;
@@ -91,10 +67,10 @@ pub struct State<'a> {
     render_context: RenderContext<'a>,
     previous_frame_time: std::time::Instant,
     input_system: input::InputSystem,
-    pipeline: pipeline::Pipeline,
+    pipeline: render::pipeline::Pipeline,
     ui_manager: ui::manager::UIManager,
+    texture_manager: render::texture::TextureManager,
     camera_system: player::CameraSystem,
-    texture_manager: geometry::TextureManager,
     is_world_running: bool,
 }
 
@@ -175,7 +151,7 @@ impl<'a> State<'a> {
 
         surface.configure(&device, &config);
 
-        let texture_manager: geometry::TextureManager = geometry::TextureManager::new(&device, &queue, &config);
+        let texture_manager: render::texture::TextureManager = render::texture::TextureManager::new(&device, &queue, &config);
 
         let chunk_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             entries: &[
@@ -203,7 +179,7 @@ impl<'a> State<'a> {
             ..Default::default()
         });
 
-        let pipeline: pipeline::Pipeline = pipeline::Pipeline::new(&device, &config, &render_pipeline_layout);
+        let pipeline: render::pipeline::Pipeline = render::pipeline::Pipeline::new(&device, &config, &render_pipeline_layout);
 
         let mut ui_manager:ui::manager::UIManager = ui::manager::UIManager::new(&device, &config, &queue);
         ui_manager.setup_ui();
@@ -265,11 +241,11 @@ impl<'a> State<'a> {
         &self.camera_system
     }
     #[inline]
-    pub fn pipeline(&self) -> &pipeline::Pipeline {
+    pub fn pipeline(&self) -> &render::pipeline::Pipeline {
         &self.pipeline
     }
     #[inline]
-    pub fn texture_manager(&self) -> &geometry::TextureManager {
+    pub fn texture_manager(&self) -> &render::texture::TextureManager {
         &self.texture_manager
     }
     #[inline]
@@ -285,7 +261,7 @@ impl<'a> State<'a> {
             self.camera_system.projection_mut().resize(new_size);
             // Clone the values to avoid holding borrows
             self.render_context.surface.configure(self.device(), self.config());
-            *self.texture_manager.depth_texture_mut() = geometry::Texture::create_depth_texture(self.device(), self.config(),"depth_texture");
+            *self.texture_manager.depth_texture_mut() = render::texture::create_depth_texture(self.device(), self.config(),"depth_texture");
             
             true
         } else {
@@ -321,7 +297,7 @@ impl<'a> State<'a> {
     }
     #[inline]
     pub fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
-        pipeline::render_all(self)
+        render::pipeline::render_all(self)
     }
 }
 
@@ -347,7 +323,7 @@ pub async fn run() {
         .with_inner_size(*config.initial_window_size())
         .with_min_inner_size(*config.min_window_size())
         .with_position(*config.initial_window_position())
-        .with_window_icon(ext::rs::load_icon_from_bytes())
+        .with_window_icon(ext::rs::load_main_icon())
         .with_theme(*config.theme())
         .with_active(true)
         .build(&event_loop)

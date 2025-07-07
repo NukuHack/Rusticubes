@@ -1,6 +1,6 @@
 ﻿
 use crate::ext::network_api;
-use crate::game_state::GameState;
+use crate::game::state::GameState;
 use crate::ext::audio;
 use super::State;
 use std::sync::atomic::{AtomicBool,AtomicPtr, Ordering};

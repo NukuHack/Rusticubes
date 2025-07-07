@@ -1,12 +1,12 @@
 
 use crate::ui::manager::UIState;
-use crate::game_state;
+use crate::game::state;
 use crate::config;
 
 pub fn join_world(world_name: &str) {
     println!("Loading world: {}", world_name);
 
-    game_state::start_world(&world_name);
+    state::start_world(&world_name);
     let state = config::get_state();
     state.ui_manager.state = UIState::Loading;
     state.ui_manager.setup_ui();

@@ -1,4 +1,6 @@
 
+use crate::game::player;
+
 impl<'a> super::State<'a> {
 
     #[inline]
@@ -25,7 +27,7 @@ impl<'a> super::State<'a> {
 
         if !self.input_system.mouse_captured() {
             let player = &mut super::config::get_gamestate().player_mut();
-            player.set_camera_mode(super::player::CameraMode::Instant);
+            player.set_camera_mode(player::CameraMode::Instant);
             self.input_system.set_mouse_captured(true);
             // Hide cursor and lock to center
             //self.window().set_cursor_icon(winit::window::CursorIcon::Crosshair);
@@ -36,7 +38,7 @@ impl<'a> super::State<'a> {
             self.center_mouse();
         } else {
             let player = &mut super::config::get_gamestate().player_mut();
-            player.set_camera_mode(super::player::CameraMode::Smooth);
+            player.set_camera_mode(player::CameraMode::Smooth);
             self.input_system.set_mouse_captured(false);
             // Show cursor and release
             //self.window().set_cursor_icon(winit::window::CursorIcon::Default);

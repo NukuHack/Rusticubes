@@ -1,6 +1,6 @@
 
+use crate::game::player;
 use crate::config;
-use crate::player;
 use crate::world;
 use std::sync::atomic::Ordering;
 use glam::Vec3;
