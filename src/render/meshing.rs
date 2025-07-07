@@ -13,9 +13,9 @@ use wgpu::util::DeviceExt;
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable, Default)]
 pub struct Vertex {
-    pub position: [f32; 3],
-    pub normal: [f32; 3],
-    pub uv: [f32; 2],
+    pub position: [f32; 3], //96 let it stay cus's why not ...
+    pub normal: [f32; 3], //96 -> not used ...
+    pub uv: [f32; 2], //64 -> 4 options : 2 bits
 }
 
 impl Vertex {

@@ -341,7 +341,7 @@ pub async fn run() {
 
     // Store the state pointer
     config::STATE_PTR.store(Box::into_raw(Box::new(state)), Ordering::Release);
-
+{/*
     match ext::mods::main() {
         Ok(_) => (), // Success case
         Err(e) => println!("⚠Error modding: {}", e),
@@ -350,6 +350,7 @@ pub async fn run() {
         Ok(_) => (), // Success case
         Err(e) => { println!("💥Error mod function override: {}", e); }
     }
+*/}
 
     // Post-init cleanup
     ext::memory::light_trim();
