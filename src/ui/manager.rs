@@ -1,5 +1,4 @@
 
-use crate::ext::network_api;
 use crate::ui::element;
 use crate::ext::audio;
 use crate::config;
@@ -12,14 +11,18 @@ use winit::keyboard::KeyCode as Key;
 pub enum UIState {
     // need at least one more for error / popup handling
     BootScreen,     // Initial boot screen
+
     WorldSelection, // World selection screen
-    InGame,         // Normal game UI
-    Loading,        // Loading screen
-    NewWorld,       // Make a new world
     Multiplayer,    // Yeah boyyy multiplayer
+    NewWorld,       // Make a new world
+
+    Loading,        // Loading screen
+
+    Escape,         // In game but with Esc pressed
+    InGame,         // Normal game UI
+
     #[default]
     None, // Baiscally not yet initialized
-    //Custom,       // this will be the exeption, aka we do not know the contents at compile time
 }
 
 pub struct UIManager {
@@ -329,26 +332,35 @@ impl UIManager {
 pub fn close_pressed() {
     match config::get_state().ui_manager.state {
         UIState::WorldSelection => {
-            let state = config::get_state();
-            state.ui_manager.state = UIState::BootScreen;
-            state.ui_manager.setup_ui();
+            let ui_manager = &mut config::get_state().ui_manager;
+            ui_manager.state = UIState::BootScreen;
+            ui_manager.setup_ui();
         }
         UIState::Multiplayer => {
-            let state = config::get_state();
-            state.ui_manager.state = UIState::BootScreen;
-            state.ui_manager.setup_ui();
+            let ui_manager = &mut config::get_state().ui_manager;
+            ui_manager.state = UIState::BootScreen;
+            ui_manager.setup_ui();
         }
         UIState::BootScreen => {
             config::close_app();
         }
         UIState::InGame => {
-            let state = config::get_state();
-            state.is_world_running = false;
-            state.ui_manager.state = UIState::BootScreen;
-            state.ui_manager.setup_ui();
+            let ui_manager = &mut config::get_state().ui_manager;
+            ui_manager.state = UIState::Escape;
+            ui_manager.setup_ui();
 
-            config::drop_gamestate();
-            network_api::cleanup_network();
+            config::get_gamestate().player_mut().controller().reset_keyboard(); // Temporary workaround
+            
+            let game_state = config::get_gamestate();
+            *game_state.running() = false;
+        }
+        UIState::Escape => {
+            let ui_manager = &mut config::get_state().ui_manager;
+            ui_manager.state = UIState::InGame;
+            ui_manager.setup_ui();
+            
+            let game_state = config::get_gamestate();
+            *game_state.running() = true;
         }
         UIState::Loading => {
             return; // hell nah- exiting while loading it like Bruh

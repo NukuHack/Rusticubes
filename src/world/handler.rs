@@ -7,11 +7,12 @@ pub fn join_world(world_name: &str) {
     println!("Loading world: {}", world_name);
 
     state::start_world(&world_name);
-    let state = config::get_state();
-    state.ui_manager.state = UIState::Loading;
-    state.ui_manager.setup_ui();
-    state.ui_manager.state = UIState::InGame;
-    state.ui_manager.setup_ui();
+    let ui_manager = &mut config::get_state().ui_manager;
+    ui_manager.state = UIState::Loading;
+    ui_manager.setup_ui();
+    
+    ui_manager.state = UIState::Escape;
+    ui_manager.setup_ui();
 }
 
 pub fn create_world(id: usize) {

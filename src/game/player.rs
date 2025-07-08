@@ -304,9 +304,7 @@ impl PlayerController {
     }
 
     /// Processes keyboard input and returns whether the key was handled
-    pub fn process_keyboard(&mut self, key: &Key, state: &ElementState) -> bool {
-        let is_pressed = *state == ElementState::Pressed;
-        
+    pub fn process_keyboard(&mut self, key: &Key, is_pressed: bool) -> bool { 
         match key {
             Key::KeyW | Key::ArrowUp => self.movement.set_forward(is_pressed),
             Key::KeyS | Key::ArrowDown => self.movement.set_backward(is_pressed),
@@ -601,7 +599,7 @@ impl CameraConfig {
             deceleration: 15.0,
             zoom_sensitivity: 0.1,
             min_fov: std::f32::consts::FRAC_PI_6, // 30 degrees
-            max_fov: std::f32::consts::FRAC_PI_2, // 90 degrees
+            max_fov: std::f32::consts::PI, // 180 degrees
         }
     }
 }

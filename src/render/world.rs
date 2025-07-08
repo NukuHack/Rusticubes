@@ -1,4 +1,5 @@
 
+use glam::Vec3;
 use crate::block::main::Block;
 use crate::block::math::{ChunkCoord, BlockPosition};
 use crate::render::meshing::{ChunkMeshBuilder, GeometryBuffer};
@@ -43,14 +44,15 @@ impl Chunk {
                 continue;
             }
 
-            let local_pos = BlockPosition::from(pos).into();
+            let local_pos:Vec3 = BlockPosition::from(pos).into();
             match block {
                 Block::Marching(_, points) => {
-                    builder.add_marching_cube(points, local_pos);
+                    builder.add_marching_cube(local_pos, points);
                 }
-                _ => {
+                Block::Simple( .. ) => {
                     builder.add_cube(local_pos, block.texture_coords(), self);
-                }
+                },
+                _ => {},
             }
         }
 

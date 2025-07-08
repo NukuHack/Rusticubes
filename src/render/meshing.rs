@@ -78,7 +78,7 @@ impl ChunkMeshBuilder {
     }
 
     /// Generates a marching cubes mesh for the given block
-    pub fn add_marching_cube(&mut self, points: u32, position: Vec3) {
+    pub fn add_marching_cube(&mut self, position: Vec3, points: u32) {
         if points == 0 || points == 0xFF_FF_FF_FF {
             return; // Early exit for empty or full cubes
         }

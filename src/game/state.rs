@@ -11,6 +11,7 @@ pub struct GameState {
     player: player::Player,
     world: world::main::World, // lol main data storage :)
     save_path: std::path::PathBuf,
+    is_running: bool,
 }
 #[allow(dead_code)]
 impl GameState {
@@ -60,6 +61,7 @@ impl GameState {
             player,
             world: world::main::World::empty(),
             save_path,
+            is_running: false,
         }
     }
     #[inline]
@@ -90,6 +92,14 @@ impl GameState {
     #[inline]
     pub fn save_path(&self) -> &std::path::PathBuf {
         &self.save_path
+    }
+    #[inline]
+    pub fn is_running(&self) -> bool {
+        self.is_running
+    }
+    #[inline]
+    pub fn running(&mut self) -> &mut bool {
+        &mut self.is_running
     }
 }
 

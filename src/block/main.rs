@@ -13,8 +13,8 @@ type DensityField = u32;
 #[repr(u8)]
 pub enum Block {
     None = 0,
-    Simple(Material, BlockRotation),  // material, rotation
-    Marching(Material, DensityField),         // material, density field (27 bits - 4)
+    Simple(Material, BlockRotation), // material, rotation
+    Marching(Material, DensityField), // material, density field (27 bits - 4)
 }
 
 #[allow(dead_code)]

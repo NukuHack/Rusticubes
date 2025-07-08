@@ -1,4 +1,5 @@
 
+use crate::config;
 use crate::block;
 use std::iter::Iterator;
 use winit::{
@@ -21,7 +22,7 @@ impl<'a> super::State<'a> {
         // if not processed then basically it's an event what should not be processed entirely so probably log it or idk 
 
         match event {
-            WindowEvent::CloseRequested => {super::config::close_app(); true},
+            WindowEvent::CloseRequested => {config::close_app(); true},
             WindowEvent::Resized(physical_size) => self.resize(*physical_size),
             WindowEvent::RedrawRequested => {
                 self.window().request_redraw();
@@ -33,7 +34,7 @@ impl<'a> super::State<'a> {
                     },
                     Err(wgpu::SurfaceError::OutOfMemory | wgpu::SurfaceError::Other) => {
                         println!("Surface error");
-                        super::config::close_app(); true
+                        config::close_app(); true
                     }
                     Err(wgpu::SurfaceError::Timeout) => {
                         println!("Surface timeout");
@@ -64,93 +65,87 @@ impl<'a> super::State<'a> {
                     state // ElementState::Released or ElementState::Pressed
                     , .. },..
             } => {
-                let key = match physical_key {
+                let key:Key = match physical_key {
                     winit::keyboard::PhysicalKey::Code(code) => *code,
                     _ => {
                         println!("You called a function that can only be called with a keyboard input ... without a keyboard input ... FF"); 
                         return false;
                     },
                 };
+                // let is_pressed: bool = *state == ElementState::Pressed;
+                let is_pressed:bool = match state {
+                    ElementState::Pressed => true,
+                    _ => false,
+                };
                 // Handle UI input first if there's a focused element
-                if let Some(_focused_idx) = self.ui_manager.focused_element {
+                if self.ui_manager.focused_element.is_some() {
                     if self.is_world_running {
-                        super::config::get_gamestate().player_mut().controller().reset_keyboard(); // Temporary workaround
+                        config::get_gamestate().player_mut().controller().reset_keyboard(); // Temporary workaround
                     }
-                    
-                    if *state == ElementState::Pressed {
+                    if is_pressed {
                         // Handle special keys for UI
                         self.ui_manager.handle_key_input(key,self.input_system.modifiers.shift_key());
                         return true;
                     }
                     return true;
                 }
-
-                // Toggle mouse capture when ALT is pressed
-                if key == Key::AltLeft || key == Key::AltRight {
-                    if *state == ElementState::Pressed {
-                        self.toggle_mouse_capture();
-                    }
-                    return true;
-                }
-
                 // Handle game controls if no UI element is focused
                 // `key` is of type `KeyCode` (e.g., KeyCode::W)
                 // `state` is of type `ElementState` (Pressed or Released)
-                if self.is_world_running {
-                    super::config::get_gamestate().player_mut().controller().process_keyboard(&key, &state);
+                if self.is_world_running && config::get_gamestate().is_running() {
+                    config::get_gamestate().player_mut().controller().process_keyboard(&key, is_pressed);
                     match key {
                         Key::KeyF => {
-                            if *state == ElementState::Pressed {
+                            if is_pressed {
                                 block::extra::place_looked_cube();
                                 return true
                             }
-                            return false;
                         },
                         Key::KeyR => {
-                            if *state == ElementState::Pressed {
+                            if is_pressed {
                                 block::extra::remove_targeted_block();
                                 return true
                             }
-                            return false;
                         },
                         Key::KeyE => {
-                            if *state == ElementState::Pressed {
+                            if is_pressed {
                                 block::extra::toggle_looked_point();
                                 return true
                             }
-                            return false;
                         },
                         Key::KeyL => {
-                            if *state == ElementState::Pressed {
+                            if is_pressed {
                                 block::extra::add_full_chunk();
                                 return true
                             }
-                            return false;
                         },
-                        _ => false,
+                        _ => { },
                     };
                 }
                 match key {
                     Key::AltLeft | Key::AltRight => {
+                        if is_pressed {
+                            self.toggle_mouse_capture();
+                        }
                         self.center_mouse();
                         true
                     },
                     Key::Escape => {
-                        if *state == ElementState::Pressed {
+                        if is_pressed {
                             crate::ui::manager::close_pressed();
                             return true;
                         }
                         false
                     },
                     Key::F1 => {
-                        if *state == ElementState::Pressed {
+                        if is_pressed {
                             self.ui_manager.toggle_visibility();
                             return true
                         }
                         false
                     },
                     Key::F11 => {
-                        if *state == ElementState::Pressed {
+                        if is_pressed {
                             let window = self.window();
                             
                             if window.fullscreen().is_some() {
@@ -216,8 +211,8 @@ impl<'a> super::State<'a> {
                     
                     // Process mouse movement for camera control
 
-                    if self.is_world_running {
-                        super::config::get_gamestate().player_mut().controller().process_mouse(delta_x, delta_y);
+                    if self.is_world_running && config::get_gamestate().is_running() {
+                        config::get_gamestate().player_mut().controller().process_mouse(delta_x, delta_y);
                     }
                     // Reset cursor to center
                     self.center_mouse();
@@ -229,8 +224,8 @@ impl<'a> super::State<'a> {
                         if let Some(prev) = self.input_system.previous_mouse {
                             let delta_x = (position.x - prev.x) as f32;
                             let delta_y = (position.y - prev.y) as f32;
-                            if self.is_world_running {
-                                super::config::get_gamestate().player_mut().controller().process_mouse(delta_x, delta_y);
+                            if self.is_world_running && config::get_gamestate().is_running() {
+                                config::get_gamestate().player_mut().controller().process_mouse(delta_x, delta_y);
                             }
                         }
                     }
@@ -243,8 +238,8 @@ impl<'a> super::State<'a> {
 
             }
             WindowEvent::MouseWheel { delta, .. } => {
-                if self.is_world_running {
-                    super::config::get_gamestate().player_mut().controller().process_scroll(delta);
+                if self.is_world_running && config::get_gamestate().is_running() {
+                    config::get_gamestate().player_mut().controller().process_scroll(delta);
                 }
                 true
             }

@@ -46,6 +46,9 @@ impl UIManager {
                 self.add_element(bg_panel);
                 self.setup_multiplayer_ui();
             }
+            UIState::Escape => {
+                self.setup_escape_ui();
+            }
         }
     }
 
@@ -443,7 +446,48 @@ impl UIManager {
     }
 
     #[inline]
-    fn setup_in_game_ui(&mut self) {
+    fn setup_escape_ui(&mut self) {
+        let bg_panel = UIElement::panel(self.next_id())
+            .with_position(-1.0, -1.0)
+            .with_size(2.0, 2.0)
+            .with_color(0, 0, 0)
+            .with_alpha(40)
+            .with_z_index(-5);
+        self.add_element(bg_panel);
+
+        let save_button = UIElement::button(self.next_id(), "Save World")
+            .with_position(-0.7, 0.24)
+            .with_size(0.4, 0.08)
+            .with_color(90, 50, 50)  // Dark reddish
+            .with_text_color(255, 180, 180) // Light red
+            .with_border((140, 80, 80, 255), 0.005)
+            .with_z_index(8)
+            .with_callback(|| 
+                {
+                    let save_path = config::get_gamestate().save_path();
+                    match world::manager::save_entire_world(save_path) {
+                        Ok(_) => {},
+                        Err(e) => { println!("Error: {}", e); },
+                    };
+                });
+        self.add_element(save_button);
+        let load_button = UIElement::button(self.next_id(), "Load World")
+            .with_position(-0.7, 0.0)
+            .with_size(0.4, 0.08)
+            .with_color(90, 50, 50)  // Dark reddish
+            .with_text_color(255, 180, 180) // Light red
+            .with_border((140, 80, 80, 255), 0.005)
+            .with_z_index(8)
+            .with_callback(|| 
+                {
+                    let save_path = config::get_gamestate().save_path();
+                    match world::manager::load_entire_world(save_path) {
+                        Ok(_) => {},
+                        Err(e) => { println!("Error: {}", e); },
+                    };
+                });
+        self.add_element(load_button);
+
         // Side panel with better contrast
         let side_panel = UIElement::panel(self.next_id())
             .with_position(0.4, -0.9)
@@ -490,39 +534,6 @@ impl UIManager {
                 });
         self.add_element(host_button);
 
-        let save_button = UIElement::button(self.next_id(), "Save World")
-            .with_position(-0.7, 0.24)
-            .with_size(0.4, 0.08)
-            .with_color(90, 50, 50)  // Dark reddish
-            .with_text_color(255, 180, 180) // Light red
-            .with_border((140, 80, 80, 255), 0.005)
-            .with_z_index(8)
-            .with_callback(|| 
-                {
-                    let save_path = config::get_gamestate().save_path();
-                    match world::manager::save_entire_world(save_path) {
-                        Ok(_) => {},
-                        Err(e) => { println!("Error: {}", e); },
-                    };
-                });
-        self.add_element(save_button);
-        let load_button = UIElement::button(self.next_id(), "Load World")
-            .with_position(-0.7, 0.0)
-            .with_size(0.4, 0.08)
-            .with_color(90, 50, 50)  // Dark reddish
-            .with_text_color(255, 180, 180) // Light red
-            .with_border((140, 80, 80, 255), 0.005)
-            .with_z_index(8)
-            .with_callback(|| 
-                {
-                    let save_path = config::get_gamestate().save_path();
-                    match world::manager::load_entire_world(save_path) {
-                        Ok(_) => {},
-                        Err(e) => { println!("Error: {}", e); },
-                    };
-                });
-        self.add_element(load_button);
-
         // Help text with better contrast
         let help_texts = [
             ("ALT to lock", 0.1),
@@ -544,9 +555,43 @@ impl UIManager {
         }
 
         // Close button with better contrast
-        let close_button = UIElement::button(self.next_id(), "Exit World")
-            .with_position(0.55, -0.8)
-            .with_size(0.3, 0.08)
+        let back_button = UIElement::button(self.next_id(), "Back to World")
+            .with_position(0.5, -0.8)
+            .with_size(0.4, 0.08)
+            .with_color(120, 40, 40)  // Dark red
+            .with_text_color(220, 180, 180) // Light red
+            .with_border((160, 60, 60, 255), 0.005)
+            .with_z_index(8)
+            .with_callback(|| close_pressed());
+        self.add_element(back_button);
+
+        // Close button with better contrast
+        let close_button = UIElement::button(self.next_id(), "Quit World")
+            .with_position(-0.2, -0.8)
+            .with_size(0.4, 0.08)
+            .with_color(120, 40, 40)  // Dark red
+            .with_text_color(220, 180, 180) // Light red
+            .with_border((160, 60, 60, 255), 0.005)
+            .with_z_index(8)
+            .with_callback(|| {
+                let state = config::get_state();
+                state.is_world_running = false;
+                state.ui_manager.state = UIState::BootScreen;
+                state.ui_manager.setup_ui();
+
+                config::drop_gamestate();
+                network_api::cleanup_network();
+            });
+        self.add_element(close_button);
+
+    }
+
+    #[inline]
+    fn setup_in_game_ui(&mut self) {
+        // Close button with better contrast
+        let close_button = UIElement::button(self.next_id(), "Stop World")
+            .with_position(0.62, -0.9)
+            .with_size(0.35, 0.08)
             .with_color(120, 40, 40)  // Dark red
             .with_text_color(220, 180, 180) // Light red
             .with_border((160, 60, 60, 255), 0.005)
