@@ -1,9 +1,5 @@
 
-use std::{
-    cell::RefCell,
-    fmt,
-    sync::Arc
-};
+use std::{cell::RefCell, fmt, sync::Arc };
 
 type Callback = Arc<RefCell<dyn FnMut() + 'static>>;
 

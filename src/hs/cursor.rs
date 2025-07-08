@@ -1,7 +1,8 @@
 
+use crate::ext::config;
 use crate::game::player;
 
-impl<'a> super::State<'a> {
+impl<'a> crate::State<'a> {
 
     #[inline]
     pub fn center_mouse(&self) {
@@ -26,7 +27,7 @@ impl<'a> super::State<'a> {
         }
 
         if !self.input_system.mouse_captured() {
-            let player = &mut super::config::get_gamestate().player_mut();
+            let player = &mut config::get_gamestate().player_mut();
             player.set_camera_mode(player::CameraMode::Instant);
             self.input_system.set_mouse_captured(true);
             // Hide cursor and lock to center
@@ -37,7 +38,7 @@ impl<'a> super::State<'a> {
                 .unwrap();
             self.center_mouse();
         } else {
-            let player = &mut super::config::get_gamestate().player_mut();
+            let player = &mut config::get_gamestate().player_mut();
             player.set_camera_mode(player::CameraMode::Smooth);
             self.input_system.set_mouse_captured(false);
             // Show cursor and release

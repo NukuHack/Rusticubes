@@ -1,10 +1,10 @@
 
 use crate::block::math::BlockPosition;
-use crate::config;
+use crate::ext::config;
 use crate::block::main::{Block, Chunk};
 use crate::block::math::ChunkCoord;
 #[allow(unused_imports)]
-use crate::stopwatch;
+use crate::ext::stopwatch;
 use ahash::AHasher;
 use glam::Vec3;
 use std::{

@@ -1,28 +1,35 @@
 ﻿
-mod config;
-mod stopwatch;
-mod input;
-mod math;
-mod cursor;
 mod event_handler;
 
+pub mod fs {
+    pub mod rs; // app-compiled resources
+    pub mod fs; // file system - from the disk
+}
+pub mod hs {
+    pub mod input;
+    pub mod math;
+    pub mod cursor;
+    pub mod time; // a nicely formatted time, just a struct
+}
+pub mod mods {
+    pub mod api; // mod loading and wasm sandbox 
+    pub mod over; // this is an overlay made by mods so they would execute instead of the real rust functions
+}
+pub mod network {
+    pub mod api; // the networking system
+    pub mod discovery; // the networking system
+    pub mod types; // the networking system
+}
 pub mod debug {
-    pub mod network_t;
+    pub mod network;
     pub mod binary;
     pub mod metadata;
 }
 pub mod ext {
     pub mod audio; // audio manager, in extra thread
-    pub mod time; // a nicely formatted time, just a struct
+    pub mod config;
+    pub mod stopwatch;
     pub mod memory; // memory management mainly focusing on memory clean up
-    pub mod mods; // mod loading and wasm sandbox 
-    pub mod mods_over; // this is an overlay made by mods so they would execute instead of the real rust functions
-    pub mod rs; // app-compiled resources
-    pub mod fs; // file system - from the disk
-
-    pub mod network_api; // the networking system
-    pub mod network_discovery; // the networking system
-    pub mod network_types; // the networking system
 }
 pub mod render {
     pub mod meshing;
@@ -66,7 +73,7 @@ pub struct State<'a> {
     window: &'a Window,
     render_context: RenderContext<'a>,
     previous_frame_time: std::time::Instant,
-    input_system: input::InputSystem,
+    input_system: hs::input::InputSystem,
     pipeline: render::pipeline::Pipeline,
     ui_manager: ui::manager::UIManager,
     texture_manager: render::texture::TextureManager,
@@ -195,14 +202,14 @@ impl<'a> State<'a> {
 
 
         // has to make the error handling better , make the error quit from world
-        let _ = config::ensure_save_dir();
+        let _ = ext::config::ensure_save_dir();
 
         Self {
             window,
             render_context,
             previous_frame_time: std::time::Instant::now(),
             camera_system,
-            input_system: input::InputSystem::default(),
+            input_system: hs::input::InputSystem::default(),
             pipeline,
             texture_manager,
             ui_manager,
@@ -273,17 +280,17 @@ impl<'a> State<'a> {
         let current_time: std::time::Instant = std::time::Instant::now();
         let delta_seconds: f32 = (current_time - self.previous_frame_time).as_secs_f32();
         self.previous_frame_time = current_time;
-        ext::network_api::update_network(); // theoretically it should run in other thread so calling it each frame should not be a problem ...
+        network::api::update_network(); // theoretically it should run in other thread so calling it each frame should not be a problem ...
         
         if self.is_world_running {
             let movement_delta = {
-                let player = &mut config::get_gamestate().player_mut();
+                let player = &mut ext::config::get_gamestate().player_mut();
                 player.update(&mut self.camera_system, delta_seconds)
             };
 
             // Update both player and camera positions in one operation
             {
-                let player = &mut config::get_gamestate().player_mut();
+                let player = &mut ext::config::get_gamestate().player_mut();
                 let camera = self.camera_system.camera_mut();
                 player.append_position(movement_delta, camera);
             }
@@ -317,13 +324,13 @@ pub async fn run() {
     // audio::clear_sound_queue();
 
     
-    let config: config::AppConfig = config::AppConfig::new(monitor_size);
+    let config: ext::config::AppConfig = ext::config::AppConfig::new(monitor_size);
     let window_raw: Window = winit::window::WindowBuilder::new()
         .with_title(&*config.window_title())
         .with_inner_size(*config.initial_window_size())
         .with_min_inner_size(*config.min_window_size())
         .with_position(*config.initial_window_position())
-        .with_window_icon(ext::rs::load_main_icon())
+        .with_window_icon(fs::rs::load_main_icon())
         .with_theme(*config.theme())
         .with_active(true)
         .build(&event_loop)
@@ -334,19 +341,19 @@ pub async fn run() {
     window_raw.set_visible(true);
 
     // Store the window pointer
-    config::WINDOW_PTR.store(Box::into_raw(Box::new(window_raw)), Ordering::Release);
-    let window_ref = config::get_window();
+    ext::config::WINDOW_PTR.store(Box::into_raw(Box::new(window_raw)), Ordering::Release);
+    let window_ref = ext::config::get_window();
         
     let state = State::new(window_ref).await;
 
     // Store the state pointer
-    config::STATE_PTR.store(Box::into_raw(Box::new(state)), Ordering::Release);
+    ext::config::STATE_PTR.store(Box::into_raw(Box::new(state)), Ordering::Release);
 {/*
-    match ext::mods::main() {
+    match mods::api::main() {
         Ok(_) => (), // Success case
         Err(e) => println!("⚠Error modding: {}", e),
     }
-    match ext::mods_over::main() {
+    match mods::over::main() {
         Ok(_) => (), // Success case
         Err(e) => { println!("💥Error mod function override: {}", e); }
     }
@@ -354,19 +361,19 @@ pub async fn run() {
 
     // Post-init cleanup
     ext::memory::light_trim();
-    ext::memory::hard_clean(Some(config::get_state().device()));
+    ext::memory::hard_clean(Some(ext::config::get_state().device()));
 
     event_loop.run(move |event, control_flow| {
-        if config::is_closed() {
-            config::cleanup_resources();
+        if ext::config::is_closed() {
+            ext::config::cleanup_resources();
             control_flow.exit();
             return;
         }
         match &event {
-            Event::WindowEvent { event, window_id } if *window_id == config::get_state().window().id() => {
-                config::get_state().handle_events(event);
+            Event::WindowEvent { event, window_id } if *window_id == ext::config::get_state().window().id() => {
+                ext::config::get_state().handle_events(event);
 
-                if config::get_state().is_world_running {
+                if ext::config::get_state().is_world_running {
                     block::extra::update_full_world();
                 }
             }

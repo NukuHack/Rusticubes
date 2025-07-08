@@ -1,7 +1,7 @@
 use std::thread;
-use crate::ext::network_types::{NetworkMessage, NetworkSystem, DiscoveryResult, HostInfo};
-use crate::ext::network_api;
-use crate::config;
+use crate::network::types::{NetworkMessage, NetworkSystem, DiscoveryResult, HostInfo};
+use crate::network::api;
+use crate::ext::config;
 use std::io::{BufRead, BufReader, Write};
 use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::time::Duration;
@@ -10,7 +10,7 @@ use std::io;
 /// Start discovering hosts in a background thread
 #[inline]
 pub fn discover_hosts(timeout_ms: u64) -> Result<String, String> {
-    if let Some(system) = network_api::get_ptr() {
+    if let Some(system) = api::get_ptr() {
         system.start_discovery_thread(timeout_ms);
         Ok(format!("Discovery thread started with timeout: {}ms", timeout_ms))
     } else {

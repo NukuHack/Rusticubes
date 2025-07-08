@@ -1,6 +1,6 @@
 
-use crate::config;
-use crate::ext::rs;
+use crate::ext::config;
+use crate::fs::rs;
 use crate::ui::element::{UIElement, UIElementData};
 use rusttype::{Font, Scale, point};
 use image::{ImageBuffer, Rgba};

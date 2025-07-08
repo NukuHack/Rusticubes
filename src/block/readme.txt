@@ -1,0 +1,2 @@
+this is a folder about the Block related things, 
+it also contains the block storage aka Chunks and some helping functions like math related stuff to convert between the position and other needed variable types

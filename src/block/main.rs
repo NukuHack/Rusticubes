@@ -2,7 +2,7 @@
 use crate::block::math::{self, BlockPosition, BlockRotation};
 use crate::render::meshing::GeometryBuffer;
 #[allow(unused_imports)]
-use crate::stopwatch;
+use crate::ext::stopwatch;
 use glam::Vec3;
 
 type Material = u16;

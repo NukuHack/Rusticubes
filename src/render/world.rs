@@ -3,7 +3,7 @@ use glam::Vec3;
 use crate::block::main::Block;
 use crate::block::math::{ChunkCoord, BlockPosition};
 use crate::render::meshing::{ChunkMeshBuilder, GeometryBuffer};
-use crate::config;
+use crate::ext::config;
 use crate::world::main::World;
 use crate::block::main::Chunk;
 use wgpu::util::DeviceExt;

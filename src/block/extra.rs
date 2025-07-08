@@ -1,5 +1,5 @@
 
-use crate::config;
+use crate::ext::config;
 use crate::block::math::ChunkCoord;
 use crate::game::player::Camera;
 use crate::block::main::Block;

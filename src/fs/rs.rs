@@ -9,7 +9,7 @@ pub const RESOURCE_DIR: include_dir::Dir = include_dir!("$CARGO_MANIFEST_DIR/com
 #[macro_export]
 macro_rules! get_raw_data {
     ($path:expr) => {{
-        use crate::ext::rs::RESOURCE_DIR;
+        use crate::fs::rs::RESOURCE_DIR;
         RESOURCE_DIR
             .get_file($path.clone())
             .map(|file| file.contents())
@@ -21,7 +21,7 @@ macro_rules! get_raw_data {
 #[macro_export]
 macro_rules! get_bytes {
     ($path:expr) => {{
-        use crate::ext::rs::RESOURCE_DIR;
+        use crate::fs::rs::RESOURCE_DIR;
         // First try to find a compressed version
         if let Some(file) = RESOURCE_DIR.get_file(format!("{}{}",$path, ".lz4")) {
             lz4_flex::decompress_size_prepended(file.contents())

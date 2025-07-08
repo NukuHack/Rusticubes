@@ -1,5 +1,5 @@
 // Vertex and texture utilities for wgpu rendering.
-use crate::ext::rs;
+use crate::fs::rs;
 /// Standard format for depth textures
 pub const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
 

@@ -1,5 +1,5 @@
 
-use crate::config;
+use crate::ext::config;
 use crate::block;
 use std::iter::Iterator;
 use winit::{
@@ -7,7 +7,7 @@ use winit::{
     keyboard::KeyCode as Key,
 };
 
-impl<'a> super::State<'a> {
+impl<'a> crate::State<'a> {
 
     #[inline]
     pub fn handle_events(&mut self,event: &WindowEvent) -> bool{

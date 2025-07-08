@@ -1,7 +1,7 @@
 
 use crate::ui::element;
 use crate::ext::audio;
-use crate::config;
+use crate::ext::config;
 use crate::ui::element::{UIElement, UIElementData};
 use crate::ui::render::{UIRenderer, Vertex};
 use crate::get_string;
@@ -20,6 +20,7 @@ pub enum UIState {
 
     Escape,         // In game but with Esc pressed
     InGame,         // Normal game UI
+    Settings,       // the ... settings ?
 
     #[default]
     None, // Baiscally not yet initialized
@@ -372,6 +373,17 @@ pub fn close_pressed() {
             let ui_manager = &mut config::get_state().ui_manager;
             ui_manager.state = UIState::WorldSelection;
             ui_manager.setup_ui();
+        },
+        UIState::Settings => {
+            if config::get_state().is_world_running {
+                let ui_manager = &mut config::get_state().ui_manager;
+                ui_manager.state = UIState::Escape;
+                ui_manager.setup_ui();
+            } else {
+                let ui_manager = &mut config::get_state().ui_manager;
+                ui_manager.state = UIState::BootScreen;
+                ui_manager.setup_ui();
+            }
         }
     }
 }

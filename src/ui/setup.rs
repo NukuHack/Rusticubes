@@ -1,7 +1,7 @@
 
-use crate::ext::network_api;
+use crate::network::api;
 use crate::block;
-use crate::config;
+use crate::ext::config;
 use crate::ext::memory;
 use crate::world;
 use crate::ui::manager::*;
@@ -46,6 +46,10 @@ impl UIManager {
                 self.add_element(bg_panel);
                 self.setup_multiplayer_ui();
             }
+            UIState::Settings => {
+                self.add_element(bg_panel);
+                self.setup_settings_ui();
+            }
             UIState::Escape => {
                 self.setup_escape_ui();
             }
@@ -82,9 +86,9 @@ impl UIManager {
             .with_border((70, 110, 180, 255), 0.005)
             .with_z_index(6)
             .with_callback(|| {
-                let state = config::get_state();
-                state.ui_manager.state = UIState::WorldSelection;
-                state.ui_manager.setup_ui();
+                let ui_manager = &mut config::get_state().ui_manager;
+                ui_manager.state = UIState::WorldSelection;
+                ui_manager.setup_ui();
             });
         self.add_element(start_button);
 
@@ -114,6 +118,20 @@ impl UIManager {
             });
         self.add_element(memory_button);
 
+        let setting_button = UIElement::button(self.next_id(), "Settings")
+            .with_position(-0.9, 0.0)
+            .with_size(0.4, 0.1)
+            .with_color(40, 40, 60)  // Dark gray-blue
+            .with_text_color(150, 170, 200) // Light blue-gray
+            .with_border((70, 90, 120, 255), 0.005)
+            .with_z_index(6)
+            .with_callback(|| {
+                let ui_manager = &mut config::get_state().ui_manager;
+                ui_manager.state = UIState::Settings;
+                ui_manager.setup_ui();
+            });
+        self.add_element(setting_button);
+
         let multiplayer_button = UIElement::button(self.next_id(), "Multi")
             .with_position(0.55, -0.1)
             .with_size(0.35, 0.1)
@@ -125,7 +143,7 @@ impl UIManager {
                 let state = config::get_state();
                 state.ui_manager.state = UIState::Multiplayer;
                 state.ui_manager.setup_ui();
-                match network_api::begin_online_search() {
+                match api::begin_online_search() {
                      Ok(o) => println!("worked: {}", o),
                      Err(e) => println!("not worked: {}", e),
                 };
@@ -261,6 +279,51 @@ impl UIManager {
     }
 
     #[inline]
+    fn setup_settings_ui(&mut self) {
+        // Title with improved styling
+        let title = UIElement::label(self.next_id(), "Settings ... yah")
+            .with_position(-0.4, 0.6)
+            .with_size(0.8, 0.15)
+            .with_color(30, 30, 45)  // Dark panel
+            .with_text_color(180, 200, 220) // Light blue text
+            .with_border((80, 100, 140, 255), 0.008)
+            .with_z_index(10);
+        self.add_element(title);
+
+        // World list container with better contrast
+        let list_panel = UIElement::panel(self.next_id())
+            .with_position(-0.6, -0.4)
+            .with_size(1.2, 0.9)  // Slightly shorter
+            .with_color(25, 25, 40)  // Dark blue-gray
+            .with_border((60, 70, 100, 255), 0.01)
+            .with_z_index(1);
+        self.add_element(list_panel);
+
+        let setting_button_1 = UIElement::button(self.next_id(), "setting")
+            .with_position(-0.4, 0.0)
+            .with_size(0.8, 0.1)
+            .with_color(40, 50, 80)
+            .with_text_color(180, 200, 220)
+            .with_border((70, 90, 130, 255), 0.005)
+            .with_z_index(5)
+            .with_callback(|| {
+                println!("set setting");
+            });
+        self.add_element(setting_button_1);
+
+        // Back button with consistent styling
+        let back_button = UIElement::button(self.next_id(), "Back")
+            .with_position(-0.1, -0.8)
+            .with_size(0.2, 0.08)
+            .with_color(60, 60, 80)  // Dark gray-blue
+            .with_text_color(180, 190, 210) // Light blue-gray
+            .with_border((90, 100, 130, 255), 0.005)
+            .with_z_index(8)
+            .with_callback(|| close_pressed());
+        self.add_element(back_button);
+    }
+
+    #[inline]
     fn setup_multiplayer_ui(&mut self) {
         // Title with improved styling
         let title = UIElement::label(self.next_id(), "Select World")
@@ -281,7 +344,7 @@ impl UIManager {
             .with_z_index(1);
         self.add_element(list_panel);
 
-        let worlds:Vec<String> = network_api::get_discovered_hosts()
+        let worlds:Vec<String> = api::get_discovered_hosts()
             .iter()
             .map(|s| s.world_name.clone())
             .collect();
@@ -309,7 +372,7 @@ impl UIManager {
 
         let re_button = UIElement::button(self.next_id(), "refresh")
             .with_position(-0.4, -0.8)
-            .with_size(0.2, 0.08)
+            .with_size(0.25, 0.08)
             .with_color(60, 60, 80)  // Dark gray-blue
             .with_text_color(180, 190, 210) // Light blue-gray
             .with_border((90, 100, 130, 255), 0.005)
@@ -328,11 +391,7 @@ impl UIManager {
             .with_text_color(180, 190, 210) // Light blue-gray
             .with_border((90, 100, 130, 255), 0.005)
             .with_z_index(8)
-            .with_callback(|| {
-                let state = config::get_state();
-                state.ui_manager.state = UIState::BootScreen;
-                state.ui_manager.setup_ui();
-            });
+            .with_callback(|| close_pressed());
         self.add_element(back_button);
     }
 
@@ -399,11 +458,7 @@ impl UIManager {
             .with_text_color(180, 190, 210) // Light blue-gray
             .with_border((90, 100, 130, 255), 0.005)
             .with_z_index(8)
-            .with_callback(|| {
-                let state = config::get_state();
-                state.ui_manager.state = UIState::WorldSelection;
-                state.ui_manager.setup_ui();
-            });
+            .with_callback(|| close_pressed());
         self.add_element(back_button);
     }
 
@@ -456,7 +511,7 @@ impl UIManager {
         self.add_element(bg_panel);
 
         let save_button = UIElement::button(self.next_id(), "Save World")
-            .with_position(-0.7, 0.24)
+            .with_position(-0.8, 0.24)
             .with_size(0.4, 0.08)
             .with_color(90, 50, 50)  // Dark reddish
             .with_text_color(255, 180, 180) // Light red
@@ -472,7 +527,7 @@ impl UIManager {
                 });
         self.add_element(save_button);
         let load_button = UIElement::button(self.next_id(), "Load World")
-            .with_position(-0.7, 0.0)
+            .with_position(-0.8, 0.0)
             .with_size(0.4, 0.08)
             .with_color(90, 50, 50)  // Dark reddish
             .with_text_color(255, 180, 180) // Light red
@@ -487,6 +542,19 @@ impl UIManager {
                     };
                 });
         self.add_element(load_button);
+        let setting_button = UIElement::button(self.next_id(), "Settings")
+            .with_position(-0.8, -0.2)
+            .with_size(0.4, 0.08)
+            .with_color(40, 40, 60)  // Dark gray-blue
+            .with_text_color(150, 170, 200) // Light blue-gray
+            .with_border((70, 90, 120, 255), 0.005)
+            .with_z_index(6)
+            .with_callback(|| {
+                let ui_manager = &mut config::get_state().ui_manager;
+                ui_manager.state = UIState::Settings;
+                ui_manager.setup_ui();
+            });
+        self.add_element(setting_button);
 
         // Side panel with better contrast
         let side_panel = UIElement::panel(self.next_id())
@@ -527,7 +595,7 @@ impl UIManager {
             .with_z_index(8)
             .with_callback(|| 
                 {
-                    match network_api::begin_online_giveaway() {
+                    match api::begin_online_giveaway() {
                         Ok(o) => println!("worked: {}", o),
                         Err(e) => println!("not worked: {}", e),
                     };
@@ -580,7 +648,7 @@ impl UIManager {
                 state.ui_manager.setup_ui();
 
                 config::drop_gamestate();
-                network_api::cleanup_network();
+                api::cleanup_network();
             });
         self.add_element(close_button);
 

@@ -1,7 +1,7 @@
 
 use crate::ui::manager::UIState;
 use crate::game::state;
-use crate::config;
+use crate::ext::config;
 
 pub fn join_world(world_name: &str) {
     println!("Loading world: {}", world_name);

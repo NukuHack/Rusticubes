@@ -1,6 +1,6 @@
 
-use crate::ext::network_discovery;
-use crate::ext::network_types::{NetworkSystem, HostInfo, NetworkStatus, NetworkEvent};
+use crate::network::discovery;
+use crate::network::types::{NetworkSystem, HostInfo, NetworkStatus, NetworkEvent};
 use ggrs::SessionState;
 use std::sync::atomic::{AtomicPtr, AtomicBool, Ordering};
 use std::time::{Duration, Instant};
@@ -150,7 +150,7 @@ pub fn begin_online_search() -> Result<String, String> {
     cleanup_network();
     match init_network(false) {
         Ok(init_msg) => {
-            match network_discovery::discover_hosts(100) {
+            match discovery::discover_hosts(100) {
                 Ok(discovery_msg) => Ok(format!(" Init: {} | Discovery: {}", init_msg, discovery_msg)),
                 Err(e) => Err(format!(" Init: {} | Discovery error: {}", init_msg, e)),
             }
@@ -298,7 +298,7 @@ pub fn connect_to_host(_target_pid: u32) -> Result<String, String> {
 
 /// Get the current network status
 #[inline]
-pub fn get_network_status() -> NetworkStatus {
+pub fn get_status() -> NetworkStatus {
     if let Some(system) = get_ptr() {
         system.status.clone()
     } else {
@@ -308,7 +308,7 @@ pub fn get_network_status() -> NetworkStatus {
 
 /// Get the next network event from the queue
 #[inline]
-pub fn pop_network_event() -> Option<NetworkEvent> {
+pub fn pop_event() -> Option<NetworkEvent> {
     if let Some(system) = get_ptr() {
         system.event_queue.pop_front()
     } else {

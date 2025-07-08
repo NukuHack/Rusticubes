@@ -1,8 +1,8 @@
 ﻿
-use crate::ext::network_api;
+use crate::network::api;
 use crate::game::state::GameState;
 use crate::ext::audio;
-use super::State;
+use crate::State;
 use std::sync::atomic::{AtomicBool,AtomicPtr, Ordering};
 use std::path::PathBuf;
 
@@ -143,7 +143,7 @@ pub fn cleanup_resources() {
         unsafe { let _ = Box::from_raw(state_ptr); }; // Drops when goes out of scope
     }
     drop_gamestate();
-    network_api::cleanup_network();
+    api::cleanup_network();
     // 3. Do the same for the window
     let window_ptr = WINDOW_PTR.swap(std::ptr::null_mut(), Ordering::AcqRel);
     if !window_ptr.is_null() {

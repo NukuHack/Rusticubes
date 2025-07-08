@@ -1,5 +1,5 @@
 
-use crate::math;
+use crate::hs::math;
 use rodio::{Sink, Decoder, OutputStream, source::Source};
 use std::io::{Cursor, Write};
 use std::sync::atomic::{AtomicPtr, Ordering};

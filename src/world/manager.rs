@@ -2,8 +2,8 @@
 use crate::world::main::World;
 use crate::block::math::{BlockRotation, ChunkCoord};
 use crate::block::main::{Block, Chunk, BlockStorage};
-use crate::config;
-use crate::ext::time;
+use crate::ext::config;
+use crate::hs::time;
 use std::path::{Path, PathBuf};
 use std::io::{self, Read, Write, Result, Error, ErrorKind};
 use std::fs::{self, File};
