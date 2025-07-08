@@ -47,6 +47,11 @@ impl ChunkCoord {
     pub const fn unpack(self) -> (i32, i32, i32) {
         (self.x(), self.y(), self.z())
     }
+    /// Extracts (x, y, z) coordinates and make them world pos
+    #[inline]
+    pub const fn unpack_to_worldpos(self) -> (i32, i32, i32) {
+        (self.x()*Chunk::SIZE_I, self.y()*Chunk::SIZE_I, self.z()*Chunk::SIZE_I)
+    }
 
     /// Extracts X coordinate with sign extension
     #[inline]
@@ -256,6 +261,13 @@ mod conversions {
         #[inline]
         fn from((x, y, z): (u8, u8, u8)) -> Self {
             Self::new(x, y, z)
+        }
+    }
+    // (usize, usize, usize) conversions
+    impl From<(usize, usize, usize)> for BlockPosition {
+        #[inline]
+        fn from((x, y, z): (usize, usize, usize)) -> Self {
+            Self::new(x as u8, y as u8, z as u8)
         }
     }
     impl From<BlockPosition> for (u8, u8, u8) {

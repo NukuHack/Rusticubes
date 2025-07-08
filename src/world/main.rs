@@ -1,8 +1,7 @@
 
-use crate::block::math::BlockPosition;
 use crate::ext::config;
+use crate::block::math::{BlockPosition, ChunkCoord};
 use crate::block::main::{Block, Chunk};
-use crate::block::math::ChunkCoord;
 #[allow(unused_imports)]
 use crate::ext::stopwatch;
 use ahash::AHasher;
@@ -11,7 +10,6 @@ use std::{
     collections::{HashMap, HashSet},
     hash::BuildHasherDefault,
 };
-use wgpu::util::DeviceExt;
 
 // Type aliases for better readability
 type FastMap<K, V> = HashMap<K, V, BuildHasherDefault<AHasher>>;
@@ -93,59 +91,35 @@ impl World {
         }
     }
 
-    /// Loads a chunk from storage
-    pub fn load_chunk(&mut self, chunk_coord: ChunkCoord, force: bool) -> bool {
-        let state = config::get_state();
-        let device = &state.render_context.device;
-        let chunk_bind_group_layout = &state.render_context.chunk_bind_group_layout;
+    /// Loads a new chunk
+    pub fn load_chunk(&mut self, chunk_coord: ChunkCoord) {
+        let chunk = if chunk_coord.y() < 1 {
+            Chunk::new(1u16)
+        } else {
+            Chunk::empty()
+        };
 
-        let mut chunk = Chunk::empty();
-        if force {
-            chunk = match Chunk::load() {
-                Some(c) => c,
-                None => return false,
-            };
-        }
-
-        // For palette-based chunks, we need a more sophisticated comparison
-        if let Some(existing_chunk) = self.get_chunk(chunk_coord) {
-            // Compare palette and storage instead of individual blocks
-            if existing_chunk.palette == chunk.palette && existing_chunk.storage == chunk.storage {
-                return false;
-            }
-        }
-
-        // Create position buffer
-        let position_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Chunk Position Buffer"),
-            contents: bytemuck::cast_slice(&[
-                chunk_coord.into(),
-                0.0 as u64,
-            ]),
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-        });
-
-        // Create bind group
-        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            layout: chunk_bind_group_layout,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: position_buffer.as_entire_binding(),
-            }],
-            label: Some("chunk_bind_group"),
-        });
-
+        self.loaded_chunks.insert(chunk_coord);
         self.chunks.insert(
             chunk_coord,
-            Chunk {
-                bind_group: Some(bind_group),
-                ..chunk
-            },
+            chunk
         );
-        self.loaded_chunks.insert(chunk_coord);
-
-        true
     }
+
+    /// Loads a chunk from storage
+    pub fn generate_chunk(&mut self, chunk_coord: ChunkCoord) {
+        let chunk = match Chunk::generate(chunk_coord, *config::get_gamestate().seed()) {
+            Some(c) => c,
+            _ => Chunk::empty(),
+        };
+
+        self.loaded_chunks.insert(chunk_coord);
+        self.chunks.insert(
+            chunk_coord,
+            chunk
+        );
+    }
+
 
     /// Updates loaded chunks based on player position
     pub fn update_loaded_chunks(&mut self, center: Vec3, radius: f32, force: bool) {
@@ -181,7 +155,8 @@ impl World {
 
                     let coord = ChunkCoord::new(center_x + dx, center_y + dy, center_z + dz);
                     if force || !self.loaded_chunks.contains(&coord) {
-                        self.load_chunk(coord, false);
+                        self.generate_chunk(coord);
+                        self.recreate_bind_group(coord);
                     }
                 }
             }

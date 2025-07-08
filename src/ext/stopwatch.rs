@@ -1,10 +1,16 @@
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Clone, Copy)]
 #[allow(dead_code)]
 pub struct RunningAverage {
     count: u64,
     average: f64, // Cache the reciprocal of count to avoid division in hot path
     inv_count: f64,
+}
+
+impl std::fmt::Debug for RunningAverage {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Avg - ").field("avg: ", &self.average()).field("num: ", &self.count()).finish()
+    }
 }
 
 #[allow(dead_code)]

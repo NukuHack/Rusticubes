@@ -29,7 +29,7 @@ fn chunk_coord_conversion() {
 
 #[test]
 fn chunk_conversion() {
-    let original = Chunk::new();
+    let original = Chunk::new(1u16);
     let bytes = original.to_binary();
     let restored = Chunk::from_binary(&bytes);
     assert_eq!(original, restored.expect("test should work"));
@@ -97,7 +97,7 @@ fn block_binary_size() {
 
 #[test]
 fn empty_chunk_serialization() {
-    let original = Chunk::new();
+    let original = Chunk::new(1u16);
     let binary = original.to_binary();
     let restored = Chunk::from_binary(&binary).unwrap();
     assert_eq!(original.palette, restored.palette);
@@ -106,7 +106,7 @@ fn empty_chunk_serialization() {
 
 #[test]
 fn uniform_chunk_serialization() {
-    let mut chunk = Chunk::new();
+    let mut chunk = Chunk::new(1u16);
     chunk.palette = vec![Block::Simple(1, BlockRotation::XplusYplus)];
     chunk.storage = BlockStorage::Uniform(0);
     
@@ -118,7 +118,7 @@ fn uniform_chunk_serialization() {
 
 #[test]
 fn sparse_chunk_serialization() {
-    let mut chunk = Chunk::new();
+    let mut chunk = Chunk::new(1u16);
     chunk.palette = vec![
         Block::None,
         Block::Simple(1, BlockRotation::XplusYplus),
@@ -164,7 +164,7 @@ fn chunk_missing_data() {
 
 #[test]
 fn chunk_binary_size() {
-    let mut chunk = Chunk::new();
+    let mut chunk = Chunk::new(1u16);
     assert_eq!(chunk.binary_size(), chunk.to_binary().len());
     
     chunk.palette = vec![Block::None];
@@ -191,12 +191,12 @@ fn world_with_chunks_serialization() {
     let mut world = World::empty();
     
     // Add some chunks
-    let mut chunk1 = Chunk::new();
+    let mut chunk1 = Chunk::new(1u16);
     chunk1.palette = vec![Block::Simple(1, BlockRotation::XplusYplus)];
     chunk1.storage = BlockStorage::Uniform(0);
     world.chunks.insert(ChunkCoord::new(0, 0, 0).into(), chunk1);
     
-    let mut chunk2 = Chunk::new();
+    let mut chunk2 = Chunk::new(1u16);
     chunk2.palette = vec![Block::None, Block::Marching(2, 12345)];
     let mut indices = Box::new([0; 4096]);
     indices[0] = 1;
@@ -234,7 +234,7 @@ fn save_load_single_chunk() {
     let mut world = World::empty();
     let coord = ChunkCoord::new(1, 2, 3);
     
-    let mut chunk = Chunk::new();
+    let mut chunk = Chunk::new(1u16);
     chunk.palette = vec![Block::Simple(42, BlockRotation::XplusYplus)];
     chunk.storage = BlockStorage::Uniform(0);
     world.chunks.insert(coord.into(), chunk);
@@ -421,13 +421,13 @@ pub fn create_dummy_world() -> World {
     let mut world = World::empty();
     
     // Add a uniform chunk
-    let mut uniform_chunk = Chunk::new();
+    let mut uniform_chunk = Chunk::new(1u16);
     uniform_chunk.palette = vec![Block::Simple(42, BlockRotation::XplusYplus)];
     uniform_chunk.storage = BlockStorage::Uniform(0);
     world.chunks.insert(ChunkCoord::new(0, 0, 0).into(), uniform_chunk);
     
     // Add a sparse chunk
-    let mut sparse_chunk = Chunk::new();
+    let mut sparse_chunk = Chunk::new(1u16);
     sparse_chunk.palette = vec![Block::None, Block::Marching(2, 12345)];
     let mut indices = Box::new([0; 4096]);
     indices[0] = 1;

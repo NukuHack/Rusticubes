@@ -101,6 +101,12 @@ impl GameState {
     pub fn running(&mut self) -> &mut bool {
         &mut self.is_running
     }
+
+
+    #[inline]
+    pub fn seed(&self) -> &u32 {
+        &0u32
+    }
 }
 
 #[inline]

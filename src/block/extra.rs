@@ -118,36 +118,7 @@ pub fn remove_targeted_block() {
     }
 }
 
-/// Loads a chunk at the camera's position if not already loaded
-#[allow(dead_code)]#[inline]
-pub fn add_def_chunk() {
-    let state = config::get_state();
-    if !state.is_world_running {
-        return;
-    }
-    let chunk_pos = ChunkCoord::from_world_pos(state.camera_system.camera().position());
 
-    if config::get_gamestate()
-        .world()
-        .loaded_chunks
-        .contains(&chunk_pos)
-    {
-        return;
-    }
-
-    if config::get_gamestate()
-        .world_mut()
-        .load_chunk(chunk_pos, false)
-    {
-        if let Some(chunk) = config::get_gamestate()
-            .world_mut()
-            .get_chunk_mut(chunk_pos)
-        {
-            let state_b = config::get_state();
-            chunk.make_mesh(state_b.device(), state_b.queue(), true);
-        }
-    }
-}
 /// Loads a chunk at the camera's position if not already loaded
 #[inline]
 pub fn add_full_chunk() {
@@ -157,17 +128,15 @@ pub fn add_full_chunk() {
     }
     let chunk_pos = ChunkCoord::from_world_pos(state.camera_system.camera().position());
 
-    if config::get_gamestate()
+    let world = config::get_gamestate().world_mut();
+    world.load_chunk(chunk_pos);
+    world.recreate_bind_group(chunk_pos);
+    if let Some(chunk) = config::get_gamestate()
         .world_mut()
-        .load_chunk(chunk_pos, true)
+        .get_chunk_mut(chunk_pos)
     {
-        if let Some(chunk) = config::get_gamestate()
-            .world_mut()
-            .get_chunk_mut(chunk_pos)
-        {
-            let state_b = config::get_state();
-            chunk.make_mesh(state_b.device(), state_b.queue(), true);
-        }
+        let state_b = config::get_state();
+        chunk.make_mesh(state_b.device(), state_b.queue(), true);
     }
 }
 

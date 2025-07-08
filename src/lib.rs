@@ -1,58 +1,58 @@
 ﻿
 mod event_handler;
 
-pub mod fs {
+pub mod fs { // file system, file related things
     pub mod rs; // app-compiled resources
     pub mod fs; // file system - from the disk
 }
-pub mod hs {
+pub mod hs { // helping structs
     pub mod input;
     pub mod math;
     pub mod cursor;
     pub mod time; // a nicely formatted time, just a struct
 }
-pub mod mods {
+pub mod mods { // modding related
     pub mod api; // mod loading and wasm sandbox 
     pub mod over; // this is an overlay made by mods so they would execute instead of the real rust functions
 }
-pub mod network {
+pub mod network { // network related
     pub mod api; // the networking system
     pub mod discovery; // the networking system
     pub mod types; // the networking system
 }
-pub mod debug {
+pub mod debug { // debug, test related
     pub mod network;
     pub mod binary;
     pub mod metadata;
 }
-pub mod ext {
+pub mod ext { // extra things that did not fit anywhere else
     pub mod audio; // audio manager, in extra thread
     pub mod config;
     pub mod stopwatch;
     pub mod memory; // memory management mainly focusing on memory clean up
 }
-pub mod render {
+pub mod render { // rendering related
     pub mod meshing;
     pub mod texture;
     pub mod pipeline;
     pub mod world;
 }
-pub mod game {
+pub mod game { // game related, instance related
     pub mod player;
     pub mod state;
 }
-pub mod world {
+pub mod world { // world related, tiny bit rendering and game related
     pub mod main;
     pub mod manager;
     pub mod handler;
 }
-pub mod block {
+pub mod block { // block related, chunk related
     pub mod main;
     pub mod math;
     pub mod extra;
     pub mod lut;
 }
-pub mod ui {
+pub mod ui { // ui related
     pub mod element;
     pub mod render;
     pub mod manager;
@@ -148,7 +148,7 @@ impl<'a> State<'a> {
             desired_maximum_frame_latency: 2,
         };
 
-        let cam_config = player::CameraConfig::new(Vec3::new(0.5, 1.8, 2.0));
+        let cam_config = player::CameraConfig::new(Vec3::new(0f32, 80f32, 0f32));
         // Create camera system with advanced controls
         let camera_system: player::CameraSystem = player::CameraSystem::new(
             &device,

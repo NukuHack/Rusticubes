@@ -1,5 +1,6 @@
 
-use crate::block::math::{self, BlockPosition, BlockRotation};
+use crate::block::math::{self, ChunkCoord, BlockPosition, BlockRotation};
+use crate::hs::math::PerlInt;
 use crate::render::meshing::GeometryBuffer;
 #[allow(unused_imports)]
 use crate::ext::stopwatch;
@@ -221,18 +222,17 @@ impl Chunk {
     pub fn empty() -> Self {
         Self {
             palette: vec![Block::None],        // Index 0 is always air
-            storage: BlockStorage::Uniform(0), // All blocks point to air
+            storage: BlockStorage::Uniform(0u8), // All blocks point to air
             dirty: false,
             mesh: None,
             bind_group: None,
         }
     }
-
-    /// Creates a new filled chunk (all blocks initialized to `Block::new()`)
+    /// Creates a new filled chunk (all blocks initialized to `Block::new(<mat>)`)
     #[inline]
-    pub fn new() -> Self {
+    pub fn new(mat: u16) -> Self {
         let mut chunk = Self::empty();
-        let new_block = Block::new(1);
+        let new_block = Block::new(mat);
         let idx = chunk.palette_add(new_block);
         chunk.storage = BlockStorage::Uniform(idx);
         chunk.dirty = true;
@@ -323,9 +323,41 @@ impl Chunk {
         self.storage.try_optimize();
     }
 
-    #[inline]
-    pub fn load() -> Option<Self> {
-        Some(Self::new())
+    pub fn generate(coord: ChunkCoord, seed: u32) -> Option<Self> {
+        if coord.y() > 4i32 { return Some(Self::empty()); }
+        if coord.y() <= 0 { return Some(Self::new(1u16)); }
+        let mut stopwatch = stopwatch::RunningAverage::new();
+        
+        let noise_gen = PerlInt::new(seed);
+        let (world_x, world_y, world_z) = coord.unpack_to_worldpos();
+        let mut chunk = Self::empty();
+        let block = Block::new(1u16);
+        
+        // Pre-calculate all noise values for this chunk's XZ plane
+        for x in 0..Self::SIZE {
+            for z in 0..Self::SIZE {
+                let pos_x = world_x + x as i32;
+                let pos_z = world_z + z as i32;
+                
+                // Get noise value and scale it to a reasonable height range
+                let noise = (noise_gen.noise_2d(pos_x, pos_z) ^ 2) / 4i16;
+                //let noise_f = noise_gen.noise_2d_f(pos_x, pos_z); // fucking shitty compiler
+                stopwatch.add(noise as f64);
+                
+                for y in 0..Self::SIZE {
+                    let pos_y = world_y + y as i32;
+                    // If this block is under or in terrain height, make it solid
+                    if pos_y <= noise as i32 {
+                        // Correct block indexing : BlockPosition
+                        let idx: BlockPosition = (x,y,z).into();
+                        chunk.set_block(idx.into(), block); // Set to solid
+                    }
+                    // Else leave as air
+                }
+            }
+        }
+        println!("stopwatch: {:?}", stopwatch);
+        Some(chunk)
     }
 
     #[inline]

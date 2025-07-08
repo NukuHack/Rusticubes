@@ -57,7 +57,7 @@ impl Player {
         delta_time: f32,
     ) -> Vec3 {
         // Clamp delta time to prevent physics issues with large frame times
-        let dt = delta_time.min(0.1);
+        let dt = delta_time.min(0.01);
 
         // Split mutable borrows to avoid holding multiple mutable references
         let (camera, projection) = camera_system.split_mut();
@@ -590,8 +590,8 @@ impl CameraConfig {
             rotation: Vec3::new(0.0, -std::f32::consts::FRAC_PI_2, 0.0), // Looking along negative Z axis
             fovy: std::f32::consts::FRAC_PI_2, // 90 degrees in radians
             znear: 0.01,
-            zfar: 100.0,
-            speed: 4.0,
+            zfar: 500.0,
+            speed: 20.0,
             sensitivity: 0.5,
             run_multiplier: 2.5,
             smoothness: 5.0,

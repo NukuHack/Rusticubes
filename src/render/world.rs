@@ -128,6 +128,14 @@ impl World {
                 self.loaded_chunks.insert(*coord);
             }
         }
+    }
 
+    pub fn recreate_bind_group(&mut self, chunk_coord: ChunkCoord) {
+        if self.loaded_chunks.contains(&chunk_coord) {
+            match self.get_chunk_mut(chunk_coord) {
+                Some(c) => c.recreate_bind_group(chunk_coord),
+                None => {}
+            }
+        }
     }
 }
