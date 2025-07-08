@@ -598,8 +598,8 @@ impl CameraConfig {
             acceleration: 10.0,
             deceleration: 15.0,
             zoom_sensitivity: 0.1,
-            min_fov: std::f32::consts::FRAC_PI_6, // 30 degrees
-            max_fov: std::f32::consts::PI, // 180 degrees
+            min_fov: std::f32::consts::FRAC_PI_6 / 2f32, // 15 degrees
+            max_fov: std::f32::consts::FRAC_PI_2 * 1.8, // 162 degrees
         }
     }
 }
