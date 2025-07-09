@@ -17,7 +17,6 @@ type FastMap<K, V> = HashMap<K, V, BuildHasherDefault<AHasher>>;
 pub struct World {
     pub chunks: FastMap<ChunkCoord, Chunk>,
     pub loaded_chunks: HashSet<ChunkCoord>,
-    //pub chunk_bind_group: wgpu::BindGroup,
 }
 
 #[allow(dead_code)]
@@ -25,7 +24,6 @@ impl World {
     /// Creates an empty world
     #[inline]
     pub fn empty() -> Self {
-
 
         Self {
             chunks: FastMap::with_capacity_and_hasher(10_000, BuildHasherDefault::<AHasher>::default()),
