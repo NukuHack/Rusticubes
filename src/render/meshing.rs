@@ -1,6 +1,7 @@
 
 use crate::block::lut::{EDGE_TABLE, TRI_TABLE};
 use crate::block::main::Chunk;
+use crate::block::math::BlockPosition;
 use glam::Vec3;
 use std::mem;
 use wgpu::util::DeviceExt;
@@ -70,9 +71,9 @@ impl ChunkMeshBuilder {
     /// Creates a new mesh builder with optimized initial capacity
     #[inline]
     pub fn new() -> Self {
-        Self {
-            vertices: Vec::with_capacity(Chunk::VOLUME * 4), // Average 4 vertices per cube
-            indices: Vec::with_capacity(Chunk::VOLUME * 6),  // Average 6 indices per cube
+        Self { // set the starting capacity smaller because now with all the culling there is chance for a chunk to be invisible
+            vertices: Vec::with_capacity(Chunk::SIZE * 4), // Average 4 vertices per cube
+            indices: Vec::with_capacity(Chunk::SIZE * 6),  // Average 6 indices per cube
             current_vertex: 0,
         }
     }
@@ -185,143 +186,155 @@ impl ChunkMeshBuilder {
             Vertex {
                 position: [vertices[0].x, vertices[0].y, vertices[0].z],
                 normal: normal_arr,
-                uv: [0.0, 0.0],
+                uv: [0f32, 0f32],
             },
             Vertex {
                 position: [vertices[1].x, vertices[1].y, vertices[1].z],
                 normal: normal_arr,
-                uv: [1.0, 0.0],
+                uv: [1., 0f32],
             },
             Vertex {
                 position: [vertices[2].x, vertices[2].y, vertices[2].z],
                 normal: normal_arr,
-                uv: [0.5, 1.0],
+                uv: [0.5, 1.],
             },
         ]);
 
         self.indices.extend([base, base + 1, base + 2]);
         self.current_vertex += 3;
     }
+}
 
-    /// Adds a rotated cube to the mesh with face culling
-    pub fn add_cube(
-        &mut self,
-        position: Vec3,
-        texture_map: [f32; 2],
-        chunk: &Chunk,
-    ) {
-        let [fs, fe] = texture_map;
-        // Check face visibility (culling)
-        let face_visibility = [
-            chunk.is_block_cull(position + Vec3::Z), // Front
-            chunk.is_block_cull(position - Vec3::Z), // Back
-            chunk.is_block_cull(position + Vec3::Y), // Top
-            chunk.is_block_cull(position - Vec3::Y), // Bottom
-            chunk.is_block_cull(position + Vec3::X), // Right
-            chunk.is_block_cull(position - Vec3::X), // Left
-        ];
-
-        // Early exit if no faces are visible
-        if !face_visibility.iter().any(|&v| v) {
-            return;
-        }
-
-        // Transform all vertices upfront
-        let mut transformed_vertices = [[0.0f32; 3]; 8];
-        for (i, vertex) in CUBE_VERTICES.iter().enumerate() {
-            let pos = Vec3::from(*vertex)+position;
-            transformed_vertices[i] = [pos.x, pos.y, pos.z];
-        }
-
-        // Add visible faces
-        for (face_idx, &visible) in face_visibility.iter().enumerate() {
-            if !visible {
-                continue;
+impl ChunkMeshBuilder {
+    pub fn add_cube(&mut self, pos: Vec3, texture_map: [f32; 2], chunk: &Chunk, neighbors: &[Option<&Chunk>; 6]) {
+        for (idx, normal) in CUBE_FACES.iter().enumerate() {
+            let neighbor_pos:Vec3 = pos + *normal;
+            
+            if !self.should_cull_face(neighbor_pos, chunk, neighbors) {
+                self.add_quad(pos, *normal, idx, texture_map);
             }
-
-            let face = &CUBE_FACES[face_idx];
-            let uv = match face_idx {
-                0 => [[fs, fs], [fe, fs], [fe, fe], [fs, fe]], // Front
-                1 => [[fe, fs], [fs, fs], [fs, fe], [fe, fe]], // Back
-                2 => [[fs, fe], [fe, fe], [fe, fs], [fs, fs]], // Top
-                3 => [[fs, fs], [fe, fs], [fe, fe], [fs, fe]], // Bottom
-                4 => [[fs, fs], [fe, fs], [fe, fe], [fs, fe]], // Right
-                5 => [[fe, fs], [fs, fs], [fs, fe], [fe, fe]], // Left
-                _ => unreachable!(),
-            };
-
-            let base = self.current_vertex as u16;
-            for (i, &vertex_idx) in face.iter().enumerate() {
-                self.vertices.push(Vertex {
-                    position: transformed_vertices[vertex_idx as usize],
-                    normal: CUBE_FACE_NORMALS[face_idx],
-                    uv: uv[i],
-                });
-            }
-
-            // Add two triangles (quad)
-            self.indices
-                .extend(&[base, base + 1, base + 2, base + 2, base + 3, base]);
-            self.current_vertex += 4;
         }
+    }
+
+    fn should_cull_face(&self, pos: Vec3, chunk: &Chunk, neighbors: &[Option<&Chunk>; 6]) -> bool {    
+        // Check if position is inside current chunk
+        let idx = usize::from(BlockPosition::from(pos));
+        if chunk.contains_position(pos) {
+            return !chunk.get_block(idx).is_empty();
+        }
+        
+        // Position is in neighboring chunk
+        let neighbor_chunk = self.get_neighbor_chunk_and_local_pos(pos, neighbors);
+        
+        match neighbor_chunk {
+            Some(chunk) => {
+                !chunk.get_block(idx).is_empty()
+            }, None => true, // No neighbor chunk means not loaded cull for now and reload mesh if it loads in
+        }
+    }
+
+    fn get_neighbor_chunk_and_local_pos<'a>(&self, neighbor_pos: Vec3, neighbors: &[Option<&'a Chunk>; 6]) -> Option<&'a Chunk> {
+        // Calculate which neighbor we need to check
+        // The neighbor indices should match the order in CUBE_FACES_F:
+        // [0] = Left (-X), [1] = Right (+X), [2] = Front (-Z), [3] = Back (+Z), [4] = Top (+Y), [5] = Bottom (-Y)
+        // Precompute the bit patterns for comparison (avoids FP math)
+        const LEFT_EDGE_BITS: u32 = (-1f32).to_bits();
+        const RIGHT_EDGE_BITS: u32 = (16f32).to_bits();
+
+        let pos_bits = neighbor_pos.to_array().map(|v| v.to_bits());
+
+        // Check X axis first (most common)
+        if pos_bits[0] == LEFT_EDGE_BITS { return neighbors[0]; }
+        if pos_bits[0] == RIGHT_EDGE_BITS { return neighbors[1]; }
+        
+        // Then Z axis
+        if pos_bits[2] == LEFT_EDGE_BITS { return neighbors[2]; }
+        if pos_bits[2] == RIGHT_EDGE_BITS { return neighbors[3]; }
+        
+        // Finally Y axis
+        if pos_bits[1] == RIGHT_EDGE_BITS { return neighbors[4]; }
+        if pos_bits[1] == LEFT_EDGE_BITS { return neighbors[5]; }
+        
+        unreachable!("Position should be outside current chunk");
+    }
+
+    fn add_quad(&mut self, position: Vec3, normal: Vec3, idx:usize, texture_map: [f32; 2]) {
+        let base = self.current_vertex as u16;
+                
+        let vertices = QUAD_VERTICES[idx];
+        // Add vertices
+        for i in 0..4 {
+            self.vertices.push(Vertex {
+                position: [
+                    position.x + vertices[i][0],
+                    position.y + vertices[i][1], 
+                    position.z + vertices[i][2]
+                ],
+                normal: [normal.x, normal.y, normal.z],
+                uv: QUAD_UVS[idx](texture_map)[i],
+            });
+        }
+        // Add indices (two triangles forming a quad)
+        self.indices.extend(&[base, base + 1, base + 2, base + 2, base + 3, base]);
+        self.current_vertex += 4;
     }
 }
 
-// =============================================
-// Block Constants
-// =============================================
+/// Make sure your CUBE_FACES constant matches the neighbor array order:
+/// Normal vectors for face lookup
+const CUBE_FACES: [Vec3; 6] = [
+    Vec3::NEG_X, // [0] Left face
+    Vec3::X,     // [1] Right face  
+    Vec3::NEG_Z, // [2] Front face
+    Vec3::Z,     // [3] Back face
+    Vec3::Y,     // [4] Top face
+    Vec3::NEG_Y, // [5] Bottom face
+];
 
-const HALF: f32 = 0.5;
+/// Quad vertices relative to position for each face
+const QUAD_VERTICES: [[[f32; 3]; 4]; 6] = [
+    // Left face (NEG_X)
+    [[0., 0., 0.], [0., 0., 1.], [0., 1., 1.], [0., 1., 0.]],
+    // Right face (X)
+    [[1., 0., 1.], [1., 0., 0.], [1., 1., 0.], [1., 1., 1.]],
+    // Front face (NEG_Z)
+    [[1., 0., 0.], [0., 0., 0.], [0., 1., 0.], [1., 1., 0.]],
+    // Back face (Z)
+    [[0., 0., 1.], [1., 0., 1.], [1., 1., 1.], [0., 1., 1.]],
+    // Top face (Y)
+    [[0., 1., 1.], [1., 1., 1.], [1., 1., 0.], [0., 1., 0.]],
+    // Bottom face (NEG_Y)
+    [[0., 0., 0.], [1., 0., 0.], [1., 0., 1.], [0., 0., 1.]],
+];
+
+/// UV coordinates for each face
+const QUAD_UVS: [fn([f32; 2]) -> [[f32; 2]; 4]; 6] = [
+    |[fs, fe]| [[fe, fs], [fs, fs], [fs, fe], [fe, fe]], // Left
+    |[fs, fe]| [[fs, fs], [fe, fs], [fe, fe], [fs, fe]], // Right
+    |[fs, fe]| [[fe, fs], [fs, fs], [fs, fe], [fe, fe]], // Front
+    |[fs, fe]| [[fs, fs], [fe, fs], [fe, fe], [fs, fe]], // Back
+    |[fs, fe]| [[fs, fe], [fe, fe], [fe, fs], [fs, fs]], // Top
+    |[fs, fe]| [[fs, fs], [fe, fs], [fe, fe], [fs, fe]], // Bottom
+];
+
+const HALF: f32 = 1.;
 
 /// Edge vertices for the marching cubes algorithm
 const EDGE_VERTICES: [[Vec3; 2]; 12] = [
-    [Vec3::ZERO, Vec3::new(HALF, 0.0, 0.0)], // Edge 0
-    [Vec3::new(HALF, 0.0, 0.0), Vec3::new(HALF, 0.0, HALF)], // Edge 1
-    [Vec3::new(HALF, 0.0, HALF), Vec3::new(0.0, 0.0, HALF)], // Edge 2
-    [Vec3::new(0.0, 0.0, HALF), Vec3::ZERO], // Edge 3
-    [Vec3::new(0.0, HALF, 0.0), Vec3::new(HALF, HALF, 0.0)], // Edge 4
-    [Vec3::new(HALF, HALF, 0.0), Vec3::new(HALF, HALF, HALF)], // Edge 5
-    [Vec3::new(HALF, HALF, HALF), Vec3::new(0.0, HALF, HALF)], // Edge 6
-    [Vec3::new(0.0, HALF, HALF), Vec3::new(0.0, HALF, 0.0)], // Edge 7
-    [Vec3::ZERO, Vec3::new(0.0, HALF, 0.0)], // Edge 8
-    [Vec3::new(HALF, 0.0, 0.0), Vec3::new(HALF, HALF, 0.0)], // Edge 9
-    [Vec3::new(HALF, 0.0, HALF), Vec3::new(HALF, HALF, HALF)], // Edge 10
-    [Vec3::new(0.0, 0.0, HALF), Vec3::new(0.0, HALF, HALF)], // Edge 11
+    [Vec3::ZERO, Vec3::new(HALF, 0f32, 0f32)], // Edge 0
+    [Vec3::new(HALF, 0f32, 0f32), Vec3::new(HALF, 0f32, HALF)], // Edge 1
+    [Vec3::new(HALF, 0f32, HALF), Vec3::new(0f32, 0f32, HALF)], // Edge 2
+    [Vec3::new(0f32, 0f32, HALF), Vec3::ZERO], // Edge 3
+    [Vec3::new(0f32, HALF, 0f32), Vec3::new(HALF, HALF, 0f32)], // Edge 4
+    [Vec3::new(HALF, HALF, 0f32), Vec3::new(HALF, HALF, HALF)], // Edge 5
+    [Vec3::new(HALF, HALF, HALF), Vec3::new(0f32, HALF, HALF)], // Edge 6
+    [Vec3::new(0f32, HALF, HALF), Vec3::new(0f32, HALF, 0f32)], // Edge 7
+    [Vec3::ZERO, Vec3::new(0f32, HALF, 0f32)], // Edge 8
+    [Vec3::new(HALF, 0f32, 0f32), Vec3::new(HALF, HALF, 0f32)], // Edge 9
+    [Vec3::new(HALF, 0f32, HALF), Vec3::new(HALF, HALF, HALF)], // Edge 10
+    [Vec3::new(0f32, 0f32, HALF), Vec3::new(0f32, HALF, HALF)], // Edge 11
 ];
 
-const CUBE_SIZE: f32 = 1.0; // Unit-sized cube
-
-/// Cube vertices (8 corners of a unit cube)
-const CUBE_VERTICES: [[f32; 3]; 8] = [
-    [0.0, 0.0, CUBE_SIZE],             // front-bottom-left
-    [CUBE_SIZE, 0.0, CUBE_SIZE],       // front-bottom-right
-    [CUBE_SIZE, CUBE_SIZE, CUBE_SIZE], // front-top-right
-    [0.0, CUBE_SIZE, CUBE_SIZE],       // front-top-left
-    [0.0, 0.0, 0.0],                   // back-bottom-left
-    [CUBE_SIZE, 0.0, 0.0],             // back-bottom-right
-    [CUBE_SIZE, CUBE_SIZE, 0.0],       // back-top-right
-    [0.0, CUBE_SIZE, 0.0],             // back-top-left
-];
-
-/// Face normals for each cube face
-const CUBE_FACE_NORMALS: [[f32; 3]; 6] = [
-    [0.0, 0.0, 1.0],  // Front
-    [0.0, 0.0, -1.0], // Back
-    [0.0, 1.0, 0.0],  // Top
-    [0.0, -1.0, 0.0], // Bottom
-    [1.0, 0.0, 0.0],  // Right
-    [-1.0, 0.0, 0.0], // Left
-];
-
-/// Cube faces defined as quads (will be converted to triangles)
-const CUBE_FACES: [[u16; 4]; 6] = [
-    [0, 1, 2, 3], // Front face
-    [5, 4, 7, 6], // Back face
-    [3, 2, 6, 7], // Top face
-    [4, 5, 1, 0], // Bottom face
-    [1, 5, 6, 2], // Right face
-    [4, 0, 3, 7], // Left face
-];
 
 // =============================================
 // Geometry Buffer

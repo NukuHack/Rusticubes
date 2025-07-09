@@ -12,11 +12,34 @@ const REACH: f32 = 6.0;
 #[inline]
 fn update_chunk_mesh(world: &mut World, pos: Vec3) {
     let chunk_pos = ChunkCoord::from_world_pos(pos);
+    
+    // Get raw pointer to the world's chunks
+    let world_ptr = world as *mut World;
+    
+    // Get mutable reference to our chunk
     if let Some(chunk) = world.get_chunk_mut(chunk_pos) {
         let state = config::get_state();
+        
+        // SAFETY:
+        // 1. We only use the pointer to access different chunks than the one we're modifying
+        // 2. The references don't outlive this scope
+        // 3. We don't modify through these references
+        let neighbors = unsafe {
+            let world_ref = &*world_ptr;
+            [
+                world_ref.get_chunk(chunk_pos.offset(-1, 0, 0)),  // Left
+                world_ref.get_chunk(chunk_pos.offset(1, 0, 0)),    // Right
+                world_ref.get_chunk(chunk_pos.offset(0, 0, -1)),   // Front
+                world_ref.get_chunk(chunk_pos.offset(0, 0, 1)),    // Back
+                world_ref.get_chunk(chunk_pos.offset(0, 1, 0)),    // Top
+                world_ref.get_chunk(chunk_pos.offset(0, -1, 0)),   // Bottom
+            ]
+        };
+
         chunk.make_mesh(
             state.device(),
             state.queue(),
+            &neighbors,
             true,
         );
     }
@@ -130,13 +153,13 @@ pub fn add_full_chunk() {
 
     let world = config::get_gamestate().world_mut();
     world.load_chunk(chunk_pos);
-    world.recreate_bind_group(chunk_pos);
+    world.create_bind_group(chunk_pos);
     if let Some(chunk) = config::get_gamestate()
         .world_mut()
         .get_chunk_mut(chunk_pos)
     {
         let state_b = config::get_state();
-        chunk.make_mesh(state_b.device(), state_b.queue(), true);
+        chunk.make_mesh(state_b.device(), state_b.queue(), &world.get_neighboring_chunks(chunk_pos), true);
     }
 }
 

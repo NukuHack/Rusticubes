@@ -2,8 +2,6 @@
 use crate::ext::config;
 use crate::block::math::{BlockPosition, ChunkCoord};
 use crate::block::main::{Block, Chunk};
-#[allow(unused_imports)]
-use crate::ext::stopwatch;
 use ahash::AHasher;
 use glam::Vec3;
 use std::{
@@ -19,6 +17,7 @@ type FastMap<K, V> = HashMap<K, V, BuildHasherDefault<AHasher>>;
 pub struct World {
     pub chunks: FastMap<ChunkCoord, Chunk>,
     pub loaded_chunks: HashSet<ChunkCoord>,
+    //pub chunk_bind_group: wgpu::BindGroup,
 }
 
 #[allow(dead_code)]
@@ -26,6 +25,8 @@ impl World {
     /// Creates an empty world
     #[inline]
     pub fn empty() -> Self {
+
+
         Self {
             chunks: FastMap::with_capacity_and_hasher(10_000, BuildHasherDefault::<AHasher>::default()),
             loaded_chunks: HashSet::with_capacity(10_000),
@@ -93,11 +94,7 @@ impl World {
 
     /// Loads a new chunk
     pub fn load_chunk(&mut self, chunk_coord: ChunkCoord) {
-        let chunk = if chunk_coord.y() < 1 {
-            Chunk::new(1u16)
-        } else {
-            Chunk::empty()
-        };
+        let chunk = Chunk::new(1u16);
 
         self.loaded_chunks.insert(chunk_coord);
         self.chunks.insert(
@@ -107,8 +104,8 @@ impl World {
     }
 
     /// Loads a chunk from storage
-    pub fn generate_chunk(&mut self, chunk_coord: ChunkCoord) {
-        let chunk = match Chunk::generate(chunk_coord, *config::get_gamestate().seed()) {
+    pub fn generate_chunk(&mut self, chunk_coord: ChunkCoord, seed: u32) {
+        let chunk = match Chunk::generate(chunk_coord, seed) {
             Some(c) => c,
             _ => Chunk::empty(),
         };
@@ -144,7 +141,7 @@ impl World {
         for coord in to_unload {
             self.unload_chunk(coord);
         }
-
+        let seed = *config::get_gamestate().seed();
         // Load new chunks in range
         for dx in -radius_i32..=radius_i32 {
             for dy in -radius_i32..=radius_i32 {
@@ -155,8 +152,8 @@ impl World {
 
                     let coord = ChunkCoord::new(center_x + dx, center_y + dy, center_z + dz);
                     if force || !self.loaded_chunks.contains(&coord) {
-                        self.generate_chunk(coord);
-                        self.recreate_bind_group(coord);
+                        self.generate_chunk(coord, seed);
+                        self.create_bind_group(coord);
                     }
                 }
             }
@@ -173,31 +170,6 @@ impl World {
     pub fn unload_chunk(&mut self, chunk_coord: ChunkCoord) {
         self.chunks.remove(&chunk_coord);
         self.loaded_chunks.remove(&chunk_coord);
-    }
-
-    /// Generates meshes for all dirty chunks
-    #[inline]
-    pub fn make_chunk_meshes(&mut self, device: &wgpu::Device, queue: &wgpu::Queue) {
-//        let timer = std::time::Instant::now();
-        //let mut chunk_times = debug::RunningAverage::default();
-
-        for chunk in self.chunks.values_mut() {
-            // Skip empty chunks entirely
-            if chunk.is_empty() {
-                continue;
-            }
-
-            //let chunk_timer = std::time::Instant::now();
-            chunk.make_mesh(device, queue, false);
-            //let elapsed_micros = chunk_timer.elapsed().as_micros() as f32;
-            //chunk_times.add(elapsed_micros.into());
-        }
-/*
-        println!(
-            "World mesh_gen_time: {:.2}ms",
-            timer.elapsed().as_secs_f32() * 1000.0
-        );
-*/
     }
 }
 

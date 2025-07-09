@@ -6,9 +6,9 @@ use crate::block::main::Chunk;
 /// Format: [X:26 (signed), Y:12 (signed), Z:26 (signed)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct ChunkCoord(u64);
-impl Into<u64> for ChunkCoord {
-    fn into(self) -> u64 {
-        self.0 // Access the inner u64 value
+impl From<ChunkCoord> for u64 {
+    fn from(a: ChunkCoord) -> Self { 
+        a.0 // Access the inner u64 value
     }
 }
 impl Into<ChunkCoord> for u64 {

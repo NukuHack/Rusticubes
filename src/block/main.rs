@@ -214,6 +214,7 @@ impl std::fmt::Debug for Chunk {
 impl Chunk {
     pub const SIZE: usize = 16;
     pub const SIZE_I: i32 = Self::SIZE as i32;
+    pub const SIZE_F: f32 = Self::SIZE as f32;
     pub const VOLUME: usize = Self::SIZE.pow(3); // 4096
     const MAX_PALETTE_SIZE: usize = 256; // Index 0 = air, indices 1-255 = blocks
 
@@ -324,9 +325,9 @@ impl Chunk {
     }
 
     pub fn generate(coord: ChunkCoord, seed: u32) -> Option<Self> {
-        if coord.y() > 4i32 { return Some(Self::empty()); }
+        if coord.y() > 8i32 { return Some(Self::empty()); }
         if coord.y() <= 0 { return Some(Self::new(1u16)); }
-        let mut stopwatch = stopwatch::RunningAverage::new();
+        //let mut stopwatch = stopwatch::RunningAverage::new();
         
         let noise_gen = PerlInt::new(seed);
         let (world_x, world_y, world_z) = coord.unpack_to_worldpos();
@@ -340,9 +341,9 @@ impl Chunk {
                 let pos_z = world_z + z as i32;
                 
                 // Get noise value and scale it to a reasonable height range
-                let noise = (noise_gen.noise_2d(pos_x, pos_z) ^ 2) / 4i16;
-                //let noise_f = noise_gen.noise_2d_f(pos_x, pos_z); // fucking shitty compiler
-                stopwatch.add(noise as f64);
+                // the "noise_2d()" function returns a random u8 perlin-noise
+                let noise = noise_gen.noise_2d(pos_x, pos_z) >> 1;
+                //stopwatch.add(noise as f64);
                 
                 for y in 0..Self::SIZE {
                     let pos_y = world_y + y as i32;
@@ -356,7 +357,7 @@ impl Chunk {
                 }
             }
         }
-        println!("stopwatch: {:?}", stopwatch);
+        //println!("stopwatch: {:?}", stopwatch);
         Some(chunk)
     }
 
@@ -380,6 +381,15 @@ impl Chunk {
             BlockStorage::Sparse(indices) => indices.iter().all(|&idx| idx == 0),
         }
     }
+    /// Checks if the chunk is completely full (all blocks are not air)
+    #[inline]
+    pub fn is_full(&self) -> bool {
+        match &self.storage {
+            BlockStorage::Uniform(idx) => *idx != 0, // Index 0 is air
+            BlockStorage::Sparse(indices) => indices.iter().all(|&idx| idx != 0),
+        }
+    }
+
 
     /// Sets a block at the given index
     pub fn set_block(&mut self, index: usize, block: Block) {
@@ -396,6 +406,12 @@ impl Chunk {
     /// Checks if a block position is empty or outside the chunk
     #[inline]
     pub fn is_block_cull(&self, pos: Vec3) -> bool {
+        let idx:usize = BlockPosition::from(pos).into();
+        let block = *self.get_block(idx);
+        block.is_empty() || block.is_marching()
+    }
+
+    pub fn contains_position(&self, pos: Vec3) -> bool {
         // Check if position is outside chunk bounds
         if pos.x < 0.0
             || pos.y < 0.0
@@ -404,12 +420,9 @@ impl Chunk {
             || pos.y >= Self::SIZE_I as f32
             || pos.z >= Self::SIZE_I as f32
         {
-            return true;
+            return false;
         }
-
-        let idx:usize = BlockPosition::from(pos).into();
-        let block = *self.get_block(idx);
-        block.is_empty() || block.is_marching()
+        else { true }
     }
 
     /// Returns a reference to the mesh if it exists
