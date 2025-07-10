@@ -2,28 +2,178 @@
 use crate::ui::element;
 use crate::ext::audio;
 use crate::ext::config;
+use crate::ui::dialog;
 use crate::ui::element::{UIElement, UIElementData};
 use crate::ui::render::{UIRenderer, Vertex};
 use crate::get_string;
 use winit::keyboard::KeyCode as Key;
 
-#[derive(Default, PartialEq)]
+
+#[derive(PartialEq, Clone, Copy)]
+pub struct UIStateID(u32);
+
+impl UIStateID {
+    pub fn new(id: u32) -> Self {
+        Self(id)
+    }
+}
+
+impl Default for UIStateID {
+    fn default() -> Self {
+        UIStateID::from(&UIState::None)
+    }
+}
+
+// Changed to take reference to avoid moving
+impl From<&UIState> for UIStateID {
+    fn from(state: &UIState) -> UIStateID {
+        match state {
+            // Simple states
+            UIState::None => UIStateID(0),
+            UIState::BootScreen => UIStateID(1),
+            UIState::WorldSelection => UIStateID(2),
+            UIState::Multiplayer => UIStateID(3),
+            UIState::NewWorld => UIStateID(4),
+            UIState::Escape => UIStateID(5),
+            UIState::InGame => UIStateID(6),
+            UIState::Settings(..) => UIStateID(7),
+            UIState::Confirm(..) => UIStateID(8),
+            UIState::Loading => UIStateID(9),            
+            UIState::Error(..) => UIStateID(10),
+        }
+    }
+}
+
+impl From<UIStateID> for UIState {
+    fn from(id: UIStateID) -> UIState {
+        match id.0 {
+            0 => UIState::None,
+            1 => UIState::BootScreen,
+            2 => UIState::WorldSelection,
+            3 => UIState::Multiplayer,
+            4 => UIState::NewWorld,
+            5 => UIState::Escape,
+            6 => UIState::InGame,
+            7 => UIState::Settings(UIStateID::default()), // Default ID
+            8 => UIState::Confirm(UIStateID::default(), 0u8),  // Default ID
+            9 => UIState::Loading,
+            10 => UIState::Error(UIStateID::default(), 0u8),  // Default ID
+            _ => UIState::None,
+        }
+    }
+}
+
+#[derive(PartialEq, Clone)]
 pub enum UIState {
-    // need at least one more for error / popup handling
-    BootScreen,     // Initial boot screen
 
-    WorldSelection, // World selection screen
-    Multiplayer,    // Yeah boyyy multiplayer
-    NewWorld,       // Make a new world
 
-    Loading,        // Loading screen
+    None,               // Baiscally not yet initialized
 
-    Escape,         // In game but with Esc pressed
-    InGame,         // Normal game UI
-    Settings,       // the ... settings ?
 
-    #[default]
-    None, // Baiscally not yet initialized
+    BootScreen,         // Initial boot screen
+
+    WorldSelection,     // World selection screen
+    Multiplayer,        // Yeah boyyy multiplayer
+    NewWorld,           // Make a new world
+
+    Escape,             // In game but with Esc pressed
+    InGame,             // Normal game UI
+
+    Settings(UIStateID),  // the ... settings ?
+    Loading,            // Loading screen
+    Confirm(UIStateID, u8),   // Confirm screen, stores uistate to "go back to"
+    Error(UIStateID, u8),     // Error screen, stores uistate to "go back to"
+}
+impl UIState{
+    pub fn inner(&self) -> Option<u8> {
+        match self {
+            // Simple states
+            UIState::None => None,
+            UIState::BootScreen => None,
+            UIState::WorldSelection => None,
+            UIState::Multiplayer => None,
+            UIState::NewWorld => None,
+            UIState::Escape => None,
+            UIState::InGame => None,
+            UIState::Settings(..) => None,
+            UIState::Confirm(_, id) => Some(*id),
+            UIState::Loading => None, 
+            UIState::Error(_, id) => Some(*id),
+        }
+    }
+    pub fn inner_state(&self) -> UIState {
+        let state = match self {
+            // Simple states
+            UIState::None => None,
+            UIState::BootScreen => None,
+            UIState::WorldSelection => None,
+            UIState::Multiplayer => None,
+            UIState::NewWorld => None,
+            UIState::Escape => None,
+            UIState::InGame => None,
+            UIState::Settings(..) => None,
+            UIState::Confirm(id, _) => Some(UIState::from(*id)),
+            UIState::Loading => None, 
+            UIState::Error(id, _) => Some(UIState::from(*id)),
+        };
+        match state {
+            Some(s) => s,
+            None => UIState::None,
+        }
+    }
+}
+impl Default for UIState {
+    fn default() -> Self {
+        UIState::None
+    }
+}
+
+pub fn close_pressed() {
+    let state = config::get_state();
+    // Take a COPY of the current state to match against
+    let current_state = state.ui_manager.state.clone();
+    
+    match current_state {
+        UIState::WorldSelection | UIState::Multiplayer => {
+            state.ui_manager.state = UIState::BootScreen;
+            state.ui_manager.setup_ui();
+        }
+        UIState::BootScreen => {
+            config::close_app();
+        }
+        UIState::InGame => {
+            state.ui_manager.state = UIState::Escape;
+            state.ui_manager.setup_ui();
+
+            let game_state = config::get_gamestate();
+            game_state.player_mut().controller().reset_keyboard();
+            *game_state.running() = false;
+        }
+        UIState::Escape => {
+            state.ui_manager.state = UIState::InGame;
+            state.ui_manager.setup_ui();
+            
+            let game_state = config::get_gamestate();
+            *game_state.running() = true;
+        }
+        UIState::Loading | UIState::None => {
+            return;
+        }
+        UIState::NewWorld => {
+            state.ui_manager.state = UIState::WorldSelection;
+            state.ui_manager.setup_ui();
+        },
+        UIState::Error(prev_state, dialog_id) | 
+        UIState::Confirm(prev_state, dialog_id) => {
+            state.ui_manager.dialogs.cancel_dialog(dialog_id);
+            state.ui_manager.state = UIState::from(prev_state);
+            state.ui_manager.setup_ui();
+        }
+        UIState::Settings(prev_state)  => {
+            state.ui_manager.state = UIState::from(prev_state);
+            state.ui_manager.setup_ui();
+        }
+    }
 }
 
 pub struct UIManager {
@@ -34,6 +184,7 @@ pub struct UIManager {
     pub elements: Vec<UIElement>,
     pub focused_element: Option<usize>,
     pub visibility: bool,
+    pub dialogs: dialog::DialogManager,
     renderer: UIRenderer,
     next_id: usize,
 }
@@ -95,6 +246,8 @@ impl UIManager {
             usage: wgpu::BufferUsages::INDEX | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
+
+        let dialogs = dialog::DialogManager::new();
         
         Self {
             state: UIState::default(),
@@ -104,6 +257,7 @@ impl UIManager {
             elements: Vec::new(),
             focused_element: None,
             visibility: true,
+            dialogs,
             renderer,
             next_id: 1,
         }
@@ -283,16 +437,15 @@ impl UIManager {
                 match &element.data {
                     UIElementData::InputField { .. } => {
                         self.focused_element = Some(index); // Store the vector index
-                    }
+                    },
                     UIElementData::Checkbox { .. } => {
                         element.toggle_checked();
                         element.trigger_callback();
-                    }
+                    },
                     UIElementData::Button { .. } => {
                         audio::set_sound("click.ogg");
                         element.trigger_callback();
-                    }
-
+                    },
                     _ => {}
                 }
                 return true;
@@ -317,9 +470,7 @@ impl UIManager {
         if !self.visibility {
             return;
         }
-
         self.renderer.render(self,render_pass);
-
     }
 
     pub fn next_id(&mut self) -> usize {
@@ -327,66 +478,10 @@ impl UIManager {
         self.next_id += 1;
         id
     }
+
 }
 
 
-pub fn close_pressed() {
-    match config::get_state().ui_manager.state {
-        UIState::WorldSelection => {
-            let ui_manager = &mut config::get_state().ui_manager;
-            ui_manager.state = UIState::BootScreen;
-            ui_manager.setup_ui();
-        }
-        UIState::Multiplayer => {
-            let ui_manager = &mut config::get_state().ui_manager;
-            ui_manager.state = UIState::BootScreen;
-            ui_manager.setup_ui();
-        }
-        UIState::BootScreen => {
-            config::close_app();
-        }
-        UIState::InGame => {
-            let ui_manager = &mut config::get_state().ui_manager;
-            ui_manager.state = UIState::Escape;
-            ui_manager.setup_ui();
-
-            config::get_gamestate().player_mut().controller().reset_keyboard(); // Temporary workaround
-            
-            let game_state = config::get_gamestate();
-            *game_state.running() = false;
-        }
-        UIState::Escape => {
-            let ui_manager = &mut config::get_state().ui_manager;
-            ui_manager.state = UIState::InGame;
-            ui_manager.setup_ui();
-            
-            let game_state = config::get_gamestate();
-            *game_state.running() = true;
-        }
-        UIState::Loading => {
-            return; // hell nah- exiting while loading it like Bruh
-        }
-        UIState::None => {
-            return; // why ???
-        }
-        UIState::NewWorld => {
-            let ui_manager = &mut config::get_state().ui_manager;
-            ui_manager.state = UIState::WorldSelection;
-            ui_manager.setup_ui();
-        },
-        UIState::Settings => {
-            if config::get_state().is_world_running {
-                let ui_manager = &mut config::get_state().ui_manager;
-                ui_manager.state = UIState::Escape;
-                ui_manager.setup_ui();
-            } else {
-                let ui_manager = &mut config::get_state().ui_manager;
-                ui_manager.state = UIState::BootScreen;
-                ui_manager.setup_ui();
-            }
-        }
-    }
-}
 
 // Utility functions for mouse coordinate conversion and UI setup
 pub fn convert_mouse_position(

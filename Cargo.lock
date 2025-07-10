@@ -3639,9 +3639,11 @@ name = "rusticubes"
 version = "0.4.6"
 dependencies = [
  "ahash",
+ "arc-swap",
  "bytemuck",
  "dirs",
  "filetime",
+ "futures-lite",
  "ggrs",
  "glam",
  "image",

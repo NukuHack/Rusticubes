@@ -46,12 +46,20 @@ impl UIManager {
                 self.add_element(bg_panel);
                 self.setup_multiplayer_ui();
             }
-            UIState::Settings => {
+            UIState::Settings(..) => {
                 self.add_element(bg_panel);
                 self.setup_settings_ui();
             }
             UIState::Escape => {
                 self.setup_escape_ui();
+            }
+            UIState::Confirm(..) => {
+                self.add_element(bg_panel);
+                self.setup_confirm_ui();
+            }
+            UIState::Error(..) => {
+                self.add_element(bg_panel);
+                //self.setup_settings_ui();
             }
         }
     }
@@ -127,7 +135,7 @@ impl UIManager {
             .with_z_index(6)
             .with_callback(|| {
                 let ui_manager = &mut config::get_state().ui_manager;
-                ui_manager.state = UIState::Settings;
+                ui_manager.state = UIState::Settings(UIStateID::from(&ui_manager.state));
                 ui_manager.setup_ui();
             });
         self.add_element(setting_button);
@@ -256,7 +264,16 @@ impl UIManager {
                 .with_border((150, 60, 60, 255), 0.005)
                 .with_z_index(5)
                 .with_callback(move || {
-                    world::manager::del_world(&name_clone);
+                    let name_clone = name_clone.clone();
+                    // Non-blocking dialog with callback
+                    config::get_state().ui_manager.dialogs.ask_with_callback(
+                        "Delete file?",
+                        move |confirmed| {
+                            if confirmed {
+                                world::manager::del_world(&name_clone);
+                            }
+                        }
+                    );
                 });
             self.add_element(delete_button);
         }
@@ -310,6 +327,71 @@ impl UIManager {
                 println!("set setting");
             });
         self.add_element(setting_button_1);
+
+        // Back button with consistent styling
+        let back_button = UIElement::button(self.next_id(), "Back")
+            .with_position(-0.1, -0.8)
+            .with_size(0.2, 0.08)
+            .with_color(60, 60, 80)  // Dark gray-blue
+            .with_text_color(180, 190, 210) // Light blue-gray
+            .with_border((90, 100, 130, 255), 0.005)
+            .with_z_index(8)
+            .with_callback(|| close_pressed());
+        self.add_element(back_button);
+    }
+
+    #[inline]
+    fn setup_confirm_ui(&mut self) {
+        // Title with improved styling
+        let manager = &config::get_state().ui_manager;
+        let dialog_id = manager.state.inner().unwrap_or(0);
+        let prompt:String = manager.dialogs.get_pending_dialog(dialog_id).unwrap_or("Yeah?".to_string());
+        let title = UIElement::label(self.next_id(), prompt)
+            .with_position(-0.4, 0.6)
+            .with_size(0.8, 0.15)
+            .with_color(30, 30, 45)  // Dark panel
+            .with_text_color(180, 200, 220) // Light blue text
+            .with_border((80, 100, 140, 255), 0.008)
+            .with_z_index(10);
+        self.add_element(title);
+
+        // World list container with better contrast
+        let list_panel = UIElement::panel(self.next_id())
+            .with_position(-0.9, -0.4)
+            .with_size(1.8, 0.9)  // Slightly shorter
+            .with_color(25, 25, 40)  // Dark blue-gray
+            .with_border((60, 70, 100, 255), 0.01)
+            .with_z_index(1);
+        self.add_element(list_panel);
+
+        let option_button_1 = UIElement::button(self.next_id(), "Yes")
+            .with_position(-0.8, 0.0)
+            .with_size(0.6, 0.1)
+            .with_color(40, 50, 80)
+            .with_text_color(180, 200, 220)
+            .with_border((70, 90, 130, 255), 0.005)
+            .with_z_index(5)
+            .with_callback(move || {
+                let ui_manager = &mut config::get_state().ui_manager;
+                ui_manager.dialogs.respond(dialog_id.clone(), true);
+                ui_manager.state = ui_manager.state.inner_state();
+                ui_manager.setup_ui();
+            });
+        self.add_element(option_button_1);
+        let option_button_2 = UIElement::button(self.next_id(), "NO")
+            .with_position(0.2, 0.0)
+            .with_size(0.6, 0.1)
+            .with_color(40, 50, 80)
+            .with_text_color(180, 200, 220)
+            .with_border((70, 90, 130, 255), 0.005)
+            .with_z_index(5)
+            .with_callback(move || {
+                let ui_manager = &mut config::get_state().ui_manager;
+                ui_manager.dialogs.respond(dialog_id.clone(), false);
+                ui_manager.state = ui_manager.state.inner_state();
+                ui_manager.setup_ui();
+            });
+        self.add_element(option_button_2);
 
         // Back button with consistent styling
         let back_button = UIElement::button(self.next_id(), "Back")
@@ -447,6 +529,9 @@ impl UIManager {
             .with_z_index(6)
             .with_callback(move || {
                 world::handler::create_world(input_id);
+                let ui_manager = &mut config::get_state().ui_manager;
+                ui_manager.state = UIState::WorldSelection;
+                ui_manager.setup_ui();
             });
         self.add_element(gen_button);
 
@@ -551,7 +636,7 @@ impl UIManager {
             .with_z_index(6)
             .with_callback(|| {
                 let ui_manager = &mut config::get_state().ui_manager;
-                ui_manager.state = UIState::Settings;
+                ui_manager.state = UIState::Settings(UIStateID::from(&ui_manager.state));
                 ui_manager.setup_ui();
             });
         self.add_element(setting_button);

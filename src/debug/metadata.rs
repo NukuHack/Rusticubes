@@ -2,11 +2,11 @@
 #[cfg(test)]
 use crate::world::manager::{WorldData, load_world_data, save_world_data, update_world_data};
 #[cfg(test)]
-use crate::config;
+use crate::ext::config;
 #[cfg(test)]
 use std::io::{self};
 #[cfg(test)]
-use crate::ext::time::Time;
+use crate::hs::time::Time;
 
 // Test 1: Simple roundtrip serialization/deserialization with perfect data
 #[test]

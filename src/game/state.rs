@@ -1,4 +1,5 @@
 
+use std::path::PathBuf;
 use crate::game::player;
 use crate::ext::config;
 use crate::world;
@@ -13,6 +14,36 @@ pub struct GameState {
     save_path: std::path::PathBuf,
     is_running: bool,
 }
+
+pub fn make_world(save_path: PathBuf) {
+    // Check and create directories if needed
+    match std::fs::metadata(&save_path) {
+        Ok(metadata) => {
+            if !metadata.is_dir() {
+                println!(
+                    "Save path {:?} exists but is not a directory", 
+                    save_path
+                );
+            }
+            // Directory already exists, no need to create
+        }
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            // Directory doesn't exist, try to create it
+            std::fs::create_dir_all(&save_path)
+                .map_err(|e| {
+                    println!("Failed to create save directory at {:?}: {}", save_path, e)
+                }).unwrap_or_else(|_| println!("Something failed"));
+        }
+        Err(e) => {
+            // Other IO error (permission issues, etc.)
+            println!(
+                "Unexpected error accessing save path {:?}: {}", 
+                save_path, e
+            );
+        }
+    }
+}
+
 #[allow(dead_code)]
 impl GameState {
     #[inline]
@@ -24,33 +55,8 @@ impl GameState {
             .join("saves")
             .join(worldname);
 
-        // Check and create directories if needed
-        match std::fs::metadata(&save_path) {
-            Ok(metadata) => {
-                if !metadata.is_dir() {
-                    println!(
-                        "Save path {:?} exists but is not a directory", 
-                        save_path
-                    );
-                }
-                // Directory already exists, no need to create
-            }
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-                // Directory doesn't exist, try to create it
-                std::fs::create_dir_all(&save_path)
-                    .map_err(|e| {
-                        println!("Failed to create save directory at {:?}: {}", save_path, e)
-                    }).unwrap_or_else(|_| println!("Something failed"));
-            }
-            Err(e) => {
-                // Other IO error (permission issues, etc.)
-                println!(
-                    "Unexpected error accessing save path {:?}: {}", 
-                    save_path, e
-                );
-            }
-        }
-        
+        make_world(save_path.clone());
+
         match world::manager::update_world_data(&save_path) {
             Ok(_) => (), // Everything is fine, do nothing
             Err(e) => println!("Error updating world data: {}", e),

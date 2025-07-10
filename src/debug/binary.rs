@@ -11,11 +11,11 @@ use crate::block::math::{BlockRotation, ChunkCoord};
 #[cfg(test)]
 use crate::block::main::{Block, Chunk, BlockStorage};
 #[cfg(test)]
-use crate::config;
+use crate::ext::config;
 #[cfg(test)]
 use std::io::{Read, Write};
 #[cfg(test)]
-use crate::game_state;
+use crate::game::state;
 #[cfg(test)]
 use std::fs::{self, File};
 
@@ -261,7 +261,7 @@ fn save_load_entire_world() {
     // Create a test world
     let world = create_dummy_world();
 
-    game_state::start_world("some_test_world");
+    state::start_world("some_test_world");
     
     // Set the game state
     config::get_gamestate().world_change(world.clone());

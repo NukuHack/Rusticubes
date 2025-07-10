@@ -26,7 +26,13 @@ pub fn create_world(id: usize) {
 	        // You might want to log this fallback behavior
 	        "New World".to_string()
 	    });
-    join_world(&world_name);
+
+    // Create the save path
+    let save_path = config::get_save_path()
+        .join("saves")
+        .join(world_name);
+	
+	state::make_world(save_path);
 }
 
 pub fn join_local_world(world_name: &str) {
