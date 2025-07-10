@@ -267,7 +267,7 @@ impl UIManager {
                     let name_clone = name_clone.clone();
                     // Non-blocking dialog with callback
                     config::get_state().ui_manager.dialogs.ask_with_callback(
-                        "Delete file?",
+                        "Delete world?",
                         move |confirmed| {
                             if confirmed {
                                 world::manager::del_world(&name_clone);
