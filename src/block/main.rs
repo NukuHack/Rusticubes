@@ -1,6 +1,6 @@
 
 use crate::block::math::{self, ChunkCoord, BlockPosition, BlockRotation};
-use crate::hs::math::PerlInt;
+use crate::hs::math::Noise;
 use crate::render::meshing::GeometryBuffer;
 #[allow(unused_imports)]
 use crate::ext::stopwatch;
@@ -329,7 +329,7 @@ impl Chunk {
         if coord.y() <= 0 { return Some(Self::new(1u16)); }
         //let mut stopwatch = stopwatch::RunningAverage::new();
         
-        let noise_gen = PerlInt::new(seed);
+        let noise_gen = Noise::new(seed);
         let (world_x, world_y, world_z) = coord.unpack_to_worldpos();
         let mut chunk = Self::empty();
         let block = Block::new(1u16);
@@ -341,9 +341,10 @@ impl Chunk {
                 let pos_z = world_z + z as i32;
                 
                 // Get noise value and scale it to a reasonable height range
-                // the "noise_2d()" function returns a random u8 perlin-noise
-                let noise = noise_gen.noise_2d(pos_x, pos_z) >> 1;
+                // the "noise_2d()" function returns a random f32 noise
+                let noise = noise_gen.noise_2d(pos_x as i32, pos_z as i32);
                 //stopwatch.add(noise as f64);
+                let noise = noise * (8 * Chunk::SIZE) as f32;
                 
                 for y in 0..Self::SIZE {
                     let pos_y = world_y + y as i32;

@@ -1,23 +1,27 @@
-
 #[derive(Clone, Copy)]
 #[allow(dead_code)]
 pub struct RunningAverage {
     count: u64,
-    average: f64, // Cache the reciprocal of count to avoid division in hot path
+    average: f64,
     inv_count: f64,
+    min: f64,
+    max: f64,
 }
 
 impl std::fmt::Debug for RunningAverage {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "Average {{  samples: {},  average: {} ,  total: {} }}",
+            "Average {{ samples: {}, average: {}, min: {}, max: {}, total: {} }}",
             format_number(self.count() as f64),
             format_number(self.avg()),
+            format_number(self.min()),
+            format_number(self.max()),
             format_number(self.sum())
         )
     }
 }
+
 impl std::fmt::Display for RunningAverage {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
@@ -25,13 +29,18 @@ impl std::fmt::Display for RunningAverage {
             "⏱️─Benchmark Results:\n\
             ├─ Samples: {}\n\
             ├─ Average: {}\n\
-            └─ Total: {}",
+            ├─ Min:     {}\n\
+            ├─ Max:     {}\n\
+            └─ Total:   {}",
             format_number(self.count() as f64),
             format_number(self.avg()),
+            format_number(self.min()),
+            format_number(self.max()),
             format_number(self.sum())
         )
     }
 }
+
 pub fn format_number(num: f64) -> String {
     if num < 5000.0 {
         format!("{:.3}", num)
@@ -44,7 +53,6 @@ pub fn format_number(num: f64) -> String {
     } else {
         format!("{:.3}T", num / 1_000_000_000_000.0)
     }
-    // it can't get more than Trillions because f64 would overflow
 }
 
 #[allow(dead_code)]
@@ -54,17 +62,24 @@ impl RunningAverage {
         RunningAverage {
             count: 0,
             average: 0.0,
-            inv_count: 0.0, // Will be set properly on first add
+            inv_count: 0.0,
+            min: f64::INFINITY,
+            max: f64::NEG_INFINITY,
         }
     }
 
     #[inline]
     pub fn add(&mut self, value: f64) {
         self.count += 1;
-        // Precompute reciprocal once
         self.inv_count = 1.0 / self.count as f64;
-        // Use FMA (fused multiply-add) when available
         self.average = f64::mul_add(value - self.average, self.inv_count, self.average);
+        
+        if value < self.min {
+            self.min = value;
+        }
+        if value > self.max {
+            self.max = value;
+        }
     }
 
     #[inline]
@@ -83,10 +98,30 @@ impl RunningAverage {
     }
 
     #[inline]
+    pub fn min(&self) -> f64 {
+        if self.count == 0 {
+            f64::NAN
+        } else {
+            self.min
+        }
+    }
+
+    #[inline]
+    pub fn max(&self) -> f64 {
+        if self.count == 0 {
+            f64::NAN
+        } else {
+            self.max
+        }
+    }
+
+    #[inline]
     pub fn clear(&mut self) {
         self.count = 0;
         self.average = 0.0;
         self.inv_count = 0.0;
+        self.min = f64::INFINITY;
+        self.max = f64::NEG_INFINITY;
     }
 }
 
