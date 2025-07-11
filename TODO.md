@@ -7,6 +7,8 @@
 - [x] fly and general movement rework 
 - [x] fov and general camera rework (also drag nice-ify) 
 - [x] making the save-load work 
+- [ ] chunk meshing correction - neighbors 
+- [x] world gen from noise 
 - [ ] settings for sound volume font and stuff 
 - [ ] making the save-load auto trigger (actually load the world on startup) 
 
@@ -14,7 +16,7 @@
 - [ ] hardcode the "missing texture" texture (purple black or idk) 
 - [x] 2d texture array and load in some other textures -> more blocks 
 - [x] !!!Needed rendering handling!!! New UI element as Slider 
-- [ ] Some basic Rounding for UI elements (maybe implement some neat stuff inside the shader)
+- [ ] Some basic Rounding for UI elements (maybe implement some neat stuff inside the shader) 
 - [x] !!!Needed rendering handling!!! Maybe a "multi-state" button kind of thing (like a slider but with a button) 
 - [ ] Making a new "panel" kind of thing with scrollable contents 
 - [ ] Ambient oc. and other lighting 
