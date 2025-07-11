@@ -1,6 +1,6 @@
 
 use crate::block::math::{self, ChunkCoord, BlockPosition, BlockRotation};
-use crate::hs::math::Noise;
+use crate::hs::math::{Noise, smooth_interpolate};
 use crate::render::meshing::GeometryBuffer;
 #[allow(unused_imports)]
 use crate::ext::stopwatch;
@@ -326,7 +326,7 @@ impl Chunk {
 
     pub fn generate(coord: ChunkCoord, seed: u32) -> Option<Self> {
         if coord.y() > 8i32 { return Some(Self::empty()); }
-        if coord.y() <= 0 { return Some(Self::new(1u16)); }
+        if coord.y() <= -2i32 { return Some(Self::new(1u16)); }
         //let mut stopwatch = stopwatch::RunningAverage::new();
         
         let noise_gen = Noise::new(seed);
@@ -337,19 +337,19 @@ impl Chunk {
         // Pre-calculate all noise values for this chunk's XZ plane
         for x in 0..Self::SIZE {
             for z in 0..Self::SIZE {
-                let pos_x = world_x + x as i32;
-                let pos_z = world_z + z as i32;
+                let pos_x:i32 = world_x + x as i32;
+                let pos_z:i32 = world_z + z as i32;
                 
                 // Get noise value and scale it to a reasonable height range
-                // the "noise_2d()" function returns a random f32 noise
-                let noise = noise_gen.noise_2d(pos_x as i32, pos_z as i32);
+                let noise:f32 = noise_gen.terrain_noise_2d(pos_x, pos_z);
+                let noise = smooth_interpolate(noise);
                 //stopwatch.add(noise as f64);
-                let noise = noise * (8 * Chunk::SIZE) as f32;
+                let final_noise = noise * (8 * Chunk::SIZE) as f32;
                 
                 for y in 0..Self::SIZE {
                     let pos_y = world_y + y as i32;
                     // If this block is under or in terrain height, make it solid
-                    if pos_y <= noise as i32 {
+                    if pos_y <= final_noise as i32 {
                         // Correct block indexing : BlockPosition
                         let idx: BlockPosition = (x,y,z).into();
                         chunk.set_block(idx.into(), block); // Set to solid
