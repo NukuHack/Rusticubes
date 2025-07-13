@@ -1,5 +1,5 @@
 
-use crate::network::types::{self, NetworkMessage, NetworkSystem, DiscoveryResult, HostInfo};
+use crate::network::types::{self, NetworkMessage, PendingConnection, NetworkEvent, NetworkStatus, NetworkSystem, DiscoveryResult, HostInfo};
 use crate::network::api;
 use crate::ext::config;
 use std::io::{self, BufRead, BufReader, Write};
@@ -141,7 +141,7 @@ impl NetworkSystem {
             None => return Ok((false, "No TCP listener available".to_string())),
         };
         
-        let (mut stream, addr) = match listener.accept() {
+        let (stream, addr) = match listener.accept() {
             Ok(result) => result,
             Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
                 return Ok((false, "No connection available".to_string()));
@@ -151,79 +151,139 @@ impl NetworkSystem {
         
         let debug_msg = format!("Accepted connection from {}", addr);
         
-        stream.set_nonblocking(true).map_err(|e| format!("{} - Failed to set stream non-blocking: {}", debug_msg, e))?;
+        // Spawn a thread to handle the blocking handshake
+        let current_pid = self.current_pid;
+        let local_ip = types::get_local_ip().map_err(|e| format!("Failed to get local IP: {}", e))?;
         
-        self.try_read_and_handle_message(&mut stream, &debug_msg)
+        let handle = std::thread::spawn(move || {
+            Self::handle_host_handshake(stream, addr, current_pid, local_ip)
+        });
+        
+        self.pending_connections.push(PendingConnection {
+            handle,
+            peer_addr: addr,
+        });
+        
+        Ok((false, format!("{} - Handshake started in background", debug_msg)))
     }
 
-    fn try_read_and_handle_message(&mut self, stream: &mut TcpStream, debug_msg: &str) -> Result<(bool, String), String> {
-        let mut reader = BufReader::new(&mut *stream);
+    fn handle_host_handshake(
+        mut stream: TcpStream, 
+        peer_addr: SocketAddr,
+        current_pid: u32,
+        local_ip: IpAddr
+    ) -> Result<(SocketAddr, SocketAddr), String> {
+        let debug_msg = format!("Handling handshake with {}", peer_addr);
+        
+        // Set a reasonable timeout for the handshake
+        stream.set_read_timeout(Some(Duration::from_secs(10)))
+            .map_err(|e| format!("{} - Failed to set read timeout: {}", debug_msg, e))?;
+        
+        // Read the join request
+        let mut reader = BufReader::new(&mut stream);
         let mut line = String::new();
         
-        let _bytes_read = match reader.read_line(&mut line) {
-            Ok(0) => return Ok((false, format!("{} - No data received yet", debug_msg))),
-            Ok(bytes) => bytes,
-            Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
-                return Ok((false, format!("{} - No data available yet", debug_msg)));
-            }
-            Err(e) => return Err(format!("{} - Read error: {}", debug_msg, e)),
+        reader.read_line(&mut line)
+            .map_err(|e| format!("{} - Failed to read join request: {}", debug_msg, e))?;
+        
+        let msg: NetworkMessage = serde_json::from_str(&line.trim())
+            .map_err(|e| format!("{} - Failed to parse join request: {}", debug_msg, e))?;
+        
+        let peer_pid = match msg {
+            NetworkMessage::JoinRequest(pid) => pid,
+            _ => return Err(format!("{} - Received wrong message type", debug_msg)),
         };
         
-        let msg: NetworkMessage = serde_json::from_str(&line.trim()).map_err(|e| format!("{} - Failed to parse message: {}", debug_msg, e))?;
+        let debug_msg = format!("{} - Received join request from peer PID: {}", debug_msg, peer_pid);
         
-        drop(reader); // Drop reader to use stream mutably
+        // Calculate UDP addresses
+        let udp_port = 7000 + (current_pid % 1000) as u16;
+        let local_udp_addr = SocketAddr::new(local_ip, udp_port);
         
-        let (should_connect, msg_debug) = self.handle_client_message(stream, msg).map_err(|e| format!("{} - Message handling error: {}", debug_msg, e))?;
+        // Send join response
+        let response = NetworkMessage::JoinResponse(local_udp_addr);
+        let response_json = serde_json::to_string(&response)
+            .map_err(|e| format!("{} - Failed to serialize join response: {}", debug_msg, e))?;
         
-        Ok((should_connect, format!("{} - {}", debug_msg, msg_debug)))
+        drop(reader); // Release the reader so we can use stream mutably
+        
+        writeln!(stream, "{}", response_json)
+            .map_err(|e| format!("{} - Failed to write join response: {}", debug_msg, e))?;
+        
+        // Read peer's UDP address
+        let mut reader = BufReader::new(&mut stream);
+        let mut peer_line = String::new();
+        
+        reader.read_line(&mut peer_line)
+            .map_err(|e| format!("{} - Failed to read peer UDP address: {}", debug_msg, e))?;
+        
+        let peer_msg: NetworkMessage = serde_json::from_str(&peer_line.trim())
+            .map_err(|e| format!("{} - Failed to parse peer message: {}", debug_msg, e))?;
+        
+        let peer_udp_addr = match peer_msg {
+            NetworkMessage::PeerAddress(addr) => addr,
+            _ => return Err(format!("{} - Received wrong message type from peer", debug_msg)),
+        };
+        
+        Ok((local_udp_addr, peer_udp_addr))
     }
 
     pub fn try_connect_to_host(&mut self, target_host_ip: &str) -> Result<(bool, String), String> {
-        // CHANGE: Accept IP address parameter instead of hardcoding localhost
         let host_addr = format!("{}:{}", target_host_ip, TCP_PORT);
         
-        let mut stream = match TcpStream::connect(&host_addr) {
-            Ok(stream) => stream,
-            Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
-                return Ok((false, "Connection in progress".to_string()));
-            }
-            Err(e) => return Err(format!("Failed to connect to {}: {}", host_addr, e)),
-        };
+        // Spawn a thread to handle the blocking connection
+        let current_pid = self.current_pid;
+        let local_ip = types::get_local_ip().map_err(|e| format!("Failed to get local IP: {}", e))?;
+        let host_addr_clone = host_addr.clone();
         
-        let debug_msg = format!("Connected to host at {}", host_addr);
+        let handle = std::thread::spawn(move || {
+            Self::handle_client_handshake(host_addr_clone, current_pid, local_ip)
+        });
         
-        stream.set_nonblocking(true).map_err(|e| format!("{} - Failed to set stream non-blocking: {}", debug_msg, e))?;
+        self.pending_connections.push(PendingConnection {
+            handle,
+            peer_addr: host_addr.parse().map_err(|e| format!("Invalid host address: {}", e))?,
+        });
         
-        self.perform_join_handshake(&mut stream, &debug_msg)
+        Ok((false, format!("Connection to {} started in background", host_addr)))
     }
 
-    fn perform_join_handshake(&mut self, stream: &mut TcpStream, debug_msg: &str) -> Result<(bool, String), String> {
-        // CHANGE: Use local IP instead of hardcoded localhost
-        let local_ip = types::get_local_ip().map_err(|e| format!("Failed to get local IP: {}", e))?;
+    fn handle_client_handshake(
+        host_addr: String,
+        current_pid: u32,
+        local_ip: IpAddr
+    ) -> Result<(SocketAddr, SocketAddr), String> {
+        let debug_msg = format!("Connecting to host at {}", host_addr);
         
-        let udp_port = 7000 + (self.current_pid % 1000) as u16;
+        let mut stream = TcpStream::connect_timeout(
+            &host_addr.parse().map_err(|e| format!("Invalid address: {}", e))?,
+            Duration::from_secs(5)
+        ).map_err(|e| format!("{} - Failed to connect: {}", debug_msg, e))?;
+        
+        // Set timeout for the handshake
+        stream.set_read_timeout(Some(Duration::from_secs(10)))
+            .map_err(|e| format!("{} - Failed to set read timeout: {}", debug_msg, e))?;
+        
+        let udp_port = 7000 + (current_pid % 1000) as u16;
         let local_udp_addr = SocketAddr::new(local_ip, udp_port);
         
         // Send join request
-        let join_msg = NetworkMessage::JoinRequest(self.current_pid);
-        let join_json = serde_json::to_string(&join_msg).map_err(|e| format!("{} - Failed to serialize join request: {}", debug_msg, e))?;
+        let join_msg = NetworkMessage::JoinRequest(current_pid);
+        let join_json = serde_json::to_string(&join_msg)
+            .map_err(|e| format!("{} - Failed to serialize join request: {}", debug_msg, e))?;
         
-        writeln!(stream, "{}", join_json).map_err(|e| format!("{} - Failed to send join request: {}", debug_msg, e))?;
-        
-        // FIX: Set blocking mode for reading the response
-        stream.set_nonblocking(false).map_err(|e| format!("{} - Failed to set stream blocking: {}", debug_msg, e))?;
-        
-        // Set a read timeout to prevent hanging
-        let timeout_dur = Some(Duration::from_millis(5000));
-        stream.set_read_timeout(timeout_dur).map_err(|e| format!("{} - Failed to set read timeout: {}", debug_msg, e))?;
+        writeln!(stream, "{}", join_json)
+            .map_err(|e| format!("{} - Failed to send join request: {}", debug_msg, e))?;
         
         // Read response
-        let mut reader = BufReader::new(&mut *stream);
+        let mut reader = BufReader::new(&mut stream);
         let mut line = String::new();
         
-        reader.read_line(&mut line).map_err(|e| format!("{} - Failed to read host response: {}", debug_msg, e))?;
+        reader.read_line(&mut line)
+            .map_err(|e| format!("{} - Failed to read host response: {}", debug_msg, e))?;
         
-        let msg: NetworkMessage = serde_json::from_str(&line.trim()).map_err(|e| format!("{} - Failed to parse host response: {}", debug_msg, e))?;
+        let msg: NetworkMessage = serde_json::from_str(&line.trim())
+            .map_err(|e| format!("{} - Failed to parse host response: {}", debug_msg, e))?;
         
         let host_udp_addr = match msg {
             NetworkMessage::JoinResponse(addr) => addr,
@@ -232,19 +292,49 @@ impl NetworkSystem {
         
         // Send our UDP address
         let peer_msg = NetworkMessage::PeerAddress(local_udp_addr);
-        let peer_json = serde_json::to_string(&peer_msg).map_err(|e| format!("{} - Failed to serialize peer address: {}", debug_msg, e))?;
+        let peer_json = serde_json::to_string(&peer_msg)
+            .map_err(|e| format!("{} - Failed to serialize peer address: {}", debug_msg, e))?;
         
-        drop(reader); // Drop reader to use stream mutably
+        drop(reader); // Release the reader
         
-        writeln!(stream, "{}", peer_json).map_err(|e| format!("{} - Failed to send UDP address: {}", debug_msg, e))?;
+        writeln!(stream, "{}", peer_json)
+            .map_err(|e| format!("{} - Failed to send UDP address: {}", debug_msg, e))?;
         
-        // FIX: Set back to non-blocking mode if needed for other operations
-        stream.set_nonblocking(true).map_err(|e| format!("{} - Failed to set stream non-blocking: {}", debug_msg, e))?;
+        Ok((local_udp_addr, host_udp_addr))
+    }
+
+    // Add this method to check for completed handshakes
+    pub fn check_pending_connections(&mut self) -> Result<bool, String> {
+        let mut completed_indices = Vec::new();
         
-        self.local_udp_addr = Some(local_udp_addr);
-        self.remote_udp_addr = Some(host_udp_addr);
+        for (i, pending) in self.pending_connections.iter().enumerate() {
+            if pending.handle.is_finished() {
+                completed_indices.push(i);
+            }
+        }
         
-        Ok((true, format!("{} - Successfully exchanged UDP addresses", debug_msg)))
+        for i in completed_indices.into_iter().rev() {
+            let pending = self.pending_connections.remove(i);
+            match pending.handle.join() {
+                Ok(Ok((local_udp_addr, remote_udp_addr))) => {
+                    self.local_udp_addr = Some(local_udp_addr);
+                    self.remote_udp_addr = Some(remote_udp_addr);
+                    return Ok(true); // Connection successful
+                }
+                Ok(Err(e)) => {
+                    let error_msg = format!("Connection to {} failed: {}", pending.peer_addr, e);
+                    self.status = NetworkStatus::Error(error_msg.clone());
+                    self.push_event(NetworkEvent::Error(error_msg));
+                }
+                Err(_) => {
+                    let error_msg = format!("Connection thread to {} panicked", pending.peer_addr);
+                    self.status = NetworkStatus::Error(error_msg.clone());
+                    self.push_event(NetworkEvent::Error(error_msg));
+                }
+            }
+        }
+        
+        Ok(false) // No connections completed yet
     }
 }
 

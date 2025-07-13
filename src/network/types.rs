@@ -65,6 +65,11 @@ pub struct HostInfo {
     pub world_name: String,
 }
 
+pub struct PendingConnection {
+    pub handle: std::thread::JoinHandle<Result<(SocketAddr, SocketAddr), String>>,
+    pub peer_addr: SocketAddr,
+}
+
 pub struct NetworkSystem {
     pub status: NetworkStatus,
     pub is_host: bool,
@@ -84,6 +89,7 @@ pub struct NetworkSystem {
     pub discovered_hosts: Arc<Mutex<Vec<HostInfo>>>,
     pub target_host_ip: Option<String>,
     pub broadcast_listener_thread: Option<std::thread::JoinHandle<()>>,
+    pub pending_connections: Vec<PendingConnection>,
 }
 
 impl NetworkSystem {
@@ -108,6 +114,7 @@ impl NetworkSystem {
             discovered_hosts: Arc::new(Mutex::new(Vec::new())),
             target_host_ip: None,
             broadcast_listener_thread: None,
+            pending_connections: Vec::new(),
         }
     }
 

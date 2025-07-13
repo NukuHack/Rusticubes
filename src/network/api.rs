@@ -219,7 +219,7 @@ pub fn cleanup_network() {
 }
 
 
-// FIXED: Update the network update function to use the stored host IP
+// Update your update_network() function in api.rs:
 #[inline]
 pub fn update_network() {
     handle_network_events();
@@ -227,6 +227,16 @@ pub fn update_network() {
     if let Some(system) = get_ptr() {
         // Check if discovery is complete
         system.check_discovery_complete();
+        
+        // Check for completed handshakes
+        if let Ok(handshake_complete) = system.check_pending_connections() {
+            if handshake_complete {
+                if let Err(e) = system.setup_ggrs_session() {
+                    system.status = NetworkStatus::Error(e.clone());
+                    system.push_event(NetworkEvent::Error(e));
+                }
+            }
+        }
         
         // Limit update rate to ~60 FPS
         let now = Instant::now();
@@ -239,14 +249,8 @@ pub fn update_network() {
             NetworkStatus::Discovering => {
                 if system.is_host {
                     match system.try_accept_connection() {
-                        Ok((true, _)) => {
-                            if let Err(e) = system.setup_ggrs_session() {
-                                system.status = NetworkStatus::Error(e.clone());
-                                system.push_event(NetworkEvent::Error(e));
-                            }
-                        }
-                        Ok((false, _)) => {
-                            // No connection yet, keep waiting
+                        Ok((_, _)) => {
+                            // Connection handling is now done in background thread
                         }
                         Err(e) => {
                             let error_msg = format!("Host connection error: {}", e);
@@ -258,17 +262,10 @@ pub fn update_network() {
             }
             NetworkStatus::Connecting => {
                 if !system.is_host {
-                    // FIXED: Use the stored target host IP
                     if let Some(target_host_ip) = system.target_host_ip.clone() {
                         match system.try_connect_to_host(&target_host_ip) {
-                            Ok((true, _)) => {
-                                if let Err(e) = system.setup_ggrs_session() {
-                                    system.status = NetworkStatus::Error(e.clone());
-                                    system.push_event(NetworkEvent::Error(e));
-                                }
-                            }
-                            Ok((false, _)) => {
-                                // Connection in progress
+                            Ok((_, _)) => {
+                                // Connection handling is now done in background thread
                             }
                             Err(e) => {
                                 let error_msg = format!("Connection error: {}", e);
@@ -290,6 +287,7 @@ pub fn update_network() {
         }
     }
 }
+
 
 
 pub fn handle_network_events() {
