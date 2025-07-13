@@ -1,3 +1,4 @@
+use walkdir::WalkDir;
 use std::{
     fs, io,
     path::{Path, PathBuf},
@@ -8,37 +9,37 @@ fn main() {
     icon_setting();
 
     // Handle resource compression (your existing system)
-    handle_resource_compression();
+    handle_resource_compression("resources", "comp_resources");
+    handle_resource_compression("assets", "comp_assets");
 
     // Handle WASM plugin compilation
     handle_wasm_compilation();
 }
 
-fn handle_resource_compression() {
-    println!("cargo:rerun-if-changed=resources");
-
-    let resource_path = Path::new("resources");
-    let comp_resource_path = Path::new("comp_resources");
+fn handle_resource_compression(path: &str, comp_path: &str) {
+    println!("cargo:rerun-if-changed={}", path); 
+    let path = Path::new(path);
+    let comp_path = Path::new(comp_path);
 
     // Handle case when neither directory exists
-    if !resource_path.exists() && !comp_resource_path.exists() {
-        eprintln!("Error: Neither 'resources' nor 'comp_resources' directory exists");
-        eprintln!("Hint: Create a 'resources' directory with your files");
+    if !path.exists() && !comp_path.exists() {
+        println!("Error: Neither 'resources' nor 'comp_resources' directory exists");
+        println!("Hint: Create a 'resources' directory with your files");
         panic!("Required directories not found");
     }
 
     // Handle case when only comp_resources exists
-    if !resource_path.exists() {
-        if comp_resource_path.exists() {
+    if !path.exists() {
+        if comp_path.exists() {
             println!("Note: 'resources' directory not found, but 'comp_resources' exists - nothing to do");
             return;
         }
     }
 
     // Create comp_resources if it doesn't exist
-    if !comp_resource_path.exists() {
+    if !comp_path.exists() {
         println!("Creating 'comp_resources' directory...");
-        fs::create_dir_all(comp_resource_path).expect("Failed to create comp_resources directory");
+        fs::create_dir_all(comp_path).expect("Failed to create comp_resources directory");
     }
 
     // Collect all files that need processing
@@ -46,40 +47,40 @@ fn handle_resource_compression() {
     let mut total_files = 0;
     let mut up_to_date_files = 0;
 
-    for entry in walkdir::WalkDir::new(resource_path) {
+    for entry in WalkDir::new(path) {
         let entry = match entry {
             Ok(e) => e,
             Err(e) => {
-                eprintln!("Warning: Failed to read directory entry: {}", e);
+                println!("Warning: Failed to read directory entry: {}", e);
                 continue;
             }
         };
 
         if entry.file_type().is_file() {
             total_files += 1;
-            let path = entry.path();
+            let entry_path = entry.path();
 
-            let relative_path = match path.strip_prefix(resource_path) {
+            let relative_path = match entry_path.strip_prefix(path) {
                 Ok(p) => p,
                 Err(e) => {
-                    eprintln!(
+                    println!(
                         "Warning: Failed to get relative path for {}: {}",
-                        path.display(),
+                        entry_path.display(),
                         e
                     );
                     continue;
                 }
             };
 
-            let mut compressed_path = comp_resource_path.join(relative_path).to_string_lossy().into_owned();
+            let mut compressed_path = comp_path.join(relative_path).to_string_lossy().into_owned();
             compressed_path.push_str(".lz4");
             let compressed_path = PathBuf::from(compressed_path);
 
-            match needs_update(path, &compressed_path) {
-                Ok(true) => files_to_process.push((path.to_owned(), compressed_path)),
+            match needs_update(entry_path, &compressed_path) {
+                Ok(true) => files_to_process.push((entry_path.to_owned(), compressed_path)),
                 Ok(false) => up_to_date_files += 1,
                 Err(e) => {
-                    eprintln!("Warning: Skipping {} due to error: {}", path.display(), e);
+                    println!("Warning: Skipping {} due to error: {}", entry_path.display(), e);
                 }
             }
         }
@@ -108,8 +109,15 @@ fn handle_resource_compression() {
     for (source_path, compressed_path) in files_to_process {
         print!("Processing {}... ", source_path.display());
 
+        // Create parent directory if it doesn't exist
+        if let Some(parent) = compressed_path.parent() {
+            if !parent.exists() {
+                fs::create_dir_all(parent).expect("Failed to create parent directory");
+            }
+        }
+
         if let Err(e) = process_file(&source_path, &compressed_path) {
-            eprintln!("FAILED: {}", e);
+            println!("FAILED: {}", e);
             skipped_count += 1;
             continue;
         }
@@ -184,7 +192,7 @@ fn handle_wasm_compilation() {
             match needs_update(&path, &wasm_output) {
                 Ok(true) => files_to_compile.push((path, wasm_output)),
                 Ok(false) => up_to_date_plugins += 1,
-                Err(e) => eprintln!("Warning: Skipping {} due to error: {}", path.display(), e),
+                Err(e) => println!("Warning: Skipping {} due to error: {}", path.display(), e),
             }
         }
     }
@@ -206,8 +214,8 @@ fn handle_wasm_compilation() {
 
     // Check if wasm32-unknown-unknown target is installed
     if !is_wasm_target_installed() {
-        eprintln!("ERROR: wasm32-unknown-unknown target not installed!");
-        eprintln!("Install it with: rustup target add wasm32-unknown-unknown");
+        println!("ERROR: wasm32-unknown-unknown target not installed!");
+        println!("Install it with: rustup target add wasm32-unknown-unknown");
         return;
     }
 
@@ -218,7 +226,7 @@ fn handle_wasm_compilation() {
         print!("Compiling {}... ", source_path.display());
         
         if let Err(e) = compile_plugin(&source_path, &wasm_output) {
-            eprintln!("FAILED: {}", e);
+            println!("FAILED: {}", e);
             fail_count += 1;
         } else {
             println!("OK");

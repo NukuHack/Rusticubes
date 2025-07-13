@@ -1,6 +1,6 @@
 #define IDI_ICON 0x101
 
-IDI_ICON ICON "rusticubes3.ico"
+IDI_ICON ICON "rusticubes.ico"
 
 #define RT_MANIFEST 24
 
