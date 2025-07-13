@@ -27,6 +27,7 @@ impl Default for UIStateID {
 // Changed to take reference to avoid moving
 impl From<&UIState> for UIStateID {
     fn from(state: &UIState) -> UIStateID {
+        #[allow(unreachable_patterns)]
         match state {
             // Simple states
             UIState::None => UIStateID(0),
@@ -40,12 +41,15 @@ impl From<&UIState> for UIStateID {
             UIState::Confirm(..) => UIStateID(8),
             UIState::Loading => UIStateID(9),            
             UIState::Error(..) => UIStateID(10),
+            UIState::ConnectLocal => UIStateID(11),
+            _ => UIStateID(0),
         }
     }
 }
 
 impl From<UIStateID> for UIState {
     fn from(id: UIStateID) -> UIState {
+        #[allow(unreachable_patterns)]
         match id.0 {
             0 => UIState::None,
             1 => UIState::BootScreen,
@@ -58,6 +62,7 @@ impl From<UIStateID> for UIState {
             8 => UIState::Confirm(UIStateID::default(), 0u8),  // Default ID
             9 => UIState::Loading,
             10 => UIState::Error(UIStateID::default(), 0u8),  // Default ID
+            11 => UIState::ConnectLocal,
             _ => UIState::None,
         }
     }
@@ -66,14 +71,13 @@ impl From<UIStateID> for UIState {
 #[derive(PartialEq, Clone)]
 pub enum UIState {
 
-
     None,               // Baiscally not yet initialized
-
 
     BootScreen,         // Initial boot screen
 
     WorldSelection,     // World selection screen
     Multiplayer,        // Yeah boyyy multiplayer
+    ConnectLocal,       // Manual connect to world
     NewWorld,           // Make a new world
 
     Escape,             // In game but with Esc pressed
@@ -86,6 +90,7 @@ pub enum UIState {
 }
 impl UIState{
     pub fn inner(&self) -> Option<u8> {
+        #[allow(unreachable_patterns)]
         match self {
             // Simple states
             UIState::None => None,
@@ -99,9 +104,11 @@ impl UIState{
             UIState::Confirm(_, id) => Some(*id),
             UIState::Loading => None, 
             UIState::Error(_, id) => Some(*id),
+            UIState::ConnectLocal => None,
         }
     }
     pub fn inner_state(&self) -> UIState {
+        #[allow(unreachable_patterns)]
         let state = match self {
             // Simple states
             UIState::None => None,
@@ -115,6 +122,7 @@ impl UIState{
             UIState::Confirm(id, _) => Some(UIState::from(*id)),
             UIState::Loading => None, 
             UIState::Error(id, _) => Some(UIState::from(*id)),
+            UIState::ConnectLocal => None,
         };
         match state {
             Some(s) => s,
@@ -137,10 +145,10 @@ pub fn close_pressed() {
         UIState::WorldSelection | UIState::Multiplayer => {
             state.ui_manager.state = UIState::BootScreen;
             state.ui_manager.setup_ui();
-        }
+        },
         UIState::BootScreen => {
             config::close_app();
-        }
+        },
         UIState::InGame => {
             state.ui_manager.state = UIState::Escape;
             state.ui_manager.setup_ui();
@@ -148,17 +156,17 @@ pub fn close_pressed() {
             let game_state = config::get_gamestate();
             game_state.player_mut().controller().reset_keyboard();
             *game_state.running() = false;
-        }
+        },
         UIState::Escape => {
             state.ui_manager.state = UIState::InGame;
             state.ui_manager.setup_ui();
             
             let game_state = config::get_gamestate();
             *game_state.running() = true;
-        }
+        },
         UIState::Loading | UIState::None => {
             return;
-        }
+        },
         UIState::NewWorld => {
             state.ui_manager.state = UIState::WorldSelection;
             state.ui_manager.setup_ui();
@@ -168,11 +176,15 @@ pub fn close_pressed() {
             state.ui_manager.dialogs.cancel_dialog(dialog_id);
             state.ui_manager.state = UIState::from(prev_state);
             state.ui_manager.setup_ui();
-        }
+        },
         UIState::Settings(prev_state)  => {
             state.ui_manager.state = UIState::from(prev_state);
             state.ui_manager.setup_ui();
-        }
+        },
+        UIState::ConnectLocal => {
+            state.ui_manager.state = UIState::WorldSelection;
+            state.ui_manager.setup_ui();
+        },
     }
 }
 
@@ -481,6 +493,18 @@ impl UIManager {
 
 }
 
+pub fn get_element_data_dy_id(id: usize) -> String {
+    config::get_state()
+        .ui_manager()
+        .get_input_text(id)
+        .map(|s| s.trim())  // Trim whitespace first
+        .filter(|s| !s.is_empty())  // Reject empty strings after trim
+        .map(|s| s.to_string())
+        .unwrap_or_else(|| {
+            // You might want to log this fallback behavior
+            "Null".to_string()
+        })
+}
 
 
 // Utility functions for mouse coordinate conversion and UI setup

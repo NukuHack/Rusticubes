@@ -15,18 +15,7 @@ pub fn join_world(world_name: &str) {
     ui_manager.setup_ui();
 }
 
-pub fn create_world(id: usize) {
-	let world_name = config::get_state()
-	    .ui_manager()
-	    .get_input_text(id)
-	    .map(|s| s.trim())  // Trim whitespace first
-	    .filter(|s| !s.is_empty())  // Reject empty strings after trim
-	    .map(|s| s.to_string())
-	    .unwrap_or_else(|| {
-	        // You might want to log this fallback behavior
-	        "New World".to_string()
-	    });
-
+pub fn create_world(world_name: String) {
     // Create the save path
     let save_path = config::get_save_path()
         .join("saves")

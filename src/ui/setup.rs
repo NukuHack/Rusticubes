@@ -4,7 +4,7 @@ use crate::block;
 use crate::ext::config;
 use crate::ext::memory;
 use crate::world;
-use crate::ui::manager::*;
+use crate::ui::manager::{self, UIState, close_pressed, UIManager, UIStateID, get_element_data_dy_id};
 use crate::ui::element::UIElement;
 
 impl UIManager {
@@ -18,49 +18,55 @@ impl UIManager {
             .with_color(15, 15, 25)  // Darker background
             .with_z_index(-5);
 
+        #[allow(unreachable_patterns)]
         match self.state {
             UIState::None => {
                 self.state = UIState::BootScreen;
                 self.setup_ui();
-            }
+            },
             UIState::BootScreen => {
                 self.add_element(bg_panel);
                 self.setup_boot_screen_ui();
-            }
+            },
             UIState::WorldSelection => {
                 self.add_element(bg_panel);
                 self.setup_world_selection_ui();
-            }
+            },
             UIState::Loading => {
                 self.add_element(bg_panel);
                 self.setup_loading_screen_ui();
-            }
+            },
             UIState::NewWorld => {
                 self.add_element(bg_panel);
                 self.setup_new_world_ui();
-            }
+            },
             UIState::InGame => {
                 self.setup_in_game_ui();
-            }
+            },
             UIState::Multiplayer => {
                 self.add_element(bg_panel);
                 self.setup_multiplayer_ui();
-            }
+            },
             UIState::Settings(..) => {
                 self.add_element(bg_panel);
                 self.setup_settings_ui();
-            }
+            },
             UIState::Escape => {
                 self.setup_escape_ui();
-            }
+            },
             UIState::Confirm(..) => {
                 self.add_element(bg_panel);
                 self.setup_confirm_ui();
-            }
+            },
             UIState::Error(..) => {
                 self.add_element(bg_panel);
                 //self.setup_settings_ui();
-            }
+            },
+            UIState::ConnectLocal => {
+                self.add_element(bg_panel);
+                self.setup_connect_local_ui();
+            },
+            _ => {},
         }
     }
 
@@ -430,7 +436,6 @@ impl UIManager {
             .iter()
             .map(|s| s.world_name.clone())
             .collect();
-        println!("hosts: {:?}", worlds);
 
         // World buttons with improved styling
         for (i, name) in worlds.iter().enumerate() {
@@ -460,10 +465,28 @@ impl UIManager {
             .with_border((90, 100, 130, 255), 0.005)
             .with_z_index(8)
             .with_callback(|| {
+                match api::refresh_discovery() {
+                    Ok(a) => { println!("Refresh: {}", a); },
+                    Err(e) => { println!("Refresh error: {}", e); },
+                }
                 let state = config::get_state();
                 state.ui_manager.setup_ui();
             });
         self.add_element(re_button);
+
+        let connect_button = UIElement::button(self.next_id(), "manual connect")
+            .with_position(0.15, -0.8)
+            .with_size(0.4, 0.08)
+            .with_color(60, 60, 80)  // Dark gray-blue
+            .with_text_color(180, 190, 210) // Light blue-gray
+            .with_border((90, 100, 130, 255), 0.005)
+            .with_z_index(8)
+            .with_callback(|| {
+                let ui_manager = &mut config::get_state().ui_manager;
+                ui_manager.state = UIState::ConnectLocal;
+                ui_manager.setup_ui();
+            });
+        self.add_element(connect_button);
 
         // Back button with consistent styling
         let back_button = UIElement::button(self.next_id(), "Back")
@@ -528,7 +551,7 @@ impl UIManager {
             .with_border((80, 110, 160, 255), 0.005)
             .with_z_index(6)
             .with_callback(move || {
-                world::handler::create_world(input_id);
+                world::handler::create_world(manager::get_element_data_dy_id(input_id));
                 let ui_manager = &mut config::get_state().ui_manager;
                 ui_manager.state = UIState::WorldSelection;
                 ui_manager.setup_ui();
@@ -547,6 +570,79 @@ impl UIManager {
         self.add_element(back_button);
     }
 
+    #[inline]
+    fn setup_connect_local_ui(&mut self) {
+        // Title with improved styling
+        let title = UIElement::label(self.next_id(), "Manual Connect")
+            .with_position(-0.5, 0.4)
+            .with_size(1.0, 0.15)
+            .with_color(30, 30, 45)  // Dark panel
+            .with_text_color(180, 200, 220) // Light blue text
+            .with_border((80, 100, 140, 255), 0.008)
+            .with_z_index(10);
+        self.add_element(title);
+
+        // Form panel with better contrast
+        let form_panel = UIElement::panel(self.next_id())
+            .with_position(-0.4, -0.3)
+            .with_size(0.8, 0.7)
+            .with_color(25, 25, 40)  // Dark blue-gray
+            .with_border((60, 70, 100, 255), 0.01)
+            .with_z_index(1);
+        self.add_element(form_panel);
+
+        // World name label
+        let w_name_label = UIElement::label(self.next_id(), "Server IP:")
+            .with_position(-0.35, 0.1)
+            .with_size(0.4, 0.08)
+            .with_color(30, 30, 45)  // Dark panel
+            .with_text_color(180, 200, 220) // Light blue text
+            .with_z_index(3);
+        self.add_element(w_name_label);
+
+        // World Name input with better styling
+        let input_id = self.next_id();
+        let world_name_input = UIElement::input(input_id)
+            .with_position(-0.35, -0.0)
+            .with_size(0.7, 0.1)
+            .with_color(40, 50, 70)  // Dark blue-gray
+            .with_text_color(200, 220, 240) // Light blue text
+            .with_placeholder("255.255.255.255")
+            .with_border((80, 100, 140, 255), 0.005)
+            .with_z_index(5);
+        self.add_element(world_name_input);
+
+        // Generate button with consistent styling
+        let gen_button = UIElement::button(self.next_id(), "Connect Server")
+            .with_position(-0.3, -0.2)
+            .with_size(0.6, 0.1)
+            .with_color(50, 70, 110)  // Medium blue
+            .with_text_color(180, 200, 220) // Light blue text
+            .with_border((80, 110, 160, 255), 0.005)
+            .with_z_index(6)
+            .with_callback(move || {
+                match api::connect_to_host(&get_element_data_dy_id(input_id)) {
+                    Ok(a) => { println!("Nice: {}", a); },
+                    Err(e) => { println!("Error: {}", e); },
+                }
+                ;
+                let ui_manager = &mut config::get_state().ui_manager;
+                ui_manager.state = UIState::WorldSelection;
+                ui_manager.setup_ui();
+            });
+        self.add_element(gen_button);
+
+        // Back button with consistent styling
+        let back_button = UIElement::button(self.next_id(), "Back")
+            .with_position(-0.1, -0.45)
+            .with_size(0.2, 0.08)
+            .with_color(60, 60, 80)  // Dark gray-blue
+            .with_text_color(180, 190, 210) // Light blue-gray
+            .with_border((90, 100, 130, 255), 0.005)
+            .with_z_index(8)
+            .with_callback(|| close_pressed());
+        self.add_element(back_button);
+    }
     #[inline]
     fn setup_loading_screen_ui(&mut self) {
         // Loading panel with better contrast

@@ -143,19 +143,20 @@ pub fn is_host() -> Result<bool, String>  {
     }
 }
 
-
+/// Enhanced discovery that scans local network
 #[inline]
 pub fn begin_online_search() -> Result<String, String> {
     // Simple approach - always restart as client
     cleanup_network();
     match init_network(false) {
         Ok(init_msg) => {
-            match discovery::discover_hosts(100) {
-                Ok(discovery_msg) => Ok(format!(" Init: {} | Discovery: {}", init_msg, discovery_msg)),
-                Err(e) => Err(format!(" Init: {} | Discovery error: {}", init_msg, e)),
+            // Use longer timeout for network scanning
+            match discovery::discover_hosts(200) { // Increased timeout
+                Ok(discovery_msg) => Ok(format!("Init: {} | Discovery: {}", init_msg, discovery_msg)),
+                Err(e) => Err(format!("Init: {} | Discovery error: {}", init_msg, e)),
             }
         },
-        Err(e) => Err(format!(" Init error: {}", e)),
+        Err(e) => Err(format!("Init error: {}", e)),
     }
 }
 
@@ -166,14 +167,19 @@ pub fn begin_online_giveaway() -> Result<String, String> {
     match init_network(true) {
         Ok(init_msg) => {
             match start_host() {
-                Ok(host_msg) => Ok(format!(" Init: {} | Host: {}", init_msg, host_msg)),
-                Err(e) => Err(format!(" Init: {} | Host error: {}", init_msg, e)),
+                Ok(host_msg) => {
+                    // Start broadcast listener for hosts
+                    if let Some(system) = get_ptr() {
+                        let _ = system.start_broadcast_listener();
+                    }
+                    Ok(format!("Init: {} | Host: {}", init_msg, host_msg))
+                },
+                Err(e) => Err(format!("Init: {} | Host error: {}", init_msg, e)),
             }
         },
-        Err(e) => Err(format!(" Init error: {}", e)),
+        Err(e) => Err(format!("Init error: {}", e)),
     }
 }
-
 
 /// Start hosting a game
 #[inline]
@@ -191,7 +197,6 @@ pub fn start_host() -> Result<String, String> {
     }
 }
 
-
 /// Cleanup the network system
 #[inline]
 pub fn cleanup_network() {
@@ -199,6 +204,10 @@ pub fn cleanup_network() {
     if let Some(system) = get_ptr() {
         if let Some(handle) = system.discovery_thread.take() {
             let _ = handle.join();
+        }
+        if let Some(_handle) = system.broadcast_listener_thread.take() {
+            // Note: broadcast listener runs indefinitely, so we can't easily join it
+            // In a real implementation, you might want to use a shutdown signal
         }
     }
     
@@ -210,9 +219,11 @@ pub fn cleanup_network() {
 }
 
 
-/// Update the network system - call this every frame
+// FIXED: Update the network update function to use the stored host IP
 #[inline]
 pub fn update_network() {
+    handle_network_events();
+
     if let Some(system) = get_ptr() {
         // Check if discovery is complete
         system.check_discovery_complete();
@@ -247,21 +258,28 @@ pub fn update_network() {
             }
             NetworkStatus::Connecting => {
                 if !system.is_host {
-                    match system.try_connect_to_host(0) { // target_pid not used in current implementation
-                        Ok((true,_)) => {
-                            if let Err(e) = system.setup_ggrs_session() {
-                                system.status = NetworkStatus::Error(e.clone());
-                                system.push_event(NetworkEvent::Error(e));
+                    // FIXED: Use the stored target host IP
+                    if let Some(target_host_ip) = system.target_host_ip.clone() {
+                        match system.try_connect_to_host(&target_host_ip) {
+                            Ok((true, _)) => {
+                                if let Err(e) = system.setup_ggrs_session() {
+                                    system.status = NetworkStatus::Error(e.clone());
+                                    system.push_event(NetworkEvent::Error(e));
+                                }
+                            }
+                            Ok((false, _)) => {
+                                // Connection in progress
+                            }
+                            Err(e) => {
+                                let error_msg = format!("Connection error: {}", e);
+                                system.status = NetworkStatus::Error(error_msg.clone());
+                                system.push_event(NetworkEvent::Error(error_msg));
                             }
                         }
-                        Ok((false,_)) => {
-                            // Connection in progress
-                        }
-                        Err(e) => {
-                            let error_msg = format!("Connection error: {}", e);
-                            system.status = NetworkStatus::Error(error_msg.clone());
-                            system.push_event(NetworkEvent::Error(error_msg));
-                        }
+                    } else {
+                        let error_msg = "No target host IP set".to_string();
+                        system.status = NetworkStatus::Error(error_msg.clone());
+                        system.push_event(NetworkEvent::Error(error_msg));
                     }
                 }
             }
@@ -274,6 +292,65 @@ pub fn update_network() {
 }
 
 
+pub fn handle_network_events() {
+
+    // Handle network events
+    while let Some(event) = pop_event() {
+        match event {
+            NetworkEvent::DiscoveryComplete(result) => {
+                println!("Discovery complete! Found {} hosts", result.hosts.len());
+                
+                // Print discovered hosts
+                for (i, host) in result.hosts.iter().enumerate() {
+                    println!("Host {}: {} - {} (world: {})", 
+                        i, host.address, host.pid, host.world_name);
+                }
+                
+                // Connect to first host if available
+                if !result.hosts.is_empty() {
+                    match connect_to_discovered_host(0) {
+                        Ok(msg) => println!("Connecting: {}", msg),
+                        Err(e) => println!("Connection failed: {}", e),
+                    }
+                }
+                
+                // Print debug info
+                if !result.debug_info.is_empty() {
+                    println!("Debug info:");
+                    for info in &result.debug_info {
+                        println!("  {}", info);
+                    }
+                }
+                
+                // Print errors
+                if !result.errors.is_empty() {
+                    println!("Errors:");
+                    for error in &result.errors {
+                        println!("  {}", error);
+                    }
+                }
+            }
+            NetworkEvent::Connected(addr) => {
+                println!("Connected to {}", addr);
+            }
+            NetworkEvent::Ready => {
+                println!("Game session ready!");
+            }
+            NetworkEvent::GameStateUpdate(state) => {
+                println!("Game state: {}", state);
+            }
+            NetworkEvent::Error(e) => {
+                println!("Network error: {}", e);
+            }
+            NetworkEvent::Synchronizing => {
+                println!("Synchronizing...");
+            }
+            _ => {}
+        }
+    }
+
+}
+
 /// Get the list of discovered hosts
 #[inline]
 pub fn get_discovered_hosts() -> Vec<HostInfo> {
@@ -284,13 +361,39 @@ pub fn get_discovered_hosts() -> Vec<HostInfo> {
     }
 }
 
-
-/// Try to connect to a host
+// FIXED: Update the existing connect_to_host function to store IP parameter
+/// Try to connect to a host by IP address
 #[inline]
-pub fn connect_to_host(_target_pid: u32) -> Result<String, String> {
+pub fn connect_to_host(host_ip: &str) -> Result<String, String> {
     if let Some(system) = get_ptr() {
         system.status = NetworkStatus::Connecting;
-        Ok(format!("Status set to Connecting for target PID: {}", _target_pid))
+        system.set_target_host_ip(host_ip.to_string());
+        Ok(format!("Status set to Connecting for host IP: {}", host_ip))
+    } else {
+        Err("Network system not initialized".to_string())
+    }
+}
+
+/// Connect to a discovered host by index
+#[inline]
+pub fn connect_to_discovered_host(host_index: usize) -> Result<String, String> {
+    if let Some(system) = get_ptr() {
+        // Extract the necessary host information while the lock is held
+        let hosts = system.discovered_hosts.lock().unwrap();
+        let host_info = {
+            if let Some(host) = hosts.get(host_index) {
+                (host.address.ip().to_string(), host.world_name.clone())
+            } else {
+                return Err(format!("Host index {} not found", host_index));
+            }
+        }; // Lock is released here
+        drop(hosts);
+        
+        // Now we can modify the system
+        system.status = NetworkStatus::Connecting;
+        system.set_target_host_ip(host_info.0.clone());
+        
+        Ok(format!("Connecting to host: {} ({})", host_info.0, host_info.1))
     } else {
         Err("Network system not initialized".to_string())
     }
@@ -316,23 +419,21 @@ pub fn pop_event() -> Option<NetworkEvent> {
     }
 }
 
-/// Get current game state
+/// Force refresh discovery (useful for UI)
 #[inline]
-pub fn get_game_state() -> i32 {
+pub fn refresh_discovery() -> Result<String, String> {
     if let Some(system) = get_ptr() {
-        system.game_state
+        if system.is_host {
+            return Err("Cannot refresh discovery as host".to_string());
+        }
+        
+        // If discovery is already running, don't start another
+        if system.discovery_thread.is_some() {
+            return Ok("Discovery already in progress".to_string());
+        }
+        
+        discovery::discover_hosts(200)
     } else {
-        0
+        Err("Network system not initialized".to_string())
     }
 }
-
-/// Get current frame count
-#[inline]
-pub fn get_frame_count() -> u32 {
-    if let Some(system) = get_ptr() {
-        system.frame_count
-    } else {
-        0
-    }
-}
-
