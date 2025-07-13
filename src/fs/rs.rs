@@ -4,6 +4,7 @@ use std::path::Path;
 
 // Include the assets directory at compile time
 pub const RESOURCE_DIR: include_dir::Dir = include_dir!("$CARGO_MANIFEST_DIR/comp_resources");
+pub const ASSET_DIR: include_dir::Dir = include_dir!("$CARGO_MANIFEST_DIR/assets");
 
 // Macro to get raw bytes from included resources (equivalent to your old get_bytes!)
 #[macro_export]
@@ -32,6 +33,33 @@ macro_rules! get_bytes {
         }
     }};
 }
+// Macro to get raw bytes from included resources (equivalent to your old get_bytes!)
+#[macro_export]
+macro_rules! get_asset_raw_data {
+    ($path:expr) => {{
+        use crate::fs::rs::ASSET_DIR;
+        ASSET_DIR
+            .get_file($path.clone())
+            .map(|file| file.contents())
+            .unwrap_or_else(|| panic!("File {} not found in embedded resources", $path))
+    }};
+}
+
+// Updated get_bytes! macro that adds compression support while maintaining backward compatibility
+#[macro_export]
+macro_rules! get_asset_bytes {
+    ($path:expr) => {{
+        use crate::fs::rs::ASSET_DIR;
+        // First try to find a compressed version
+        if let Some(file) = ASSET_DIR.get_file(format!("{}{}",$path, ".lz4")) {
+            lz4_flex::decompress_size_prepended(file.contents())
+                .unwrap_or_else(|e| panic!("Failed to decompress {}: {}", $path, e))
+        } else {
+            // Fall back to uncompressed version (original behavior)
+            crate::get_asset_raw_data!($path).to_vec()
+        }
+    }};
+}
 
 // Updated get_string! macro that works with both compressed and uncompressed resources
 #[macro_export]
@@ -48,7 +76,7 @@ use std::io::Cursor;
 use winit::window::Icon;
 #[inline]
 pub fn load_main_icon() -> Option<Icon> {
-    let Some((rgba,w,h)) = load_image_from_path("icon.png".to_string()) else { panic!() };
+    let Some((rgba,w,h)) = load_image_asset_from_path("rusticubes3.png".to_string()) else { panic!() };
 
     match Icon::from_rgba(rgba, w, h) {
         Ok(icon) => Some(icon),
@@ -121,6 +149,26 @@ pub fn load_image_from_path<T: Into<String>>(path: T) -> Option<(Vec<u8>,u32,u32
     let path:String = path.into();
     // Create a cursor to read from memory
     let reader_rgba = match ImageReader::new(Cursor::new(crate::get_bytes!(path.clone())))
+        .with_guessed_format()
+        .expect("Failed to guess format")
+        .decode() 
+    {
+        Ok(img) => img.to_rgba8(),
+        Err(e) => {
+            println!("Failed to decode image: {}", e);
+            return None;
+        }
+    };
+
+    let (width, height) = reader_rgba.dimensions();
+
+    // Convert to RGBA8 (16×16 = 1024 bytes)
+    Some((reader_rgba.into_raw(),width,height))
+}
+pub fn load_image_asset_from_path<T: Into<String>>(path: T) -> Option<(Vec<u8>,u32,u32)> {
+    let path:String = path.into();
+    // Create a cursor to read from memory
+    let reader_rgba = match ImageReader::new(Cursor::new(crate::get_asset_bytes!(path.clone())))
         .with_guessed_format()
         .expect("Failed to guess format")
         .decode() 

@@ -16,6 +16,8 @@ pub struct GameState {
 }
 
 pub fn make_world(save_path: PathBuf) {
+    // has to make the error handling better , make the error quit from world
+    let _ = config::ensure_save_dir();
     // Check and create directories if needed
     match std::fs::metadata(&save_path) {
         Ok(metadata) => {

@@ -57,6 +57,9 @@ walkdir = "2"
 lz4_flex = "0.11"
 filetime = "0.2"
 
+[target.'cfg(windows)'.build-dependencies]
+embed-resource = "3.0.2"
+windows_exe_info = "0.4"
 
 [package.metadata.windows]
 icon = "assets/icon.ico"

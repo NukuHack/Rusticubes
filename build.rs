@@ -5,6 +5,8 @@ use std::{
 };
 
 fn main() {
+    icon_setting();
+
     // Handle resource compression (your existing system)
     handle_resource_compression();
 
@@ -342,4 +344,28 @@ fn needs_update(source_path: &Path, target_path: &Path) -> io::Result<bool> {
     let target_modified = fs::metadata(target_path)?.modified()?;
 
     Ok(source_modified > target_modified)
+}
+
+fn icon_setting() {
+    #[cfg(windows)]
+    {
+        let _ = embed_resource::compile(
+            "assets/rusticubes.rc",
+            embed_resource::NONE,
+        );
+        windows_exe_info::versioninfo::link_cargo_env();
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        // For macOS, you typically need to bundle the icon in the .app bundle
+        // This is usually handled by cargo-bundle or similar tools
+        // You might want to add build scripts or configuration for this
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        // For Linux, icons are typically installed to /usr/share/icons or ~/.local/share/icons
+        // This is usually handled by the package manager or installation process
+    }
 }

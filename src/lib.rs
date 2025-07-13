@@ -201,10 +201,6 @@ impl<'a> State<'a> {
             chunk_bind_group_layout,
         };
 
-
-        // has to make the error handling better , make the error quit from world
-        let _ = ext::config::ensure_save_dir();
-
         Self {
             window,
             render_context,
@@ -349,16 +345,15 @@ pub async fn run() {
 
     // Store the state pointer
     ext::config::STATE_PTR.store(Box::into_raw(Box::new(state)), Ordering::Release);
-{/*
-    match mods::api::main() {
-        Ok(_) => (), // Success case
-        Err(e) => println!("⚠Error modding: {}", e),
+
+    #[cfg(debug_assertions)] {
+        if let Err(e) = mods::api::main() {
+            eprintln!("⚠Error modding: {}", e);
+        }
+        if let Err(e) = mods::over::main() {
+            eprintln!("💥Error mod function override: {}", e);
+        }
     }
-    match mods::over::main() {
-        Ok(_) => (), // Success case
-        Err(e) => { println!("💥Error mod function override: {}", e); }
-    }
-*/}
 
     // Post-init cleanup
     ext::memory::light_trim();
