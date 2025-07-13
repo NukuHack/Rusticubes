@@ -1,6 +1,6 @@
 [package]
 name = "rusticubes"
-version = "0.4.6" 
+version = "0.4.7" 
 edition = "2024"
 authors = ["NukuHack", "nukuhack@gmail.com"] # might not be able to answer too quickly
 description = "3D voxel sandbox game"
