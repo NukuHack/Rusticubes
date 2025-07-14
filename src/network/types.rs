@@ -9,8 +9,11 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::io;
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum NetworkMessage {
+    DiscoveryRequest,
+    DiscoveryResponse{ ip:String, port:u16 },
+
     PeerAddress(SocketAddr),
     Ping,
     Pong,
@@ -235,39 +238,6 @@ pub fn create_local_socket_addr(port: u16) -> Result<SocketAddr, io::Error> {
     let local_ip = get_local_ip()?;
     Ok(SocketAddr::new(local_ip, port))
 }
-/*
-/// Get all available network interfaces (more comprehensive approach)
-pub fn get_network_interfaces() -> Result<Vec<IpAddr>, Box<dyn std::error::Error>> {
-    let network_interfaces = NetworkInterface::show()?;
-    let mut ips = Vec::new();
-    
-    for interface in network_interfaces {
-        // Skip loopback and non-running interfaces
-        if interface.name.starts_with("loop") || !interface.flags.is_running() {
-            continue;
-        }
-        
-        for addr in interface.addr {
-            match addr.ip() {
-                IpAddr::V4(ipv4) => {
-                    // Skip localhost and link-local addresses
-                    if !ipv4.is_loopback() && !ipv4.is_link_local() {
-                        ips.push(IpAddr::V4(ipv4));
-                    }
-                }
-                IpAddr::V6(ipv6) => {
-                    // Skip localhost and link-local IPv6 addresses
-                    if !ipv6.is_loopback() && !ipv6.is_unicast_link_local() {
-                        ips.push(IpAddr::V6(ipv6));
-                    }
-                }
-            }
-        }
-    }
-    
-    Ok(ips)
-}
-*/
 /// Simple way to detect if we're on a local network
 pub fn is_local_network_ip(ip: &IpAddr) -> bool {
     match ip {
