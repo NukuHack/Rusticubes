@@ -159,7 +159,8 @@ impl UIRenderer {
         self.pixel_ratio = ratio.max(10.0).min(0.5);
     }
     
-    #[inline] pub fn process_elements(&mut self, elements: &[UIElement]) -> (Vec<Vertex>, Vec<u32>) {
+    #[inline] 
+    pub fn process_elements(&mut self, elements: &[UIElement]) -> (Vec<Vertex>, Vec<u32>) {
         let mut sorted_elements: Vec<_> = elements.iter().filter(|e| e.visible).collect();
         sorted_elements.sort_by_key(|e| e.z_index);
         let mut vertices = Vec::with_capacity(sorted_elements.len() * 8);
@@ -174,12 +175,17 @@ impl UIRenderer {
                 UIElementData::Image { .. } => self.process_image_element(element, &mut vertices, &mut indices, &mut current_index),
                 UIElementData::Animation { .. } => self.process_animation_element(element, &mut vertices, &mut indices, &mut current_index),
                 UIElementData::Checkbox { .. } => self.process_checkbox(element, &mut vertices, &mut indices, &mut current_index),
-                UIElementData::InputField { .. } | UIElementData::Button { .. } | UIElementData::Label { .. } => {
-                    if element.get_text().is_some() {
-                        self.process_text_element(element, &mut vertices, &mut indices, &mut current_index);
-                    } else {
-                        self.process_rect_element(element, &mut vertices, &mut indices, &mut current_index);
-                    }
+                UIElementData::Slider { .. } => self.process_slider(element, &mut vertices, &mut indices, &mut current_index),
+                UIElementData::InputField { .. } | UIElementData::Button { .. } => {
+                    self.process_rect_element(element, &mut vertices, &mut indices, &mut current_index);
+                    self.process_text_element(element, element.get_text(), &mut vertices, &mut indices, &mut current_index);
+                }
+                UIElementData::Label { .. } => {
+                    self.process_text_element(element, element.get_text(), &mut vertices, &mut indices, &mut current_index);
+                }
+                UIElementData::MultiStateButton { states, current_state, .. } => {
+                    self.process_rect_element(element, &mut vertices, &mut indices, &mut current_index);
+                    self.process_text_element(element, Some(&states[*current_state]), &mut vertices, &mut indices, &mut current_index);
                 }
                 _ => self.process_rect_element(element, &mut vertices, &mut indices, &mut current_index),
             }
@@ -187,20 +193,12 @@ impl UIRenderer {
         (vertices, indices)
     }
 
-    #[inline] fn process_text_element(&mut self, element: &UIElement, vertices: &mut Vec<Vertex>, 
-        indices: &mut Vec<u32>, current_index: &mut u32) {
+
+    #[inline] 
+    fn process_text_element(&mut self, element: &UIElement, text: Option<&str>,vertices: &mut Vec<Vertex>, indices: &mut Vec<u32>, current_index: &mut u32) {
         let state = config::get_state();
         
-        match &element.data {
-            UIElementData::InputField { .. } | UIElementData::Button { .. } => {
-                self.add_rectangle(vertices, element.position, element.size, element.color);
-                indices.extend(self.rectangle_indices(*current_index));
-                *current_index += 4;
-            }
-            _ => {}
-        }
-
-        if let Some(text) = element.get_text() {
+        if let Some(text) = text {
             let texture_key = format!("{}_{:?}", text, element.color);
             if !self.text_textures.contains_key(&texture_key) {
                 let texture = self.render_text_to_texture(state.device(), state.queue(), text, element.size, element.get_text_color());
@@ -228,7 +226,7 @@ impl UIRenderer {
                 let positions = [[x, y], [x + tex_w, y], [x, y + tex_h], [x + tex_w, y + tex_h]];
                 
                 for j in 0..4 {
-                    vertices.push(Vertex::new(positions[j], [255, 255, 255, 255]));
+                    vertices.push(Vertex::new(positions[j], element.get_text_color()));
                 }
                 indices.extend(self.rectangle_indices(*current_index));
                 *current_index += 4;
@@ -236,8 +234,33 @@ impl UIRenderer {
         }
     }
 
-    fn render_text_to_texture(&self, device: &wgpu::Device, queue: &wgpu::Queue, 
-        text: &str, element_size: (f32, f32), [r, g, b, a]: [u8; 4]) -> wgpu::Texture {
+    #[inline] 
+    fn process_slider(&mut self, element: &UIElement, vertices: &mut Vec<Vertex>, indices: &mut Vec<u32>, current_index: &mut u32) {
+        if let UIElementData::Slider { min_value, max_value, current_value, .. } = &element.data {
+            let (x, y) = element.position;
+            let (w, h) = element.size;
+            
+            // Draw slider track
+            let track_height = h * 0.3;
+            let track_y = y + (h - track_height) / 2.0;
+            let track_color = [100, 100, 100, 255];
+            self.add_rectangle(vertices, (x, track_y), (w, track_height), track_color);
+            indices.extend(self.rectangle_indices(*current_index));
+            *current_index += 4;
+            
+            // Draw slider handle
+            let normalized_value = (current_value - min_value) / (max_value - min_value);
+            let handle_width = h * 0.8;
+            let handle_x = x + (w - handle_width) * normalized_value;
+            let handle_y = y + (h - handle_width) / 2.0;
+            let handle_color = [200, 200, 200, 255];
+            self.add_rectangle(vertices, (handle_x, handle_y), (handle_width, handle_width), handle_color);
+            indices.extend(self.rectangle_indices(*current_index));
+            *current_index += 4;
+        }
+    }
+
+    fn render_text_to_texture(&self, device: &wgpu::Device, queue: &wgpu::Queue, text: &str, element_size: (f32, f32), [r, g, b, a]: [u8; 4]) -> wgpu::Texture {
         let target_width_px = (element_size.0 * 100.0 * self.pixel_ratio) as u32;
         let target_height_px = (element_size.1 * 100.0 * self.pixel_ratio) as u32;
         let font_size = target_height_px as f32 * 0.8;
@@ -477,12 +500,11 @@ impl UIRenderer {
                 color: [0, 0, 0, 255],
                 ..*element
             };
-            self.process_text_element(&label_element, vertices, indices, current_index);
+            self.process_text_element(&label_element, label_element.get_text(), vertices, indices, current_index);
         }
     }
 
-    #[inline] fn process_rect_element(&self, element: &UIElement, vertices: &mut Vec<Vertex>, 
-        indices: &mut Vec<u32>, current_index: &mut u32) {
+    #[inline] fn process_rect_element(&self, element: &UIElement, vertices: &mut Vec<Vertex>, indices: &mut Vec<u32>, current_index: &mut u32) {
         self.add_rectangle(vertices, element.position, element.size, element.color);
         indices.extend(self.rectangle_indices(*current_index));
         *current_index += 4;
@@ -519,6 +541,7 @@ impl UIRenderer {
                 r_pass.draw_indexed(i_off..(i_off + 6), 0, 0..1);
                 i_off += 6;
             }
+            #[allow(unreachable_patterns)]
             match &element.data {
                 UIElementData::Image { path } => {
                     let image_key = format!("{}_{}", path, element.color.map(|c| c.to_string()).join("|"));
@@ -562,12 +585,34 @@ impl UIRenderer {
                         i_off += 6;
                     }
                 },
+                UIElementData::Slider { .. } => {
+                    r_pass.set_bind_group(0, &self.default_bind_group, &[]);
+                    // Draw track
+                    r_pass.draw_indexed(i_off..(i_off + 6), 0, 0..1);
+                    i_off += 6;
+                    // Draw handle
+                    r_pass.draw_indexed(i_off..(i_off + 6), 0, 0..1);
+                    i_off += 6;
+                },
                 UIElementData::InputField { .. } | UIElementData::Button { .. } => {
                     r_pass.set_bind_group(0, &self.default_bind_group, &[]);
                     r_pass.draw_indexed(i_off..(i_off + 6), 0, 0..1);
                     i_off += 6;
                     if let Some(text) = element.get_text() {
                         let texture_key = format!("{}_{:?}", text, element.color);
+                        if let Some((_, bind_group)) = self.text_textures.get(&texture_key) {
+                            r_pass.set_bind_group(0, bind_group, &[]);
+                            r_pass.draw_indexed(i_off..(i_off + 6), 0, 0..1);
+                        }
+                        i_off += 6;
+                    }
+                },
+                UIElementData::MultiStateButton { states, current_state, .. } => {
+                    r_pass.set_bind_group(0, &self.default_bind_group, &[]);
+                    r_pass.draw_indexed(i_off..(i_off + 6), 0, 0..1);
+                    i_off += 6;
+                    {
+                        let texture_key = format!("{}_{:?}", &states[*current_state], element.color);
                         if let Some((_, bind_group)) = self.text_textures.get(&texture_key) {
                             r_pass.set_bind_group(0, bind_group, &[]);
                             r_pass.draw_indexed(i_off..(i_off + 6), 0, 0..1);

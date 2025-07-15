@@ -59,7 +59,7 @@ impl UIManager {
             },
             UIState::Error(..) => {
                 self.add_element(bg_panel);
-                //self.setup_settings_ui();
+                //self.setup_error_ui();
             },
             UIState::ConnectLocal => {
                 self.add_element(bg_panel);
@@ -322,16 +322,42 @@ impl UIManager {
         self.add_element(list_panel);
 
         let setting_button_1 = UIElement::button(self.next_id(), "setting")
-            .with_position(-0.4, 0.0)
+            .with_position(-0.4, 0.1)
             .with_size(0.8, 0.1)
             .with_color(40, 50, 80)
             .with_text_color(180, 200, 220)
             .with_border((70, 90, 130, 255), 0.005)
             .with_z_index(5)
             .with_callback(|| {
-                println!("set setting");
+                println!("clicked setting_button_1");
             });
         self.add_element(setting_button_1);
+
+        let setting_slider_1 = UIElement::slider(self.next_id(), 0., 100.)
+            .with_position(-0.4, -0.1)
+            .with_size(0.8, 0.1)
+            .with_color(40, 50, 80)
+            .with_text_color(180, 200, 220)
+            .with_border((70, 90, 130, 255), 0.005)
+            .with_z_index(5)
+            .with_step(0.5)
+            .with_value(10.)
+            .with_callback(|| {
+                println!("clicked setting_slider_1");
+            });
+        self.add_element(setting_slider_1);
+
+        let setting_multi_button_1 = UIElement::multi_state_button(self.next_id(), vec!("On", "Off"))
+            .with_position(-0.4, -0.3)
+            .with_size(0.8, 0.1)
+            .with_color(40, 50, 80)
+            .with_text_color(180, 200, 220)
+            .with_border((70, 90, 130, 255), 0.005)
+            .with_z_index(5)
+            .with_callback(|| {
+                println!("clicked setting_multi_button_1");
+            });
+        self.add_element(setting_multi_button_1);
 
         // Back button with consistent styling
         let back_button = UIElement::button(self.next_id(), "Back")

@@ -28,6 +28,7 @@ pub enum UIElementData {
 }
 
 impl Default for UIElementData {
+    #[inline]
     fn default() -> Self { UIElementData::Panel }
 }
 
@@ -88,6 +89,7 @@ pub struct UIElement {
 }
 
 impl Default for UIElement {
+    #[inline]
     fn default() -> Self {
         Self {
             id: 0,
@@ -125,25 +127,33 @@ impl UIElement {
     
 
     // Element creation
+    #[inline]
     pub fn new(id: usize, element_type: UIElementData) -> Self {
         Self { id, data: element_type, color: Self::DEFAULT_COLOR, ..Default::default() }
     }
+    #[inline]
     pub fn panel(id: usize) -> Self { Self::new(id, UIElementData::Panel) }
+    #[inline]
     pub fn label<T: Textlike>(id: usize, text: T) -> Self {
         Self::new(id, UIElementData::Label { text: text.into(), text_color: None })
     }
+    #[inline]
     pub fn button<T: Textlike>(id: usize, text: T) -> Self {
         Self::new(id, UIElementData::Button { text: text.into(), text_color: None, on_click: None })
     }
+    #[inline]
     pub fn input(id: usize) -> Self {
         Self::new(id, UIElementData::InputField { text: String::new(), text_color: None, placeholder: None })
     }
+    #[inline]
     pub fn checkbox(id: usize) -> Self {
         Self::new(id, UIElementData::Checkbox { label: None, text_color: None, checked: false, on_click: None })
     }
+    #[inline]
     pub fn image<T: Textlike>(id: usize, path: T) -> Self {
         Self::new(id, UIElementData::Image { path: path.into() })
     }
+    #[inline]
     pub fn animation<T: Textlike>(id: usize, frames: Vec<T>) -> Self {
         Self::new(id, UIElementData::Animation {
             frames : frames.into_iter().map(Into::into).collect(),
@@ -151,13 +161,16 @@ impl UIElement {
             looping: true, playing: true, smooth_transition: false, blend_delay: 20,
         })
     }
+    #[inline]
     pub fn divider(id: usize) -> Self { Self::new(id, UIElementData::Divider) }
+    #[inline]
     pub fn multi_state_button<T: Textlike>(id: usize, states: Vec<T>) -> Self {
         Self::new(id, UIElementData::MultiStateButton {
             states: states.into_iter().map(Into::into).collect(),
             current_state: 0,on_click: None,
         })
     }
+    #[inline]
     pub fn slider(id: usize, min_value: f32, max_value: f32) -> Self {
         Self::new(id, UIElementData::Slider {
             min_value, max_value, //vertical: false,
@@ -168,18 +181,27 @@ impl UIElement {
     
     
     // Builder methods
+    #[inline]
     pub fn with_position(mut self, x: f32, y: f32) -> Self { self.position = (x, y); self }
+    #[inline]
     pub fn with_size(mut self, width: f32, height: f32) -> Self { self.size = (width, height); self }
+    #[inline]
     pub fn with_color(mut self, r: u8, g: u8, b: u8) -> Self { self.color = [r, g, b, self.color[3]]; self }
+    #[inline]
     pub fn with_alpha(mut self, alpha: u8) -> Self { self.color[3] = alpha; self }
+    #[inline]
     pub fn with_z_index(mut self, z_index: i32) -> Self { self.z_index = z_index; self }
+    #[inline]
     pub fn with_visibility(mut self, visible: bool) -> Self { self.visible = visible; self }
+    #[inline]
     pub fn with_enabled(mut self, enabled: bool) -> Self { self.enabled = enabled; self }
+    #[inline]
     pub fn with_border(mut self, color: (u8, u8, u8, u8), width: f32) -> Self {
         self.border_color = [color.0, color.1, color.2, color.3];
         self.border_width = width;
         self
     }
+    #[inline]
     pub fn with_callback<F: FnMut() + 'static>(mut self, callback: F) -> Self {
         match &mut self.data {
             UIElementData::Button { on_click, .. } => {
@@ -200,29 +222,38 @@ impl UIElement {
     }
             
     // Utility methods
+    #[inline]
     pub fn get_bounds(&self) -> (f32, f32, f32, f32) {
         let (x, y) = self.position;
         let (w, h) = self.size;
         (x, y, x + w, y + h)
     }
+    #[inline]
     pub fn contains_point(&self, x: f32, y: f32) -> bool {
         if !self.visible || !self.enabled { return false; }
         let (min_x, min_y, max_x, max_y) = self.get_bounds();
         x >= min_x && x <= max_x && y >= min_y && y <= max_y
     }
+    #[inline]
     pub fn is_input(&self) -> bool { matches!(self.data, UIElementData::InputField { .. }) }
+    #[inline]
     pub fn update_hover_state(&mut self, is_hovered: bool) {
         self.hovered = is_hovered && self.enabled;
-        if matches!(self.data, UIElementData::Button { .. }) {
-            self.color[3] = if self.hovered && self.enabled {
-                Self::HOVER_ALPHA
-            } else if !self.enabled {
-                Self::DEFAULT_ALPHA / 2
-            } else {
-                Self::DEFAULT_ALPHA
-            };
+        match self.data {
+            UIElementData::Button{ .. } | UIElementData::InputField{ .. } | UIElementData::Slider{ .. } | UIElementData::MultiStateButton{ .. } => {
+
+                self.color[3] = if self.hovered && self.enabled {
+                    Self::HOVER_ALPHA
+                } else if !self.enabled {
+                    Self::DEFAULT_ALPHA / 2
+                } else {
+                    Self::DEFAULT_ALPHA
+                };
+            },
+            _ => { },
         }
     }
+    #[inline]
     pub fn get_text(&self) -> Option<&str> {
         match &self.data {
             UIElementData::Label { text, .. } |
@@ -232,6 +263,7 @@ impl UIElement {
             _ => None,
         }
     }
+    #[inline]
     pub fn get_text_mut(&mut self) -> Option<&mut String> {
         match &mut self.data {
             UIElementData::Label { text, .. } |
@@ -240,18 +272,14 @@ impl UIElement {
             UIElementData::Checkbox { label, .. } => label.as_mut(),
             _ => None,
         }
-    }    
+    }
+    #[inline]
     pub fn trigger_callback(&mut self) {
         let callback = match &mut self.data {
             UIElementData::Button { on_click, .. } => on_click.clone(),
             UIElementData::Checkbox { on_click, .. } => on_click.clone(),
             UIElementData::Slider { on_change, .. } => on_change.clone(),
-            UIElementData::MultiStateButton { on_click, .. } => {
-                // Call next_state before cloning the callback
-                let cb = on_click.clone();
-                self.next_state();
-                cb
-            }
+            UIElementData::MultiStateButton { on_click, .. } => on_click.clone(),
             _ => None,
         };
         if let Some(cb) = callback {
@@ -265,10 +293,12 @@ impl UIElement {
 impl UIElement {
 
     // Text-related methods
+    #[inline]
     pub fn with_text<T: Textlike>(mut self, text: T) -> Self {
         if let Some(text_field) = self.get_text_mut() { *text_field = text.into(); }
         self
     }
+    #[inline]
     fn set_text_color(&mut self, r: u8, g: u8, b: u8, a: u8) {
         match &mut self.data {
             UIElementData::Label { text_color, .. } |
@@ -278,15 +308,18 @@ impl UIElement {
             _ => {}
         }
     }
+    #[inline]
     pub fn with_text_color(mut self, r: u8, g: u8, b: u8) -> Self {
         self.set_text_color(r, g, b, 255);
         self
     }
+    #[inline]
     pub fn with_text_visibility(mut self, a: u8) -> Self {
         let color = self.get_text_color();
         self.set_text_color(color[0], color[1], color[2], a);
         self
     }
+    #[inline]
     pub fn get_text_color(&self) -> [u8; 4] {
         let text_color = match &self.data {
             UIElementData::Label { text_color, .. } |
@@ -297,6 +330,7 @@ impl UIElement {
         };
         text_color.unwrap_or(self.color)
     }
+    #[inline]
     pub fn with_placeholder<T: Textlike>(mut self, placeholder: T) -> Self {
         if let UIElementData::InputField { placeholder: p, .. } = &mut self.data {
             *p = Some(placeholder.into());
@@ -305,11 +339,20 @@ impl UIElement {
     }
 
     // MultiStateButton-related methods
+    #[inline]
     pub fn next_state(&mut self) {
         if let UIElementData::MultiStateButton { states, current_state, .. } = &mut self.data {
             *current_state = (*current_state + 1) % states.len();
         }
     }
+    #[inline]
+    pub fn with_states<T: Textlike>(mut self, statesss: Vec<T>) -> Self {
+        if let UIElementData::MultiStateButton { states, .. } = &mut self.data {
+            *states = statesss.into_iter().map(Into::into).collect();
+        }
+        self
+    }
+    #[inline]
     pub fn get_current_state(&self) -> Option<usize> {
         if let UIElementData::MultiStateButton { current_state, .. } = &self.data {
             Some(*current_state)
@@ -317,24 +360,73 @@ impl UIElement {
             None
         }
     }
+    // Slider-related methods
+    #[inline]
     pub fn with_step(mut self, step: f32) -> Self {
         if let UIElementData::Slider { step: s, .. } = &mut self.data {
             *s = Some(step);
         }
         self
     }
-    /*pub fn with_vertical(mut self, vertical: bool) -> Self {
+    /*
+    #[inline]
+    pub fn with_vertical(mut self, vertical: bool) -> Self {
         if let UIElementData::Slider { vertical: v, .. } = &mut self.data {
             *v = vertical;
         }
         self
     }*/
+    #[inline]
     pub fn with_value(mut self, value: f32) -> Self {
         if let UIElementData::Slider { min_value, max_value, current_value, .. } = &mut self.data {
             *current_value = value.clamp(*min_value, *max_value);
         }
         self
     }
+    #[inline]
+    pub fn set_value(&mut self, value: f32) {
+        if let UIElementData::Slider { current_value, .. } = &mut self.data {
+            *current_value = value;
+        }
+    }
+    #[inline]
+    pub fn calc_value(&self, norm_x: f32, norm_y: f32) -> Option<f32> {
+        if let UIElementData::Slider { min_value, max_value, step, .. } = &self.data {
+            // Calculate clicked position relative to slider
+            let (x, y) = self.position;
+            let (w, h) = self.size;
+            
+            // Get click position relative to slider track
+            let track_height = h * 0.3;
+            let track_y = y + (h - track_height) / 2.0;
+            
+            // Only process if click is within track bounds (vertically)
+            if norm_y >= track_y && norm_y <= track_y + track_height {
+                let handle_width = h * 0.8;
+                let effective_width = w - handle_width;
+                let click_x = (norm_x - x - handle_width / 2.0).clamp(0.0, effective_width);
+                
+                // Calculate normalized value (0-1)
+                let normalized_value = click_x / effective_width;
+                
+                // Convert to actual value range
+                let value = min_value + normalized_value * (max_value - min_value);
+                
+                let mut clamped_value = value.clamp(*min_value, *max_value);
+
+                if let Some(step) = step {
+                    // Round to the nearest step
+                    let stepped_value = (clamped_value / *step).round() * *step;
+                    // Ensure we're still within bounds after rounding
+                    clamped_value = stepped_value.clamp(*min_value, *max_value);
+                }
+
+                return Some(clamped_value);
+            }
+        }
+        None
+    }
+    #[inline]
     pub fn get_value(&self) -> Option<f32> {
         if let UIElementData::Slider { current_value, .. } = &self.data {
             Some(*current_value)
@@ -344,51 +436,63 @@ impl UIElement {
     }
     
     // Checkbox-related methods
+    #[inline]
     pub fn with_checked(mut self, checked: bool) -> Self {
         if let UIElementData::Checkbox { checked: c, .. } = &mut self.data { *c = checked; }
         self
     }
+    #[inline]
     pub fn toggle_checked(&mut self) {
         if let UIElementData::Checkbox { checked, .. } = &mut self.data { *checked = !*checked; }
     }
+    #[inline]
     pub fn is_checked(&self) -> Option<bool> {
         if let UIElementData::Checkbox { checked, .. } = &self.data { Some(*checked) } else { None }
     }
 
     // Animation-related methods
+    #[inline]
     pub fn with_animation_frames<T: Textlike>(mut self, frames_new: Vec<T>) -> Self {
         if let UIElementData::Animation { frames, .. } = &mut self.data {
             *frames = frames_new.into_iter().map(Into::into).collect();
         }
         self
     }
+    #[inline]
     pub fn with_animation_duration(mut self, duration: f32) -> Self {
         if let UIElementData::Animation { frame_duration, .. } = &mut self.data { *frame_duration = duration; }
         self
     }
+    #[inline]
     pub fn with_looping(mut self, looping: bool) -> Self {
         if let UIElementData::Animation { looping: l, .. } = &mut self.data { *l = looping; }
         self
     }
+    #[inline]
     pub fn with_smooth_transition(mut self, smooth: bool) -> Self {
         if let UIElementData::Animation { smooth_transition, .. } = &mut self.data { *smooth_transition = smooth; }
         self
     }
+    #[inline]
     pub fn with_blend_delay(mut self, delay: u32) -> Self {
         if let UIElementData::Animation { blend_delay, .. } = &mut self.data { *blend_delay = delay; }
         self
     }
+    #[inline]
     pub fn play(&mut self) {
         if let UIElementData::Animation { playing, .. } = &mut self.data { *playing = true; }
     }
+    #[inline]
     pub fn pause(&mut self) {
         if let UIElementData::Animation { playing, .. } = &mut self.data { *playing = false; }
     }
+    #[inline]
     pub fn reset(&mut self) {
         if let UIElementData::Animation { current_frame, elapsed_time, .. } = &mut self.data {
             *current_frame = 0; *elapsed_time = 0.0;
         }
     }
+    #[inline]
     pub fn update_anim(&mut self, delta_time: f32) {
         if let UIElementData::Animation {
             frames, current_frame, frame_duration, elapsed_time, looping, playing, ..
