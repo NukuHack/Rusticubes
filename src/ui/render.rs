@@ -178,14 +178,14 @@ impl UIRenderer {
                 UIElementData::Slider { .. } => self.process_slider(element, &mut vertices, &mut indices, &mut current_index),
                 UIElementData::InputField { .. } | UIElementData::Button { .. } => {
                     self.process_rect_element(element, &mut vertices, &mut indices, &mut current_index);
-                    self.process_text_element(element, element.get_text(), &mut vertices, &mut indices, &mut current_index);
+                    self.process_text_element(element, element.get_data(), &mut vertices, &mut indices, &mut current_index);
                 }
                 UIElementData::Label { .. } => {
-                    self.process_text_element(element, element.get_text(), &mut vertices, &mut indices, &mut current_index);
+                    self.process_text_element(element, element.get_data(), &mut vertices, &mut indices, &mut current_index);
                 }
-                UIElementData::MultiStateButton { states, current_state, .. } => {
+                UIElementData::MultiStateButton { .. } => {
                     self.process_rect_element(element, &mut vertices, &mut indices, &mut current_index);
-                    self.process_text_element(element, Some(&states[*current_state]), &mut vertices, &mut indices, &mut current_index);
+                    self.process_text_element(element, element.get_data(), &mut vertices, &mut indices, &mut current_index);
                 }
                 _ => self.process_rect_element(element, &mut vertices, &mut indices, &mut current_index),
             }
@@ -243,7 +243,7 @@ impl UIRenderer {
             // Draw slider track
             let track_height = h * 0.3;
             let track_y = y + (h - track_height) / 2.0;
-            let track_color = [100, 100, 100, 255];
+            let track_color = element.color;
             self.add_rectangle(vertices, (x, track_y), (w, track_height), track_color);
             indices.extend(self.rectangle_indices(*current_index));
             *current_index += 4;
@@ -253,7 +253,7 @@ impl UIRenderer {
             let handle_width = h * 0.8;
             let handle_x = x + (w - handle_width) * normalized_value;
             let handle_y = y + (h - handle_width) / 2.0;
-            let handle_color = [200, 200, 200, 255];
+            let handle_color = element.get_text_color();
             self.add_rectangle(vertices, (handle_x, handle_y), (handle_width, handle_width), handle_color);
             indices.extend(self.rectangle_indices(*current_index));
             *current_index += 4;
@@ -346,11 +346,10 @@ impl UIRenderer {
         result
     }
 
-    #[inline] fn process_image_element(&mut self, element: &UIElement, vertices: &mut Vec<Vertex>, 
-        indices: &mut Vec<u32>, current_index: &mut u32) {
+    #[inline] fn process_image_element(&mut self, element: &UIElement, vertices: &mut Vec<Vertex>, indices: &mut Vec<u32>, current_index: &mut u32) {
         if let UIElementData::Image { path } = &element.data {
             let state = config::get_state();
-            let image_key = format!("{}_{}", path, element.color.map(|c| c.to_string()).join("|"));
+            let image_key = format!("{}_{:?}", path, element.color);
             
             if !self.image_textures.contains_key(&image_key) {
                 let texture = self.create_image_texture(state.device(), state.queue(), path.to_string());
@@ -399,8 +398,7 @@ impl UIRenderer {
         texture
     }
 
-    #[inline] fn process_animation_element(&mut self, element: &UIElement, vertices: &mut Vec<Vertex>, 
-        indices: &mut Vec<u32>, current_index: &mut u32) {
+    #[inline] fn process_animation_element(&mut self, element: &UIElement, vertices: &mut Vec<Vertex>, indices: &mut Vec<u32>, current_index: &mut u32) {
         if let UIElementData::Animation {frames,..} = &element.data {
             let state = config::get_state();
             let animation_key = frames.join("|");
@@ -422,8 +420,7 @@ impl UIRenderer {
         }
     }
 
-    fn create_animation_texture_array(&self, device: &wgpu::Device, queue: &wgpu::Queue, 
-        frames: &[String]) -> Option<(wgpu::Texture, wgpu::BindGroup)> {
+    fn create_animation_texture_array(&self, device: &wgpu::Device, queue: &wgpu::Queue, frames: &[String]) -> Option<(wgpu::Texture, wgpu::BindGroup)> {
         if frames.is_empty() { return None; }
         let (_, width, height) = rs::load_image_from_path(frames[0].clone())?;
         let layer_count = frames.len() as u32;
@@ -461,8 +458,7 @@ impl UIRenderer {
         Some((texture, bind_group))
     }
 
-    #[inline] fn process_border(&self, element: &UIElement, vertices: &mut Vec<Vertex>, 
-        indices: &mut Vec<u32>, current_index: &mut u32) {
+    #[inline] fn process_border(&self, element: &UIElement, vertices: &mut Vec<Vertex>, indices: &mut Vec<u32>, current_index: &mut u32) {
         let (x, y) = element.position;
         let (w, h) = element.size;
         let border_width = element.border_width;
@@ -475,8 +471,7 @@ impl UIRenderer {
         *current_index += 4;
     }
 
-    #[inline] fn process_checkbox(&mut self, element: &UIElement, vertices: &mut Vec<Vertex>, 
-        indices: &mut Vec<u32>, current_index: &mut u32) {
+    #[inline] fn process_checkbox(&mut self, element: &UIElement, vertices: &mut Vec<Vertex>, indices: &mut Vec<u32>, current_index: &mut u32) {
         self.process_rect_element(element, vertices, indices, current_index);
         if let UIElementData::Checkbox { checked, .. } = &element.data {
             if *checked {
@@ -492,7 +487,7 @@ impl UIRenderer {
                 *current_index += 4;
             }
         }
-        if let Some(text) = element.get_text() {
+        if let Some(text) = element.get_data() {
             let label_element = UIElement {
                 position: (element.position.0 + element.size.0 + 0.01, element.position.1),
                 size: (text.len() as f32 * 0.01, element.size.1),
@@ -500,7 +495,7 @@ impl UIRenderer {
                 color: [0, 0, 0, 255],
                 ..*element
             };
-            self.process_text_element(&label_element, label_element.get_text(), vertices, indices, current_index);
+            self.process_text_element(&label_element, label_element.get_data(), vertices, indices, current_index);
         }
     }
 
@@ -510,8 +505,7 @@ impl UIRenderer {
         *current_index += 4;
     }
 
-    #[inline] fn add_rectangle(&self, vertices: &mut Vec<Vertex>, (x, y): (f32, f32), 
-        (w, h): (f32, f32), color: [u8; 4]) {
+    #[inline] fn add_rectangle(&self, vertices: &mut Vec<Vertex>, (x, y): (f32, f32), (w, h): (f32, f32), color: [u8; 4]) {
         let packed_color = pack_color_u8(color);
         vertices.extend([
             Vertex{position: [x, y + h], packed_data: packed_color},
@@ -544,27 +538,20 @@ impl UIRenderer {
             #[allow(unreachable_patterns)]
             match &element.data {
                 UIElementData::Image { path } => {
-                    let image_key = format!("{}_{}", path, element.color.map(|c| c.to_string()).join("|"));
+                    let image_key = format!("{}_{:?}", path, element.color);
                     if let Some((_, bind_group)) = self.image_textures.get(&image_key) {
                         r_pass.set_bind_group(0, bind_group, &[]);
                         r_pass.draw_indexed(i_off..(i_off + 6), 0, 0..1);
                     }
                     i_off += 6;
                 },
-                UIElementData::Animation { frames, current_frame, elapsed_time, smooth_transition, blend_delay, frame_duration, .. } => {
-                    let animation_key = frames.join("|");
-                    if let Some((_, bind_group)) = self.animation_textures.get(&animation_key) {
-                        let frame_count = frames.len() as u32;
-                        let next_frame = if *smooth_transition { (*current_frame + 1) % frame_count } else { *current_frame };
-                        let packed_frames = (*current_frame & 0xFFFF) | ((next_frame & 0xFFFF) << 16);
-                        let raw_progress = ((elapsed_time / frame_duration) * 100.0) as u32;
-                        let packed_progress = (raw_progress & 0xFFFF) | ((blend_delay & 0xFFFF) << 16);
-                        config::get_state().queue().write_buffer(
-                            &self.uniform_buffer, 0,
-                            bytemuck::cast_slice(&[packed_frames, packed_progress])
-                        );
-                        r_pass.set_bind_group(0, bind_group, &[]);
-                        r_pass.draw_indexed(i_off..(i_off + 6), 0, 0..1);
+                UIElementData::Animation { frames, .. } => {
+                    if let Some((_, bind_group)) = self.animation_textures.get(&frames.join("|")) {
+                        if let Some(stuff) = element.get_packed_anim_data() {
+                            config::get_state().queue().write_buffer(&self.uniform_buffer, 0, bytemuck::cast_slice(&stuff));
+                            r_pass.set_bind_group(0, bind_group, &[]);
+                            r_pass.draw_indexed(i_off..(i_off + 6), 0, 0..1);
+                        }
                     }
                     i_off += 6;
                 },
@@ -576,7 +563,7 @@ impl UIRenderer {
                         r_pass.draw_indexed(i_off..(i_off + 6), 0, 0..1);
                         i_off += 6;
                     }
-                    if let Some(text) = element.get_text() {
+                    if let Some(text) = element.get_data() {
                         let texture_key = format!("{}_{:?}", text, element.color);
                         if let Some((_, bind_group)) = self.text_textures.get(&texture_key) {
                             r_pass.set_bind_group(0, bind_group, &[]);
@@ -594,11 +581,13 @@ impl UIRenderer {
                     r_pass.draw_indexed(i_off..(i_off + 6), 0, 0..1);
                     i_off += 6;
                 },
-                UIElementData::InputField { .. } | UIElementData::Button { .. } => {
+                UIElementData::InputField { .. } |
+                UIElementData::Button { .. } |
+                UIElementData::MultiStateButton { .. } => {
                     r_pass.set_bind_group(0, &self.default_bind_group, &[]);
                     r_pass.draw_indexed(i_off..(i_off + 6), 0, 0..1);
                     i_off += 6;
-                    if let Some(text) = element.get_text() {
+                    if let Some(text) = element.get_data() {
                         let texture_key = format!("{}_{:?}", text, element.color);
                         if let Some((_, bind_group)) = self.text_textures.get(&texture_key) {
                             r_pass.set_bind_group(0, bind_group, &[]);
@@ -607,26 +596,14 @@ impl UIRenderer {
                         i_off += 6;
                     }
                 },
-                UIElementData::MultiStateButton { states, current_state, .. } => {
-                    r_pass.set_bind_group(0, &self.default_bind_group, &[]);
-                    r_pass.draw_indexed(i_off..(i_off + 6), 0, 0..1);
-                    i_off += 6;
-                    {
-                        let texture_key = format!("{}_{:?}", &states[*current_state], element.color);
-                        if let Some((_, bind_group)) = self.text_textures.get(&texture_key) {
-                            r_pass.set_bind_group(0, bind_group, &[]);
-                            r_pass.draw_indexed(i_off..(i_off + 6), 0, 0..1);
-                        }
-                        i_off += 6;
-                    }
-                },
-                UIElementData::Panel { .. } | UIElementData::Divider { .. } => {
+                UIElementData::Panel { .. } |
+                UIElementData::Divider { .. } => {
                     r_pass.set_bind_group(0, &self.default_bind_group, &[]);
                     r_pass.draw_indexed(i_off..(i_off + 6), 0, 0..1);
                     i_off += 6;
                 },
                 UIElementData::Label { .. } => {
-                    if let Some(text) = element.get_text() {
+                    if let Some(text) = element.get_data() {
                         let texture_key = format!("{}_{:?}", text, element.color);
                         if let Some((_, bind_group)) = self.text_textures.get(&texture_key) {
                             r_pass.set_bind_group(0, bind_group, &[]);

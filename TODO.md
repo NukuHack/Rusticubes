@@ -8,9 +8,11 @@
 - [x] fov and general camera rework (also drag nice-ify) 
 - [x] making the save-load work 
 - [x] world gen from noise 
-- [ ] chunk meshing correction - neighbors 
 - [ ] settings for sound volume font and stuff 
+- [ ] chunk meshing correction - neighbors 
 - [ ] making the save-load auto trigger (actually load the world on startup) 
+- [ ] correcting the save to be world wise not just player pos relative
+- [ ] Ambient oc. and other lighting 
 
 ## Low Priority  
 - [x] 2d texture array and load in some other textures -> more blocks 
@@ -19,7 +21,6 @@
 - [ ] hardcode the "missing texture" texture (purple black or idk) 
 - [ ] Some basic Rounding for UI elements (maybe implement some neat stuff inside the shader) 
 - [ ] Making a new "panel" kind of thing with scrollable contents 
-- [ ] Ambient oc. and other lighting 
 
 
 ## Compiled stuff

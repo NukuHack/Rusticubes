@@ -13,7 +13,7 @@ pub enum UIElementData {
     Divider,
     Label { text: String, text_color: Option<[u8; 4]> },
     Button { text: String, text_color: Option<[u8; 4]>, on_click: Option<Callback> },
-    MultiStateButton { states: Vec<String>, current_state: usize, on_click: Option<Callback>, },
+    MultiStateButton { states: Vec<String>, text_color: Option<[u8; 4]>, current_state: usize, on_click: Option<Callback>, },
     InputField { text: String, text_color: Option<[u8; 4]>, placeholder: Option<String> },
     Checkbox { label: Option<String>, text_color: Option<[u8; 4]>, checked: bool, on_click: Option<Callback> },
     Image { path: String },
@@ -22,7 +22,7 @@ pub enum UIElementData {
         looping: bool, playing: bool, smooth_transition: bool, blend_delay: u32,
     },
     Slider {
-        min_value: f32, max_value: f32, current_value: f32,
+        min_value: f32, slider_color: Option<[u8; 4]>, max_value: f32, current_value: f32,
         step: Option<f32>, on_change: Option<Callback>, //vertical: bool,
     },
 }
@@ -167,6 +167,7 @@ impl UIElement {
     pub fn multi_state_button<T: Textlike>(id: usize, states: Vec<T>) -> Self {
         Self::new(id, UIElementData::MultiStateButton {
             states: states.into_iter().map(Into::into).collect(),
+            text_color: None,
             current_state: 0,on_click: None,
         })
     }
@@ -174,6 +175,7 @@ impl UIElement {
     pub fn slider(id: usize, min_value: f32, max_value: f32) -> Self {
         Self::new(id, UIElementData::Slider {
             min_value, max_value, //vertical: false,
+            slider_color: None,
             current_value: min_value, 
             step: None,on_change: None, 
         })
@@ -254,12 +256,15 @@ impl UIElement {
         }
     }
     #[inline]
-    pub fn get_text(&self) -> Option<&str> {
+    pub fn get_data(&self) -> Option<&str> {
         match &self.data {
             UIElementData::Label { text, .. } |
             UIElementData::Button { text, .. } |
             UIElementData::InputField { text, .. } => Some(text),
             UIElementData::Checkbox { label, .. } => label.as_deref(),
+            UIElementData::MultiStateButton { states, current_state, .. } => Some(&states[*current_state]),
+            UIElementData::Animation { frames, current_frame, .. } => Some(&frames[*current_frame as usize]),
+            //UIElementData::Slider { current_value, .. } => Some(&current_value.to_string()),
             _ => None,
         }
     }
@@ -304,7 +309,9 @@ impl UIElement {
             UIElementData::Label { text_color, .. } |
             UIElementData::Button { text_color, .. } |
             UIElementData::InputField { text_color, .. } |
-            UIElementData::Checkbox { text_color, .. } => *text_color = Some([r, g, b, a]),
+            UIElementData::Checkbox { text_color, .. } |
+            UIElementData::MultiStateButton { text_color, .. } => *text_color = Some([r, g, b, a]),
+            UIElementData::Slider { slider_color, .. } => *slider_color = Some([r, g, b, a]),
             _ => {}
         }
     }
@@ -325,7 +332,9 @@ impl UIElement {
             UIElementData::Label { text_color, .. } |
             UIElementData::Button { text_color, .. } |
             UIElementData::InputField { text_color, .. } |
-            UIElementData::Checkbox { text_color, .. } => *text_color,
+            UIElementData::Checkbox { text_color, .. } |
+            UIElementData::MultiStateButton { text_color, .. } => *text_color,
+            UIElementData::Slider { slider_color, .. } => *slider_color,
             _ => None,
         };
         text_color.unwrap_or(self.color)
@@ -397,7 +406,7 @@ impl UIElement {
             let (w, h) = self.size;
             
             // Get click position relative to slider track
-            let track_height = h * 0.3;
+            let track_height = h * 0.5; // set to 0.5 because it's better, even tho visually it's just 0.3
             let track_y = y + (h - track_height) / 2.0;
             
             // Only process if click is within track bounds (vertically)
@@ -515,6 +524,20 @@ impl UIElement {
                 }
             }
         }
+    }
+    #[inline]
+    pub fn get_packed_anim_data(&self) -> Option<[u32;2]> {
+        if let UIElementData::Animation {
+            frames, current_frame, frame_duration, elapsed_time,   smooth_transition, blend_delay, ..
+        } = &self.data {
+            let frame_count = frames.len() as u32;
+            let next_frame = if *smooth_transition { (*current_frame + 1) % frame_count } else { *current_frame };
+            let packed_frames = (*current_frame & 0xFFFF) | ((next_frame & 0xFFFF) << 16);
+            let raw_progress = ((elapsed_time / frame_duration) * 100.0) as u32;
+            let packed_progress = (raw_progress & 0xFFFF) | ((*blend_delay & 0xFFFF) << 16);
+            return Some([packed_frames, packed_progress]);
+        }
+        None
     }
 
 }

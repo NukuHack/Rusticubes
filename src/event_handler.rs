@@ -78,7 +78,7 @@ impl<'a> crate::State<'a> {
                     _ => false,
                 };
                 // Handle UI input first if there's a focused element
-                if self.ui_manager.focused_element.is_some() {
+                if self.ui_manager.visibility == true && self.ui_manager.focused_element.is_some() {
                     if self.is_world_running {
                         config::get_gamestate().player_mut().controller().reset_keyboard(); // Temporary workaround
                     }
@@ -176,16 +176,22 @@ impl<'a> crate::State<'a> {
                 match (button, *state) {
                     (MouseButton::Left, ElementState::Pressed) => {
                         self.input_system.mouse_button_state.left = true;
-                        if self.ui_manager.visibility!=false{
-                        // Use the stored current mouse position
-                        if let Some(current_position) = self.input_system.previous_mouse {
-                            crate::ui::manager::handle_ui_click(&mut self.ui_manager, self.render_context.size.into(), &current_position);
-                        }
+                        if self.ui_manager.visibility == true {
+                            // Use the stored current mouse position
+                            if let Some(current_position) = self.input_system.previous_mouse {
+                                self.ui_manager.handle_ui_click(self.render_context.size.into(), &current_position, true);
+                            }
                         }
                         true
                     }
                     (MouseButton::Left, ElementState::Released) => {
                         self.input_system.mouse_button_state.left = false;
+                        if self.ui_manager.visibility == true {
+                            // Use the stored current mouse position
+                            if let Some(current_position) = self.input_system.previous_mouse {
+                                self.ui_manager.handle_ui_click(self.render_context.size.into(), &current_position, false);
+                            }
+                        }
                         true
                     }
                     (MouseButton::Right, ElementState::Pressed) => {
@@ -220,18 +226,12 @@ impl<'a> crate::State<'a> {
                     return true;
                 } else {
                     // Handle normal mouse movement for UI
-                    if self.input_system.mouse_button_state.right {
-                        if let Some(prev) = self.input_system.previous_mouse {
-                            let delta_x = (position.x - prev.x) as f32;
-                            let delta_y = (position.y - prev.y) as f32;
-                            if self.is_world_running && config::get_gamestate().is_running() {
-                                config::get_gamestate().player_mut().controller().process_mouse(delta_x, delta_y);
-                            }
-                        }
+                    if self.ui_manager.visibility == true && self.ui_manager.focused_element.is_some() {
+                        self.ui_manager.handle_mouse_move(self.render_context.size.into(), position);
                     }
                     
                     // Handle UI hover
-                    crate::ui::manager::handle_ui_hover(&mut self.ui_manager, self.render_context.size.into(), position);
+                    self.ui_manager.handle_ui_hover(self.render_context.size.into(), position);
                     self.input_system.previous_mouse = Some(*position);
                     return true;
                 }
