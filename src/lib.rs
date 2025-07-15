@@ -18,8 +18,7 @@ pub mod mods { // modding related
 pub mod network { // network related
     pub mod api; // the networking system
     pub mod discovery; // the networking system
-    pub mod types; // the networking system
-    // extra utilities for basic stuff
+    pub mod types; // the networking system and extra utilities for basic stuff
 }
 pub mod debug { // debug, test related
     pub mod network;

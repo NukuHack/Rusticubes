@@ -1,10 +1,9 @@
 
 use crate::network::api;
 use crate::block;
-use crate::ext::config;
-use crate::ext::memory;
-use crate::world;
-use crate::ui::manager::{self, UIState, close_pressed, UIManager, UIStateID, get_element_data_dy_id};
+use crate::ext::{config, memory};
+use crate::world::{handler, manager};
+use crate::ui::manager::{UIState, close_pressed, UIManager, UIStateID, get_element_data_dy_id};
 use crate::ui::element::UIElement;
 
 impl UIManager {
@@ -233,7 +232,7 @@ impl UIManager {
             });
         self.add_element(new_button);
 
-        let worlds:Vec<String> = match world::manager::get_world_names() {
+        let worlds:Vec<String> = match manager::get_world_names() {
             Ok(worlds) => worlds,
             Err(e) => {
                 println!("Error loading world names: {}", e);
@@ -256,7 +255,7 @@ impl UIManager {
                 .with_callback({
                     let name_clone = name_clone.clone();  // Clone for this closure
                     move || {
-                        world::handler::join_world(&name_clone);
+                        handler::join_world(&name_clone);
                     }
                 });
             self.add_element(world_button);
@@ -276,7 +275,7 @@ impl UIManager {
                         "Delete world?",
                         move |confirmed| {
                             if confirmed {
-                                world::manager::del_world(&name_clone);
+                                manager::del_world(&name_clone);
                             }
                         }
                     );
@@ -451,7 +450,7 @@ impl UIManager {
                 .with_z_index(5)
                 .with_callback({
                     move || {
-                        world::handler::join_local_world(&name_clone);
+                        handler::join_local_world(&name_clone);
                     }
                 });
             self.add_element(world_button);
@@ -551,7 +550,7 @@ impl UIManager {
             .with_border((80, 110, 160, 255), 0.005)
             .with_z_index(6)
             .with_callback(move || {
-                world::handler::create_world(manager::get_element_data_dy_id(input_id));
+                handler::create_world(get_element_data_dy_id(input_id));
                 let ui_manager = &mut config::get_state().ui_manager;
                 ui_manager.state = UIState::WorldSelection;
                 ui_manager.setup_ui();
@@ -701,7 +700,7 @@ impl UIManager {
             .with_callback(|| 
                 {
                     let save_path = config::get_gamestate().save_path();
-                    match world::manager::save_entire_world(save_path) {
+                    match manager::save_entire_world(save_path) {
                         Ok(_) => {},
                         Err(e) => { println!("Error: {}", e); },
                     };
@@ -717,7 +716,7 @@ impl UIManager {
             .with_callback(|| 
                 {
                     let save_path = config::get_gamestate().save_path();
-                    match world::manager::load_entire_world(save_path) {
+                    match manager::load_entire_world(save_path) {
                         Ok(_) => {},
                         Err(e) => { println!("Error: {}", e); },
                     };
@@ -824,12 +823,10 @@ impl UIManager {
             .with_z_index(8)
             .with_callback(|| {
                 let state = config::get_state();
-                state.is_world_running = false;
                 state.ui_manager.state = UIState::BootScreen;
                 state.ui_manager.setup_ui();
 
-                config::drop_gamestate();
-                api::cleanup_network();
+                handler::leave_world();
             });
         self.add_element(close_button);
 

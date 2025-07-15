@@ -1,10 +1,7 @@
 
-use crate::ui::element;
-use crate::ext::audio;
-use crate::ext::config;
-use crate::ui::dialog;
-use crate::ui::element::{UIElement, UIElementData};
-use crate::ui::render::{UIRenderer, Vertex};
+use crate::ext::{audio, config};
+use crate::ui::element::{self, UIElement, UIElementData};
+use crate::ui::{dialog, render::{UIRenderer, Vertex}};
 use crate::get_string;
 use winit::keyboard::KeyCode as Key;
 
@@ -151,18 +148,17 @@ pub fn close_pressed() {
         },
         UIState::InGame => {
             state.ui_manager.state = UIState::Escape;
-            state.ui_manager.setup_ui();
-
             let game_state = config::get_gamestate();
             game_state.player_mut().controller().reset_keyboard();
             *game_state.running() = false;
+
+            state.ui_manager.setup_ui();
         },
         UIState::Escape => {
             state.ui_manager.state = UIState::InGame;
+            *config::get_gamestate().running() = true;
+
             state.ui_manager.setup_ui();
-            
-            let game_state = config::get_gamestate();
-            *game_state.running() = true;
         },
         UIState::Loading | UIState::None => {
             return;

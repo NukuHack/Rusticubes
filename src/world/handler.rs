@@ -2,6 +2,7 @@
 use crate::ui::manager::UIState;
 use crate::game::state;
 use crate::ext::config;
+use crate::network::api;
 
 pub fn join_world(world_name: &str) {
     println!("Loading world: {}", world_name);
@@ -26,4 +27,14 @@ pub fn create_world(world_name: String) {
 
 pub fn join_local_world(world_name: &str) {
 	println!("joining world : {}", world_name);
+}
+
+pub fn leave_world() {
+    let state = config::get_state();
+    state.is_world_running = false;
+
+    config::drop_gamestate();
+    if api::is_host() == Ok(true) {
+        api::cleanup_network();
+    }
 }
