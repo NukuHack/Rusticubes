@@ -256,7 +256,7 @@ impl UIElement {
         }
     }
     #[inline]
-    pub fn get_data(&self) -> Option<&str> {
+    pub fn get_str(&self) -> Option<&str> {
         match &self.data {
             UIElementData::Label { text, .. } |
             UIElementData::Button { text, .. } |
@@ -283,8 +283,8 @@ impl UIElement {
         let callback = match &mut self.data {
             UIElementData::Button { on_click, .. } => on_click.clone(),
             UIElementData::Checkbox { on_click, .. } => on_click.clone(),
-            UIElementData::Slider { on_change, .. } => on_change.clone(),
             UIElementData::MultiStateButton { on_click, .. } => on_click.clone(),
+            UIElementData::Slider { on_change, .. } => on_change.clone(),
             _ => None,
         };
         if let Some(cb) = callback {
@@ -393,12 +393,20 @@ impl UIElement {
         self
     }
     #[inline]
+    pub fn set_calc_value(&mut self, norm_x: f32, norm_y: f32) {
+        if let UIElementData::Slider { .. } = &mut self.data {
+            if let Some(value) = self.calc_value(norm_x, norm_y) {
+                self.set_value(value);
+            }
+        }
+    }
+    #[inline]
     pub fn set_value(&mut self, value: f32) {
         if let UIElementData::Slider { current_value, .. } = &mut self.data {
             *current_value = value;
         }
     }
-    #[inline]
+    #[inline] #[allow(unused_variables)]
     pub fn calc_value(&self, norm_x: f32, norm_y: f32) -> Option<f32> {
         if let UIElementData::Slider { min_value, max_value, step, .. } = &self.data {
             // Calculate clicked position relative to slider
@@ -410,7 +418,7 @@ impl UIElement {
             let track_y = y + (h - track_height) / 2.0;
             
             // Only process if click is within track bounds (vertically)
-            if norm_y >= track_y && norm_y <= track_y + track_height {
+            /*if norm_y >= track_y && norm_y <= track_y + track_height*/ {
                 let handle_width = h * 0.8;
                 let effective_width = w - handle_width;
                 let click_x = (norm_x - x - handle_width / 2.0).clamp(0.0, effective_width);

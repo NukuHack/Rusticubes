@@ -178,14 +178,14 @@ impl UIRenderer {
                 UIElementData::Slider { .. } => self.process_slider(element, &mut vertices, &mut indices, &mut current_index),
                 UIElementData::InputField { .. } | UIElementData::Button { .. } => {
                     self.process_rect_element(element, &mut vertices, &mut indices, &mut current_index);
-                    self.process_text_element(element, element.get_data(), &mut vertices, &mut indices, &mut current_index);
+                    self.process_text_element(element, element.get_str(), &mut vertices, &mut indices, &mut current_index);
                 }
                 UIElementData::Label { .. } => {
-                    self.process_text_element(element, element.get_data(), &mut vertices, &mut indices, &mut current_index);
+                    self.process_text_element(element, element.get_str(), &mut vertices, &mut indices, &mut current_index);
                 }
                 UIElementData::MultiStateButton { .. } => {
                     self.process_rect_element(element, &mut vertices, &mut indices, &mut current_index);
-                    self.process_text_element(element, element.get_data(), &mut vertices, &mut indices, &mut current_index);
+                    self.process_text_element(element, element.get_str(), &mut vertices, &mut indices, &mut current_index);
                 }
                 _ => self.process_rect_element(element, &mut vertices, &mut indices, &mut current_index),
             }
@@ -487,7 +487,7 @@ impl UIRenderer {
                 *current_index += 4;
             }
         }
-        if let Some(text) = element.get_data() {
+        if let Some(text) = element.get_str() {
             let label_element = UIElement {
                 position: (element.position.0 + element.size.0 + 0.01, element.position.1),
                 size: (text.len() as f32 * 0.01, element.size.1),
@@ -495,7 +495,7 @@ impl UIRenderer {
                 color: [0, 0, 0, 255],
                 ..*element
             };
-            self.process_text_element(&label_element, label_element.get_data(), vertices, indices, current_index);
+            self.process_text_element(&label_element, label_element.get_str(), vertices, indices, current_index);
         }
     }
 
@@ -526,7 +526,7 @@ impl UIRenderer {
         r_pass.set_index_buffer(ui_manager.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
         r_pass.set_bind_group(1, &self.uniform_bind_group, &[]);
         let mut i_off = 0;
-        let mut sorted_elements: Vec<_> = ui_manager.elements.iter().filter(|e| e.visible).collect();
+        let mut sorted_elements = ui_manager.visible_elements();
         sorted_elements.sort_by_key(|e| e.z_index);
         
         for element in sorted_elements {
@@ -563,7 +563,7 @@ impl UIRenderer {
                         r_pass.draw_indexed(i_off..(i_off + 6), 0, 0..1);
                         i_off += 6;
                     }
-                    if let Some(text) = element.get_data() {
+                    if let Some(text) = element.get_str() {
                         let texture_key = format!("{}_{:?}", text, element.color);
                         if let Some((_, bind_group)) = self.text_textures.get(&texture_key) {
                             r_pass.set_bind_group(0, bind_group, &[]);
@@ -587,7 +587,7 @@ impl UIRenderer {
                     r_pass.set_bind_group(0, &self.default_bind_group, &[]);
                     r_pass.draw_indexed(i_off..(i_off + 6), 0, 0..1);
                     i_off += 6;
-                    if let Some(text) = element.get_data() {
+                    if let Some(text) = element.get_str() {
                         let texture_key = format!("{}_{:?}", text, element.color);
                         if let Some((_, bind_group)) = self.text_textures.get(&texture_key) {
                             r_pass.set_bind_group(0, bind_group, &[]);
@@ -603,7 +603,7 @@ impl UIRenderer {
                     i_off += 6;
                 },
                 UIElementData::Label { .. } => {
-                    if let Some(text) = element.get_data() {
+                    if let Some(text) = element.get_str() {
                         let texture_key = format!("{}_{:?}", text, element.color);
                         if let Some((_, bind_group)) = self.text_textures.get(&texture_key) {
                             r_pass.set_bind_group(0, bind_group, &[]);
