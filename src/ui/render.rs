@@ -420,6 +420,34 @@ impl UIRenderer {
         }
     }
 
+    #[inline] fn process_checkbox(&mut self, element: &UIElement, vertices: &mut Vec<Vertex>, indices: &mut Vec<u32>, current_index: &mut u32) {
+        self.process_rect_element(element, vertices, indices, current_index);
+        if let UIElementData::Checkbox { checked, .. } = &element.data {
+            if *checked {
+                let (x, y) = element.position;
+                let (w, h) = element.size;
+                let padding = 0.2;
+                let check_x = x + w * padding;
+                let check_y = y + h * padding;
+                let check_w = w * (1.0 - 2.0 * padding);
+                let check_h = h * (1.0 - 2.0 * padding);
+                self.add_rectangle(vertices, (check_x, check_y), (check_w, check_h), [50, 120, 50, 255]);
+                indices.extend(self.rectangle_indices(*current_index));
+                *current_index += 4;
+            }
+        }
+        if let Some(text) = element.get_str() {
+            let label_element = UIElement {
+                position: (element.position.0 + element.size.0 + 0.01, element.position.1),
+                size: (text.len() as f32 * 0.01, element.size.1),
+                data: UIElementData::Label { text: text.to_string(), text_color: None },
+                color: [0, 0, 0, 255],
+                ..*element
+            };
+            self.process_text_element(&label_element, label_element.get_str(), vertices, indices, current_index);
+        }
+    }
+
     fn create_animation_texture_array(&self, device: &wgpu::Device, queue: &wgpu::Queue, frames: &[String]) -> Option<(wgpu::Texture, wgpu::BindGroup)> {
         if frames.is_empty() { return None; }
         let (_, width, height) = rs::load_image_from_path(frames[0].clone())?;
@@ -469,34 +497,6 @@ impl UIRenderer {
         self.add_rectangle(vertices, (border_x, border_y), (border_w, border_h), element.border_color);
         indices.extend(self.rectangle_indices(*current_index));
         *current_index += 4;
-    }
-
-    #[inline] fn process_checkbox(&mut self, element: &UIElement, vertices: &mut Vec<Vertex>, indices: &mut Vec<u32>, current_index: &mut u32) {
-        self.process_rect_element(element, vertices, indices, current_index);
-        if let UIElementData::Checkbox { checked, .. } = &element.data {
-            if *checked {
-                let (x, y) = element.position;
-                let (w, h) = element.size;
-                let padding = 0.2;
-                let check_x = x + w * padding;
-                let check_y = y + h * padding;
-                let check_w = w * (1.0 - 2.0 * padding);
-                let check_h = h * (1.0 - 2.0 * padding);
-                self.add_rectangle(vertices, (check_x, check_y), (check_w, check_h), [50, 120, 50, 255]);
-                indices.extend(self.rectangle_indices(*current_index));
-                *current_index += 4;
-            }
-        }
-        if let Some(text) = element.get_str() {
-            let label_element = UIElement {
-                position: (element.position.0 + element.size.0 + 0.01, element.position.1),
-                size: (text.len() as f32 * 0.01, element.size.1),
-                data: UIElementData::Label { text: text.to_string(), text_color: None },
-                color: [0, 0, 0, 255],
-                ..*element
-            };
-            self.process_text_element(&label_element, label_element.get_str(), vertices, indices, current_index);
-        }
     }
 
     #[inline] fn process_rect_element(&self, element: &UIElement, vertices: &mut Vec<Vertex>, indices: &mut Vec<u32>, current_index: &mut u32) {

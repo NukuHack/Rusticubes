@@ -1,4 +1,5 @@
 
+use crate::ui::manager;
 use crate::ext::config;
 use crate::game::player;
 
@@ -26,6 +27,9 @@ impl<'a> crate::State<'a> {
                 self.window().set_cursor_visible(true);
                 self.window().set_cursor_grab(winit::window::CursorGrabMode::None).unwrap();
             } else {
+                if let manager::UIState::Inventory(_) = config::get_state().ui_manager.state.clone() {
+                    return;
+                }
                 let player = &mut config::get_gamestate().player_mut();
                 player.set_camera_mode(player::CameraMode::Instant);
                 self.input_system.set_mouse_captured(true);
@@ -33,8 +37,7 @@ impl<'a> crate::State<'a> {
                 //self.window().set_cursor_icon(winit::window::CursorIcon::Crosshair);
                 self.window().set_cursor_visible(false);
                 self.window().set_cursor_grab(winit::window::CursorGrabMode::Confined)
-                    .or_else(|_| self.window().set_cursor_grab(winit::window::CursorGrabMode::Locked))
-                    .unwrap();
+                    .or_else(|_| self.window().set_cursor_grab(winit::window::CursorGrabMode::Locked)).unwrap();
                 self.center_mouse();
             }
         } else {

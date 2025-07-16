@@ -1,6 +1,7 @@
 use crate::{
     ext::{audio, config},
     get_string,
+    game::inventory::InventoryUIState,
     ui::{
         dialog,
         element::{self, UIElement, UIElementData},
@@ -16,6 +17,8 @@ impl UIStateID {
     #[inline] pub fn new(id: u32) -> Self { Self(id) }
 }
 
+
+// Update the UIStateID implementation to include Inventory
 impl From<&UIState> for UIStateID {
     fn from(state: &UIState) -> Self {
         #[allow(unreachable_patterns)]
@@ -32,6 +35,7 @@ impl From<&UIState> for UIStateID {
             UIState::Loading => UIStateID(9),            
             UIState::Error(..) => UIStateID(10),
             UIState::ConnectLocal => UIStateID(11),
+            UIState::Inventory(_) => UIStateID(12),
             _ => UIStateID(0),
         }
     }
@@ -53,6 +57,7 @@ impl From<UIStateID> for UIState {
             9 => UIState::Loading,
             10 => UIState::Error(UIStateID::default(), 0),
             11 => UIState::ConnectLocal,
+            12 => UIState::Inventory(InventoryUIState::default()),
             _ => UIState::None,
         }
     }
@@ -72,6 +77,8 @@ pub enum UIState {
     Loading,
     Confirm(UIStateID, u8),
     Error(UIStateID, u8),
+
+    Inventory(InventoryUIState),
 }
 
 impl UIState {
@@ -84,7 +91,7 @@ impl UIState {
     
     pub fn inner_state(&self) -> UIState {
         match self {
-            UIState::Confirm(id, _) | UIState::Error(id, _) => UIState::from(*id),
+            UIState::Confirm(id, _) | UIState::Error(id, _) |
             UIState::Settings(id) => UIState::from(*id),
             _ => UIState::None,
         }
@@ -103,10 +110,12 @@ pub fn close_pressed() {
             let game_state = config::get_gamestate();
             game_state.player_mut().controller().reset_keyboard();
             *game_state.running() = false;
+            state.toggle_mouse_capture();
         },
         UIState::Escape => {
             state.ui_manager.state = UIState::InGame;
             *config::get_gamestate().running() = true;
+            state.toggle_mouse_capture();
         },
         UIState::NewWorld => state.ui_manager.state = UIState::WorldSelection,
         UIState::Error(prev_state, dialog_id) | UIState::Confirm(prev_state, dialog_id) => {
@@ -115,6 +124,10 @@ pub fn close_pressed() {
         },
         UIState::Settings(prev_state) => state.ui_manager.state = UIState::from(prev_state),
         UIState::ConnectLocal => state.ui_manager.state = UIState::WorldSelection,
+        UIState::Inventory(_) => {
+            state.ui_manager.state = UIState::InGame;
+            state.toggle_mouse_capture();
+        },
         _ => return,
     }
     state.ui_manager.setup_ui();
@@ -138,6 +151,18 @@ pub struct UIManager {
     next_id: usize,
 }
 
+
+/// this is the screen related UI layout, also use f32 for position setting
+/// -1,1|    |    |   |1,1 
+/// ----+----+----+---+----
+///     |    |    |   |    
+/// ----+----+----+---+----
+///     |    |0,0 |   |    
+/// ----+----+----+---+----
+///     |    |    |   |    
+/// ----+----+----+---+----
+///-1,-1|    |    |   |1,-1
+// i use AI so i tried to make this as understandable for AI as i can ... even with all those stupid formatting they do with the whitespaces ...
 impl UIManager {
     #[inline]
     pub fn new(device: &wgpu::Device, config: &wgpu::SurfaceConfiguration, queue: &wgpu::Queue) -> Self {
@@ -306,16 +331,23 @@ impl UIManager {
         self.clear_focused_element();
         for (idx, element) in self.elements.iter_mut().enumerate().rev() {
             if element.visible && element.enabled && element.contains_point(norm_x, norm_y) {
-                if matches!(element.data, 
+                match element.data {
                     UIElementData::InputField{..} |
                     UIElementData::Checkbox{..} | 
                     UIElementData::Button{..} |
-                    UIElementData::MultiStateButton{..} | 
-                    UIElementData::Slider{..}
-                ) {
-                    self.focused_element = Some(idx);
-                    audio::set_sound("click.ogg");
-                    return true;
+                    UIElementData::MultiStateButton{..} => {
+                        self.focused_element = Some(idx);
+                        audio::set_sound("click.ogg");
+                        return true;
+                    },
+                    UIElementData::Slider{..} => {
+                        element.set_calc_value(norm_x, norm_y);
+                        
+                        self.focused_element = Some(idx);
+                        audio::set_sound("click.ogg");
+                        return true;
+                    },
+                    _=> { },
                 }
             }
         }

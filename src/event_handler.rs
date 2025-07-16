@@ -1,7 +1,8 @@
 
 use crate::ext::config;
-use crate::block;
+use crate::block::extra;
 use crate::ui::manager;
+use crate::game::inventory::InventoryUIState;
 use std::iter::Iterator;
 use winit::{
     event::{ElementState, MouseButton, WindowEvent},
@@ -110,25 +111,57 @@ impl<'a> crate::State<'a> {
                     match key {
                         Key::KeyF => {
                             if is_pressed {
-                                block::extra::place_looked_cube();
+                                extra::place_looked_cube();
                                 return true
                             }
                         },
                         Key::KeyR => {
                             if is_pressed {
-                                block::extra::remove_targeted_block();
+                                extra::remove_targeted_block();
                                 return true
                             }
                         },
                         Key::KeyE => {
                             if is_pressed {
-                                block::extra::toggle_looked_point();
+                                extra::toggle_looked_point();
+                                return true
+                            }
+                        },
+                        Key::KeyI => {
+                            if is_pressed {
+                                let state = config::get_state();
+                                match state.ui_manager.state.clone() {
+                                    manager::UIState::Inventory(_) => {
+                                        state.ui_manager.state = manager::UIState::InGame;
+                                        self.toggle_mouse_capture();
+                                    },
+                                    manager::UIState::InGame => {
+                                        state.ui_manager.state = manager::UIState::Inventory(InventoryUIState::default());
+                                        if self.input_system.mouse_captured() { self.toggle_mouse_capture(); }
+                                    }
+                                    _ => return false,
+                                }
+                                state.ui_manager.setup_ui();
+                                return true
+                            }
+                        },
+                        Key::KeyJ => {
+                            if is_pressed {
+                                let state = config::get_state();
+                                match state.ui_manager.state.clone() {
+                                    manager::UIState::InGame => {
+                                        state.ui_manager.state = manager::UIState::Inventory(InventoryUIState::default());
+                                        if self.input_system.mouse_captured() { self.toggle_mouse_capture(); }
+                                    }
+                                    _ => return false,
+                                }
+                                state.ui_manager.setup_ui();
                                 return true
                             }
                         },
                         Key::KeyL => {
                             if is_pressed {
-                                block::extra::add_full_chunk();
+                                extra::add_full_chunk();
                                 return true
                             }
                         },
@@ -146,9 +179,6 @@ impl<'a> crate::State<'a> {
                     Key::Escape => {
                         if is_pressed {
                             manager::close_pressed();
-                            if self.input_system.mouse_captured() {
-                                self.toggle_mouse_capture();
-                            }
                             return true;
                         }
                         false

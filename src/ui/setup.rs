@@ -59,12 +59,15 @@ impl UIManager {
             },
             UIState::Error(..) => {
                 self.add_element(bg_panel);
-                //self.setup_error_ui();
+                self.setup_error_ui();
             },
             UIState::ConnectLocal => {
                 self.add_element(bg_panel);
                 self.setup_connect_local_ui();
             },
+            UIState::Inventory(_) => {
+                self.setup_inventory_ui();
+            }
             _ => {},
         }
     }
@@ -437,6 +440,71 @@ impl UIManager {
     }
 
     #[inline]
+    fn setup_error_ui(&mut self) {
+        // Title with improved styling
+        let manager = &config::get_state().ui_manager;
+        let dialog_id = manager.state.inner().unwrap_or(0);
+        let prompt:String = manager.dialogs.get_pending_dialog(dialog_id).unwrap_or("ERROR!!".to_string());
+        let title = UIElement::label(self.next_id(), prompt)
+            .with_position(-0.4, 0.6)
+            .with_size(0.8, 0.15)
+            .with_color(30, 30, 45)  // Dark panel
+            .with_text_color(180, 200, 220) // Light blue text
+            .with_border((80, 100, 140, 255), 0.008)
+            .with_z_index(10);
+        self.add_element(title);
+
+        // World list container with better contrast
+        let list_panel = UIElement::panel(self.next_id())
+            .with_position(-0.9, -0.4)
+            .with_size(1.8, 0.9)  // Slightly shorter
+            .with_color(25, 25, 40)  // Dark blue-gray
+            .with_border((60, 70, 100, 255), 0.01)
+            .with_z_index(1);
+        self.add_element(list_panel);
+
+        let option_button_1 = UIElement::button(self.next_id(), "Continue")
+            .with_position(-0.8, 0.0)
+            .with_size(0.6, 0.1)
+            .with_color(40, 50, 80)
+            .with_text_color(180, 200, 220)
+            .with_border((70, 90, 130, 255), 0.005)
+            .with_z_index(5)
+            .with_callback(move || {
+                let ui_manager = &mut config::get_state().ui_manager;
+                ui_manager.dialogs.respond(dialog_id.clone(), true);
+                ui_manager.state = ui_manager.state.inner_state();
+                ui_manager.setup_ui();
+            });
+        self.add_element(option_button_1);
+        let option_button_2 = UIElement::button(self.next_id(), "Cancel")
+            .with_position(0.2, 0.0)
+            .with_size(0.6, 0.1)
+            .with_color(40, 50, 80)
+            .with_text_color(180, 200, 220)
+            .with_border((70, 90, 130, 255), 0.005)
+            .with_z_index(5)
+            .with_callback(move || {
+                let ui_manager = &mut config::get_state().ui_manager;
+                ui_manager.dialogs.respond(dialog_id.clone(), false);
+                ui_manager.state = ui_manager.state.inner_state();
+                ui_manager.setup_ui();
+            });
+        self.add_element(option_button_2);
+
+        // Back button with consistent styling
+        let back_button = UIElement::button(self.next_id(), "Back")
+            .with_position(-0.1, -0.8)
+            .with_size(0.2, 0.08)
+            .with_color(60, 60, 80)  // Dark gray-blue
+            .with_text_color(180, 190, 210) // Light blue-gray
+            .with_border((90, 100, 130, 255), 0.005)
+            .with_z_index(8)
+            .with_callback(|| close_pressed());
+        self.add_element(back_button);
+    }
+
+    #[inline]
     fn setup_multiplayer_ui(&mut self) {
         // Title with improved styling
         let title = UIElement::label(self.next_id(), "Select World")
@@ -719,9 +787,9 @@ impl UIManager {
         let save_button = UIElement::button(self.next_id(), "Save World")
             .with_position(-0.8, 0.24)
             .with_size(0.4, 0.08)
-            .with_color(90, 50, 50)  // Dark reddish
-            .with_text_color(255, 180, 180) // Light red
-            .with_border((140, 80, 80, 255), 0.005)
+            .with_color(40, 40, 60)  // Dark gray-blue
+            .with_text_color(150, 170, 200) // Light blue-gray
+            .with_border((70, 90, 120, 255), 0.005)
             .with_z_index(8)
             .with_callback(|| 
                 {
@@ -735,9 +803,9 @@ impl UIManager {
         let load_button = UIElement::button(self.next_id(), "Load World")
             .with_position(-0.8, 0.0)
             .with_size(0.4, 0.08)
-            .with_color(90, 50, 50)  // Dark reddish
-            .with_text_color(255, 180, 180) // Light red
-            .with_border((140, 80, 80, 255), 0.005)
+            .with_color(40, 40, 60)  // Dark gray-blue
+            .with_text_color(150, 170, 200) // Light blue-gray
+            .with_border((70, 90, 120, 255), 0.005)
             .with_z_index(8)
             .with_callback(|| 
                 {
@@ -795,9 +863,9 @@ impl UIManager {
         let host_button = UIElement::button(self.next_id(), "Host World")
             .with_position(0.5, 0.22)
             .with_size(0.4, 0.08)
-            .with_color(90, 50, 50)  // Dark reddish
-            .with_text_color(255, 180, 180) // Light red
-            .with_border((140, 80, 80, 255), 0.005)
+            .with_color(40, 40, 60)  // Dark gray-blue
+            .with_text_color(150, 170, 200) // Light blue-gray
+            .with_border((70, 90, 120, 255), 0.005)
             .with_z_index(8)
             .with_callback(|| 
                 {
@@ -832,9 +900,9 @@ impl UIManager {
         let back_button = UIElement::button(self.next_id(), "Back to World")
             .with_position(0.5, -0.8)
             .with_size(0.4, 0.08)
-            .with_color(120, 40, 40)  // Dark red
-            .with_text_color(220, 180, 180) // Light red
-            .with_border((160, 60, 60, 255), 0.005)
+            .with_color(30, 30, 45)  // Dark panel
+            .with_text_color(180, 200, 220) // Light blue text
+            .with_border((70, 90, 120, 255), 0.005)
             .with_z_index(8)
             .with_callback(|| close_pressed());
         self.add_element(back_button);
@@ -861,9 +929,9 @@ impl UIManager {
     #[inline]
     fn setup_in_game_ui(&mut self) {
         // Close button with better contrast
-        let close_button = UIElement::button(self.next_id(), "Stop World")
-            .with_position(0.62, -0.9)
-            .with_size(0.35, 0.08)
+        let close_button = UIElement::button(self.next_id(), "X")
+            .with_position(0.92, -0.92)
+            .with_size(0.08, 0.08)
             .with_color(120, 40, 40)  // Dark red
             .with_text_color(220, 180, 180) // Light red
             .with_border((160, 60, 60, 255), 0.005)

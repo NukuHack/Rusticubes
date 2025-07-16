@@ -38,8 +38,10 @@ pub mod render { // rendering related
     pub mod world;
 }
 pub mod game { // game related, instance related
-    pub mod player;
-    pub mod state;
+    pub mod items; // the items and item stack impl.
+    pub mod inventory; // basic inventory impl.
+    pub mod player; // main camera and player impl.
+    pub mod state; // game-state with seed and stuff
 }
 pub mod world { // world related, tiny bit rendering and game related
     pub mod main;
