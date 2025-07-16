@@ -16,30 +16,29 @@ impl<'a> crate::State<'a> {
 
     #[inline]
     pub fn toggle_mouse_capture(&mut self) {
-        if !self.is_world_running {
-            if *self.input_system.mouse_captured() {
+        if self.is_world_running  && config::get_gamestate().is_running() {
+            if self.input_system.mouse_captured() {
+                let player = &mut config::get_gamestate().player_mut();
+                player.set_camera_mode(player::CameraMode::Smooth);
                 self.input_system.set_mouse_captured(false);
+                // Show cursor and release
                 //self.window().set_cursor_icon(winit::window::CursorIcon::Default);
-            	self.window().set_cursor_visible(true);
+                self.window().set_cursor_visible(true);
                 self.window().set_cursor_grab(winit::window::CursorGrabMode::None).unwrap();
+            } else {
+                let player = &mut config::get_gamestate().player_mut();
+                player.set_camera_mode(player::CameraMode::Instant);
+                self.input_system.set_mouse_captured(true);
+                // Hide cursor and lock to center
+                //self.window().set_cursor_icon(winit::window::CursorIcon::Crosshair);
+                self.window().set_cursor_visible(false);
+                self.window().set_cursor_grab(winit::window::CursorGrabMode::Confined)
+                    .or_else(|_| self.window().set_cursor_grab(winit::window::CursorGrabMode::Locked))
+                    .unwrap();
+                self.center_mouse();
             }
-            return
-        }
-
-        if !self.input_system.mouse_captured() {
-            let player = &mut config::get_gamestate().player_mut();
-            player.set_camera_mode(player::CameraMode::Instant);
-            self.input_system.set_mouse_captured(true);
-            // Hide cursor and lock to center
-            //self.window().set_cursor_icon(winit::window::CursorIcon::Crosshair);
-            self.window().set_cursor_visible(false);
-            self.window().set_cursor_grab(winit::window::CursorGrabMode::Confined)
-                .or_else(|_| self.window().set_cursor_grab(winit::window::CursorGrabMode::Locked))
-                .unwrap();
-            self.center_mouse();
         } else {
-            let player = &mut config::get_gamestate().player_mut();
-            player.set_camera_mode(player::CameraMode::Smooth);
+            // if the game is not running release mouse all ways
             self.input_system.set_mouse_captured(false);
             // Show cursor and release
             //self.window().set_cursor_icon(winit::window::CursorIcon::Default);

@@ -31,7 +31,7 @@ pub struct Player {
     movement_mode: MovementMode,
     camera_mode: CameraMode,
 }
-
+const MOUSE_TO_SCREEN: f32 = 0.0056789;
 #[allow(dead_code)]
 impl Player {
     /// Creates a new player with default position and given camera configuration
@@ -96,12 +96,11 @@ impl Player {
         // Apply mouse input to target rotation
         // mouse_x controls yaw (horizontal rotation)
         // mouse_y controls pitch (vertical rotation)
-        self.controller.target_yaw -= self.controller.mouse_delta.x * self.config.sensitivity * 0.05;
-        self.controller.target_pitch -= self.controller.mouse_delta.y * self.config.sensitivity * 0.05;
+        self.controller.target_yaw -= self.controller.mouse_delta.x * self.config.sensitivity * MOUSE_TO_SCREEN;
+        self.controller.target_pitch -= self.controller.mouse_delta.y * self.config.sensitivity * MOUSE_TO_SCREEN;
         
         // Clamp pitch to prevent over-rotation
-        self.controller.target_pitch = self.controller.target_pitch
-            .clamp(-SAFE_FRAC_PI_2, SAFE_FRAC_PI_2);
+        self.controller.target_pitch = self.controller.target_pitch.clamp(-SAFE_FRAC_PI_2, SAFE_FRAC_PI_2);
 
         match self.camera_mode {
             CameraMode::Smooth => {
@@ -587,12 +586,12 @@ impl CameraConfig {
     pub fn new(position: Vec3) -> Self {
         Self {
             position,
-            rotation: Vec3::new(0.0, -std::f32::consts::FRAC_PI_2, 0.0), // Looking along negative Z axis
+            rotation: Vec3::new(0.,0.,0.), // Looking along negative X axis
             fovy: std::f32::consts::FRAC_PI_2, // 90 degrees in radians
             znear: 0.01,
             zfar: 500.0,
             speed: 20.0,
-            sensitivity: 0.5,
+            sensitivity: 0.4,
             run_multiplier: 2.5,
             smoothness: 5.0,
             acceleration: 10.0,

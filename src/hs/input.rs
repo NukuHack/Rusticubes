@@ -24,8 +24,8 @@ impl InputSystem {
     }
 
     #[inline]
-    pub fn mouse_captured(&self) -> &bool {
-        &self.mouse_captured
+    pub fn mouse_captured(&self) -> bool {
+        self.mouse_captured
     }
 }
 

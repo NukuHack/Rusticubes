@@ -242,7 +242,7 @@ impl UIManager {
         if let Some(pos) = self.elements.iter().position(|e| e.id == id) {
             if let Some(focused_pos) = self.focused_element {
                 match focused_pos.cmp(&pos) {
-                    std::cmp::Ordering::Equal => self.focused_element = None,
+                    std::cmp::Ordering::Equal => self.clear_focused_element(),
                     std::cmp::Ordering::Greater => self.focused_element = Some(focused_pos - 1),
                     _ => (),
                 }
@@ -258,14 +258,14 @@ impl UIManager {
     #[inline] pub fn get_element(&self, id: usize) -> Option<&UIElement> { self.elements.iter().find(|e| e.id == id) }
     #[inline] pub fn get_element_mut(&mut self, id: usize) -> Option<&mut UIElement> { self.elements.iter_mut().find(|e| e.id == id) }
      
-    #[inline] pub fn clear_elements(&mut self) { self.elements.clear(); self.focused_element = None; self.next_id = 1; }
+    #[inline] pub fn clear_elements(&mut self) { self.elements.clear(); self.clear_focused_element(); self.next_id = 1; }
     
     #[inline]
     pub fn handle_key_input(&mut self, key: Key, shift: bool) {
         match key {
             Key::Backspace => self.handle_backspace(),
-            Key::Enter => self.blur_current_element(),
-            Key::Escape => self.blur_current_element(),
+            Key::Enter => self.clear_focused_element(),
+            Key::Escape => self.clear_focused_element(),
             _ => if let Some(c) = element::key_to_char(key, shift) {
                 self.process_text_input(c);
             },
@@ -283,7 +283,7 @@ impl UIManager {
         }
     }
     
-    #[inline] pub fn blur_current_element(&mut self) { self.focused_element = None; }
+    #[inline] pub fn clear_focused_element(&mut self) { self.focused_element = None; }
     
     #[inline]
     pub fn process_text_input(&mut self, c: char) {
@@ -303,7 +303,7 @@ impl UIManager {
         
     #[inline]
     pub fn handle_click_press(&mut self, norm_x: f32, norm_y: f32) -> bool {
-        self.focused_element = None;
+        self.clear_focused_element();
         for (idx, element) in self.elements.iter_mut().enumerate().rev() {
             if element.visible && element.enabled && element.contains_point(norm_x, norm_y) {
                 if matches!(element.data, 
@@ -353,10 +353,10 @@ impl UIManager {
         if let Some(element) = self.get_focused_element() {
             match &element.data {
                 UIElementData::InputField{..} => {
-                    //self.focused_element = None; // this is bad for text input
+                    //self.clear_focused_element(); // this is bad for text input
                 },
                 _ => {
-                    self.focused_element = None;
+                    self.clear_focused_element();
                 },
             }
         }

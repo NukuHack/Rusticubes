@@ -1,6 +1,7 @@
 
 use crate::ext::config;
 use crate::block;
+use crate::ui::manager;
 use std::iter::Iterator;
 use winit::{
     event::{ElementState, MouseButton, WindowEvent},
@@ -42,6 +43,15 @@ impl<'a> crate::State<'a> {
                     },
                 }
             },
+            WindowEvent::Focused(focused) => {
+                if !focused{
+                    if self.is_world_running {
+                        config::get_gamestate().player_mut().controller().reset_keyboard(); // Temporary workaround
+                    }
+                    self.ui_manager.clear_focused_element();
+                }
+                true
+            },
             WindowEvent::ModifiersChanged(modifiers) => {
                 self.input_system.modifiers = modifiers.state();
                 true
@@ -50,10 +60,13 @@ impl<'a> crate::State<'a> {
                 self.handle_key_input(event);
                 true
             },
-            _ => {
+            WindowEvent::MouseInput { .. } |
+            WindowEvent::CursorMoved { .. } |
+            WindowEvent::MouseWheel { .. } => {
                 self.handle_mouse_input(event);
                 true
-            }
+            },
+            _ => false,
         }
     }
     #[inline]
@@ -132,7 +145,10 @@ impl<'a> crate::State<'a> {
                     },
                     Key::Escape => {
                         if is_pressed {
-                            crate::ui::manager::close_pressed();
+                            manager::close_pressed();
+                            if self.input_system.mouse_captured() {
+                                self.toggle_mouse_capture();
+                            }
                             return true;
                         }
                         false
@@ -206,7 +222,7 @@ impl<'a> crate::State<'a> {
                 }
             }
             WindowEvent::CursorMoved { position, .. } => {
-                if *self.input_system.mouse_captured() == true {
+                if self.input_system.mouse_captured() {
                     // Calculate relative movement from center
                     let size = self.size();
                     let center_x = size.width as f64 / 2.0;
@@ -244,8 +260,7 @@ impl<'a> crate::State<'a> {
                 true
             }
             _ => false,
-        };
-        false
+        }
     }
 
 
