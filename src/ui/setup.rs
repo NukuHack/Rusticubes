@@ -336,8 +336,20 @@ impl UIManager {
             });
         self.add_element(setting_button_1);
 
+        let setting_checkbox_1 = UIElement::checkbox(self.next_id(), Some("checkbox"))
+            .with_position(-0.4, -0.02)
+            .with_size(0.08, 0.1)
+            .with_color(40, 50, 80)
+            .with_text_color(180, 200, 220)
+            .with_border((70, 90, 130, 255), 0.005)
+            .with_z_index(5)
+            .with_callback(|| {
+                println!("clicked setting_checkbox_1");
+            });
+        self.add_element(setting_checkbox_1);
+
         let setting_slider_1 = UIElement::slider(self.next_id(), 0., 100.)
-            .with_position(-0.4, -0.1)
+            .with_position(-0.4, -0.15)
             .with_size(0.8, 0.1)
             .with_color(40, 50, 80)
             .with_text_color(180, 200, 220)

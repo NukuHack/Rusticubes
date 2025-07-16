@@ -146,7 +146,10 @@ impl UIElement {
         Self::new(id, UIElementData::InputField { text: String::new(), text_color: None, placeholder: None })
     }
     #[inline]
-    pub fn checkbox(id: usize) -> Self {
+    pub fn checkbox<T: Textlike>(id: usize, label: Option<T>) -> Self {
+        if let Some(text) = label {
+            return Self::new(id, UIElementData::Checkbox { label: Some(text.into()), text_color: None, checked: false, on_click: None });
+        }
         Self::new(id, UIElementData::Checkbox { label: None, text_color: None, checked: false, on_click: None })
     }
     #[inline]

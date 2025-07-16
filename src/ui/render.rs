@@ -195,7 +195,7 @@ impl UIRenderer {
 
 
     #[inline] 
-    fn process_text_element(&mut self, element: &UIElement, text: Option<&str>,vertices: &mut Vec<Vertex>, indices: &mut Vec<u32>, current_index: &mut u32) {
+    fn process_text_element(&mut self, element: &UIElement, text: Option<&str>, vertices: &mut Vec<Vertex>, indices: &mut Vec<u32>, current_index: &mut u32) {
         let state = config::get_state();
         
         if let Some(text) = text {
@@ -221,15 +221,9 @@ impl UIRenderer {
                 let pixel_to_unit = 1.0 / (100.0 * self.pixel_ratio);
                 let tex_w = texture.width() as f32 * pixel_to_unit;
                 let tex_h = texture.height() as f32 * pixel_to_unit;
-                let x = x + (w - tex_w) / 2.0;
-                let y = y + (h - tex_h) / 2.0;
-                let positions = [[x, y], [x + tex_w, y], [x, y + tex_h], [x + tex_w, y + tex_h]];
-                
-                for j in 0..4 {
-                    vertices.push(Vertex::new(positions[j], element.get_text_color()));
-                }
-                indices.extend(self.rectangle_indices(*current_index));
-                *current_index += 4;
+                let real_x = x + (w - tex_w) / 2.0;
+                let real_y = y + (h - tex_h) / 2.0;
+                self.proc_rect_element((real_x, real_y), (tex_w, tex_h), element.get_text_color(), vertices, indices, current_index);
             }
         }
     }
@@ -244,19 +238,15 @@ impl UIRenderer {
             let track_height = h * 0.3;
             let track_y = y + (h - track_height) / 2.0;
             let track_color = element.color;
-            self.add_rectangle(vertices, (x, track_y), (w, track_height), track_color);
-            indices.extend(self.rectangle_indices(*current_index));
-            *current_index += 4;
+            self.proc_rect_element((x, track_y), (w, track_height), track_color, vertices, indices, current_index);
             
             // Draw slider handle
             let normalized_value = (current_value - min_value) / (max_value - min_value);
-            let handle_width = h * 0.8;
-            let handle_x = x + (w - handle_width) * normalized_value;
-            let handle_y = y + (h - handle_width) / 2.0;
+            let handle_w = h * 0.8;
+            let handle_x = x + (w - handle_w) * normalized_value;
+            let handle_y = y + (h - handle_w) / 2.0;
             let handle_color = element.get_text_color();
-            self.add_rectangle(vertices, (handle_x, handle_y), (handle_width, handle_width), handle_color);
-            indices.extend(self.rectangle_indices(*current_index));
-            *current_index += 4;
+            self.proc_rect_element((handle_x, handle_y), (handle_w, handle_w), handle_color, vertices, indices, current_index);
         }
     }
 
@@ -366,14 +356,7 @@ impl UIRenderer {
                 self.image_textures.insert(image_key, (texture, bind_group));
             }
 
-            let (x, y) = element.position;
-            let (w, h) = element.size;
-            let positions = [[x, y], [x + w, y], [x, y + h], [x + w, y + h]];
-            for j in 0..4 {
-                vertices.push(Vertex::new(positions[j], element.color));
-            }
-            indices.extend(self.rectangle_indices(*current_index));
-            *current_index += 4;
+            self.process_rect_element(element, vertices, indices, current_index);
         }
     }
 
@@ -409,14 +392,7 @@ impl UIRenderer {
                 }
             }
 
-            let (x, y) = element.position;
-            let (w, h) = element.size;
-            let positions = [[x, y], [x + w, y], [x, y + h], [x + w, y + h]];
-            for j in 0..4 {
-                vertices.push(Vertex::new(positions[j], element.color));
-            }
-            indices.extend(self.rectangle_indices(*current_index));
-            *current_index += 4;
+            self.process_rect_element(element, vertices, indices, current_index);
         }
     }
 
@@ -431,18 +407,16 @@ impl UIRenderer {
                 let check_y = y + h * padding;
                 let check_w = w * (1.0 - 2.0 * padding);
                 let check_h = h * (1.0 - 2.0 * padding);
-                self.add_rectangle(vertices, (check_x, check_y), (check_w, check_h), [50, 120, 50, 255]);
-                indices.extend(self.rectangle_indices(*current_index));
-                *current_index += 4;
+                self.proc_rect_element((check_x, check_y), (check_w, check_h), [50, 120, 50, 255], vertices, indices, current_index);
             }
         }
         if let Some(text) = element.get_str() {
             let label_element = UIElement {
                 position: (element.position.0 + element.size.0 + 0.01, element.position.1),
-                size: (text.len() as f32 * 0.01, element.size.1),
+                size: (text.len() as f32 * 0.015, element.size.1),
                 data: UIElementData::Label { text: text.to_string(), text_color: None },
                 color: [0, 0, 0, 255],
-                ..*element
+                ..UIElement::default()
             };
             self.process_text_element(&label_element, label_element.get_str(), vertices, indices, current_index);
         }
@@ -494,25 +468,29 @@ impl UIRenderer {
         let border_y = y - border_width;
         let border_w = w + 2.0 * border_width;
         let border_h = h + 2.0 * border_width;
-        self.add_rectangle(vertices, (border_x, border_y), (border_w, border_h), element.border_color);
-        indices.extend(self.rectangle_indices(*current_index));
-        *current_index += 4;
+        self.proc_rect_element((border_x, border_y), (border_w, border_h), element.border_color, vertices, indices, current_index);
     }
 
     #[inline] fn process_rect_element(&self, element: &UIElement, vertices: &mut Vec<Vertex>, indices: &mut Vec<u32>, current_index: &mut u32) {
-        self.add_rectangle(vertices, element.position, element.size, element.color);
+        self.proc_rect_element(element.position, element.size, element.color, vertices, indices, current_index);
+    }
+    #[inline] fn proc_rect_element(&self, pos: (f32, f32), size: (f32, f32), color: [u8; 4], vertices: &mut Vec<Vertex>, indices: &mut Vec<u32>, current_index: &mut u32) {
+        self.add_rectangle(vertices, pos, size, color);
         indices.extend(self.rectangle_indices(*current_index));
         *current_index += 4;
     }
 
     #[inline] fn add_rectangle(&self, vertices: &mut Vec<Vertex>, (x, y): (f32, f32), (w, h): (f32, f32), color: [u8; 4]) {
-        let packed_color = pack_color_u8(color);
-        vertices.extend([
-            Vertex{position: [x, y + h], packed_data: packed_color},
-            Vertex{position: [x + w, y + h], packed_data: packed_color},
-            Vertex{position: [x, y], packed_data: packed_color},
-            Vertex{position: [x + w, y], packed_data: packed_color},
-        ]);
+        const P:f32 = 1.0; const N:f32 = 0.0;
+        let positions = [
+            [x - w*N, y - h*N],
+            [x + w*P, y - h*N],
+            [x - w*N, y + h*P],
+            [x + w*P, y + h*P]
+        ];
+        for j in 0..4 {
+            vertices.push(Vertex::new(positions[j], color));
+        }
     }
 
     #[inline] fn rectangle_indices(&self, base: u32) -> [u32; 6] {
