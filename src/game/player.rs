@@ -1,6 +1,7 @@
 use glam::Vec3;
 use winit::event::*;
 use winit::keyboard::KeyCode as Key;
+use crate::game::inventory;
 
 /// Movement mode enum
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -30,6 +31,7 @@ pub struct Player {
 	controller: PlayerController,
 	movement_mode: MovementMode,
 	camera_mode: CameraMode,
+	inventory: inventory::Inventory,
 }
 const MOUSE_TO_SCREEN: f32 = 0.0056789;
 #[allow(dead_code)]
@@ -42,6 +44,7 @@ impl Player {
 			controller: PlayerController::new(config),
 			movement_mode: MovementMode::Flat,
 			camera_mode: CameraMode::Smooth,
+			inventory: inventory::Inventory::default(),
 		}
 	}
 
@@ -200,6 +203,13 @@ impl Player {
 			);
 			self.controller.scroll = 0.0;
 		}
+	}
+
+	pub fn inventory(&self) -> &inventory::Inventory {
+		&self.inventory
+	}
+	pub fn inventory_mut(&mut self) -> &mut inventory::Inventory {
+		&mut self.inventory
 	}
 }
 

@@ -9,7 +9,8 @@
 - [x] making the save-load work  
 - [x] world gen from noise  
 - [ ] settings for sound volume font and stuff  
-- [ ] refine inventory and item and block things  
+- [x] refine inventory and item and block things  
+- [ ] item and block things correctly  
 - [ ] chunk meshing correction - neighbors  
 - [ ] making the save-load auto trigger (actually load the world on startup)  
 - [ ] correcting the save to be world wise not just player pos relative 

@@ -149,7 +149,7 @@ impl<'a> crate::State<'a> {
 								let state = config::get_state();
 								match state.ui_manager.state.clone() {
 									manager::UIState::InGame => {
-										state.ui_manager.state = manager::UIState::Inventory(inventory::InventoryUIState::def_st());
+										state.ui_manager.state = manager::UIState::Inventory(inventory::InventoryUIState::str().b());
 										if self.input_system.mouse_captured() { self.toggle_mouse_capture(); }
 									}
 									_ => return false,
@@ -163,7 +163,7 @@ impl<'a> crate::State<'a> {
 								let state = config::get_state();
 								match state.ui_manager.state.clone() {
 									manager::UIState::InGame => {
-										state.ui_manager.state = manager::UIState::Inventory(inventory::InventoryUIState::def_cr());
+										state.ui_manager.state = manager::UIState::Inventory(inventory::InventoryUIState::craft().b());
 										if self.input_system.mouse_captured() { self.toggle_mouse_capture(); }
 									}
 									_ => return false,

@@ -1,12 +1,11 @@
 
 
+use crate::ext::config;
 use crate::ui::{
 	manager::{UIManager, UIState},
 	element::UIElement,
 };
 use crate::game::inventory as inv;
-
-const SLOT: f32 = 0.08;
 
 
 #[derive(PartialEq, Clone, Copy)]
@@ -27,34 +26,117 @@ pub enum InventoryUIState {
 		// Crafting-specific fields
 	},
 }
+// 3. Better builder pattern for InventoryUIState
+impl InventoryUIState {
+	#[inline]
+	pub fn pl() -> PlayerInvBuilder {
+		PlayerInvBuilder::new()
+	}
+	#[inline]
+	pub fn str() -> StorageInvBuilder {
+		StorageInvBuilder::new()
+	}
+	#[inline]
+	pub fn craft() -> CraftingInvBuilder {
+		CraftingInvBuilder::new()
+	}
+}
+pub struct PlayerInvBuilder {
+	inv: InvState,
+}
 
+impl PlayerInvBuilder {
+	#[inline]
+	fn new() -> Self {
+		Self { inv: InvState::default() }
+	}
+	#[inline]
+	pub fn inv(mut self, inv: InvState) -> Self {
+		self.inv = inv;
+		self
+	}
+	#[inline]
+	pub fn b(self) -> InventoryUIState {
+		InventoryUIState::Player { inv: self.inv }
+	}
+}
+pub struct StorageInvBuilder {
+	inv: InvState,
+	size: SlotCount,
+}
+impl StorageInvBuilder {
+	#[inline]
+	fn new() -> Self {
+		Self { 
+			inv: InvState::Items, 
+			size: SlotCount::MED 
+		}
+	}
+	#[inline]
+	pub fn inv(mut self, inv: InvState) -> Self {
+		self.inv = inv;
+		self
+	}
+	#[inline]
+	pub fn size(mut self, size: SlotCount) -> Self {
+		self.size = size;
+		self
+	}
+	#[inline]
+	pub fn b(self) -> InventoryUIState {
+		InventoryUIState::Storage { 
+			inv: self.inv, 
+			size: self.size 
+		}
+	}
+}
+pub struct CraftingInvBuilder {
+	inv: InvState,
+	size: SlotCount,
+	result: SlotCount,
+}
+impl CraftingInvBuilder {
+	#[inline]
+	fn new() -> Self {
+		Self { 
+			inv: InvState::Items, 
+			size: SlotCount::custom(3, 3),
+			result: SlotCount::custom(1, 1)
+		}
+	}
+	#[inline]
+	pub fn inv(mut self, inv: InvState) -> Self {
+		self.inv = inv;
+		self
+	}
+	#[inline]
+	pub fn input(mut self, size: SlotCount) -> Self {
+		self.size = size;
+		self
+	}
+	#[inline]
+	pub fn result(mut self, result: SlotCount) -> Self {
+		self.result = result;
+		self
+	}
+	#[inline]
+	pub fn b(self) -> InventoryUIState {
+		InventoryUIState::Crafting { 
+			inv: self.inv, 
+			size: self.size, 
+			result: self.result 
+		}
+	}
+}
 impl Default for InventoryUIState {
+	#[inline]
 	fn default() -> Self {
 		Self::Player { inv: InvState::default() }
 	}
 }
-impl InventoryUIState {
-	pub fn def_pl() -> Self {
-		Self::default()
-	}
-	pub fn new_pl(inv: InvState) -> Self {
-		Self::Player { inv }
-	}
-	pub fn def_st() -> Self {
-		Self::new_st(InvState::Items, SlotCount::MED)
-	}
-	pub fn new_st(inv: InvState, size: SlotCount) -> Self {
-		Self::Storage { inv, size }
-	}
-	pub fn def_cr() -> Self {
-		Self::new_cr(InvState::Items, SlotCount::custom(3,3), SlotCount::custom(1,1))
-	}
-	pub fn new_cr(inv: InvState, size: SlotCount, result: SlotCount) -> Self {
-		Self::Crafting { inv, size, result }
-	}
-}
 
-#[derive(PartialEq, Clone, Copy, Default)]
+
+#[derive(PartialEq, Clone, Copy, Default, Debug)]
 pub enum InvState {
 	#[default]
 	All,    // everything
@@ -64,6 +146,31 @@ pub enum InvState {
 	Hotbar, // hotbar
 	None,   // ofc nothing
 }
+#[derive(PartialEq, Clone, Copy, Default)]
+pub enum AreaType {
+	#[default]
+	Panel,
+	Inventory,
+	Hotbar,
+	Armor,
+
+	Storage,
+	Input,
+	Output,
+}
+impl std::fmt::Debug for AreaType {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		match self {
+			Self::Inventory => write!(f, "Inventory"),
+			Self::Hotbar => write!(f, "Hotbar"),
+			Self::Armor => write!(f, "Armor"),
+			Self::Storage => write!(f, "Storage"),
+			Self::Input => write!(f, "Input"),
+			Self::Output => write!(f, "Output"),
+			Self::Panel => write!(f, "Outside Panel"),
+		}
+	}
+}
 
 #[derive(PartialEq, Clone, Copy)]
 pub struct SlotCount {
@@ -72,6 +179,7 @@ pub struct SlotCount {
 }
 
 impl Default for SlotCount {
+	#[inline]
 	fn default() -> Self {
 		Self::SMALL
 	}
@@ -86,10 +194,12 @@ impl SlotCount {
 	pub const BIG: Self = Self { rows: 6, columns: 12 }; // 72
 	pub const GIANT: Self = Self { rows: 7, columns: 13 }; // 101
 
+	#[inline]
 	pub fn total(&self) -> usize {
 		self.rows as usize * self.columns as usize
 	}
 
+	#[inline]
 	pub fn custom(height: u8, width: u8) -> Self {
 		Self {
 			rows: height,
@@ -98,13 +208,11 @@ impl SlotCount {
 	}
 }
 
+const SLOT: f32 = 0.08;
+const PADDING: f32 = 0.02;
 
-
-
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct InventoryLayout {
-	pub slot_size: f32,
-	pub padding: f32,
 	pub section_spacing: f32,
 	pub panel_padding: f32,
 	pub panel_position: (f32, f32), // bottom-left corner
@@ -119,8 +227,9 @@ pub struct InventoryLayout {
 	pub armor_area: AreaLayout,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct AreaLayout {
+	pub name: AreaType,
 	pub position: (f32, f32), // bottom-left corner of the area
 	pub size: (f32, f32),
 	pub rows: u8,
@@ -128,10 +237,9 @@ pub struct AreaLayout {
 }
 
 impl Default for InventoryLayout {
+	#[inline]
 	fn default() -> Self {
 		Self {
-			slot_size: SLOT,
-			padding: 0.01,
 			section_spacing: 0.12,
 			panel_padding: 0.05,
 			panel_position: (0.0, 0.0),
@@ -147,8 +255,10 @@ impl Default for InventoryLayout {
 }
 
 impl Default for AreaLayout {
+	#[inline]
 	fn default() -> Self {
 		Self {
+			name : AreaType::default(),
 			position: (0.0, 0.0),
 			size: (0.0, 0.0),
 			rows: 0,
@@ -158,9 +268,10 @@ impl Default for AreaLayout {
 }
 
 impl AreaLayout {
-	pub fn new(rows: u8, columns: u8, center_pos: (f32, f32), slot_size: f32, padding: f32) -> Self {
-		let width = (columns as f32 * slot_size) + ((columns.saturating_sub(1)) as f32 * padding);
-		let height = (rows as f32 * slot_size) + ((rows.saturating_sub(1)) as f32 * padding);
+	#[inline]
+	pub fn new(rows: u8, columns: u8, center_pos: (f32, f32), name: AreaType) -> Self {
+		let width = (columns as f32 * SLOT) + ((columns.saturating_sub(1)) as f32 * PADDING);
+		let height = (rows as f32 * SLOT) + ((rows.saturating_sub(1)) as f32 * PADDING);
 		
 		// Convert center position to bottom-left corner
 		let position = (
@@ -169,6 +280,7 @@ impl AreaLayout {
 		);
 		
 		Self {
+			name,
 			position,
 			size: (width, height),
 			rows,
@@ -177,13 +289,20 @@ impl AreaLayout {
 	}
 	
 	/// Get the bounds of this area (left, bottom, right, top)
+	#[inline]
 	pub fn get_bounds(&self) -> (f32, f32, f32, f32) {
 		let (x, y) = self.position;
 		let (w, h) = self.size;
 		(x, y, x + w, y + h)
 	}
+	#[inline]
+	pub fn contains_point(&self, x: f32, y: f32) -> bool {
+		let (min_x, min_y, max_x, max_y) = self.get_bounds();
+		x >= min_x && x <= max_x && y >= min_y && y <= max_y
+	}
 	
 	/// Get the center position of this area
+	#[inline]
 	pub fn get_center(&self) -> (f32, f32) {
 		let (x, y) = self.position;
 		let (w, h) = self.size;
@@ -191,35 +310,63 @@ impl AreaLayout {
 	}
 	
 	/// Get the position for a specific slot (row, col) - returns bottom-left corner
-	pub fn get_slot_position(&self, row: u8, col: u8, slot_size: f32, padding: f32) -> (f32, f32) {
-		let x = self.position.0 + (col as f32 * (slot_size + padding));
-		let y = self.position.1 + ((self.rows - 1 - row) as f32 * (slot_size + padding));
+	#[inline]
+	pub fn get_slot_position(&self, row: u8, col: u8) -> (f32, f32) {
+		let x = self.position.0 + (col as f32 * (SLOT + PADDING));
+		let y = self.position.1 + ((self.rows - 1 - row) as f32 * (SLOT + PADDING));
 		(x, y)
+	}
+	/// Get the bounds of a single slot (left, bottom, right, top)
+	#[inline]
+	pub fn get_slot_bounds(&self, row: u8, col: u8) -> (f32, f32, f32, f32) {
+		let (x, y) = self.get_slot_position(row, col);
+		(x, y, x + SLOT, y + SLOT)
+	}
+	#[inline]
+	pub fn slot_contains_point(&self, row: u8, col: u8, x: f32, y: f32) -> bool {
+		let (min_x, min_y, max_x, max_y) = self.get_slot_bounds(row, col);
+		x >= min_x && x <= max_x && y >= min_y && y <= max_y
 	}
 }
 
 impl InventoryLayout {
-	pub fn calculate_for_player(inv_state: InvState) -> Self {
+	#[inline]
+	pub fn calculate_for_player(inv_state: InvState, inv_lay: &mut inv::Inventory) -> Self {
 		let mut layout = Self::default();
+		let inv_lay = inv_lay.clone();
 		
-		// Calculate areas with center positions first
+		// Create temporary areas to calculate proper spacing
+		let temp_inv = AreaLayout::new(
+			inv_lay.inv_row(), inv_lay.inv_col(), 
+			(0.0, 0.0), AreaType::Inventory,
+		);
+		let temp_hotbar = AreaLayout::new(
+			1, inv_lay.hotbar(), 
+			(0.0, 0.0), AreaType::Hotbar,
+		);
+		let temp_armor = AreaLayout::new(
+			inv_lay.armor(), 1, 
+			(0.0, 0.0), AreaType::Armor,
+		);
+		
+		// Calculate positions with proper spacing
 		let inv_center = (0.0, 0.0);
-		let hotbar_center = (0.0, inv_center.1 - layout.section_spacing);
-		let armor_center = (inv_center.0 - layout.section_spacing * 2.0, inv_center.1);
+		let hotbar_center = (0.0, inv_center.1 - temp_inv.size.1/2.0 - layout.section_spacing - temp_hotbar.size.1/2.0);
+		let armor_center = (inv_center.0 - temp_inv.size.0/2.0 - layout.section_spacing - temp_armor.size.0/2.0, inv_center.1);
 		
 		layout.inv_area = AreaLayout::new(
-			inv::inv_row(), inv::inv_col(), 
-			inv_center, layout.slot_size, layout.padding
+			inv_lay.inv_row(), inv_lay.inv_col(), 
+			inv_center, AreaType::Inventory,
 		);
 		
 		layout.hotbar_area = AreaLayout::new(
-			1, inv::hotbar(), 
-			hotbar_center, layout.slot_size, layout.padding
+			1, inv_lay.hotbar(), 
+			hotbar_center, AreaType::Hotbar,
 		);
 		
 		layout.armor_area = AreaLayout::new(
-			inv::armor(), 1, 
-			armor_center, layout.slot_size, layout.padding
+			inv_lay.armor(), 1, 
+			armor_center, AreaType::Armor,
 		);
 
 		let areas = layout.get_active_areas(inv_state);
@@ -228,33 +375,53 @@ impl InventoryLayout {
 		layout
 	}
 	
-	pub fn calculate_for_storage(storage_size: SlotCount, inv_state: InvState) -> Self {
+	#[inline]
+	pub fn calculate_for_storage(storage_size: SlotCount, inv_state: InvState, inv_lay: &mut inv::Inventory) -> Self {
 		let mut layout = Self::default();
+		let inv_lay = inv_lay.clone();
 		
-		// Calculate areas with center positions
-		let storage_center = (0.0, layout.section_spacing);
-		let inv_center = (0.0, -layout.section_spacing);
-		let hotbar_center = (0.0, inv_center.1 - layout.section_spacing);
-		let armor_center = (inv_center.0 - layout.section_spacing * 2.0, inv_center.1);
+		// Create temporary areas to calculate proper spacing
+		let temp_storage = AreaLayout::new(
+			storage_size.rows, storage_size.columns,
+			(0.0, 0.0), AreaType::Storage,
+		);
+		let temp_inv = AreaLayout::new(
+			inv_lay.inv_row(), inv_lay.inv_col(), 
+			(0.0, 0.0), AreaType::Inventory,
+		);
+		let temp_hotbar = AreaLayout::new(
+			1, inv_lay.hotbar(), 
+			(0.0, 0.0), AreaType::Hotbar,
+		);
+		let temp_armor = AreaLayout::new(
+			inv_lay.armor(), 1, 
+			(0.0, 0.0), AreaType::Armor,
+		);
+		
+		// Calculate positions with proper spacing
+		let storage_center = (0.0, temp_storage.size.1/2.0 + layout.section_spacing);
+		let inv_center = (0.0, -temp_inv.size.1/2.0 - layout.section_spacing);
+		let hotbar_center = (0.0, inv_center.1 - temp_inv.size.1/2.0 - layout.section_spacing - temp_hotbar.size.1/2.0);
+		let armor_center = (inv_center.0 - temp_inv.size.0/2.0 - layout.section_spacing - temp_armor.size.0/2.0, inv_center.1);
 		
 		layout.storage_area = AreaLayout::new(
 			storage_size.rows, storage_size.columns,
-			storage_center, layout.slot_size, layout.padding
+			storage_center, AreaType::Storage,
 		);
 		
 		layout.inv_area = AreaLayout::new(
-			inv::inv_row(), inv::inv_col(), 
-			inv_center, layout.slot_size, layout.padding
+			inv_lay.inv_row(), inv_lay.inv_col(), 
+			inv_center, AreaType::Inventory,
 		);
 		
 		layout.hotbar_area = AreaLayout::new(
-			1, inv::hotbar(), 
-			hotbar_center, layout.slot_size, layout.padding
+			1, inv_lay.hotbar(), 
+			hotbar_center, AreaType::Hotbar,
 		);
 		
 		layout.armor_area = AreaLayout::new(
-			inv::armor(), 1, 
-			armor_center, layout.slot_size, layout.padding
+			inv_lay.armor(), 1, 
+			armor_center, AreaType::Armor,
 		);
 		
 		let mut areas = vec![layout.storage_area.clone()];
@@ -264,42 +431,66 @@ impl InventoryLayout {
 		layout
 	}
 	
-	pub fn calculate_for_crafting(crafting_size: SlotCount, result_size: SlotCount, inv_state: InvState) -> Self {
+	#[inline]
+	pub fn calculate_for_crafting(crafting_size: SlotCount, result_size: SlotCount, inv_state: InvState, inv_lay: &mut inv::Inventory) -> Self {
 		let mut layout = Self::default();
+		let inv_lay = inv_lay.clone();
 		
-		// Calculate crafting areas side by side at the top
-		let crafting_spacing = layout.section_spacing * 1.5;
-		let crafting_y = layout.section_spacing;
+		// Create temporary areas to calculate proper spacing
+		let temp_input = AreaLayout::new(
+			crafting_size.rows, crafting_size.columns,
+			(0.0, 0.0), AreaType::Input,
+		);
+		let temp_result = AreaLayout::new(
+			result_size.rows, result_size.columns,
+			(0.0, 0.0), AreaType::Output,
+		);
+		let temp_inv = AreaLayout::new(
+			inv_lay.inv_row(), inv_lay.inv_col(), 
+			(0.0, 0.0), AreaType::Inventory,
+		);
+		let temp_hotbar = AreaLayout::new(
+			1, inv_lay.hotbar(), 
+			(0.0, 0.0), AreaType::Hotbar,
+		);
+		let temp_armor = AreaLayout::new(
+			inv_lay.armor(), 1, 
+			(0.0, 0.0), AreaType::Armor,
+		);
 		
-		let input_center = (-crafting_spacing, crafting_y);
-		let result_center = (crafting_spacing, crafting_y);
-		let inv_center = (0.0, -layout.section_spacing);
-		let hotbar_center = (0.0, inv_center.1 - layout.section_spacing);
-		let armor_center = (inv_center.0 - layout.section_spacing * 2.0, inv_center.1);
+		// Calculate crafting areas side by side at the top with proper spacing
+		let crafting_y = layout.section_spacing + temp_input.size.1/2.0f32.max(temp_result.size.1/2.0);
+		let horizontal_spacing = (temp_input.size.0 + temp_result.size.0)/2.0 + layout.section_spacing;
+		
+		let input_center = (-horizontal_spacing/2.0, crafting_y);
+		let result_center = (horizontal_spacing/2.0, crafting_y);
+		let inv_center = (0.0, -temp_inv.size.1/2.0 - layout.section_spacing);
+		let hotbar_center = (0.0, inv_center.1 - temp_inv.size.1/2.0 - layout.section_spacing - temp_hotbar.size.1/2.0);
+		let armor_center = (inv_center.0 - temp_inv.size.0/2.0 - layout.section_spacing - temp_armor.size.0/2.0, inv_center.1);
 		
 		layout.input_area = AreaLayout::new(
 			crafting_size.rows, crafting_size.columns,
-			input_center, layout.slot_size, layout.padding
+			input_center, AreaType::Input,
 		);
 		
 		layout.result_area = AreaLayout::new(
 			result_size.rows, result_size.columns,
-			result_center, layout.slot_size, layout.padding
+			result_center, AreaType::Output,
 		);
 		
 		layout.inv_area = AreaLayout::new(
-			inv::inv_row(), inv::inv_col(), 
-			inv_center, layout.slot_size, layout.padding
+			inv_lay.inv_row(), inv_lay.inv_col(), 
+			inv_center, AreaType::Inventory,
 		);
 		
 		layout.hotbar_area = AreaLayout::new(
-			1, inv::hotbar(), 
-			hotbar_center, layout.slot_size, layout.padding
+			1, inv_lay.hotbar(), 
+			hotbar_center, AreaType::Hotbar,
 		);
 		
 		layout.armor_area = AreaLayout::new(
-			inv::armor(), 1, 
-			armor_center, layout.slot_size, layout.padding
+			inv_lay.armor(), 1, 
+			armor_center, AreaType::Armor,
 		);
 		
 		let mut areas = vec![layout.input_area.clone(), layout.result_area.clone()];
@@ -309,6 +500,7 @@ impl InventoryLayout {
 		layout
 	}
 	
+	#[inline]
 	fn get_active_areas(&self, inv_state: InvState) -> Vec<AreaLayout> {
 		match inv_state {
 			InvState::Armor => vec![self.armor_area.clone()],
@@ -355,32 +547,147 @@ impl InventoryLayout {
 	}
 	
 	/// Get the panel's center position
+	#[inline]
 	pub fn get_panel_center(&self) -> (f32, f32) {
 		(
 			self.panel_position.0 + self.panel_size.0 / 2.0,
 			self.panel_position.1 + self.panel_size.1 / 2.0
 		)
 	}
+
+	/// Debug method to check for overlaps between areas
+	pub fn check_overlaps(&self, inv_state: InvState) -> Vec<String> {
+		let mut overlaps = Vec::new();
+		let areas = self.get_active_areas(inv_state);
+		
+		for (i, area1) in areas.iter().enumerate() {
+			for (j, area2) in areas.iter().enumerate() {
+				if i >= j { continue; }
+				
+				let (l1, b1, r1, t1) = area1.get_bounds();
+				let (l2, b2, r2, t2) = area2.get_bounds();
+				
+				// Check if rectangles overlap
+				if !(r1 <= l2 || r2 <= l1 || t1 <= b2 || t2 <= b1) {
+					overlaps.push(format!("Areas {} and {} overlap", i, j));
+				}
+			}
+		}
+		
+		overlaps
+	}
+	/// Get the bounds of the panel area (left, bottom, right, top)
+	#[inline]
+	pub fn get_panel_bounds(&self) -> (f32, f32, f32, f32) {
+		let (x, y) = self.panel_position;
+		let (w, h) = self.panel_size;
+		(x, y, x + w, y + h)
+	}
+	#[inline]
+	pub fn contains_point(&self, x: f32, y: f32) -> bool {
+		let (min_x, min_y, max_x, max_y) = self.get_panel_bounds();
+		x >= min_x && x <= max_x && y >= min_y && y <= max_y
+	}
 }
 
+// 2. Better click handling with proper return types
+#[derive(Debug, Clone, PartialEq)]
+pub enum ClickResult {
+	SlotClicked {
+		area_type: AreaType,
+		slot: (u8, u8),
+	},
+	SlotMissed {
+		area_type: AreaType,
+	},
+	OutsidePanel,
+}
+
+impl InventoryLayout {
+	pub fn handle_click(&self, inv_state: InventoryUIState, x: f32, y: f32) -> ClickResult {
+		// Check if click is within panel bounds first
+		if !self.contains_point(x, y) {
+			return ClickResult::OutsidePanel;
+		}
+
+		let areas = self.get_areas_for_state(inv_state);
+		
+		for area in areas {
+			if area.contains_point(x, y) {
+				// Check each slot in the area
+				for row in 0..area.rows {
+					for col in 0..area.columns {
+						if area.slot_contains_point(row, col, x, y) {
+							return ClickResult::SlotClicked {
+								area_type: area.name,
+								slot: (row, col),
+							};
+						}
+					}
+				}
+				// Clicked in area but not on any slot
+				return ClickResult::SlotMissed {
+					area_type: area.name,
+				};
+			}
+		}
+		
+		return ClickResult::SlotMissed {
+			area_type: AreaType::default(),
+		};
+	}
+
+	// Centralized method to get areas for different states
+	fn get_areas_for_state(&self, inv_state: InventoryUIState) -> Vec<&AreaLayout> {
+		match inv_state {
+			InventoryUIState::Player { inv } => {
+				self.get_active_areas_ref(inv)
+			},
+			InventoryUIState::Storage { inv, .. } => {
+				let mut areas = self.get_active_areas_ref(inv);
+				areas.push(&self.storage_area);
+				areas
+			},
+			InventoryUIState::Crafting { inv, .. } => {
+				let mut areas = self.get_active_areas_ref(inv);
+				areas.push(&self.input_area);
+				areas.push(&self.result_area);
+				areas
+			},
+		}
+	}
+
+	// Return references instead of clones for better performance
+	fn get_active_areas_ref(&self, inv_state: InvState) -> Vec<&AreaLayout> {
+		match inv_state {
+			InvState::Armor => vec![&self.armor_area],
+			InvState::Inner => vec![&self.inv_area],
+			InvState::Hotbar => vec![&self.hotbar_area],
+			InvState::Items => vec![&self.inv_area, &self.hotbar_area],
+			InvState::All => vec![&self.inv_area, &self.armor_area, &self.hotbar_area],
+			InvState::None => vec![],
+		}
+	}
+}
 
 impl UIManager {
 	pub fn setup_inventory_ui(&mut self) {
 		self.clear_elements();
+		let inv_lay = config::get_gamestate().player_mut().inventory_mut();
 
 		if let UIState::Inventory(state) = self.state.clone() {
 			let layout = match state {
 				InventoryUIState::Player { inv } => {
-					InventoryLayout::calculate_for_player(inv)
+					InventoryLayout::calculate_for_player(inv, inv_lay)
 				}
 				InventoryUIState::Storage { inv, size } => {
-					InventoryLayout::calculate_for_storage(size, inv)
+					InventoryLayout::calculate_for_storage(size, inv, inv_lay)
 				}
 				InventoryUIState::Crafting { inv, size, result } => {
-					InventoryLayout::calculate_for_crafting(size, result, inv)
+					InventoryLayout::calculate_for_crafting(size, result, inv, inv_lay)
 				}
 			};
-						
+			inv_lay.set_layout(&layout);
 			// Add main panel
 			self.add_main_panel(&layout);
 			
@@ -418,7 +725,7 @@ impl UIManager {
 		let version_width = 0.12;
 		let version_height = SLOT/2.;
 		let version_x = layout.panel_position.0 + layout.panel_size.0 - version_width;
-		let version_y = layout.panel_position.1 - version_height - 0.02;
+		let version_y = layout.panel_position.1 - version_height - PADDING;
 		
 		let version = UIElement::label(self.next_id(), format!("v{}", env!("CARGO_PKG_VERSION")))
 			.with_position(version_x, version_y)
@@ -461,7 +768,7 @@ impl UIManager {
 		
 		for row in 0..area.rows {
 			for col in 0..area.columns {
-				let (x, y) = area.get_slot_position(row, col, SLOT, 0.02);
+				let (x, y) = area.get_slot_position(row, col);
 				
 				let slot = UIElement::panel(self.next_id())
 					.with_position(x, y)

@@ -1,8 +1,9 @@
+
 use crate::{
 	ext::{audio, config},
 	get_string,
 	ui::{
-		dialog, inventory,
+		dialog, inventory::{self, ClickResult},
 		element::{self, UIElement, UIElementData},
 		render::{UIRenderer, Vertex},
 	},
@@ -327,6 +328,26 @@ impl UIManager {
 		
 	#[inline]
 	pub fn handle_click_press(&mut self, norm_x: f32, norm_y: f32) -> bool {
+		match self.state.clone() {
+			UIState::Inventory(inv_state) => {
+				if let Some(inv_lay) = config::get_gamestate().player().inventory().layout.clone() {
+					match inv_lay.handle_click(inv_state, norm_x, norm_y) {
+						ClickResult::SlotClicked{area_type, slot} => {
+							println!("clicked or area: {:?}, on slot {};{}", area_type, slot.0, slot.1);
+						}
+						ClickResult::SlotMissed{area_type} => {
+							println!("clicked or area: {:?}, not on slot", area_type);
+						}
+						_=> {println!("clicked outside area")}
+					}
+
+					return true;
+				}
+			},
+			_ => {
+
+			}
+		}
 		self.clear_focused_element();
 		for (idx, element) in self.elements.iter_mut().enumerate().rev() {
 			if element.visible && element.enabled && element.contains_point(norm_x, norm_y) {
