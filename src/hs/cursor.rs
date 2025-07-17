@@ -5,50 +5,50 @@ use crate::game::player;
 
 impl<'a> crate::State<'a> {
 
-    #[inline]
-    pub fn center_mouse(&self) {
-        // Reset mouse to center
-        let size: &winit::dpi::PhysicalSize<u32> = self.size();
-        let x:f64 = (size.width as f64) / 2.0;
-        let y:f64 = (size.height as f64) / 2.0;
-        self.window().set_cursor_position(winit::dpi::PhysicalPosition::new(x, y))
-            .expect("Set mouse cursor position");
-    }
+	#[inline]
+	pub fn center_mouse(&self) {
+		// Reset mouse to center
+		let size: &winit::dpi::PhysicalSize<u32> = self.size();
+		let x:f64 = (size.width as f64) / 2.0;
+		let y:f64 = (size.height as f64) / 2.0;
+		self.window().set_cursor_position(winit::dpi::PhysicalPosition::new(x, y))
+			.expect("Set mouse cursor position");
+	}
 
-    #[inline]
-    pub fn toggle_mouse_capture(&mut self) {
-        if self.is_world_running  && config::get_gamestate().is_running() {
-            if self.input_system.mouse_captured() {
-                let player = &mut config::get_gamestate().player_mut();
-                player.set_camera_mode(player::CameraMode::Smooth);
-                self.input_system.set_mouse_captured(false);
-                // Show cursor and release
-                //self.window().set_cursor_icon(winit::window::CursorIcon::Default);
-                self.window().set_cursor_visible(true);
-                self.window().set_cursor_grab(winit::window::CursorGrabMode::None).unwrap();
-            } else {
-                if let manager::UIState::Inventory(_) = config::get_state().ui_manager.state.clone() {
-                    return;
-                }
-                let player = &mut config::get_gamestate().player_mut();
-                player.set_camera_mode(player::CameraMode::Instant);
-                self.input_system.set_mouse_captured(true);
-                // Hide cursor and lock to center
-                //self.window().set_cursor_icon(winit::window::CursorIcon::Crosshair);
-                self.window().set_cursor_visible(false);
-                self.window().set_cursor_grab(winit::window::CursorGrabMode::Confined)
-                    .or_else(|_| self.window().set_cursor_grab(winit::window::CursorGrabMode::Locked)).unwrap();
-                self.center_mouse();
-            }
-        } else {
-            // if the game is not running release mouse all ways
-            self.input_system.set_mouse_captured(false);
-            // Show cursor and release
-            //self.window().set_cursor_icon(winit::window::CursorIcon::Default);
-            self.window().set_cursor_visible(true);
-            self.window().set_cursor_grab(winit::window::CursorGrabMode::None).unwrap();
-        }
-    }
+	#[inline]
+	pub fn toggle_mouse_capture(&mut self) {
+		if self.is_world_running  && config::get_gamestate().is_running() {
+			if self.input_system.mouse_captured() {
+				let player = &mut config::get_gamestate().player_mut();
+				player.set_camera_mode(player::CameraMode::Smooth);
+				self.input_system.set_mouse_captured(false);
+				// Show cursor and release
+				//self.window().set_cursor_icon(winit::window::CursorIcon::Default);
+				self.window().set_cursor_visible(true);
+				self.window().set_cursor_grab(winit::window::CursorGrabMode::None).unwrap();
+			} else {
+				if let manager::UIState::Inventory(_) = config::get_state().ui_manager.state.clone() {
+					return;
+				}
+				let player = &mut config::get_gamestate().player_mut();
+				player.set_camera_mode(player::CameraMode::Instant);
+				self.input_system.set_mouse_captured(true);
+				// Hide cursor and lock to center
+				//self.window().set_cursor_icon(winit::window::CursorIcon::Crosshair);
+				self.window().set_cursor_visible(false);
+				self.window().set_cursor_grab(winit::window::CursorGrabMode::Confined)
+					.or_else(|_| self.window().set_cursor_grab(winit::window::CursorGrabMode::Locked)).unwrap();
+				self.center_mouse();
+			}
+		} else {
+			// if the game is not running release mouse all ways
+			self.input_system.set_mouse_captured(false);
+			// Show cursor and release
+			//self.window().set_cursor_icon(winit::window::CursorIcon::Default);
+			self.window().set_cursor_visible(true);
+			self.window().set_cursor_grab(winit::window::CursorGrabMode::None).unwrap();
+		}
+	}
 
 }
 
