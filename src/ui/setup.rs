@@ -797,7 +797,7 @@ impl UIManager {
         self.add_element(bg_panel);
 
         let save_button = UIElement::button(self.next_id(), "Save World")
-            .with_position(-0.8, 0.24)
+            .with_position(-0.8, 0.15)
             .with_size(0.4, 0.08)
             .with_color(40, 40, 60)  // Dark gray-blue
             .with_text_color(150, 170, 200) // Light blue-gray
@@ -829,7 +829,7 @@ impl UIManager {
                 });
         self.add_element(load_button);
         let setting_button = UIElement::button(self.next_id(), "Settings")
-            .with_position(-0.8, -0.2)
+            .with_position(-0.8, -0.15)
             .with_size(0.4, 0.08)
             .with_color(40, 40, 60)  // Dark gray-blue
             .with_text_color(150, 170, 200) // Light blue-gray
@@ -841,6 +841,19 @@ impl UIManager {
                 ui_manager.setup_ui();
             });
         self.add_element(setting_button);
+
+        let memory_button = UIElement::button(self.next_id(), "Memory")
+            .with_position(-0.8, -0.3)
+            .with_size(0.4, 0.08)
+            .with_color(40, 40, 60)
+            .with_text_color(150, 170, 200)
+            .with_border((70, 90, 120, 255), 0.005)
+            .with_z_index(6)
+            .with_callback(|| {
+                memory::light_trim();
+                memory::hard_clean(Some(config::get_state().device()));
+            });
+        self.add_element(memory_button);
 
         // Side panel with better contrast
         let side_panel = UIElement::panel(self.next_id())

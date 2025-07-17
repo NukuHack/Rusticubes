@@ -24,11 +24,12 @@ pub struct ItemId(pub u32);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct ToolFlags(pub u8);
 impl ToolFlags {
-    const PICKAXE:u8 = 1 << 0;
-    const AXE:u8 = 1 << 1;
-    const SHOVEL:u8 = 1 << 2;
-    const HOE:u8 = 1 << 3;
-    const SWORD:u8 = 1 << 4;
+    const PICKAXE:u8 = 1 << 0; // stone related thing
+    const AXE:u8 = 1 << 1; // wood related thing
+    const SHOVEL:u8 = 1 << 2; // dirt related thing
+    const HOE:u8 = 1 << 3; // leaf related thing
+    const SWORD:u8 = 1 << 4; // web related thing
+    const SCISSORS:u8 = 1 << 5; // wool related thing
     // Add more as needed
 }
 

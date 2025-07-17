@@ -1,8 +1,7 @@
 
 use crate::ext::config;
 use crate::block::extra;
-use crate::ui::manager;
-use crate::game::inventory::InventoryUIState;
+use crate::ui::{manager, inventory};
 use std::iter::Iterator;
 use winit::{
     event::{ElementState, MouseButton, WindowEvent},
@@ -136,7 +135,7 @@ impl<'a> crate::State<'a> {
                                         self.toggle_mouse_capture();
                                     },
                                     manager::UIState::InGame => {
-                                        state.ui_manager.state = manager::UIState::Inventory(InventoryUIState::default());
+                                        state.ui_manager.state = manager::UIState::Inventory(inventory::InventoryUIState::default());
                                         if self.input_system.mouse_captured() { self.toggle_mouse_capture(); }
                                     }
                                     _ => return false,
@@ -150,7 +149,21 @@ impl<'a> crate::State<'a> {
                                 let state = config::get_state();
                                 match state.ui_manager.state.clone() {
                                     manager::UIState::InGame => {
-                                        state.ui_manager.state = manager::UIState::Inventory(InventoryUIState::default());
+                                        state.ui_manager.state = manager::UIState::Inventory(inventory::InventoryUIState::def_st());
+                                        if self.input_system.mouse_captured() { self.toggle_mouse_capture(); }
+                                    }
+                                    _ => return false,
+                                }
+                                state.ui_manager.setup_ui();
+                                return true
+                            }
+                        },
+                        Key::KeyK => {
+                            if is_pressed {
+                                let state = config::get_state();
+                                match state.ui_manager.state.clone() {
+                                    manager::UIState::InGame => {
+                                        state.ui_manager.state = manager::UIState::Inventory(inventory::InventoryUIState::def_cr());
                                         if self.input_system.mouse_captured() { self.toggle_mouse_capture(); }
                                     }
                                     _ => return false,

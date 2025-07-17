@@ -1,9 +1,8 @@
 use crate::{
     ext::{audio, config},
     get_string,
-    game::inventory::InventoryUIState,
     ui::{
-        dialog,
+        dialog, inventory,
         element::{self, UIElement, UIElementData},
         render::{UIRenderer, Vertex},
     },
@@ -57,7 +56,7 @@ impl From<UIStateID> for UIState {
             9 => UIState::Loading,
             10 => UIState::Error(UIStateID::default(), 0),
             11 => UIState::ConnectLocal,
-            12 => UIState::Inventory(InventoryUIState::default()),
+            12 => UIState::Inventory(inventory::InventoryUIState::default()),
             _ => UIState::None,
         }
     }
@@ -78,7 +77,7 @@ pub enum UIState {
     Confirm(UIStateID, u8),
     Error(UIStateID, u8),
 
-    Inventory(InventoryUIState),
+    Inventory(inventory::InventoryUIState),
 }
 
 impl UIState {
