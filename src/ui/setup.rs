@@ -15,6 +15,7 @@ impl UIManager {
 			.with_position(-1.0, -1.0)
 			.with_size(2.0, 2.0)
 			.with_color(15, 15, 25)  // Darker background
+			.with_alpha(255)
 			.with_z_index(-5);
 
 		#[allow(unreachable_patterns)]
@@ -116,9 +117,7 @@ impl UIManager {
 			.with_text_color(255, 180, 180) // Light red
 			.with_border((160, 60, 60, 255), 0.005)
 			.with_z_index(5)
-			.with_callback(|| {
-				close_pressed();
-			});
+			.with_callback(|| close_pressed());
 		self.add_element(exit_button);
 
 		let memory_button = UIElement::button(self.next_id(), "Memory")
@@ -159,11 +158,9 @@ impl UIManager {
 				let state = ptr::get_state();
 				state.ui_manager.state = UIState::Multiplayer;
 				state.ui_manager.setup_ui();
-				match api::begin_online_search() {
-					 Ok(o) => println!("worked: {}", o),
-					 Err(e) => println!("not worked: {}", e),
-				};
-			});
+				if let Err(e) = api::begin_online_search() {
+					println!("not worked: {}", e)
+				}});
 		self.add_element(multiplayer_button);
 
 		// Decorative elements
@@ -257,9 +254,7 @@ impl UIManager {
 				.with_z_index(5)
 				.with_callback({
 					let name_clone = name_clone.clone();  // Clone for this closure
-					move || {
-						handler::join_world(&name_clone);
-					}
+					move || handler::join_world(&name_clone)
 				});
 			self.add_element(world_button);
 
@@ -277,9 +272,7 @@ impl UIManager {
 					ptr::get_state().ui_manager.dialogs.ask_with_callback(
 						"Delete world?",
 						move |confirmed| {
-							if confirmed {
-								manager::del_world(&name_clone);
-							}
+							if confirmed { manager::del_world(&name_clone);}
 						}
 					);
 				});
@@ -331,9 +324,7 @@ impl UIManager {
 			.with_text_color(180, 200, 220)
 			.with_border((70, 90, 130, 255), 0.005)
 			.with_z_index(5)
-			.with_callback(|| {
-				println!("clicked setting_button_1");
-			});
+			.with_callback(|| println!("clicked setting_button_1"));
 		self.add_element(setting_button_1);
 
 		let setting_checkbox_1 = UIElement::checkbox(self.next_id(), Some("checkbox"))
@@ -343,9 +334,7 @@ impl UIManager {
 			.with_text_color(180, 200, 220)
 			.with_border((70, 90, 130, 255), 0.005)
 			.with_z_index(5)
-			.with_callback(|| {
-				println!("clicked setting_checkbox_1");
-			});
+			.with_callback(|| println!("clicked setting_checkbox_1"));
 		self.add_element(setting_checkbox_1);
 
 		let setting_slider_1 = UIElement::slider(self.next_id(), 0., 100.)
@@ -357,9 +346,7 @@ impl UIManager {
 			.with_z_index(5)
 			.with_step(0.5)
 			.with_value(10.)
-			.with_callback(|| {
-				println!("clicked setting_slider_1");
-			});
+			.with_callback(|| println!("clicked setting_slider_1"));
 		self.add_element(setting_slider_1);
 
 		let setting_multi_button_1 = UIElement::multi_state_button(self.next_id(), vec!("On", "Off"))
@@ -369,9 +356,7 @@ impl UIManager {
 			.with_text_color(180, 200, 220)
 			.with_border((70, 90, 130, 255), 0.005)
 			.with_z_index(5)
-			.with_callback(|| {
-				println!("clicked setting_multi_button_1");
-			});
+			.with_callback(|| println!("clicked setting_multi_button_1"));
 		self.add_element(setting_multi_button_1);
 
 		// Back button with consistent styling
@@ -554,11 +539,7 @@ impl UIManager {
 				.with_text_color(180, 200, 220)
 				.with_border((70, 90, 130, 255), 0.005)
 				.with_z_index(5)
-				.with_callback({
-					move || {
-						handler::join_local_world(&name_clone);
-					}
-				});
+				.with_callback(move || handler::join_local_world(&name_clone));
 			self.add_element(world_button);
 		}
 
@@ -570,9 +551,8 @@ impl UIManager {
 			.with_border((90, 100, 130, 255), 0.005)
 			.with_z_index(8)
 			.with_callback(|| {
-				match api::refresh_discovery() {
-					Ok(a) => { println!("Refresh: {}", a); },
-					Err(e) => { println!("Refresh error: {}", e); },
+				if let Err(e) = api::refresh_discovery() {
+					println!("Refresh error: {}", e);
 				}
 				let state = ptr::get_state();
 				state.ui_manager.setup_ui();
@@ -590,7 +570,7 @@ impl UIManager {
 				let ui_manager = &mut ptr::get_state().ui_manager;
 				ui_manager.state = UIState::ConnectLocal;
 				ui_manager.setup_ui();
-			});
+				});
 		self.add_element(connect_button);
 
 		// Back button with consistent styling
@@ -660,7 +640,7 @@ impl UIManager {
 				let ui_manager = &mut ptr::get_state().ui_manager;
 				ui_manager.state = UIState::WorldSelection;
 				ui_manager.setup_ui();
-			});
+				});
 		self.add_element(gen_button);
 
 		// Back button with consistent styling
@@ -726,15 +706,13 @@ impl UIManager {
 			.with_border((80, 110, 160, 255), 0.005)
 			.with_z_index(6)
 			.with_callback(move || {
-				match api::connect_to_host(&get_element_data_dy_id(input_id)) {
-					Ok(a) => { println!("Nice: {}", a); },
-					Err(e) => { println!("Error: {}", e); },
+				if let Err(e) = api::connect_to_host(&get_element_data_dy_id(input_id)) {
+					println!("Error: {}", e);
 				}
-				;
 				let ui_manager = &mut ptr::get_state().ui_manager;
 				ui_manager.state = UIState::WorldSelection;
 				ui_manager.setup_ui();
-			});
+				});
 		self.add_element(gen_button);
 
 		// Back button with consistent styling
@@ -803,14 +781,11 @@ impl UIManager {
 			.with_text_color(150, 170, 200) // Light blue-gray
 			.with_border((70, 90, 120, 255), 0.005)
 			.with_z_index(8)
-			.with_callback(|| 
-				{
-					let save_path = ptr::get_gamestate().save_path();
-					match manager::save_entire_world(save_path) {
-						Ok(_) => {},
-						Err(e) => { println!("Error: {}", e); },
-					};
-				});
+			.with_callback(|| {
+				let save_path = ptr::get_gamestate().save_path();
+				if let Err(e) = manager::save_entire_world(save_path) {
+					println!("Error: {}", e);
+				}});
 		self.add_element(save_button);
 		let load_button = UIElement::button(self.next_id(), "Load World")
 			.with_position(-0.8, 0.0)
@@ -819,14 +794,11 @@ impl UIManager {
 			.with_text_color(150, 170, 200) // Light blue-gray
 			.with_border((70, 90, 120, 255), 0.005)
 			.with_z_index(8)
-			.with_callback(|| 
-				{
-					let save_path = ptr::get_gamestate().save_path();
-					match manager::load_entire_world(save_path) {
-						Ok(_) => {},
-						Err(e) => { println!("Error: {}", e); },
-					};
-				});
+			.with_callback(|| {
+				let save_path = ptr::get_gamestate().save_path();
+				if let Err(e) = manager::load_entire_world(save_path) {
+					println!("Error: {}", e);
+				}});
 		self.add_element(load_button);
 		let setting_button = UIElement::button(self.next_id(), "Settings")
 			.with_position(-0.8, -0.15)
@@ -892,13 +864,10 @@ impl UIManager {
 			.with_text_color(150, 170, 200) // Light blue-gray
 			.with_border((70, 90, 120, 255), 0.005)
 			.with_z_index(8)
-			.with_callback(|| 
-				{
-					match api::begin_online_giveaway() {
-						Ok(o) => println!("worked: {}", o),
-						Err(e) => println!("not worked: {}", e),
-					};
-				});
+			.with_callback(|| { 
+				if let Err(e) = api::begin_online_giveaway() {
+					println!("not worked: {}", e);
+				}});
 		self.add_element(host_button);
 
 		// Help text with better contrast
@@ -953,17 +922,6 @@ impl UIManager {
 
 	#[inline]
 	fn setup_in_game_ui(&mut self) {
-		// Close button with better contrast
-		let close_button = UIElement::button(self.next_id(), "X")
-			.with_position(0.92, -0.92)
-			.with_size(0.08, 0.08)
-			.with_color(120, 40, 40)  // Dark red
-			.with_text_color(220, 180, 180) // Light red
-			.with_border((160, 60, 60, 255), 0.005)
-			.with_z_index(8)
-			.with_callback(|| close_pressed());
-		self.add_element(close_button);
-
 		// Cross-hair with better visibility
 		let crosshair_v = UIElement::divider(self.next_id())
 			.with_position(0.0, -0.02)

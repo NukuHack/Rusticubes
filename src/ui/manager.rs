@@ -1,6 +1,6 @@
 
 use crate::{
-	ext::{audio, ptr},
+	ext::{audio, ptr, config},
 	get_string,
 	ui::{
 		dialog, inventory::{self, ClickResult},
@@ -147,6 +147,8 @@ pub struct UIManager {
 	renderer: UIRenderer,
 	// extra for double callbacks
 	pub dialogs: dialog::DialogManager,
+	// theme nice
+	pub theme: config::UITheme,
 	// helper stuff, mainly for init
 	next_id: usize,
 }
@@ -226,6 +228,7 @@ impl UIManager {
 			focused_element: None,
 			visibility: true,
 			dialogs: dialog::DialogManager::new(),
+			theme: config::UITheme::default(),
 			renderer,
 			next_id: 1,
 		}

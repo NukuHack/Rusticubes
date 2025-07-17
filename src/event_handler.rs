@@ -105,9 +105,8 @@ impl<'a> crate::State<'a> {
 				// Handle game controls if no UI element is focused
 				// `key` is of type `KeyCode` (e.g., KeyCode::W)
 				// `state` is of type `ElementState` (Pressed or Released)
-				let statre = ptr::get_gamestate();
-				if self.is_world_running && statre.is_running() {
-					statre.player_mut().controller().process_keyboard(&key, is_pressed);
+				if self.is_world_running && ptr::get_gamestate().is_running() {
+					ptr::get_gamestate().player_mut().controller().process_keyboard(&key, is_pressed);
 					match key {
 						Key::KeyF => {
 							if is_pressed {

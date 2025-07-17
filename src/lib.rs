@@ -28,6 +28,7 @@ pub mod debug { // debug, test related
 pub mod ext { // extra things that did not fit anywhere else
 	pub mod audio; // audio manager, in extra thread
 	pub mod config;
+	pub mod color;
 	pub mod ptr; // all the pointers and stuff
 	pub mod stopwatch;
 	pub mod memory; // memory management mainly focusing on memory clean up

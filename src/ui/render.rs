@@ -415,7 +415,7 @@ impl UIRenderer {
 				position: (element.position.0 + element.size.0 + 0.01, element.position.1),
 				size: (text.len() as f32 * 0.015, element.size.1),
 				data: UIElementData::Label { text: text.to_string(), text_color: None },
-				color: [0, 0, 0, 255],
+				color: element.get_text_color(),
 				..UIElement::default()
 			};
 			self.process_text_element(&label_element, label_element.get_str(), vertices, indices, current_index);
