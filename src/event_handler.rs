@@ -297,9 +297,8 @@ impl<'a> crate::State<'a> {
 
 			}
 			WindowEvent::MouseWheel { delta, .. } => {
-				let gamestate = ptr::get_gamestate();
-				if self.is_world_running && gamestate.is_running() {
-					gamestate.player_mut().controller().process_scroll(delta);
+				if self.is_world_running && ptr::get_gamestate().is_running() {
+					ptr::get_gamestate().player_mut().controller().process_scroll(delta);
 				}
 				true
 			}

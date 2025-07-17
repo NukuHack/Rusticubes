@@ -698,12 +698,12 @@ impl UIManager {
 					self.create_inventory_slots(inv, &layout);
 				}
 				InventoryUIState::Storage { inv, size: _ } => {
-					self.create_area_slots(&layout.storage_area, (40, 40, 60), (80, 80, 120, 255));
+					self.create_area_slots(&layout.storage_area);
 					self.create_inventory_slots(inv, &layout);
 				}
 				InventoryUIState::Crafting { inv, size: _, result: _ } => {
-					self.create_area_slots(&layout.input_area, (40, 40, 60), (80, 80, 120, 255));
-					self.create_area_slots(&layout.result_area, (60, 80, 60), (80, 120, 80, 255));
+					self.create_area_slots(&layout.input_area);
+					self.create_area_slots(&layout.result_area);
 					self.create_inventory_slots(inv, &layout);
 				}
 			}
@@ -714,9 +714,8 @@ impl UIManager {
 		let main_panel = UIElement::panel(self.next_id())
 			.with_position(layout.panel_position.0, layout.panel_position.1)
 			.with_size(layout.panel_size.0, layout.panel_size.1)
-			.with_color(25, 25, 40)
-			.with_border((60, 60, 90, 255), 0.008)
-			.with_z_index(1);
+			.with_style(&self.theme.inv.panel_bg)
+			.with_z_index(3);
 		self.add_element(main_panel);
 	}
 
@@ -730,9 +729,7 @@ impl UIManager {
 		let version = UIElement::label(self.next_id(), format!("v{}", env!("CARGO_PKG_VERSION")))
 			.with_position(version_x, version_y)
 			.with_size(version_width, version_height)
-			.with_color(30, 30, 45)
-			.with_text_color(200, 230, 255)
-			.with_border((60, 80, 120, 170), 0.003)
+			.with_style(&self.theme.labels.extra())
 			.with_z_index(8);
 		self.add_element(version);
 	}
@@ -740,28 +737,28 @@ impl UIManager {
 	fn create_inventory_slots(&mut self, inv_state: InvState, layout: &InventoryLayout) {
 		match inv_state {
 			InvState::All => {
-				self.create_area_slots(&layout.armor_area, (60, 60, 80), (100, 100, 140, 255));
-				self.create_area_slots(&layout.inv_area, (40, 40, 60), (80, 80, 120, 255));
-				self.create_area_slots(&layout.hotbar_area, (50, 50, 70), (90, 90, 130, 255));
+				self.create_area_slots(&layout.armor_area);
+				self.create_area_slots(&layout.inv_area);
+				self.create_area_slots(&layout.hotbar_area);
 			}
 			InvState::Items => {
-				self.create_area_slots(&layout.inv_area, (40, 40, 60), (80, 80, 120, 255));
-				self.create_area_slots(&layout.hotbar_area, (50, 50, 70), (90, 90, 130, 255));
+				self.create_area_slots(&layout.inv_area);
+				self.create_area_slots(&layout.hotbar_area);
 			}
 			InvState::Armor => {
-				self.create_area_slots(&layout.armor_area, (60, 60, 80), (100, 100, 140, 255));
+				self.create_area_slots(&layout.armor_area);
 			}
 			InvState::Inner => {
-				self.create_area_slots(&layout.inv_area, (40, 40, 60), (80, 80, 120, 255));
+				self.create_area_slots(&layout.inv_area);
 			}
 			InvState::Hotbar => {
-				self.create_area_slots(&layout.hotbar_area, (50, 50, 70), (90, 90, 130, 255));
+				self.create_area_slots(&layout.hotbar_area);
 			}
 			InvState::None => {}
 		}
 	}
 
-	fn create_area_slots(&mut self, area: &AreaLayout, slot_color: (u8, u8, u8), border_color: (u8, u8, u8, u8)) {
+	fn create_area_slots(&mut self, area: &AreaLayout) {
 		if area.rows == 0 || area.columns == 0 {
 			return;
 		}
@@ -773,9 +770,8 @@ impl UIManager {
 				let slot = UIElement::panel(self.next_id())
 					.with_position(x, y)
 					.with_size(SLOT, SLOT)
-					.with_color(slot_color.0, slot_color.1, slot_color.2)
-					.with_border(border_color, 0.003)
-					.with_z_index(2);
+					.with_style(self.theme.inv.get_style(area.name))
+					.with_z_index(5);
 				
 				self.add_element(slot);
 			}

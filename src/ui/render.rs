@@ -168,7 +168,7 @@ impl UIRenderer {
 		let mut current_index = 0u32;
 
 		for element in sorted_elements {
-			if element.border_width > 0.0 {
+			if element.border.width > 0.0 {
 				self.process_border(element, &mut vertices, &mut indices, &mut current_index);
 			}
 			match &element.data {
@@ -199,9 +199,9 @@ impl UIRenderer {
 		let state = ptr::get_state();
 		
 		if let Some(text) = text {
-			let texture_key = format!("{}_{:?}", text, element.color);
+			let texture_key = format!("{}_{:?}", text, element.get_text_color());
 			if !self.text_textures.contains_key(&texture_key) {
-				let texture = self.render_text_to_texture(state.device(), state.queue(), text, element.size, element.get_text_color());
+				let texture = self.render_text_to_texture(state.device(), state.queue(), text, element.size, element.get_text_color().to_arr());
 				let texture_view = texture.create_view(&wgpu::TextureViewDescriptor {
 					dimension: Some(wgpu::TextureViewDimension::D2Array), ..Default::default() });
 				let bind_group = state.device().create_bind_group(&wgpu::BindGroupDescriptor {
@@ -223,7 +223,7 @@ impl UIRenderer {
 				let tex_h = texture.height() as f32 * pixel_to_unit;
 				let real_x = x + (w - tex_w) / 2.0;
 				let real_y = y + (h - tex_h) / 2.0;
-				self.proc_rect_element((real_x, real_y), (tex_w, tex_h), element.get_text_color(), vertices, indices, current_index);
+				self.proc_rect_element((real_x, real_y), (tex_w, tex_h), element.get_text_color().to_arr(), vertices, indices, current_index);
 			}
 		}
 	}
@@ -237,15 +237,14 @@ impl UIRenderer {
 			// Draw slider track
 			let track_height = h * 0.3;
 			let track_y = y + (h - track_height) / 2.0;
-			let track_color = element.color;
-			self.proc_rect_element((x, track_y), (w, track_height), track_color, vertices, indices, current_index);
+			self.proc_rect_element((x, track_y), (w, track_height), element.color.to_arr(), vertices, indices, current_index);
 			
 			// Draw slider handle
 			let normalized_value = (current_value - min_value) / (max_value - min_value);
 			let handle_w = h * 0.8;
 			let handle_x = x + (w - handle_w) * normalized_value;
 			let handle_y = y + (h - handle_w) / 2.0;
-			let handle_color = element.get_text_color();
+			let handle_color = element.get_text_color().to_arr();
 			self.proc_rect_element((handle_x, handle_y), (handle_w, handle_w), handle_color, vertices, indices, current_index);
 		}
 	}
@@ -338,10 +337,8 @@ impl UIRenderer {
 
 	#[inline] fn process_image_element(&mut self, element: &UIElement, vertices: &mut Vec<Vertex>, indices: &mut Vec<u32>, current_index: &mut u32) {
 		if let UIElementData::Image { path } = &element.data {
-			let state = ptr::get_state();
-			let image_key = format!("{}_{:?}", path, element.color);
-			
-			if !self.image_textures.contains_key(&image_key) {
+			let state = ptr::get_state();			
+			if !self.image_textures.contains_key(path) {
 				let texture = self.create_image_texture(state.device(), state.queue(), path.to_string());
 				let texture_view = texture.create_view(&wgpu::TextureViewDescriptor {
 					dimension: Some(wgpu::TextureViewDimension::D2Array), ..Default::default() });
@@ -353,7 +350,7 @@ impl UIRenderer {
 					],
 					label: Some("image_bind_group"),
 				});
-				self.image_textures.insert(image_key, (texture, bind_group));
+				self.image_textures.insert(path.to_string(), (texture, bind_group));
 			}
 
 			self.process_rect_element(element, vertices, indices, current_index);
@@ -382,7 +379,7 @@ impl UIRenderer {
 	}
 
 	#[inline] fn process_animation_element(&mut self, element: &UIElement, vertices: &mut Vec<Vertex>, indices: &mut Vec<u32>, current_index: &mut u32) {
-		if let UIElementData::Animation {frames,..} = &element.data {
+		if let UIElementData::Animation { frames,..} = &element.data {
 			let state = ptr::get_state();
 			let animation_key = frames.join("|");
 			
@@ -407,14 +404,14 @@ impl UIRenderer {
 				let check_y = y + h * padding;
 				let check_w = w * (1.0 - 2.0 * padding);
 				let check_h = h * (1.0 - 2.0 * padding);
-				self.proc_rect_element((check_x, check_y), (check_w, check_h), [50, 120, 50, 255], vertices, indices, current_index);
+				self.proc_rect_element((check_x, check_y), (check_w, check_h), (element.color.with_g(255)).to_arr(), vertices, indices, current_index);
 			}
 		}
 		if let Some(text) = element.get_str() {
 			let label_element = UIElement {
 				position: (element.position.0 + element.size.0 + 0.01, element.position.1),
 				size: (text.len() as f32 * 0.015, element.size.1),
-				data: UIElementData::Label { text: text.to_string(), text_color: None },
+				data: UIElementData::Label { text: text.to_string(), text_color: element.get_text_color() },
 				color: element.get_text_color(),
 				..UIElement::default()
 			};
@@ -463,16 +460,16 @@ impl UIRenderer {
 	#[inline] fn process_border(&self, element: &UIElement, vertices: &mut Vec<Vertex>, indices: &mut Vec<u32>, current_index: &mut u32) {
 		let (x, y) = element.position;
 		let (w, h) = element.size;
-		let border_width = element.border_width;
+		let border_width = element.border.width;
 		let border_x = x - border_width;
 		let border_y = y - border_width;
 		let border_w = w + 2.0 * border_width;
 		let border_h = h + 2.0 * border_width;
-		self.proc_rect_element((border_x, border_y), (border_w, border_h), element.border_color, vertices, indices, current_index);
+		self.proc_rect_element((border_x, border_y), (border_w, border_h), element.border.color.to_arr(), vertices, indices, current_index);
 	}
 
 	#[inline] fn process_rect_element(&self, element: &UIElement, vertices: &mut Vec<Vertex>, indices: &mut Vec<u32>, current_index: &mut u32) {
-		self.proc_rect_element(element.position, element.size, element.color, vertices, indices, current_index);
+		self.proc_rect_element(element.position, element.size, element.color.to_arr(), vertices, indices, current_index);
 	}
 	#[inline] fn proc_rect_element(&self, pos: (f32, f32), size: (f32, f32), color: [u8; 4], vertices: &mut Vec<Vertex>, indices: &mut Vec<u32>, current_index: &mut u32) {
 		self.add_rectangle(vertices, pos, size, color);
@@ -508,7 +505,7 @@ impl UIRenderer {
 		sorted_elements.sort_by_key(|e| e.z_index);
 		
 		for element in sorted_elements {
-			if element.border_width > 0.0 {
+			if element.border.width > 0.0 {
 				r_pass.set_bind_group(0, &self.default_bind_group, &[]);
 				r_pass.draw_indexed(i_off..(i_off + 6), 0, 0..1);
 				i_off += 6;
@@ -516,8 +513,7 @@ impl UIRenderer {
 			#[allow(unreachable_patterns)]
 			match &element.data {
 				UIElementData::Image { path } => {
-					let image_key = format!("{}_{:?}", path, element.color);
-					if let Some((_, bind_group)) = self.image_textures.get(&image_key) {
+					if let Some((_, bind_group)) = self.image_textures.get(path) {
 						r_pass.set_bind_group(0, bind_group, &[]);
 						r_pass.draw_indexed(i_off..(i_off + 6), 0, 0..1);
 					}
@@ -542,7 +538,7 @@ impl UIRenderer {
 						i_off += 6;
 					}
 					if let Some(text) = element.get_str() {
-						let texture_key = format!("{}_{:?}", text, element.color);
+						let texture_key = format!("{}_{:?}", text, element.get_text_color());
 						if let Some((_, bind_group)) = self.text_textures.get(&texture_key) {
 							r_pass.set_bind_group(0, bind_group, &[]);
 							r_pass.draw_indexed(i_off..(i_off + 6), 0, 0..1);
@@ -566,7 +562,7 @@ impl UIRenderer {
 					r_pass.draw_indexed(i_off..(i_off + 6), 0, 0..1);
 					i_off += 6;
 					if let Some(text) = element.get_str() {
-						let texture_key = format!("{}_{:?}", text, element.color);
+						let texture_key = format!("{}_{:?}", text, element.get_text_color());
 						if let Some((_, bind_group)) = self.text_textures.get(&texture_key) {
 							r_pass.set_bind_group(0, bind_group, &[]);
 							r_pass.draw_indexed(i_off..(i_off + 6), 0, 0..1);
@@ -582,7 +578,7 @@ impl UIRenderer {
 				},
 				UIElementData::Label { .. } => {
 					if let Some(text) = element.get_str() {
-						let texture_key = format!("{}_{:?}", text, element.color);
+						let texture_key = format!("{}_{:?}", text, element.get_text_color());
 						if let Some((_, bind_group)) = self.text_textures.get(&texture_key) {
 							r_pass.set_bind_group(0, bind_group, &[]);
 							r_pass.draw_indexed(i_off..(i_off + 6), 0, 0..1);

@@ -1,5 +1,7 @@
 
+use crate::ext::color::{Color, Border};
 use std::{cell::RefCell, fmt, sync::Arc };
+use crate::ext::config::ElementStyle;
 
 type Callback = Arc<RefCell<dyn FnMut() + 'static>>;
 
@@ -11,18 +13,18 @@ impl<T> Textlike for T where T: Into<String> {}
 pub enum UIElementData {
 	Panel,
 	Divider,
-	Label { text: String, text_color: Option<[u8; 4]> },
-	Button { text: String, text_color: Option<[u8; 4]>, on_click: Option<Callback> },
-	MultiStateButton { states: Vec<String>, text_color: Option<[u8; 4]>, current_state: usize, on_click: Option<Callback>, },
-	InputField { text: String, text_color: Option<[u8; 4]>, placeholder: Option<String> },
-	Checkbox { label: Option<String>, text_color: Option<[u8; 4]>, checked: bool, on_click: Option<Callback> },
+	Label { text: String, text_color: Color },
+	Button { text: String, text_color: Color, on_click: Option<Callback> },
+	MultiStateButton { states: Vec<String>, text_color: Color, current_state: usize, on_click: Option<Callback>, },
+	InputField { text: String, text_color: Color, placeholder: Option<String> },
+	Checkbox { label: Option<String>, text_color: Color, checked: bool, on_click: Option<Callback> },
 	Image { path: String },
 	Animation {
 		frames: Vec<String>, current_frame: u32, frame_duration: f32, elapsed_time: f32,
 		looping: bool, playing: bool, smooth_transition: bool, blend_delay: u32,
 	},
 	Slider {
-		min_value: f32, slider_color: Option<[u8; 4]>, max_value: f32, current_value: f32,
+		min_value: f32, slider_color: Color, max_value: f32, current_value: f32,
 		step: Option<f32>, on_change: Option<Callback>, //vertical: bool,
 	},
 }
@@ -79,12 +81,11 @@ pub struct UIElement {
 	pub data: UIElementData,
 	pub position: (f32, f32),
 	pub size: (f32, f32),
-	pub color: [u8; 4],
+	pub color: Color,
 	pub hovered: bool,
 	pub z_index: i32,
 	pub visible: bool,
-	pub border_color: [u8; 4],
-	pub border_width: f32,
+	pub border: Border,
 	pub enabled: bool,
 }
 
@@ -96,12 +97,11 @@ impl Default for UIElement {
 			data: UIElementData::default(),
 			position: (0.0, 0.0),
 			size: (0.0, 0.0),
-			color: Self::DEFAULT_COLOR,
+			color: Color::DEF_COLOR,
 			hovered: false,
 			z_index: 0,
 			visible: true,
-			border_color: Self::DEFAULT_COLOR,
-			border_width: 0.0,
+			border: Border::NONE,
 			enabled: true,
 		}
 	}
@@ -121,36 +121,31 @@ impl fmt::Debug for UIElement {
 }
 
 impl UIElement {
-	const DEFAULT_ALPHA: u8 = 255;
-	const HOVER_ALPHA: u8 = 124;
-	const DEFAULT_COLOR: [u8; 4] = [255, 255, 255, Self::DEFAULT_ALPHA];
-	
-
 	// Element creation
 	#[inline]
 	pub fn new(id: usize, element_type: UIElementData) -> Self {
-		Self { id, data: element_type, color: Self::DEFAULT_COLOR, ..Default::default() }
+		Self { id, data: element_type, color: Color::DEF_COLOR, ..Default::default() }
 	}
 	#[inline]
 	pub fn panel(id: usize) -> Self { Self::new(id, UIElementData::Panel) }
 	#[inline]
 	pub fn label<T: Textlike>(id: usize, text: T) -> Self {
-		Self::new(id, UIElementData::Label { text: text.into(), text_color: None })
+		Self::new(id, UIElementData::Label { text: text.into(), text_color: Color::DEF_COLOR })
 	}
 	#[inline]
 	pub fn button<T: Textlike>(id: usize, text: T) -> Self {
-		Self::new(id, UIElementData::Button { text: text.into(), text_color: None, on_click: None })
+		Self::new(id, UIElementData::Button { text: text.into(), text_color: Color::DEF_COLOR, on_click: None })
 	}
 	#[inline]
 	pub fn input(id: usize) -> Self {
-		Self::new(id, UIElementData::InputField { text: String::new(), text_color: None, placeholder: None })
+		Self::new(id, UIElementData::InputField { text: String::new(), text_color: Color::DEF_COLOR, placeholder: None })
 	}
 	#[inline]
 	pub fn checkbox<T: Textlike>(id: usize, label: Option<T>) -> Self {
 		if let Some(text) = label {
-			return Self::new(id, UIElementData::Checkbox { label: Some(text.into()), text_color: None, checked: false, on_click: None });
+			return Self::new(id, UIElementData::Checkbox { label: Some(text.into()), text_color: Color::DEF_COLOR, checked: false, on_click: None });
 		}
-		Self::new(id, UIElementData::Checkbox { label: None, text_color: None, checked: false, on_click: None })
+		Self::new(id, UIElementData::Checkbox { label: None, text_color: Color::DEF_COLOR, checked: false, on_click: None })
 	}
 	#[inline]
 	pub fn image<T: Textlike>(id: usize, path: T) -> Self {
@@ -170,7 +165,7 @@ impl UIElement {
 	pub fn multi_state_button<T: Textlike>(id: usize, states: Vec<T>) -> Self {
 		Self::new(id, UIElementData::MultiStateButton {
 			states: states.into_iter().map(Into::into).collect(),
-			text_color: None,
+			text_color: Color::DEF_COLOR,
 			current_state: 0,on_click: None,
 		})
 	}
@@ -178,7 +173,7 @@ impl UIElement {
 	pub fn slider(id: usize, min_value: f32, max_value: f32) -> Self {
 		Self::new(id, UIElementData::Slider {
 			min_value, max_value, //vertical: false,
-			slider_color: None,
+			slider_color: Color::DEF_COLOR,
 			current_value: min_value, 
 			step: None,on_change: None, 
 		})
@@ -186,26 +181,22 @@ impl UIElement {
 	
 	
 	// Builder methods
+	#[inline] pub fn with_position(mut self, x: f32, y: f32) -> Self { self.position = (x, y); self }
+	#[inline] pub fn with_size(mut self, width: f32, height: f32) -> Self { self.size = (width, height); self }
+	#[inline] pub fn with_color(mut self, color: Color) -> Self { self.color = color; self }
+	#[inline] pub fn with_alpha(mut self, a: u8) -> Self { self.color = self.color.with_a(a); self }
+	#[inline] pub fn with_z_index(mut self, z_index: i32) -> Self { self.z_index = z_index; self }
+	#[inline] pub fn with_visible(mut self, visible: bool) -> Self { self.visible = visible; self }
+	#[inline] pub fn with_enabled(mut self, enabled: bool) -> Self { self.enabled = enabled; self }
+	#[inline] pub fn with_border(mut self, border: Border) -> Self { self.border = border; self}
+
 	#[inline]
-	pub fn with_position(mut self, x: f32, y: f32) -> Self { self.position = (x, y); self }
-	#[inline]
-	pub fn with_size(mut self, width: f32, height: f32) -> Self { self.size = (width, height); self }
-	#[inline]
-	pub fn with_color(mut self, r: u8, g: u8, b: u8) -> Self { self.color = [r, g, b, self.color[3]]; self }
-	#[inline]
-	pub fn with_alpha(mut self, alpha: u8) -> Self { self.color[3] = alpha; self }
-	#[inline]
-	pub fn with_z_index(mut self, z_index: i32) -> Self { self.z_index = z_index; self }
-	#[inline]
-	pub fn with_visibility(mut self, visible: bool) -> Self { self.visible = visible; self }
-	#[inline]
-	pub fn with_enabled(mut self, enabled: bool) -> Self { self.enabled = enabled; self }
-	#[inline]
-	pub fn with_border(mut self, color: (u8, u8, u8, u8), width: f32) -> Self {
-		self.border_color = [color.0, color.1, color.2, color.3];
-		self.border_width = width;
-		self
+	pub fn with_style(self, style: &ElementStyle) -> Self {
+		self.with_color(style.color)
+			.with_border(style.border)
+			.with_text_color(style.text_color())
 	}
+
 	#[inline]
 	pub fn with_callback<F: FnMut() + 'static>(mut self, callback: F) -> Self {
 		match &mut self.data {
@@ -247,12 +238,12 @@ impl UIElement {
 		match self.data {
 			UIElementData::Button{ .. } | UIElementData::InputField{ .. } | UIElementData::Slider{ .. } | UIElementData::MultiStateButton{ .. } => {
 
-				self.color[3] = if self.hovered && self.enabled {
-					Self::HOVER_ALPHA
+				self.color.a = if self.hovered && self.enabled {
+					Color::HOVER_ALPHA
 				} else if !self.enabled {
-					Self::DEFAULT_ALPHA / 2
+					Color::HOVER_ALPHA / 2
 				} else {
-					Self::DEFAULT_ALPHA
+					Color::DEF_ALPHA
 				};
 			},
 			_ => { },
@@ -307,37 +298,32 @@ impl UIElement {
 		self
 	}
 	#[inline]
-	fn set_text_color(&mut self, r: u8, g: u8, b: u8, a: u8) {
+	pub fn with_text_color(mut self, color: Color) -> Self {
 		match &mut self.data {
 			UIElementData::Label { text_color, .. } |
 			UIElementData::Button { text_color, .. } |
 			UIElementData::InputField { text_color, .. } |
 			UIElementData::Checkbox { text_color, .. } |
-			UIElementData::MultiStateButton { text_color, .. } => *text_color = Some([r, g, b, a]),
-			UIElementData::Slider { slider_color, .. } => *slider_color = Some([r, g, b, a]),
+			UIElementData::MultiStateButton { text_color, .. } => *text_color = color,
+			UIElementData::Slider { slider_color, .. } => *slider_color = color,
 			_ => {}
 		}
-	}
-	#[inline]
-	pub fn with_text_color(mut self, r: u8, g: u8, b: u8) -> Self {
-		self.set_text_color(r, g, b, 255);
 		self
 	}
 	#[inline]
-	pub fn with_text_visibility(mut self, a: u8) -> Self {
-		let color = self.get_text_color();
-		self.set_text_color(color[0], color[1], color[2], a);
-		self
+	pub fn with_text_alpha(self, a: u8) -> Self {
+		let color = self.get_text_color().with_a(a);
+		self.with_text_color(color)
 	}
 	#[inline]
-	pub fn get_text_color(&self) -> [u8; 4] {
+	pub fn get_text_color(&self) -> Color {
 		let text_color = match &self.data {
 			UIElementData::Label { text_color, .. } |
 			UIElementData::Button { text_color, .. } |
 			UIElementData::InputField { text_color, .. } |
 			UIElementData::Checkbox { text_color, .. } |
-			UIElementData::MultiStateButton { text_color, .. } => *text_color,
-			UIElementData::Slider { slider_color, .. } => *slider_color,
+			UIElementData::MultiStateButton { text_color, .. } => Some(*text_color),
+			UIElementData::Slider { slider_color, .. } => Some(*slider_color),
 			_ => None,
 		};
 		text_color.unwrap_or(self.color)
