@@ -1,6 +1,6 @@
 
 use crate::State;
-use crate::ext::config;
+use crate::ext::ptr;
 use crate::render::meshing::Vertex;
 use crate::render::texture;
 use crate::get_string;
@@ -387,7 +387,7 @@ pub fn render_all(current_state: &mut State) -> Result<(), wgpu::SurfaceError> {
 		rpass.set_bind_group(0, current_state.texture_manager().bind_group(), &[]);
 		rpass.set_bind_group(1, current_state.camera_system().bind_group(), &[]);
 
-		config::get_gamestate()
+		ptr::get_gamestate()
 			.world()
 			.render_chunks(&mut rpass);
 
@@ -395,7 +395,7 @@ pub fn render_all(current_state: &mut State) -> Result<(), wgpu::SurfaceError> {
 		rpass.set_pipeline(&current_state.pipeline().inside_pipeline);
 		rpass.set_bind_group(0, current_state.texture_manager().bind_group(), &[]);
 		rpass.set_bind_group(1, current_state.camera_system().bind_group(), &[]);
-		config::get_gamestate()
+		ptr::get_gamestate()
 			.world()
 			.render_chunks(&mut rpass);
 	}

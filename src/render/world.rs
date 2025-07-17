@@ -3,12 +3,11 @@ use wgpu::util::DeviceExt;
 use ahash::AHasher;
 use glam::Vec3;
 use std::{ collections::HashMap, hash::BuildHasherDefault };
-use crate::block::main::Block;
+use crate::block::main::{Block, Chunk};
 use crate::block::math::{ChunkCoord, BlockPosition};
 use crate::render::meshing::{ChunkMeshBuilder, GeometryBuffer};
-use crate::ext::config;
+use crate::ext::ptr;
 use crate::world::main::World;
-use crate::block::main::Chunk;
 
 // =============================================
 // Extra Rendering related Implementations
@@ -122,7 +121,7 @@ impl World {
 impl Chunk {
 	/// Recreates chunk's bind group
 	pub fn create_bind_group(&mut self, chunk_pos: ChunkCoord) {
-		let state = config::get_state();
+		let state = ptr::get_state();
 		let device = state.device();
 		let chunk_bind_group_layout = &state.render_context.chunk_bind_group_layout;
 

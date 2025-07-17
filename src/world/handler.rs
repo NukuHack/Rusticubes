@@ -3,12 +3,13 @@ use crate::ui::manager::UIState;
 use crate::game::state;
 use crate::ext::config;
 use crate::network::api;
+use crate::ext::ptr;
 
 pub fn join_world(world_name: &str) {
 	println!("Loading world: {}", world_name);
 
 	state::start_world(&world_name);
-	let ui_manager = &mut config::get_state().ui_manager;
+	let ui_manager = &mut ptr::get_state().ui_manager;
 	ui_manager.state = UIState::Loading;
 	ui_manager.setup_ui();
 	
@@ -30,10 +31,10 @@ pub fn join_local_world(world_name: &str) {
 }
 
 pub fn leave_world() {
-	let state = config::get_state();
+	let state = ptr::get_state();
 	state.is_world_running = false;
 
-	config::drop_gamestate();
+	ptr::drop_gamestate();
 	if api::is_host() == Ok(true) {
 		api::cleanup_network();
 	}

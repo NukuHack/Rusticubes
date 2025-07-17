@@ -28,6 +28,7 @@ pub mod debug { // debug, test related
 pub mod ext { // extra things that did not fit anywhere else
 	pub mod audio; // audio manager, in extra thread
 	pub mod config;
+	pub mod ptr; // all the pointers and stuff
 	pub mod stopwatch;
 	pub mod memory; // memory management mainly focusing on memory clean up
 }
@@ -284,13 +285,13 @@ impl<'a> State<'a> {
 		
 		if self.is_world_running {
 			let movement_delta = {
-				let player = &mut ext::config::get_gamestate().player_mut();
+				let player = &mut ext::ptr::get_gamestate().player_mut();
 				player.update(&mut self.camera_system, delta_seconds)
 			};
 
 			// Update both player and camera positions in one operation
 			{
-				let player = &mut ext::config::get_gamestate().player_mut();
+				let player = &mut ext::ptr::get_gamestate().player_mut();
 				let camera = self.camera_system.camera_mut();
 				player.append_position(movement_delta, camera);
 			}
@@ -326,12 +327,12 @@ pub async fn run() {
 	
 	let config: ext::config::AppConfig = ext::config::AppConfig::new(monitor_size);
 	let window_raw: Window = winit::window::WindowBuilder::new()
-		.with_title(&*config.window_title())
-		.with_inner_size(*config.initial_window_size())
-		.with_min_inner_size(*config.min_window_size())
-		.with_position(*config.initial_window_position())
+		.with_title(&config.window_title)
+		.with_inner_size(config.initial_window_size)
+		.with_min_inner_size(config.min_window_size)
+		.with_position(config.initial_window_position)
 		.with_window_icon(fs::rs::load_main_icon())
-		.with_theme(*config.theme())
+		.with_theme(config.theme)
 		.with_active(true)
 		.build(&event_loop)
 		.unwrap();
@@ -341,13 +342,13 @@ pub async fn run() {
 	window_raw.set_visible(true);
 
 	// Store the window pointer
-	ext::config::WINDOW_PTR.store(Box::into_raw(Box::new(window_raw)), Ordering::Release);
-	let window_ref = ext::config::get_window();
+	ext::ptr::WINDOW_PTR.store(Box::into_raw(Box::new(window_raw)), Ordering::Release);
+	let window_ref = ext::ptr::get_window();
 		
 	let state = State::new(window_ref).await;
 
 	// Store the state pointer
-	ext::config::STATE_PTR.store(Box::into_raw(Box::new(state)), Ordering::Release);
+	ext::ptr::STATE_PTR.store(Box::into_raw(Box::new(state)), Ordering::Release);
 
 	#[cfg(debug_assertions)] {
 		if let Err(e) = mods::api::main() {
@@ -360,19 +361,20 @@ pub async fn run() {
 
 	// Post-init cleanup
 	ext::memory::light_trim();
-	ext::memory::hard_clean(Some(ext::config::get_state().device()));
+	ext::memory::hard_clean(Some(ext::ptr::get_state().device()));
 
 	event_loop.run(move |event, control_flow| {
-		if ext::config::is_closed() {
-			ext::config::cleanup_resources();
+		if ext::ptr::is_closed() {
+			ext::ptr::cleanup_resources();
 			control_flow.exit();
 			return;
 		}
+		let state = ext::ptr::get_state();
 		match &event {
-			Event::WindowEvent { event, window_id } if *window_id == ext::config::get_state().window().id() => {
-				ext::config::get_state().handle_events(event);
+			Event::WindowEvent { event, window_id } if *window_id == state.window().id() => {
+				state.handle_events(event);
 
-				if ext::config::get_state().is_world_running {
+				if state.is_world_running {
 					block::extra::update_full_world();
 				}
 			}

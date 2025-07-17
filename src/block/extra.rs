@@ -1,5 +1,5 @@
 
-use crate::ext::config;
+use crate::ext::ptr;
 use crate::block::math::ChunkCoord;
 use crate::game::player::Camera;
 use crate::block::main::Block;
@@ -18,7 +18,7 @@ fn update_chunk_mesh(world: &mut World, pos: Vec3) {
 	
 	// Get mutable reference to our chunk
 	if let Some(chunk) = world.get_chunk_mut(chunk_pos) {
-		let state = config::get_state();
+		let state = ptr::get_state();
 		
 		// SAFETY:
 		// 1. We only use the pointer to access different chunks than the one we're modifying
@@ -113,12 +113,12 @@ pub fn raycast_to_block(camera: &Camera, world: &World, max_distance: f32) -> Op
 /// Places a cube on the face of the block the player is looking at
 #[inline]
 pub fn place_looked_cube() {
-	let state = config::get_state();
+	let state = ptr::get_state();
 	if !state.is_world_running {
 		return;
 	}
 	let camera = &state.camera_system.camera();
-	let world = &mut config::get_gamestate().world_mut();
+	let world = &mut ptr::get_gamestate().world_mut();
 
 	if let Some((block_pos, normal)) = raycast_to_block(camera, world, REACH) {
 		let placement_pos = block_pos + normal;
@@ -129,11 +129,11 @@ pub fn place_looked_cube() {
 
 /// Removes the block the player is looking at
 pub fn remove_targeted_block() {
-	let state = config::get_state();
+	let state = ptr::get_state();
 	if !state.is_world_running {
 		return;
 	}
-	let world = &mut config::get_gamestate().world_mut();
+	let world = &mut ptr::get_gamestate().world_mut();
 
 	if let Some((block_pos, _)) = raycast_to_block(state.camera_system.camera(), world, REACH) {
 		world.set_block(block_pos, Block::None);
@@ -145,20 +145,20 @@ pub fn remove_targeted_block() {
 /// Loads a chunk at the camera's position if not already loaded
 #[inline]
 pub fn add_full_chunk() {
-	let state = config::get_state();
+	let state = ptr::get_state();
 	if !state.is_world_running {
 		return;
 	}
 	let chunk_pos = ChunkCoord::from_world_pos(state.camera_system.camera().position());
 
-	let world = config::get_gamestate().world_mut();
+	let world = ptr::get_gamestate().world_mut();
 	world.load_chunk(chunk_pos);
 	world.create_bind_group(chunk_pos);
-	if let Some(chunk) = config::get_gamestate()
+	if let Some(chunk) = ptr::get_gamestate()
 		.world_mut()
 		.get_chunk_mut(chunk_pos)
 	{
-		let state_b = config::get_state();
+		let state_b = ptr::get_state();
 		chunk.make_mesh(state_b.device(), state_b.queue(), &world.get_neighboring_chunks(chunk_pos), true);
 	}
 }
@@ -166,18 +166,18 @@ pub fn add_full_chunk() {
 /// Loads chunks around the camera in a radius
 #[inline]
 pub fn update_full_world() {
-	let state = config::get_state();
+	let state = ptr::get_state();
 	if !state.is_world_running {
 		return;
 	}
-	config::get_gamestate().world_mut().update_loaded_chunks(
+	ptr::get_gamestate().world_mut().update_loaded_chunks(
 		state.camera_system.camera().position(),
 		REACH * 2.0,
 		false,
 	);
 
-	let state_b = config::get_state();
-	config::get_gamestate()
+	let state_b = ptr::get_state();
+	ptr::get_gamestate()
 		.world_mut()
 		.make_chunk_meshes(state_b.device(), state_b.queue());
 }
@@ -185,18 +185,18 @@ pub fn update_full_world() {
 /// Fill chunks around the camera in a radius
 #[inline]
 pub fn add_full_world() {
-	let state = config::get_state();
+	let state = ptr::get_state();
 	if !state.is_world_running {
 		return;
 	}
-	config::get_gamestate().world_mut().update_loaded_chunks(
+	ptr::get_gamestate().world_mut().update_loaded_chunks(
 		state.camera_system.camera().position(),
 		REACH * 2.0,
 		true,
 	);
 
-	let state_b = config::get_state();
-	config::get_gamestate()
+	let state_b = ptr::get_state();
+	ptr::get_gamestate()
 		.world_mut()
 		.make_chunk_meshes(state_b.device(), state_b.queue());
 }
@@ -207,7 +207,7 @@ pub fn raycast_to_cube_point(
 	world: &World,
 	max_distance: f32,
 ) -> Option<(Vec3, (u8, u8, u8))> {
-	if !config::get_state().is_world_running {
+	if !ptr::get_state().is_world_running {
 		return None;
 	}
 	let (block_pos, normal) = raycast_to_block(camera, world, max_distance)?;
@@ -254,12 +254,12 @@ pub fn raycast_to_cube_point(
 /// Toggles a point in the marching cube that the player is looking at
 #[inline]
 pub fn toggle_looked_point() {
-	let state = config::get_state();
+	let state = ptr::get_state();
 	if !state.is_world_running {
 		return;
 	}
 	let camera = &state.camera_system.camera();
-	let gamestate = config::get_gamestate();
+	let gamestate = ptr::get_gamestate();
 	let world = gamestate.world_mut();
 
 	// Find targeted block and point

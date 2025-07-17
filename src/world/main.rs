@@ -1,5 +1,5 @@
 
-use crate::ext::config;
+use crate::ext::ptr;
 use crate::block::math::{BlockPosition, ChunkCoord};
 use crate::block::main::{Block, Chunk};
 use ahash::AHasher;
@@ -139,7 +139,7 @@ impl World {
 		for coord in to_unload {
 			self.unload_chunk(coord);
 		}
-		let seed = *config::get_gamestate().seed();
+		let seed = *ptr::get_gamestate().seed();
 		// Load new chunks in range
 		for dx in -radius_i32..=radius_i32 {
 			for dy in -radius_i32..=radius_i32 {

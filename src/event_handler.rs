@@ -1,5 +1,5 @@
 
-use crate::ext::config;
+use crate::ext::ptr;
 use crate::block::extra;
 use crate::ui::{manager, inventory};
 use std::iter::Iterator;
@@ -23,7 +23,7 @@ impl<'a> crate::State<'a> {
 		// if not processed then basically it's an event what should not be processed entirely so probably log it or idk 
 
 		match event {
-			WindowEvent::CloseRequested => {config::close_app(); true},
+			WindowEvent::CloseRequested => {ptr::close_app(); true},
 			WindowEvent::Resized(physical_size) => self.resize(*physical_size),
 			WindowEvent::RedrawRequested => {
 				self.window().request_redraw();
@@ -35,7 +35,7 @@ impl<'a> crate::State<'a> {
 					},
 					Err(wgpu::SurfaceError::OutOfMemory | wgpu::SurfaceError::Other) => {
 						println!("Surface error");
-						config::close_app(); true
+						ptr::close_app(); true
 					}
 					Err(wgpu::SurfaceError::Timeout) => {
 						println!("Surface timeout");
@@ -46,7 +46,7 @@ impl<'a> crate::State<'a> {
 			WindowEvent::Focused(focused) => {
 				if !focused{
 					if self.is_world_running {
-						config::get_gamestate().player_mut().controller().reset_keyboard(); // Temporary workaround
+						ptr::get_gamestate().player_mut().controller().reset_keyboard(); // Temporary workaround
 					}
 					self.ui_manager.clear_focused_element();
 				}
@@ -93,7 +93,7 @@ impl<'a> crate::State<'a> {
 				// Handle UI input first if there's a focused element
 				if self.ui_manager.visibility == true && self.ui_manager.get_focused_element().is_some() {
 					if self.is_world_running {
-						config::get_gamestate().player_mut().controller().reset_keyboard(); // Temporary workaround
+						ptr::get_gamestate().player_mut().controller().reset_keyboard(); // Temporary workaround
 					}
 					if is_pressed {
 						// Handle keys for UI
@@ -105,8 +105,9 @@ impl<'a> crate::State<'a> {
 				// Handle game controls if no UI element is focused
 				// `key` is of type `KeyCode` (e.g., KeyCode::W)
 				// `state` is of type `ElementState` (Pressed or Released)
-				if self.is_world_running && config::get_gamestate().is_running() {
-					config::get_gamestate().player_mut().controller().process_keyboard(&key, is_pressed);
+				let statre = ptr::get_gamestate();
+				if self.is_world_running && statre.is_running() {
+					statre.player_mut().controller().process_keyboard(&key, is_pressed);
 					match key {
 						Key::KeyF => {
 							if is_pressed {
@@ -128,7 +129,7 @@ impl<'a> crate::State<'a> {
 						},
 						Key::KeyI => {
 							if is_pressed {
-								let state = config::get_state();
+								let state = ptr::get_state();
 								match state.ui_manager.state.clone() {
 									manager::UIState::Inventory(_) => {
 										state.ui_manager.state = manager::UIState::InGame;
@@ -146,7 +147,7 @@ impl<'a> crate::State<'a> {
 						},
 						Key::KeyJ => {
 							if is_pressed {
-								let state = config::get_state();
+								let state = ptr::get_state();
 								match state.ui_manager.state.clone() {
 									manager::UIState::InGame => {
 										state.ui_manager.state = manager::UIState::Inventory(inventory::InventoryUIState::str().b());
@@ -160,7 +161,7 @@ impl<'a> crate::State<'a> {
 						},
 						Key::KeyK => {
 							if is_pressed {
-								let state = config::get_state();
+								let state = ptr::get_state();
 								match state.ui_manager.state.clone() {
 									manager::UIState::InGame => {
 										state.ui_manager.state = manager::UIState::Inventory(inventory::InventoryUIState::craft().b());
@@ -275,9 +276,9 @@ impl<'a> crate::State<'a> {
 					let delta_y = (position.y - center_y) as f32;
 					
 					// Process mouse movement for camera control
-
-					if self.is_world_running && config::get_gamestate().is_running() {
-						config::get_gamestate().player_mut().controller().process_mouse(delta_x, delta_y);
+					let gamestate = ptr::get_gamestate();
+					if self.is_world_running && gamestate.is_running() {
+						gamestate.player_mut().controller().process_mouse(delta_x, delta_y);
 					}
 					// Reset cursor to center
 					self.center_mouse();
@@ -297,8 +298,9 @@ impl<'a> crate::State<'a> {
 
 			}
 			WindowEvent::MouseWheel { delta, .. } => {
-				if self.is_world_running && config::get_gamestate().is_running() {
-					config::get_gamestate().player_mut().controller().process_scroll(delta);
+				let gamestate = ptr::get_gamestate();
+				if self.is_world_running && gamestate.is_running() {
+					gamestate.player_mut().controller().process_scroll(delta);
 				}
 				true
 			}

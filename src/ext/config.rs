@@ -1,18 +1,12 @@
 ﻿
-use crate::network::api;
-use crate::game::state::GameState;
-use crate::ext::audio;
-use crate::State;
-use std::sync::atomic::{AtomicBool,AtomicPtr, Ordering};
 use std::path::PathBuf;
 
-//#[derive(Default)]
 pub struct AppConfig {
-	window_title: String,
-	initial_window_size: winit::dpi::PhysicalSize<f32>,
-	min_window_size: winit::dpi::PhysicalSize<f32>,
-	initial_window_position: winit::dpi::PhysicalPosition<f32>,
-	theme: Option<winit::window::Theme>
+	pub window_title: String,
+	pub initial_window_size: winit::dpi::PhysicalSize<f32>,
+	pub min_window_size: winit::dpi::PhysicalSize<f32>,
+	pub initial_window_position: winit::dpi::PhysicalPosition<f32>,
+	pub theme: Option<winit::window::Theme>
 }
 
 impl Default for AppConfig {
@@ -40,27 +34,6 @@ impl AppConfig {
 			initial_window_position: winit::dpi::PhysicalPosition::new(x,y),
 			..Self::default()
 		}
-	}
-
-	#[inline]
-	pub fn window_title(&self) -> &String {
-		&self.window_title
-	}
-	#[inline]
-	pub fn initial_window_size(&self) -> &winit::dpi::PhysicalSize<f32> {
-		&self.initial_window_size
-	}
-	#[inline]
-	pub fn min_window_size(&self) -> &winit::dpi::PhysicalSize<f32> {
-		&self.min_window_size
-	}
-	#[inline]
-	pub fn initial_window_position(&self) -> &winit::dpi::PhysicalPosition<f32> {
-		&self.initial_window_position
-	}
-	#[inline]
-	pub fn theme(&self) -> &Option<winit::window::Theme> {
-		&self.theme
 	}
 }
 #[inline]
@@ -90,71 +63,60 @@ pub fn ensure_save_dir() -> std::io::Result<PathBuf> {
 }
 
 
-// Replace your static mut variables with these:
-pub static WINDOW_PTR: AtomicPtr<winit::window::Window> = AtomicPtr::new(std::ptr::null_mut());
-pub static STATE_PTR: AtomicPtr<State<'static>> = AtomicPtr::new(std::ptr::null_mut());
-pub static CLOSED: AtomicBool = AtomicBool::new(false);
-pub static GAMESTATE_PTR: AtomicPtr<GameState> = AtomicPtr::new(std::ptr::null_mut());
-
-// Safe accessor functions
-#[inline]
-pub fn get_window() -> &'static mut winit::window::Window {
-	let ptr = WINDOW_PTR.load(Ordering::Acquire);
-	if ptr.is_null() {
-		panic!("Window not initialized");
-	}
-	unsafe { &mut *ptr }
-}
-#[inline]
-pub fn get_state() -> &'static mut State<'static> {
-	let ptr = STATE_PTR.load(Ordering::Acquire);
-	if ptr.is_null() {
-		panic!("State not initialized");
-	}
-	unsafe { &mut *ptr }
-}
-#[inline]
-pub fn get_gamestate() -> &'static mut GameState {
-	let ptr = GAMESTATE_PTR.load(Ordering::Acquire);
-	if ptr.is_null() {
-		panic!("GameState not initialized");
-	}
-	unsafe { &mut *ptr }
-}
-#[inline]
-pub fn close_app() {
-	CLOSED.store(true, Ordering::Release);
-}
-#[inline]
-pub fn is_closed() -> bool {
-	CLOSED.load(Ordering::Acquire)
+// 4. Better configuration and constants management
+pub struct InventoryConfig {
+    pub slot_size: f32,
+    pub slot_padding: f32,
+    pub section_spacing: f32,
+    pub panel_padding: f32,
+    pub border_width: f32,
+    pub colors: InventoryColors,
 }
 
-// In your cleanup code (like when closing the app):
-#[inline]
-pub fn cleanup_resources() {
-	// dropping the audio first (if not cleaned up properly it might play after app close)
-	audio::stop_all_sounds();
-	audio::cleanup_audio();
-	// 1. Take ownership of the state pointer (atomically setting it to null)
-	let state_ptr = STATE_PTR.swap(std::ptr::null_mut(), Ordering::AcqRel);
-	// 2. If we got a non-null pointer, convert it back to Box to drop it
-	if !state_ptr.is_null() {
-		unsafe { let _ = Box::from_raw(state_ptr); }; // Drops when goes out of scope
-	}
-	drop_gamestate();
-	api::cleanup_network();
-	// 3. Do the same for the window
-	let window_ptr = WINDOW_PTR.swap(std::ptr::null_mut(), Ordering::AcqRel);
-	if !window_ptr.is_null() {
-		unsafe { let _ = Box::from_raw(window_ptr); }; // Drops when goes out of scope
-	}
+pub struct InventoryColors {
+    pub panel_bg: (u8, u8, u8),
+    pub panel_border: (u8, u8, u8, u8),
+    pub inventory_slot: (u8, u8, u8),
+    pub inventory_border: (u8, u8, u8, u8),
+    pub hotbar_slot: (u8, u8, u8),
+    pub hotbar_border: (u8, u8, u8, u8),
+    pub armor_slot: (u8, u8, u8),
+    pub armor_border: (u8, u8, u8, u8),
+    pub storage_slot: (u8, u8, u8),
+    pub storage_border: (u8, u8, u8, u8),
+    pub crafting_slot: (u8, u8, u8),
+    pub crafting_border: (u8, u8, u8, u8),
 }
-#[inline]
-pub fn drop_gamestate() {
-	let gamestate_ptr = GAMESTATE_PTR.swap(std::ptr::null_mut(), Ordering::AcqRel);
-	if !gamestate_ptr.is_null() {
-		unsafe { let _ = Box::from_raw(gamestate_ptr); }; // Drops when goes out of scope
-	}
+
+impl Default for InventoryConfig {
+    fn default() -> Self {
+        Self {
+            slot_size: 0.08,
+            slot_padding: 0.02,
+            section_spacing: 0.12,
+            panel_padding: 0.05,
+            border_width: 0.003,
+            colors: InventoryColors::default(),
+        }
+    }
+}
+
+impl Default for InventoryColors {
+    fn default() -> Self {
+        Self {
+            panel_bg: (25, 25, 40),
+            panel_border: (60, 60, 90, 255),
+            inventory_slot: (40, 40, 60),
+            inventory_border: (80, 80, 120, 255),
+            hotbar_slot: (50, 50, 70),
+            hotbar_border: (90, 90, 130, 255),
+            armor_slot: (60, 60, 80),
+            armor_border: (100, 100, 140, 255),
+            storage_slot: (40, 40, 60),
+            storage_border: (80, 80, 120, 255),
+            crafting_slot: (60, 80, 60),
+            crafting_border: (80, 120, 80, 255),
+        }
+    }
 }
 

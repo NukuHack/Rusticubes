@@ -1,6 +1,6 @@
 
 
-use crate::ext::config;
+use crate::ext::ptr;
 use crate::ui::{
 	manager::{UIManager, UIState},
 	element::UIElement,
@@ -673,7 +673,7 @@ impl InventoryLayout {
 impl UIManager {
 	pub fn setup_inventory_ui(&mut self) {
 		self.clear_elements();
-		let inv_lay = config::get_gamestate().player_mut().inventory_mut();
+		let inv_lay = ptr::get_gamestate().player_mut().inventory_mut();
 
 		if let UIState::Inventory(state) = self.state.clone() {
 			let layout = match state {

@@ -1,6 +1,6 @@
 
 use crate::ui::manager;
-use crate::ext::config;
+use crate::ext::ptr;
 use crate::game::player;
 
 impl<'a> crate::State<'a> {
@@ -17,9 +17,9 @@ impl<'a> crate::State<'a> {
 
 	#[inline]
 	pub fn toggle_mouse_capture(&mut self) {
-		if self.is_world_running  && config::get_gamestate().is_running() {
+		if self.is_world_running  && ptr::get_gamestate().is_running() {
 			if self.input_system.mouse_captured() {
-				let player = &mut config::get_gamestate().player_mut();
+				let player = &mut ptr::get_gamestate().player_mut();
 				player.set_camera_mode(player::CameraMode::Smooth);
 				self.input_system.set_mouse_captured(false);
 				// Show cursor and release
@@ -27,10 +27,10 @@ impl<'a> crate::State<'a> {
 				self.window().set_cursor_visible(true);
 				self.window().set_cursor_grab(winit::window::CursorGrabMode::None).unwrap();
 			} else {
-				if let manager::UIState::Inventory(_) = config::get_state().ui_manager.state.clone() {
+				if let manager::UIState::Inventory(_) = ptr::get_state().ui_manager.state.clone() {
 					return;
 				}
-				let player = &mut config::get_gamestate().player_mut();
+				let player = &mut ptr::get_gamestate().player_mut();
 				player.set_camera_mode(player::CameraMode::Instant);
 				self.input_system.set_mouse_captured(true);
 				// Hide cursor and lock to center

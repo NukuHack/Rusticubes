@@ -1,7 +1,7 @@
 
 use std::path::PathBuf;
 use crate::game::player;
-use crate::ext::config;
+use crate::ext::{ptr, config};
 use crate::world;
 use std::sync::atomic::Ordering;
 use glam::Vec3;
@@ -120,10 +120,10 @@ impl GameState {
 #[inline]
 pub fn start_world(worldname: &str) {
 	let game_state = GameState::new(worldname);
-	config::GAMESTATE_PTR.store(Box::into_raw(Box::new(game_state)), Ordering::Release);
+	ptr::GAMESTATE_PTR.store(Box::into_raw(Box::new(game_state)), Ordering::Release);
 	
 	// This will only execute when not in test configuration
 	if !cfg!(test) {
-		config::get_state().is_world_running = true;
+		ptr::get_state().is_world_running = true;
 	}
 }

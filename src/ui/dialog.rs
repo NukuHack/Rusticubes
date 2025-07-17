@@ -1,11 +1,10 @@
-use std::cell::RefCell;
-use crate::ui::manager::UIState;
-use crate::ui::manager::UIStateID;
-use crate::ui::manager::UIManager;
-use crate::ext::config;
+
+use crate::ui::manager::{UIState, UIStateID, UIManager};
+use crate::ext::ptr;
 use arc_swap::ArcSwap;
 use futures_lite::future;
 use std::{
+	cell::RefCell,
 	collections::HashMap,
 	fmt, sync::{
 	atomic::{AtomicU8, Ordering},
@@ -67,7 +66,7 @@ impl DialogManager {
 		});
 
 		// Show dialog in UI
-		config::get_state().ui_manager.confirm(id, &prompt);
+		ptr::get_state().ui_manager.confirm(id, &prompt);
 
 		// Wait for response
 		loop {
@@ -106,7 +105,7 @@ impl DialogManager {
 		});
 
 		// Show dialog in UI
-		config::get_state().ui_manager.confirm(id, &prompt);
+		ptr::get_state().ui_manager.confirm(id, &prompt);
 
 		id
 	}
@@ -262,7 +261,7 @@ impl std::error::Error for DialogError {}
 
 impl UIManager {
 	pub fn confirm(&mut self, id: u8, _prompt: impl Into<String>) {
-		let ui_manager = &mut config::get_state().ui_manager;
+		let ui_manager = &mut ptr::get_state().ui_manager;
 		ui_manager.state = UIState::Confirm(UIStateID::from(&ui_manager.state), id.clone());
 		ui_manager.setup_ui();
 	}

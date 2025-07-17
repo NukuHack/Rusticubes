@@ -1,5 +1,5 @@
 use crate::{
-	ext::config,
+	ext::ptr,
 	network::{
 		api,
 		types::{self, DiscoveryResult, HostInfo, NetworkEvent, NetworkMessage, 
@@ -143,7 +143,7 @@ impl NetworkSystem {
 			
 			match serde_json::from_str(trimmed).map_err(|e| format!("Parse error: {}", e))? {
 				NetworkMessage::WorldInfoRequest => {
-					let world = config::get_gamestate().worldname().to_string();
+					let world = ptr::get_gamestate().worldname().to_string();
 					let res = NetworkMessage::WorldInfoResponse(world);
 					writeln!(&mut stream, "{}", serde_json::to_string(&res)
 						.map_err(|e| format!("Serialize error: {}", e))?)
@@ -185,7 +185,7 @@ impl NetworkSystem {
 	}
 
 	fn handle_world_info_request(&mut self, stream: &mut TcpStream) -> Result<(bool, String), String> {
-		let world = config::get_gamestate().worldname().to_string();
+		let world = ptr::get_gamestate().worldname().to_string();
 		let res = NetworkMessage::WorldInfoResponse(world.clone());
 		writeln!(stream, "{}", serde_json::to_string(&res).map_err(|e| format!("Serialize error: {}", e))?)
 			.map_err(|e| format!("Write error: {}", e))?;

@@ -2,6 +2,7 @@
 use crate::world::main::World;
 use crate::block::math::{BlockRotation, ChunkCoord};
 use crate::block::main::{Block, Chunk, BlockStorage};
+use crate::ext::ptr;
 use crate::ext::config;
 use crate::hs::time;
 use std::path::{Path, PathBuf};
@@ -55,7 +56,7 @@ pub fn del_world(world_name: &str) {
 		Ok(_) => {
 			println!("Successfully deleted world '{}'", world_name);
 			// Refresh UI after successful deletion
-			let state = config::get_state();
+			let state = ptr::get_state();
 			state.ui_manager.setup_ui();
 		},
 		Err(e) => {
@@ -507,7 +508,7 @@ impl ChunkCoord {
 // 
 
 pub fn save_entire_world(path: &PathBuf) -> Result<()> {
-	let game_state = config::get_gamestate();
+	let game_state = ptr::get_gamestate();
 	let world = game_state.world();
 	let world_data = world.to_binary();
 	// Ensure safe writing
@@ -545,8 +546,8 @@ pub fn load_entire_world(path: &PathBuf) -> Result<()> {
 		Error::new(ErrorKind::InvalidData, "Failed to deserialize world")
 	})?;
 	// Apply the loaded world
-	config::get_gamestate().world_change(loaded_world);
-	config::get_gamestate().world_mut().remake_rendering();
+	ptr::get_gamestate().world_change(loaded_world);
+	ptr::get_gamestate().world_mut().remake_rendering();
 		
 	Ok(())
 }

@@ -1,6 +1,6 @@
 
 use crate::{
-	ext::{audio, config},
+	ext::{audio, ptr},
 	get_string,
 	ui::{
 		dialog, inventory::{self, ClickResult},
@@ -99,22 +99,22 @@ impl UIState {
 }
 
 pub fn close_pressed() {
-	let state = config::get_state();
+	let state = ptr::get_state();
 	match state.ui_manager.state.clone() {
 		UIState::WorldSelection | UIState::Multiplayer => {
 			state.ui_manager.state = UIState::BootScreen;
 		},
-		UIState::BootScreen => config::close_app(),
+		UIState::BootScreen => ptr::close_app(),
 		UIState::InGame => {
 			state.ui_manager.state = UIState::Escape;
-			let game_state = config::get_gamestate();
+			let game_state = ptr::get_gamestate();
 			game_state.player_mut().controller().reset_keyboard();
 			*game_state.running() = false;
 			state.toggle_mouse_capture();
 		},
 		UIState::Escape => {
 			state.ui_manager.state = UIState::InGame;
-			*config::get_gamestate().running() = true;
+			*ptr::get_gamestate().running() = true;
 			state.toggle_mouse_capture();
 		},
 		UIState::NewWorld => state.ui_manager.state = UIState::WorldSelection,
@@ -330,7 +330,7 @@ impl UIManager {
 	pub fn handle_click_press(&mut self, norm_x: f32, norm_y: f32) -> bool {
 		match self.state.clone() {
 			UIState::Inventory(inv_state) => {
-				if let Some(inv_lay) = config::get_gamestate().player().inventory().layout.clone() {
+				if let Some(inv_lay) = ptr::get_gamestate().player().inventory().layout.clone() {
 					match inv_lay.handle_click(inv_state, norm_x, norm_y) {
 						ClickResult::SlotClicked{area_type, slot} => {
 							println!("clicked or area: {:?}, on slot {};{}", area_type, slot.0, slot.1);
@@ -456,7 +456,7 @@ impl UIManager {
 
 #[inline]
 pub fn get_element_data_dy_id(id: usize) -> String {
-	config::get_state()
+	ptr::get_state()
 		.ui_manager()
 		.get_element(id)
 		.and_then(|element|

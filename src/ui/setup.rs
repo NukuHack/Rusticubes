@@ -1,7 +1,7 @@
 
 use crate::network::api;
 use crate::block;
-use crate::ext::{config, memory};
+use crate::ext::{ptr, memory};
 use crate::world::{handler, manager};
 use crate::ui::manager::{UIState, close_pressed, UIManager, UIStateID, get_element_data_dy_id};
 use crate::ui::element::UIElement;
@@ -102,7 +102,7 @@ impl UIManager {
 			.with_border((70, 110, 180, 255), 0.005)
 			.with_z_index(6)
 			.with_callback(|| {
-				let ui_manager = &mut config::get_state().ui_manager;
+				let ui_manager = &mut ptr::get_state().ui_manager;
 				ui_manager.state = UIState::WorldSelection;
 				ui_manager.setup_ui();
 			});
@@ -130,7 +130,7 @@ impl UIManager {
 			.with_z_index(6)
 			.with_callback(|| {
 				memory::light_trim();
-				memory::hard_clean(Some(config::get_state().device()));
+				memory::hard_clean(Some(ptr::get_state().device()));
 			});
 		self.add_element(memory_button);
 
@@ -142,7 +142,7 @@ impl UIManager {
 			.with_border((70, 90, 120, 255), 0.005)
 			.with_z_index(6)
 			.with_callback(|| {
-				let ui_manager = &mut config::get_state().ui_manager;
+				let ui_manager = &mut ptr::get_state().ui_manager;
 				ui_manager.state = UIState::Settings(UIStateID::from(&ui_manager.state));
 				ui_manager.setup_ui();
 			});
@@ -156,7 +156,7 @@ impl UIManager {
 			.with_border((70, 90, 120, 255), 0.005)
 			.with_z_index(6)
 			.with_callback(|| {
-				let state = config::get_state();
+				let state = ptr::get_state();
 				state.ui_manager.state = UIState::Multiplayer;
 				state.ui_manager.setup_ui();
 				match api::begin_online_search() {
@@ -229,7 +229,7 @@ impl UIManager {
 			.with_border((80, 110, 160, 255), 0.005)
 			.with_z_index(8)
 			.with_callback(|| {
-				let state = config::get_state();
+				let state = ptr::get_state();
 				state.ui_manager.state = UIState::NewWorld;
 				state.ui_manager.setup_ui();
 			});
@@ -274,7 +274,7 @@ impl UIManager {
 				.with_callback(move || {
 					let name_clone = name_clone.clone();
 					// Non-blocking dialog with callback
-					config::get_state().ui_manager.dialogs.ask_with_callback(
+					ptr::get_state().ui_manager.dialogs.ask_with_callback(
 						"Delete world?",
 						move |confirmed| {
 							if confirmed {
@@ -296,7 +296,7 @@ impl UIManager {
 			.with_border((90, 100, 130, 255), 0.005)
 			.with_z_index(8)
 			.with_callback(|| {
-				let state = config::get_state();
+				let state = ptr::get_state();
 				state.ui_manager.state = UIState::BootScreen;
 				state.ui_manager.setup_ui();
 			});
@@ -389,7 +389,7 @@ impl UIManager {
 	#[inline]
 	fn setup_confirm_ui(&mut self) {
 		// Title with improved styling
-		let manager = &config::get_state().ui_manager;
+		let manager = &ptr::get_state().ui_manager;
 		let dialog_id = manager.state.inner().unwrap_or(0);
 		let prompt:String = manager.dialogs.get_pending_dialog(dialog_id).unwrap_or("Yeah?".to_string());
 		let title = UIElement::label(self.next_id(), prompt)
@@ -418,7 +418,7 @@ impl UIManager {
 			.with_border((70, 90, 130, 255), 0.005)
 			.with_z_index(5)
 			.with_callback(move || {
-				let ui_manager = &mut config::get_state().ui_manager;
+				let ui_manager = &mut ptr::get_state().ui_manager;
 				ui_manager.dialogs.respond(dialog_id.clone(), true);
 				ui_manager.state = ui_manager.state.inner_state();
 				ui_manager.setup_ui();
@@ -432,7 +432,7 @@ impl UIManager {
 			.with_border((70, 90, 130, 255), 0.005)
 			.with_z_index(5)
 			.with_callback(move || {
-				let ui_manager = &mut config::get_state().ui_manager;
+				let ui_manager = &mut ptr::get_state().ui_manager;
 				ui_manager.dialogs.respond(dialog_id.clone(), false);
 				ui_manager.state = ui_manager.state.inner_state();
 				ui_manager.setup_ui();
@@ -454,7 +454,7 @@ impl UIManager {
 	#[inline]
 	fn setup_error_ui(&mut self) {
 		// Title with improved styling
-		let manager = &config::get_state().ui_manager;
+		let manager = &ptr::get_state().ui_manager;
 		let dialog_id = manager.state.inner().unwrap_or(0);
 		let prompt:String = manager.dialogs.get_pending_dialog(dialog_id).unwrap_or("ERROR!!".to_string());
 		let title = UIElement::label(self.next_id(), prompt)
@@ -483,7 +483,7 @@ impl UIManager {
 			.with_border((70, 90, 130, 255), 0.005)
 			.with_z_index(5)
 			.with_callback(move || {
-				let ui_manager = &mut config::get_state().ui_manager;
+				let ui_manager = &mut ptr::get_state().ui_manager;
 				ui_manager.dialogs.respond(dialog_id.clone(), true);
 				ui_manager.state = ui_manager.state.inner_state();
 				ui_manager.setup_ui();
@@ -497,7 +497,7 @@ impl UIManager {
 			.with_border((70, 90, 130, 255), 0.005)
 			.with_z_index(5)
 			.with_callback(move || {
-				let ui_manager = &mut config::get_state().ui_manager;
+				let ui_manager = &mut ptr::get_state().ui_manager;
 				ui_manager.dialogs.respond(dialog_id.clone(), false);
 				ui_manager.state = ui_manager.state.inner_state();
 				ui_manager.setup_ui();
@@ -574,7 +574,7 @@ impl UIManager {
 					Ok(a) => { println!("Refresh: {}", a); },
 					Err(e) => { println!("Refresh error: {}", e); },
 				}
-				let state = config::get_state();
+				let state = ptr::get_state();
 				state.ui_manager.setup_ui();
 			});
 		self.add_element(re_button);
@@ -587,7 +587,7 @@ impl UIManager {
 			.with_border((90, 100, 130, 255), 0.005)
 			.with_z_index(8)
 			.with_callback(|| {
-				let ui_manager = &mut config::get_state().ui_manager;
+				let ui_manager = &mut ptr::get_state().ui_manager;
 				ui_manager.state = UIState::ConnectLocal;
 				ui_manager.setup_ui();
 			});
@@ -657,7 +657,7 @@ impl UIManager {
 			.with_z_index(6)
 			.with_callback(move || {
 				handler::create_world(get_element_data_dy_id(input_id));
-				let ui_manager = &mut config::get_state().ui_manager;
+				let ui_manager = &mut ptr::get_state().ui_manager;
 				ui_manager.state = UIState::WorldSelection;
 				ui_manager.setup_ui();
 			});
@@ -731,7 +731,7 @@ impl UIManager {
 					Err(e) => { println!("Error: {}", e); },
 				}
 				;
-				let ui_manager = &mut config::get_state().ui_manager;
+				let ui_manager = &mut ptr::get_state().ui_manager;
 				ui_manager.state = UIState::WorldSelection;
 				ui_manager.setup_ui();
 			});
@@ -805,7 +805,7 @@ impl UIManager {
 			.with_z_index(8)
 			.with_callback(|| 
 				{
-					let save_path = config::get_gamestate().save_path();
+					let save_path = ptr::get_gamestate().save_path();
 					match manager::save_entire_world(save_path) {
 						Ok(_) => {},
 						Err(e) => { println!("Error: {}", e); },
@@ -821,7 +821,7 @@ impl UIManager {
 			.with_z_index(8)
 			.with_callback(|| 
 				{
-					let save_path = config::get_gamestate().save_path();
+					let save_path = ptr::get_gamestate().save_path();
 					match manager::load_entire_world(save_path) {
 						Ok(_) => {},
 						Err(e) => { println!("Error: {}", e); },
@@ -836,7 +836,7 @@ impl UIManager {
 			.with_border((70, 90, 120, 255), 0.005)
 			.with_z_index(6)
 			.with_callback(|| {
-				let ui_manager = &mut config::get_state().ui_manager;
+				let ui_manager = &mut ptr::get_state().ui_manager;
 				ui_manager.state = UIState::Settings(UIStateID::from(&ui_manager.state));
 				ui_manager.setup_ui();
 			});
@@ -851,7 +851,7 @@ impl UIManager {
 			.with_z_index(6)
 			.with_callback(|| {
 				memory::light_trim();
-				memory::hard_clean(Some(config::get_state().device()));
+				memory::hard_clean(Some(ptr::get_state().device()));
 			});
 		self.add_element(memory_button);
 
@@ -941,7 +941,7 @@ impl UIManager {
 			.with_border((160, 60, 60, 255), 0.005)
 			.with_z_index(8)
 			.with_callback(|| {
-				let state = config::get_state();
+				let state = ptr::get_state();
 				state.ui_manager.state = UIState::BootScreen;
 				state.ui_manager.setup_ui();
 

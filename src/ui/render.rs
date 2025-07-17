@@ -1,6 +1,6 @@
 
-use crate::ext::config;
 use crate::fs::rs;
+use crate::ext::ptr;
 use crate::ui::element::{UIElement, UIElementData};
 use rusttype::{Font, Scale, point};
 use image::{ImageBuffer, Rgba};
@@ -196,7 +196,7 @@ impl UIRenderer {
 
 	#[inline] 
 	fn process_text_element(&mut self, element: &UIElement, text: Option<&str>, vertices: &mut Vec<Vertex>, indices: &mut Vec<u32>, current_index: &mut u32) {
-		let state = config::get_state();
+		let state = ptr::get_state();
 		
 		if let Some(text) = text {
 			let texture_key = format!("{}_{:?}", text, element.color);
@@ -338,7 +338,7 @@ impl UIRenderer {
 
 	#[inline] fn process_image_element(&mut self, element: &UIElement, vertices: &mut Vec<Vertex>, indices: &mut Vec<u32>, current_index: &mut u32) {
 		if let UIElementData::Image { path } = &element.data {
-			let state = config::get_state();
+			let state = ptr::get_state();
 			let image_key = format!("{}_{:?}", path, element.color);
 			
 			if !self.image_textures.contains_key(&image_key) {
@@ -383,7 +383,7 @@ impl UIRenderer {
 
 	#[inline] fn process_animation_element(&mut self, element: &UIElement, vertices: &mut Vec<Vertex>, indices: &mut Vec<u32>, current_index: &mut u32) {
 		if let UIElementData::Animation {frames,..} = &element.data {
-			let state = config::get_state();
+			let state = ptr::get_state();
 			let animation_key = frames.join("|");
 			
 			if !self.animation_textures.contains_key(&animation_key) {
@@ -526,7 +526,7 @@ impl UIRenderer {
 				UIElementData::Animation { frames, .. } => {
 					if let Some((_, bind_group)) = self.animation_textures.get(&frames.join("|")) {
 						if let Some(stuff) = element.get_packed_anim_data() {
-							config::get_state().queue().write_buffer(&self.uniform_buffer, 0, bytemuck::cast_slice(&stuff));
+							ptr::get_state().queue().write_buffer(&self.uniform_buffer, 0, bytemuck::cast_slice(&stuff));
 							r_pass.set_bind_group(0, bind_group, &[]);
 							r_pass.draw_indexed(i_off..(i_off + 6), 0, 0..1);
 						}
