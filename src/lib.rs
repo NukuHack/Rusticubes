@@ -20,10 +20,12 @@ pub mod network { // network related
 	pub mod discovery; // the networking system
 	pub mod types; // the networking system and extra utilities for basic stuff
 }
+#[cfg(test)]
 pub mod debug { // debug, test related
 	pub mod network;
 	pub mod binary;
 	pub mod metadata;
+	pub mod physics;
 }
 pub mod ext { // extra things that did not fit anywhere else
 	pub mod audio; // audio manager, in extra thread
@@ -54,7 +56,6 @@ pub mod block { // block related, chunk related
 	pub mod main;
 	pub mod math;
 	pub mod extra;
-	pub mod lut;
 }
 pub mod ui { // ui related
 	pub mod element;
@@ -63,6 +64,10 @@ pub mod ui { // ui related
 	pub mod setup;
 	pub mod inventory;
 	pub mod dialog;
+}
+pub mod physic {
+	pub mod aabb;
+	pub mod body;
 }
 
 

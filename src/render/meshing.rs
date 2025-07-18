@@ -1,5 +1,4 @@
 
-//use crate::block::lut::{EDGE_TABLE, TRI_TABLE};
 use crate::block::main::Chunk;
 use crate::block::math::BlockPosition;
 use glam::IVec3;
@@ -52,131 +51,6 @@ impl Default for ChunkMeshBuilder {
 		Self::new()
 	}
 }
-
-/*impl ChunkMeshBuilder {
-	/// Generates a marching cubes mesh for the given block
-	pub fn add_marching_cube(&mut self, position: Vec3, points: u32) {
-		if points == 0 || points == 0xFF_FF_FF_FF {
-			return; // Early exit for empty or full cubes
-		}
-
-		let base_pos = position;
-		let mut edge_vertex_cache = [None; 12];
-
-		// Process each of the 8 sub-cubes
-		for i in 0..8 {
-			let case_index = Self::calculate_case_index(points, i);
-
-			// Skip empty or full sub-cubes
-			if case_index == 0 || case_index == 255 {
-				continue;
-			}
-
-			let edges = EDGE_TABLE[case_index as usize];
-			if edges == 0 {
-				continue;
-			}
-
-			// Calculate sub-cube offset
-			let sub_offset = Vec3::new(
-				(i & 1) as f32 * 0.5,
-				((i >> 1) & 1) as f32 * 0.5,
-				((i >> 2) & 1) as f32 * 0.5,
-			);
-
-			// Cache edge vertices
-			for edge in 0..12 {
-				if (edges & (1 << edge)) != 0 && edge_vertex_cache[edge].is_none() {
-					let [a, b] = EDGE_VERTICES[edge];
-					edge_vertex_cache[edge] = Some(a.lerp(b, 0.5));
-				}
-			}
-
-			// Generate triangles
-			self.generate_triangles(case_index, &edge_vertex_cache, base_pos + sub_offset);
-
-			// Clear cache for next sub-cube
-			edge_vertex_cache = [None; 12];
-		}
-	}
-	#[inline]
-	fn calculate_case_index(points: u32, sub_cube_idx: usize) -> u8 {
-		let mut case_index = 0u8;
-		for bit in 0..8 {
-			let (x, y, z) = match bit {
-				0 => (0, 0, 0),
-				1 => (1, 0, 0),
-				2 => (1, 0, 1),
-				3 => (0, 0, 1),
-				4 => (0, 1, 0),
-				5 => (1, 1, 0),
-				6 => (1, 1, 1),
-				7 => (0, 1, 1),
-				_ => unreachable!(),
-			};
-
-			let x = x + ((sub_cube_idx & 1) as u8);
-			let y = y + (((sub_cube_idx >> 1) & 1) as u8);
-			let z = z + (((sub_cube_idx >> 2) & 1) as u8);
-
-			let bit_pos = x as u32 + (y as u32) * 3 + (z as u32) * 9;
-			if (points & (1u32 << bit_pos)) != 0 {
-				case_index |= 1 << bit;
-			}
-		}
-		case_index
-	}
-	#[inline]
-	fn generate_triangles(
-		&mut self,
-		case_index: u8,
-		edge_vertex_cache: &[Option<Vec3>; 12],
-		position: Vec3,
-	) {
-		let triangles = &TRI_TABLE[case_index as usize];
-		let mut i = 0;
-
-		while i < 16 && triangles[i] != -1 {
-			let v0 = edge_vertex_cache[triangles[i] as usize].unwrap();
-			let v1 = edge_vertex_cache[triangles[i + 1] as usize].unwrap();
-			let v2 = edge_vertex_cache[triangles[i + 2] as usize].unwrap();
-
-			self.add_triangle(&[position + v0, position + v1, position + v2]);
-			i += 3;
-		}
-	}
-	/// Adds a triangle to the mesh with calculated normals
-	#[inline]
-	pub fn add_triangle(&mut self, vertices: &[Vec3; 3]) {
-		// Calculate face normal
-		let edge1 = vertices[1] - vertices[0];
-		let edge2 = vertices[2] - vertices[0];
-		let normal = edge1.cross(edge2).normalize();
-		let normal_arr = [normal.x, normal.y, normal.z];
-
-		let base = self.current_vertex as u16;
-		self.vertices.extend([
-			Vertex {
-				position: [vertices[0].x, vertices[0].y, vertices[0].z],
-				normal: normal_arr,
-				uv: [0f32, 0f32],
-			},
-			Vertex {
-				position: [vertices[1].x, vertices[1].y, vertices[1].z],
-				normal: normal_arr,
-				uv: [1., 0f32],
-			},
-			Vertex {
-				position: [vertices[2].x, vertices[2].y, vertices[2].z],
-				normal: normal_arr,
-				uv: [0.5, 1.],
-			},
-		]);
-
-		self.indices.extend([base, base + 1, base + 2]);
-		self.current_vertex += 3;
-	}
-}*/
 
 impl ChunkMeshBuilder {
 	/// Creates a new mesh builder with optimized initial capacity
@@ -295,25 +169,6 @@ const QUAD_VERTICES: [[[i32; 3]; 4]; 6] = [
     // Bottom face (NEG_Y)
     [[0, 0, 0], [1, 0, 0], [1, 0, 1], [0, 0, 1]],
 ];
-/*
-const HALF: f32 = 1.;
-
-/// Edge vertices for the marching cubes algorithm
-const EDGE_VERTICES: [[Vec3; 2]; 12] = [
-	[Vec3::ZERO, Vec3::new(HALF, 0f32, 0f32)], // Edge 0
-	[Vec3::new(HALF, 0f32, 0f32), Vec3::new(HALF, 0f32, HALF)], // Edge 1
-	[Vec3::new(HALF, 0f32, HALF), Vec3::new(0f32, 0f32, HALF)], // Edge 2
-	[Vec3::new(0f32, 0f32, HALF), Vec3::ZERO], // Edge 3
-	[Vec3::new(0f32, HALF, 0f32), Vec3::new(HALF, HALF, 0f32)], // Edge 4
-	[Vec3::new(HALF, HALF, 0f32), Vec3::new(HALF, HALF, HALF)], // Edge 5
-	[Vec3::new(HALF, HALF, HALF), Vec3::new(0f32, HALF, HALF)], // Edge 6
-	[Vec3::new(0f32, HALF, HALF), Vec3::new(0f32, HALF, 0f32)], // Edge 7
-	[Vec3::ZERO, Vec3::new(0f32, HALF, 0f32)], // Edge 8
-	[Vec3::new(HALF, 0f32, 0f32), Vec3::new(HALF, HALF, 0f32)], // Edge 9
-	[Vec3::new(HALF, 0f32, HALF), Vec3::new(HALF, HALF, HALF)], // Edge 10
-	[Vec3::new(0f32, 0f32, HALF), Vec3::new(0f32, HALF, HALF)], // Edge 11
-];
-*/
 
 // =============================================
 // Geometry Buffer

@@ -353,12 +353,6 @@ impl Block {
 				data.push(rotation.to_byte());
 				data
 			}
-			Block::Marching(material, density) => {
-				let mut data = vec![2];
-				data.extend_from_slice(&material.to_le_bytes());
-				data.extend_from_slice(&density.to_le_bytes());
-				data
-			}
 		}
 	}
 	
@@ -375,12 +369,6 @@ impl Block {
 				let rotation = BlockRotation::from_byte(bytes[3])?;
 				Some(Block::Simple(material, rotation))
 			}
-			2 => {
-				if bytes.len() < 7 { return None; }
-				let material = u16::from_le_bytes([bytes[1], bytes[2]]);
-				let density = u32::from_le_bytes([bytes[3], bytes[4], bytes[5], bytes[6]]);
-				Some(Block::Marching(material, density))
-			}
 			_ => None,
 		}
 	}
@@ -390,7 +378,6 @@ impl Block {
 		match self {
 			Block::None => 1,
 			Block::Simple(_, _) => 1 + mem::size_of::<u16>() + 1,
-			Block::Marching(_, _) => 1 + mem::size_of::<u16>() + mem::size_of::<u32>(),
 		}
 	}
 }

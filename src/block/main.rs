@@ -7,7 +7,6 @@ use crate::ext::stopwatch;
 use glam::IVec3;
 
 type Material = u16;
-type DensityField = u32;
 
 /// Represents a block in the world with optimized storage
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -15,7 +14,6 @@ type DensityField = u32;
 pub enum Block {
 	None = 0,
 	Simple(Material, BlockRotation), // material, rotation
-	Marching(Material, DensityField), // material, density field (27 bits - 4)
 }
 
 #[allow(dead_code)]
@@ -39,18 +37,6 @@ impl Block {
 	pub const fn new(material: Material) -> Self {
 		Self::Simple(material, BlockRotation::XplusYplus)
 	}
-	/// Creates a new marching cubes block with no point set
-	#[inline]
-	pub const fn new_march(material: Material) -> Self {
-		Self::Marching(material, 0)
-	}
-
-	/// Creates a new marching cubes block with center point set
-	#[inline]
-	pub const fn new_dot() -> Self {
-		Self::Marching(1, 0x20_00)
-	}
-
 
 	/// Extracts rotation
 	#[inline]
@@ -72,14 +58,9 @@ impl Block {
 	#[inline]
 	pub fn is_empty(&self) -> bool {
 		match self {
-			Block::Simple(material, _) | Block::Marching(material, _) => *material == 0,
+			Block::Simple(material, _) => *material == 0,
 			Block::None => true,
 		}
-	}
-
-	#[inline]
-	pub fn is_marching(&self) -> bool {
-		matches!(self, Block::Marching { .. })
 	}
 
 	#[inline]
@@ -91,7 +72,7 @@ impl Block {
 	#[inline]
 	pub fn material(&self) -> Material {
 		match self {
-			Block::Simple(material, _) | Block::Marching(material, _) => *material,
+			Block::Simple(material, _) => *material,
 			Block::None => 0,
 		}
 	}
@@ -99,7 +80,7 @@ impl Block {
 	#[inline]
 	pub fn set_material(&mut self, material: Material) {
 		match self {
-			Block::Simple(mat, _) | Block::Marching(mat, _) => *mat = material,
+			Block::Simple(mat, _) => *mat = material,
 			Block::None => {}
 		}
 	}
@@ -112,35 +93,6 @@ impl Block {
 		}
 	}
 
-	/// Sets a point in the 3x3x3 density field
-	#[inline]
-	pub fn set_point(&mut self, x: u8, y: u8, z: u8, value: bool) {
-		if let Block::Marching(_, points) = self {
-			debug_assert!(x < 3 && y < 3 && z < 3, "Coordinates must be 0-2");
-			let bit_pos = x as u32 + (y as u32) * 3 + (z as u32) * 9;
-			*points = (*points & !(1 << bit_pos)) | ((value as u32) << bit_pos);
-		}
-	}
-
-	/// Gets a point from the 3x3x3 density field
-	#[inline]
-	pub fn get_point(&self, x: u8, y: u8, z: u8) -> Option<bool> {
-		match self {
-			Block::Marching(_, points) => {
-				debug_assert!(x < 3 && y < 3 && z < 3, "Coordinates must be 0-2");
-				let bit_pos = x as u32 + (y as u32) * 3 + (z as u32) * 9;
-				Some((*points & (1u32 << bit_pos)) != 0)
-			}
-			_ => None,
-		}
-	}
-
-	pub fn get_march(&mut self) -> Option<Block> {
-		match self {
-			Block::Marching(_, _) => None,
-			_ => Some(Self::new_march(self.material())),
-		}
-	}
 }
 
 /// Represents a chunk of blocks in the world
@@ -409,7 +361,7 @@ impl Chunk {
 	pub fn is_block_cull(&self, pos: IVec3) -> bool {
 		let idx:usize = BlockPosition::from(pos).into();
 		let block = *self.get_block(idx);
-		block.is_empty() || block.is_marching()
+		block.is_empty()
 	}
 
 	pub fn contains_position(&self, pos: IVec3) -> bool {

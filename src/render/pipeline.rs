@@ -10,7 +10,6 @@ use wgpu;
 #[allow(dead_code)]
 pub struct Pipeline {
 	// Pipelines
-	pub inside_pipeline: wgpu::RenderPipeline,
 	pub chunk_pipeline: wgpu::RenderPipeline,
 	pub post_pipeline: wgpu::RenderPipeline,
 	pub sky_pipeline: wgpu::RenderPipeline,
@@ -39,7 +38,6 @@ impl Pipeline {
 		});
 
 		Self {
-			inside_pipeline: create_inside_pipeline(device, layout, &shaders.inside, config.format),
 			chunk_pipeline: create_chunk_pipeline(device, layout, &shaders.chunk, config.format),
 			post_pipeline: create_post_pipeline(
 				device,
@@ -58,7 +56,6 @@ impl Pipeline {
 
 /// Helper struct for organizing shader creation
 struct Shaders {
-	pub inside: wgpu::ShaderModule,
 	pub chunk: wgpu::ShaderModule,
 	pub post: wgpu::ShaderModule,
 	pub sky: wgpu::ShaderModule,
@@ -69,18 +66,11 @@ impl Shaders {
 	fn new(device: &wgpu::Device) -> Self {
 		// Load shader sources first
 		let chunk_shader = get_string!("chunk_shader.wgsl");
-		let inside_shader = get_string!("inside_shader.wgsl");
-		let texture_shader = get_string!("texture_shader.wgsl");
 		let sky_shader = get_string!("sky_shader.wgsl");
 		let fxaa_shader = get_string!("fxaa.wgsl");
 
-		// Combine shader sources using string concatenation
-		let inside_source = format!("{}\n{}", chunk_shader, inside_shader);
-		let chunk_source = format!("{}\n{}", chunk_shader, texture_shader);
-
 		Self {
-			inside: create_shader(device, "Inside Solid Color Shader", &inside_source),
-			chunk: create_shader(device, "Chunk Shader", &chunk_source),
+			chunk: create_shader(device, "Chunk Shader", &chunk_shader),
 			post: create_shader(device, "Post Processing Shader", &fxaa_shader),
 			sky: create_shader(device, "Sky Shader", &sky_shader),
 		}
@@ -147,27 +137,9 @@ fn create_chunk_pipeline(
 		shader,
 		format,
 		&[Vertex::desc()],
-		Some(depth_stencil_state(true)),
+		Some(depth_stencil_state()),
 		default_primitive_state(),
 		"Chunk Render Pipeline",
-	)
-}
-#[inline]
-fn create_inside_pipeline(
-	device: &wgpu::Device,
-	layout: &wgpu::PipelineLayout,
-	shader: &wgpu::ShaderModule,
-	format: wgpu::TextureFormat,
-) -> wgpu::RenderPipeline {
-	create_base_pipeline(
-		device,
-		Some(layout),
-		shader,
-		format,
-		&[Vertex::desc()],
-		Some(inside_depth_stencil()),
-		inside_primitive_state(),
-		"Inside Render Pipeline",
 	)
 }
 #[inline]
@@ -271,27 +243,13 @@ fn default_primitive_state() -> wgpu::PrimitiveState {
 	}
 }
 #[inline]
-fn inside_primitive_state() -> wgpu::PrimitiveState {
-	wgpu::PrimitiveState {
-		front_face: wgpu::FrontFace::Cw,
-		..default_primitive_state()
-	}
-}
-#[inline]
-fn depth_stencil_state(write_enabled: bool) -> wgpu::DepthStencilState {
+fn depth_stencil_state() -> wgpu::DepthStencilState {
 	wgpu::DepthStencilState {
 		format: texture::DEPTH_FORMAT,
-		depth_write_enabled: write_enabled,
+		depth_write_enabled: true,
 		depth_compare: wgpu::CompareFunction::Less,
 		stencil: wgpu::StencilState::default(),
 		bias: wgpu::DepthBiasState::default(),
-	}
-}
-#[inline]
-fn inside_depth_stencil() -> wgpu::DepthStencilState {
-	wgpu::DepthStencilState {
-		depth_compare: wgpu::CompareFunction::Less,
-		..depth_stencil_state(false)
 	}
 }
 
@@ -370,15 +328,6 @@ pub fn render_all(current_state: &mut State) -> Result<(), wgpu::SurfaceError> {
 		ptr::get_gamestate()
 			.world()
 			.render_chunks(&mut rpass);
-
-		// Render inside surfaces
-		/*
-		rpass.set_pipeline(&current_state.pipeline().inside_pipeline);
-		rpass.set_bind_group(0, current_state.texture_manager().bind_group(), &[]);
-		rpass.set_bind_group(1, current_state.camera_system().bind_group(), &[]);
-		ptr::get_gamestate()
-			.world()
-			.render_chunks(&mut rpass);*/
 	}
 
 	// Post processing pass 
