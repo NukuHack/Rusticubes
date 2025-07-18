@@ -172,18 +172,16 @@ impl<'a> State<'a> {
 		let texture_manager: render::texture::TextureManager = render::texture::TextureManager::new(&device, &queue, &config);
 
 		let chunk_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-			entries: &[
-				wgpu::BindGroupLayoutEntry {
-					binding: 0,
-					visibility: wgpu::ShaderStages::VERTEX,
-					ty: wgpu::BindingType::Buffer {
-						ty: wgpu::BufferBindingType::Uniform,
-						has_dynamic_offset: false,
-						min_binding_size: wgpu::BufferSize::new(16), // stupid gpu has to make it 16 at least ... 8 byte would be enough tho ..
-					},
-					count: None,
+			entries: &[wgpu::BindGroupLayoutEntry {
+				binding: 0,
+				visibility: wgpu::ShaderStages::VERTEX,
+				ty: wgpu::BindingType::Buffer {
+					ty: wgpu::BufferBindingType::Uniform,
+					has_dynamic_offset: false,
+					min_binding_size: None, // used to be "wgpu::BufferSize::new(16)" -> // stupid gpu has to make it 16 at least ... 8 byte would be enough tho ..
 				},
-			],
+				count: None,
+			},],
 			label: Some("chunk_bind_group_layout"),
 		});
 		let render_pipeline_layout: wgpu::PipelineLayout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {

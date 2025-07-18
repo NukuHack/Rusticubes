@@ -268,3 +268,87 @@ impl Block {
 	}
 
 }
+
+
+/*
+/// Performs ray tracing to a cube and determines which of the 27 points (3x3x3 grid) was hit
+#[inline]
+pub fn raycast_to_cube_point(
+	camera: &Camera,
+	world: &World,
+	max_distance: f32,
+) -> Option<(Vec3, (u8, u8, u8))> {
+	if !ptr::get_state().is_world_running {
+		return None;
+	}
+	let (block_pos, normal) = raycast_to_block(camera, world, max_distance)?;
+
+	// Get ray details
+	let ray_origin = camera.position();
+	let ray_dir = camera.forward();
+
+	// Calculate the exact intersection point on the cube's surface
+	let t = if normal.x != 0.0 {
+		let x = if normal.x > 0.0 {
+			block_pos.x + 1.0
+		} else {
+			block_pos.x
+		};
+		(x - ray_origin.x) / ray_dir.x
+	} else if normal.y != 0.0 {
+		let y = if normal.y > 0.0 {
+			block_pos.y + 1.0
+		} else {
+			block_pos.y
+		};
+		(y - ray_origin.y) / ray_dir.y
+	} else {
+		let z = if normal.z > 0.0 {
+			block_pos.z + 1.0
+		} else {
+			block_pos.z
+		};
+		(z - ray_origin.z) / ray_dir.z
+	};
+
+	let intersection_point = ray_origin + ray_dir * t;
+
+	// Convert to local block coordinates (0-1 range) then to 3x3x3 grid coordinates
+	let local_pos = intersection_point - block_pos;
+	let x = (local_pos.x * 3.0).floor().clamp(0.0, 2.0) as u8;
+	let y = (local_pos.y * 3.0).floor().clamp(0.0, 2.0) as u8;
+	let z = (local_pos.z * 3.0).floor().clamp(0.0, 2.0) as u8;
+
+	Some((block_pos, (x, y, z)))
+}
+
+/// Toggles a point in the marching cube that the player is looking at
+#[inline]
+pub fn toggle_looked_point() {
+	let state = ptr::get_state();
+	if !state.is_world_running {
+		return;
+	}
+	let camera = &state.camera_system.camera();
+	let gamestate = ptr::get_gamestate();
+	let world = gamestate.world_mut();
+
+	// Find targeted block and point
+	let Some((block_pos, (x, y, z))) = raycast_to_cube_point(camera, world, REACH) else { return; };
+	let Some(block) = world.get_block_mut(block_pos) else { return; };
+	if block.is_empty() { return; }
+	// Convert to marching cube block if needed
+	if !block.is_marching() {
+		if let Some(march_block) = block.get_march() {
+			*block = march_block;
+		} else { return; }
+	} 
+	// Get current point state
+	let is_dot = block.get_point(x, y, z).unwrap_or(false); 
+	// Toggle
+	block.set_point(x, y, z, !is_dot); 
+	// Rebuild chunk mesh
+	update_chunk_mesh(world, block_pos);
+}
+*/
+

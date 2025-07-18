@@ -1,6 +1,5 @@
 
 use crate::ext::ptr;
-use crate::block::math::BlockPosition;
 use crate::block::math::ChunkCoord;
 use crate::game::player::Camera;
 use crate::block::main::Block;
@@ -49,7 +48,7 @@ fn update_chunk_mesh(world: &mut World, pos: IVec3) {
 /// Improved raycasting function that finds the first non-empty block and its face
 /// Optimized raycasting function using IVec3 for block positions
 #[inline]
-pub fn raycast_to_block(camera: &Camera, world: &World, max_distance: f32) -> Option<(IVec3, Vec3)> {
+pub fn raycast_to_block(camera: &Camera, world: &World, max_distance: f32) -> Option<(IVec3, IVec3)> {
     let ray_origin = camera.position();
     let ray_dir = camera.forward();
     
@@ -88,7 +87,7 @@ pub fn raycast_to_block(camera: &Camera, world: &World, max_distance: f32) -> Op
         } / ray_dir.z.abs().max(f32::MIN_POSITIVE),
     );
     
-    let mut normal = Vec3::ZERO;
+    let mut normal = IVec3::ZERO;
     let mut traveled = 0.0f32;
     
     while traveled < max_distance {
@@ -99,17 +98,17 @@ pub fn raycast_to_block(camera: &Camera, world: &World, max_distance: f32) -> Op
         
         // Move to next block boundary
         if t_max.x < t_max.y && t_max.x < t_max.z {
-            normal = Vec3::new(-step.x, 0.0, 0.0);
+            normal = IVec3::new(-step_i.x, 0, 0);
             block_pos.x += step_i.x;
             traveled = t_max.x;
             t_max.x += t_delta.x;
         } else if t_max.y < t_max.z {
-            normal = Vec3::new(0.0, -step.y, 0.0);
+            normal = IVec3::new(0, -step_i.y, 0);
             block_pos.y += step_i.y;
             traveled = t_max.y;
             t_max.y += t_delta.y;
         } else {
-            normal = Vec3::new(0.0, 0.0, -step.z);
+            normal = IVec3::new(0, 0, -step_i.z);
             block_pos.z += step_i.z;
             traveled = t_max.z;
             t_max.z += t_delta.z;
@@ -121,19 +120,19 @@ pub fn raycast_to_block(camera: &Camera, world: &World, max_distance: f32) -> Op
 
 /// Places a cube on the face of the block the player is looking at
 #[inline]
-pub fn place_looked_cube() {
-	let state = ptr::get_state();
-	if !state.is_world_running {
-		return;
-	}
-	let camera = &state.camera_system.camera();
-	let world = &mut ptr::get_gamestate().world_mut();
+pub fn place_looked_block() {
+    let state = ptr::get_state();
+    if !state.is_world_running {
+        return;
+    }
+    let camera = &state.camera_system.camera();
+    let world = &mut ptr::get_gamestate().world_mut();
 
-	if let Some((block_pos, normal)) = raycast_to_block(camera, world, REACH) {
-		let placement_pos = BlockPosition::from((block_pos.x as f32 + normal.x ,block_pos.y as f32 + normal.y, block_pos.z as f32 + normal.z)).into();
-		world.set_block(placement_pos, Block::new(1));
-		update_chunk_mesh(world, placement_pos);
-	}
+    if let Some((block_pos, normal)) = raycast_to_block(camera, world, REACH) {
+        let placement_pos = block_pos + normal;
+        world.set_block(placement_pos, Block::new(1));
+        update_chunk_mesh(world, placement_pos);
+    }
 }
 
 /// Removes the block the player is looking at
@@ -209,85 +208,3 @@ pub fn add_full_world() {
 		.world_mut()
 		.make_chunk_meshes(state_b.device(), state_b.queue());
 }
-/*
-/// Performs ray tracing to a cube and determines which of the 27 points (3x3x3 grid) was hit
-#[inline]
-pub fn raycast_to_cube_point(
-	camera: &Camera,
-	world: &World,
-	max_distance: f32,
-) -> Option<(Vec3, (u8, u8, u8))> {
-	if !ptr::get_state().is_world_running {
-		return None;
-	}
-	let (block_pos, normal) = raycast_to_block(camera, world, max_distance)?;
-
-	// Get ray details
-	let ray_origin = camera.position();
-	let ray_dir = camera.forward();
-
-	// Calculate the exact intersection point on the cube's surface
-	let t = if normal.x != 0.0 {
-		let x = if normal.x > 0.0 {
-			block_pos.x + 1.0
-		} else {
-			block_pos.x
-		};
-		(x - ray_origin.x) / ray_dir.x
-	} else if normal.y != 0.0 {
-		let y = if normal.y > 0.0 {
-			block_pos.y + 1.0
-		} else {
-			block_pos.y
-		};
-		(y - ray_origin.y) / ray_dir.y
-	} else {
-		let z = if normal.z > 0.0 {
-			block_pos.z + 1.0
-		} else {
-			block_pos.z
-		};
-		(z - ray_origin.z) / ray_dir.z
-	};
-
-	let intersection_point = ray_origin + ray_dir * t;
-
-	// Convert to local block coordinates (0-1 range) then to 3x3x3 grid coordinates
-	let local_pos = intersection_point - block_pos;
-	let x = (local_pos.x * 3.0).floor().clamp(0.0, 2.0) as u8;
-	let y = (local_pos.y * 3.0).floor().clamp(0.0, 2.0) as u8;
-	let z = (local_pos.z * 3.0).floor().clamp(0.0, 2.0) as u8;
-
-	Some((block_pos, (x, y, z)))
-}
-
-/// Toggles a point in the marching cube that the player is looking at
-#[inline]
-pub fn toggle_looked_point() {
-	let state = ptr::get_state();
-	if !state.is_world_running {
-		return;
-	}
-	let camera = &state.camera_system.camera();
-	let gamestate = ptr::get_gamestate();
-	let world = gamestate.world_mut();
-
-	// Find targeted block and point
-	let Some((block_pos, (x, y, z))) = raycast_to_cube_point(camera, world, REACH) else { return; };
-	let Some(block) = world.get_block_mut(block_pos) else { return; };
-	if block.is_empty() { return; }
-	// Convert to marching cube block if needed
-	if !block.is_marching() {
-		if let Some(march_block) = block.get_march() {
-			*block = march_block;
-		} else { return; }
-	} 
-	// Get current point state
-	let is_dot = block.get_point(x, y, z).unwrap_or(false); 
-	// Toggle
-	block.set_point(x, y, z, !is_dot); 
-	// Rebuild chunk mesh
-	update_chunk_mesh(world, block_pos);
-}
-*/
-

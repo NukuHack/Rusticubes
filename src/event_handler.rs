@@ -110,19 +110,13 @@ impl<'a> crate::State<'a> {
 					match key {
 						Key::KeyF => {
 							if is_pressed {
-								extra::place_looked_cube();
+								extra::place_looked_block();
 								return true
 							}
 						},
 						Key::KeyR => {
 							if is_pressed {
 								extra::remove_targeted_block();
-								return true
-							}
-						},
-						Key::KeyE => {
-							if is_pressed {
-								//extra::toggle_looked_point();
 								return true
 							}
 						},

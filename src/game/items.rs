@@ -23,6 +23,7 @@ pub struct ItemId(pub u32);
 // Use bitflags for extensible tool types
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct ToolFlags(pub u8);
+#[allow(dead_code)]
 impl ToolFlags {
 	const PICKAXE:u8 = 1 << 0; // stone related thing
 	const AXE:u8 = 1 << 1; // wood related thing
