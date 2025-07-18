@@ -2,37 +2,24 @@
 @group(1) @binding(0) var<uniform> camera_proj: mat4x4f;
 @group(2) @binding(0) var<uniform> chunk_pos: u64;
 
-// Constants matching your Rust implementation
-const Z_SHIFT: u32 = 0u;
-const Y_SHIFT: u32 = 26u;
-const X_SHIFT: u32 = 38u;
-
-const Z_MASK: u64 = u64(0x3FFFFFFu); // (1 << 26) - 1
-const Y_MASK: u64 = u64(0xFFFu);     // (1 << 12) - 1
-const X_MASK: u64 = u64(0x3FFFFFFu); // (1 << 26) - 1
-
 // Assuming CHUNK_SIZE_I is passed as a uniform or constant
 const CHUNK_SIZE_I: i32 = 16i; // Adjust based on your actual chunk size
 
-// Helper functions to extract coordinates from the packed u64
 fn extract_x(coord: u64) -> i32 {
-	let x = i32((coord >> X_SHIFT) & X_MASK);
-	// Sign extension for 26-bit value
-	return (x << 6u) >> 6u;
+	let x = i32((coord >> 38u) & u64(0x3FFFFFFu));
+	// Simplified sign extension using arithmetic shift
+	return (x << 38u) >> 38u;  // Matches 26-bit sign extension
 }
-
 fn extract_y(coord: u64) -> i32 {
-	let y = i32((coord >> Y_SHIFT) & Y_MASK);
-	// Sign extension for 12-bit value
-	return (y << 20u) >> 20u;
+	let y = i32((coord >> 26u) & u64(0xFFFu));
+	// Simplified sign extension
+	return (y << 52u) >> 52u;  // Matches 12-bit sign extension
 }
-
 fn extract_z(coord: u64) -> i32 {
-	let z = i32(coord & Z_MASK);
-	// Sign extension for 26-bit value
-	return (z << 6u) >> 6u;
+	let z = i32(coord & u64(0x3FFFFFFu));
+	// Simplified sign extension
+	return (z << 38u) >> 38u;  // Matches 26-bit sign extension
 }
-
 // Main function to convert ChunkCoord to world position
 fn to_world_pos(coord: u64) -> vec3f {
 	let x = extract_x(coord);
@@ -99,14 +86,13 @@ fn vs_main(
 	let normal_idx = (instance_data >> 16u) & 0x7u;
 
 	let model_pos = normal_to_rot(vx, vy, vz, normal_idx); // Combine vertex and instance positions
-	let instance_pos = vec3f(ix, iy, iz);
 	
 	let normal = NORMALS[normal_idx];
 	
 	var output: VertexOutput;
 	
 	// Apply chunk position (as translation), then camera view_proj
-	let world_pos = model_pos + instance_pos + to_world_pos(chunk_pos);
+	let world_pos = to_world_pos(chunk_pos) + model_pos + vec3f(ix, iy, iz);
 	output.clip_position = camera_proj * vec4f(world_pos, 1.0);
 	
 	output.world_normal = normal;
@@ -117,9 +103,10 @@ fn vs_main(
 	// The UVs should be:
 	// [0,0], [1,0], [1,1], [1,1], [0,1], [0,0]
 	let local_idx = vert_idx % 6u;
+	// Replace the UV calculation with:
 	output.uv = vec2f(
-		select(0.0, 1.0, local_idx == 1u || local_idx == 2u || local_idx == 3u),
-		select(0.0, 1.0, local_idx == 2u || local_idx == 3u || local_idx == 4u)
+		f32(local_idx >= 1u && local_idx <= 3u),
+		f32(local_idx >= 2u && local_idx <= 4u)
 	);
 	
 	return output;
@@ -135,12 +122,13 @@ fn vs_main(
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4f {
 	let light_dir = normalize(vec3f(0.5, 1.0, 0.5));
-	let light_strength = 0.35 + 0.55 * max(dot(in.world_normal, light_dir), 0.0);
-	
 	let up = vec3f(0.0, 1.0, 0.0);
-	let hemi_light = 0.5 + 0.5 * dot(in.world_normal, up);
-	let final_light = mix(light_strength, hemi_light, 0.3);
-
+	
+	// Combined lighting calculation
+	let directional = max(dot(in.world_normal, light_dir), 0.0);
+	let hemi = 0.5 + 0.5 * dot(in.world_normal, up);
+	let final_light = mix(0.35 + 0.55 * directional, hemi, 0.3);
+	
 	let texture_color = textureSample(t_diffuse, s_diffuse, in.uv, 0);
 	return vec4f(texture_color.rgb * final_light, texture_color.a);
 }
