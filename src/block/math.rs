@@ -1,5 +1,5 @@
 
-use glam::Vec3;
+use glam::{Vec3, IVec3};
 use crate::block::main::Chunk;
 
 /// Compact chunk coordinate representation (64 bits)
@@ -96,7 +96,16 @@ impl ChunkCoord {
 
 	/// Creates from world position
 	#[inline]
-	pub fn from_world_pos(world_pos: Vec3) -> Self {
+	pub fn from_world_pos(world_pos: IVec3) -> Self {
+		let chunk_size = Chunk::SIZE_I;
+		Self::new(
+			world_pos.x.div_euclid(chunk_size),
+			world_pos.y.div_euclid(chunk_size),
+			world_pos.z.div_euclid(chunk_size),
+		)
+	}
+	#[inline]
+	pub fn from_world_posf(world_pos: Vec3) -> Self {
 		let chunk_size = Chunk::SIZE_I;
 		Self::new(
 			world_pos.x.div_euclid(chunk_size as f32) as i32,
@@ -255,7 +264,18 @@ impl BlockPosition {
 // Bidirectional conversions grouped by type
 mod conversions {
 	use super::*;
-
+	
+	impl From<(f32, f32, f32)> for BlockPosition {
+		#[inline]
+		fn from((x, y, z): (f32, f32, f32)) -> Self {
+			let chunk_size = Chunk::SIZE_I;
+			Self::new(
+				(x.floor() as i32).rem_euclid(chunk_size) as u8,
+				(y.floor() as i32).rem_euclid(chunk_size) as u8,
+				(z.floor() as i32).rem_euclid(chunk_size) as u8
+			)
+		}
+	}
 	// (u8, u8, u8) conversions
 	impl From<(u8, u8, u8)> for BlockPosition {
 		#[inline]
@@ -293,6 +313,23 @@ mod conversions {
 		#[inline]
 		fn from(pos: BlockPosition) -> Self {
 			Vec3::new(pos.x().into(), pos.y().into(), pos.z().into())
+		}
+	}
+	impl From<BlockPosition> for IVec3 {
+		#[inline]
+		fn from(pos: BlockPosition) -> Self {
+			IVec3::new(pos.x().into(), pos.y().into(), pos.z().into())
+		}
+	}
+	impl From<IVec3> for BlockPosition {
+		#[inline]
+		fn from(vec: IVec3) -> Self {
+			let chunk_size = Chunk::SIZE_I;
+			Self::new(
+				(vec.x as i32).rem_euclid(chunk_size) as u8,
+				(vec.y as i32).rem_euclid(chunk_size) as u8,
+				(vec.z as i32).rem_euclid(chunk_size) as u8
+			)
 		}
 	}
 

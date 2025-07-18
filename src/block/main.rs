@@ -4,7 +4,7 @@ use crate::hs::math::{Noise, smooth_interpolate};
 use crate::render::meshing::GeometryBuffer;
 #[allow(unused_imports)]
 use crate::ext::stopwatch;
-use glam::Vec3;
+use glam::IVec3;
 
 type Material = u16;
 type DensityField = u32;
@@ -406,20 +406,20 @@ impl Chunk {
 
 	/// Checks if a block position is empty or outside the chunk
 	#[inline]
-	pub fn is_block_cull(&self, pos: Vec3) -> bool {
+	pub fn is_block_cull(&self, pos: IVec3) -> bool {
 		let idx:usize = BlockPosition::from(pos).into();
 		let block = *self.get_block(idx);
 		block.is_empty() || block.is_marching()
 	}
 
-	pub fn contains_position(&self, pos: Vec3) -> bool {
+	pub fn contains_position(&self, pos: IVec3) -> bool {
 		// Check if position is outside chunk bounds
-		if pos.x < 0.0
-			|| pos.y < 0.0
-			|| pos.z < 0.0
-			|| pos.x >= Self::SIZE_I as f32
-			|| pos.y >= Self::SIZE_I as f32
-			|| pos.z >= Self::SIZE_I as f32
+		if pos.x < 0
+			|| pos.y < 0
+			|| pos.z < 0
+			|| pos.x >= Self::SIZE_I
+			|| pos.y >= Self::SIZE_I
+			|| pos.z >= Self::SIZE_I
 		{
 			return false;
 		}

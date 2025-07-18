@@ -122,7 +122,7 @@ impl<'a> crate::State<'a> {
 						},
 						Key::KeyE => {
 							if is_pressed {
-								extra::toggle_looked_point();
+								//extra::toggle_looked_point();
 								return true
 							}
 						},

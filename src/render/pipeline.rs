@@ -10,13 +10,13 @@ use wgpu;
 #[allow(dead_code)]
 pub struct Pipeline {
 	// Pipelines
-	inside_pipeline: wgpu::RenderPipeline,
-	chunk_pipeline: wgpu::RenderPipeline,
-	post_pipeline: wgpu::RenderPipeline,
-	sky_pipeline: wgpu::RenderPipeline,
+	pub inside_pipeline: wgpu::RenderPipeline,
+	pub chunk_pipeline: wgpu::RenderPipeline,
+	pub post_pipeline: wgpu::RenderPipeline,
+	pub sky_pipeline: wgpu::RenderPipeline,
 	// Cached layouts
-	post_bind_group_layout: wgpu::BindGroupLayout,
-	post_pipeline_layout: wgpu::PipelineLayout,
+	pub post_bind_group_layout: wgpu::BindGroupLayout,
+	pub post_pipeline_layout: wgpu::PipelineLayout,
 }
 
 impl Pipeline {
@@ -54,34 +54,14 @@ impl Pipeline {
 			post_pipeline_layout,
 		}
 	}
-	#[inline]
-	pub fn post_bind_group_layout(&self) -> &wgpu::BindGroupLayout {
-		&self.post_bind_group_layout
-	}
-	#[inline]
-	pub fn inside_pipeline(&self) -> &wgpu::RenderPipeline {
-		&self.inside_pipeline
-	}
-	#[inline]
-	pub fn chunk_pipeline(&self) -> &wgpu::RenderPipeline {
-		&self.chunk_pipeline
-	}
-	#[inline]
-	pub fn post_pipeline(&self) -> &wgpu::RenderPipeline {
-		&self.post_pipeline
-	}
-	#[inline]
-	pub fn sky_pipeline(&self) -> &wgpu::RenderPipeline {
-		&self.sky_pipeline
-	}
 }
 
 /// Helper struct for organizing shader creation
 struct Shaders {
-	inside: wgpu::ShaderModule,
-	chunk: wgpu::ShaderModule,
-	post: wgpu::ShaderModule,
-	sky: wgpu::ShaderModule,
+	pub inside: wgpu::ShaderModule,
+	pub chunk: wgpu::ShaderModule,
+	pub post: wgpu::ShaderModule,
+	pub sky: wgpu::ShaderModule,
 }
 
 impl Shaders {
@@ -354,7 +334,7 @@ pub fn render_all(current_state: &mut State) -> Result<(), wgpu::SurfaceError> {
 	};
 
 	let mut sky_pass = encoder.begin_render_pass(&sky_pass_descriptor);
-	sky_pass.set_pipeline(&current_state.pipeline.sky_pipeline);
+	sky_pass.set_pipeline(&current_state.pipeline().sky_pipeline);
 	sky_pass.draw(0..3, 0..1);
 	drop(sky_pass);
 
@@ -383,7 +363,7 @@ pub fn render_all(current_state: &mut State) -> Result<(), wgpu::SurfaceError> {
 		});
 
 		// Render chunks
-		rpass.set_pipeline(&current_state.pipeline.chunk_pipeline);
+		rpass.set_pipeline(&current_state.pipeline().chunk_pipeline);
 		rpass.set_bind_group(0, current_state.texture_manager().bind_group(), &[]);
 		rpass.set_bind_group(1, current_state.camera_system().bind_group(), &[]);
 
@@ -392,12 +372,13 @@ pub fn render_all(current_state: &mut State) -> Result<(), wgpu::SurfaceError> {
 			.render_chunks(&mut rpass);
 
 		// Render inside surfaces
+		/*
 		rpass.set_pipeline(&current_state.pipeline().inside_pipeline);
 		rpass.set_bind_group(0, current_state.texture_manager().bind_group(), &[]);
 		rpass.set_bind_group(1, current_state.camera_system().bind_group(), &[]);
 		ptr::get_gamestate()
 			.world()
-			.render_chunks(&mut rpass);
+			.render_chunks(&mut rpass);*/
 	}
 
 	// Post processing pass 
@@ -417,7 +398,7 @@ pub fn render_all(current_state: &mut State) -> Result<(), wgpu::SurfaceError> {
 			timestamp_writes: None,
 		});
 
-		post_pass.set_pipeline(&current_state.pipeline.post_pipeline);
+		post_pass.set_pipeline(&current_state.pipeline().post_pipeline);
 		post_pass.set_bind_group(0,current_state.texture_manager().post_processing_bind_group(),&[],);
 		post_pass.draw(0..3, 0..1);
 	}

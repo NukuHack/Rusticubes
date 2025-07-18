@@ -1,8 +1,8 @@
 
-use crate::block::lut::{EDGE_TABLE, TRI_TABLE};
+//use crate::block::lut::{EDGE_TABLE, TRI_TABLE};
 use crate::block::main::Chunk;
 use crate::block::math::BlockPosition;
-use glam::Vec3;
+use glam::IVec3;
 use std::mem;
 use wgpu::util::DeviceExt;
 
@@ -10,13 +10,11 @@ use wgpu::util::DeviceExt;
 // Vertex Definition
 // =============================================
 
-/// A vertex with position, normal, and UV coordinates
+/// A vertex with position, normal
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable, Default)]
 pub struct Vertex {
-	pub position: [f32; 3], //96 let it stay cus's why not ...
-	pub normal: [f32; 3], //96 -> not used ...
-	pub uv: [f32; 2], //64 -> 4 options : 2 bits
+	pub packed_data: u32, 
 }
 
 impl Vertex {
@@ -26,23 +24,11 @@ impl Vertex {
 			array_stride: mem::size_of::<Self>() as wgpu::BufferAddress,
 			step_mode: wgpu::VertexStepMode::Vertex,
 			attributes: &[
-				// Position
+				// Packed all
 				wgpu::VertexAttribute {
 					offset: 0,
 					shader_location: 0,
-					format: wgpu::VertexFormat::Float32x3,
-				},
-				// Normal
-				wgpu::VertexAttribute {
-					offset: mem::size_of::<[f32; 3]>() as wgpu::BufferAddress,
-					shader_location: 1,
-					format: wgpu::VertexFormat::Float32x3,
-				},
-				// UV coordinates
-				wgpu::VertexAttribute {
-					offset: mem::size_of::<[f32; 6]>() as wgpu::BufferAddress,
-					shader_location: 2,
-					format: wgpu::VertexFormat::Float32x2,
+					format: wgpu::VertexFormat::Uint32,
 				},
 			],
 		}
@@ -67,17 +53,7 @@ impl Default for ChunkMeshBuilder {
 	}
 }
 
-impl ChunkMeshBuilder {
-	/// Creates a new mesh builder with optimized initial capacity
-	#[inline]
-	pub fn new() -> Self {
-		Self { // set the starting capacity smaller because now with all the culling there is chance for a chunk to be invisible
-			vertices: Vec::with_capacity(Chunk::SIZE * 4), // Average 4 vertices per cube
-			indices: Vec::with_capacity(Chunk::SIZE * 6),  // Average 6 indices per cube
-			current_vertex: 0,
-		}
-	}
-
+/*impl ChunkMeshBuilder {
 	/// Generates a marching cubes mesh for the given block
 	pub fn add_marching_cube(&mut self, position: Vec3, points: u32) {
 		if points == 0 || points == 0xFF_FF_FF_FF {
@@ -123,7 +99,6 @@ impl ChunkMeshBuilder {
 			edge_vertex_cache = [None; 12];
 		}
 	}
-
 	#[inline]
 	fn calculate_case_index(points: u32, sub_cube_idx: usize) -> u8 {
 		let mut case_index = 0u8;
@@ -151,7 +126,6 @@ impl ChunkMeshBuilder {
 		}
 		case_index
 	}
-
 	#[inline]
 	fn generate_triangles(
 		&mut self,
@@ -171,7 +145,6 @@ impl ChunkMeshBuilder {
 			i += 3;
 		}
 	}
-
 	/// Adds a triangle to the mesh with calculated normals
 	#[inline]
 	pub fn add_triangle(&mut self, vertices: &[Vec3; 3]) {
@@ -203,20 +176,28 @@ impl ChunkMeshBuilder {
 		self.indices.extend([base, base + 1, base + 2]);
 		self.current_vertex += 3;
 	}
-}
+}*/
 
 impl ChunkMeshBuilder {
-	pub fn add_cube(&mut self, pos: Vec3, texture_map: [f32; 2], chunk: &Chunk, neighbors: &[Option<&Chunk>; 6]) {
+	/// Creates a new mesh builder with optimized initial capacity
+	#[inline]
+	pub fn new() -> Self {
+		Self { // set the starting capacity smaller because now with all the culling there is chance for a chunk to be invisible
+			vertices: Vec::with_capacity(Chunk::SIZE * 4), // Average 4 vertices per cube
+			indices: Vec::with_capacity(Chunk::SIZE * 6),  // Average 6 indices per cube
+			current_vertex: 0,
+		}
+	}
+	pub fn add_cube(&mut self, pos: IVec3, _texture_map: [f32; 2], chunk: &Chunk, neighbors: &[Option<&Chunk>; 6]) {
 		for (idx, normal) in CUBE_FACES.iter().enumerate() {
-			let neighbor_pos:Vec3 = pos + *normal;
+			let neighbor_pos: IVec3 = pos + *normal;
 			
 			if !self.should_cull_face(neighbor_pos, chunk, neighbors) {
-				self.add_quad(pos, *normal, idx, texture_map);
+				self.add_quad(pos, idx);
 			}
 		}
 	}
-
-	fn should_cull_face(&self, pos: Vec3, chunk: &Chunk, neighbors: &[Option<&Chunk>; 6]) -> bool {    
+	#[inline]fn should_cull_face(&self, pos: IVec3, chunk: &Chunk, neighbors: &[Option<&Chunk>; 6]) -> bool {    
 		// Check if position is inside current chunk
 		let idx = usize::from(BlockPosition::from(pos));
 		if chunk.contains_position(pos) {
@@ -229,52 +210,53 @@ impl ChunkMeshBuilder {
 		match neighbor_chunk {
 			Some(chunk) => {
 				!chunk.get_block(idx).is_empty()
-			}, None => true, // No neighbor chunk means not loaded cull for now and reload mesh if it loads in
+			}, 
+			None => true, // No neighbor chunk means not loaded cull for now and reload mesh if it loads in
 		}
 	}
-
-	fn get_neighbor_chunk_and_local_pos<'a>(&self, neighbor_pos: Vec3, neighbors: &[Option<&'a Chunk>; 6]) -> Option<&'a Chunk> {
+	#[inline]fn get_neighbor_chunk_and_local_pos<'a>(&self, neighbor_pos: IVec3, neighbors: &[Option<&'a Chunk>; 6]) -> Option<&'a Chunk> {
 		// Calculate which neighbor we need to check
 		// The neighbor indices should match the order in CUBE_FACES_F:
 		// [0] = Left (-X), [1] = Right (+X), [2] = Front (-Z), [3] = Back (+Z), [4] = Top (+Y), [5] = Bottom (-Y)
 		// Precompute the bit patterns for comparison (avoids FP math)
-		const LEFT_EDGE_BITS: u32 = (-1f32).to_bits();
-		const RIGHT_EDGE_BITS: u32 = (16f32).to_bits();
 
-		let pos_bits = neighbor_pos.to_array().map(|v| v.to_bits());
-
-		// Check X axis first (most common)
-		if pos_bits[0] == LEFT_EDGE_BITS { return neighbors[0]; }
-		if pos_bits[0] == RIGHT_EDGE_BITS { return neighbors[1]; }
-		
-		// Then Z axis
-		if pos_bits[2] == LEFT_EDGE_BITS { return neighbors[2]; }
-		if pos_bits[2] == RIGHT_EDGE_BITS { return neighbors[3]; }
-		
-		// Finally Y axis
-		if pos_bits[1] == RIGHT_EDGE_BITS { return neighbors[4]; }
-		if pos_bits[1] == LEFT_EDGE_BITS { return neighbors[5]; }
-		
-		unreachable!("Position should be outside current chunk");
+	    // Chunk boundaries in i32 coordinates
+	    const LEFT_EDGE: i32 = -1;
+	    const RIGHT_EDGE: i32 = 16;  // Assuming 16x16x16 chunks
+	    
+	    // Check X axis first (most common)
+	    if neighbor_pos.x == LEFT_EDGE { return neighbors[0]; }  // -X (Left)
+	    if neighbor_pos.x == RIGHT_EDGE { return neighbors[1]; }  // +X (Right)
+	    
+	    // Then Z axis
+	    if neighbor_pos.z == LEFT_EDGE { return neighbors[2]; }  // -Z (Front)
+	    if neighbor_pos.z == RIGHT_EDGE { return neighbors[3]; }  // +Z (Back)
+	    
+	    // Finally Y axis
+	    if neighbor_pos.y == RIGHT_EDGE { return neighbors[4]; }  // +Y (Top)
+	    if neighbor_pos.y == LEFT_EDGE { return neighbors[5]; }   // -Y (Bottom)
+	    
+		unreachable!("Position should be outside current chunk");  // Position is inside current chunk
 	}
-
-	fn add_quad(&mut self, position: Vec3, normal: Vec3, idx:usize, texture_map: [f32; 2]) {
+	#[inline]fn add_quad(&mut self, position: IVec3, idx: usize) {
 		let base = self.current_vertex as u16;
 				
 		let vertices = QUAD_VERTICES[idx];
-		// Add vertices
+		
+		// Add vertices without any UV data - shader will calculate everything
 		for i in 0..4 {
+			let position = u16::from((position.x + vertices[i][0]) as u16 | ((position.y + vertices[i][1]) as u16) << 5 | ((position.z + vertices[i][2]) as u16) << 10) as u32;
 			self.vertices.push(Vertex {
-				position: [
-					position.x + vertices[i][0],
-					position.y + vertices[i][1], 
-					position.z + vertices[i][2]
-				],
-				normal: [normal.x, normal.y, normal.z],
-				uv: QUAD_UVS[idx](texture_map)[i],
+				packed_data: (position | (idx as u32) << 16)
 			});
 		}
+		
 		// Add indices (two triangles forming a quad)
+		// This order matches the shader's expectation:
+		// Vertex 0: (0, 0) - bottom-left
+		// Vertex 1: (1, 0) - bottom-right  
+		// Vertex 2: (1, 1) - top-right
+		// Vertex 3: (0, 1) - top-left
 		self.indices.extend(&[base, base + 1, base + 2, base + 2, base + 3, base]);
 		self.current_vertex += 4;
 	}
@@ -282,41 +264,38 @@ impl ChunkMeshBuilder {
 
 /// Make sure your CUBE_FACES constant matches the neighbor array order:
 /// Normal vectors for face lookup
-const CUBE_FACES: [Vec3; 6] = [
-	Vec3::NEG_X, // [0] Left face
-	Vec3::X,     // [1] Right face  
-	Vec3::NEG_Z, // [2] Front face
-	Vec3::Z,     // [3] Back face
-	Vec3::Y,     // [4] Top face
-	Vec3::NEG_Y, // [5] Bottom face
+const CUBE_FACES: [IVec3; 6] = [
+	IVec3::NEG_X, // [0] Left face
+	IVec3::X,     // [1] Right face  
+	IVec3::NEG_Z, // [2] Front face
+	IVec3::Z,     // [3] Back face
+	IVec3::Y,     // [4] Top face
+	IVec3::NEG_Y, // [5] Bottom face
 ];
 
 /// Quad vertices relative to position for each face
-const QUAD_VERTICES: [[[f32; 3]; 4]; 6] = [
-	// Left face (NEG_X)
-	[[0., 0., 0.], [0., 0., 1.], [0., 1., 1.], [0., 1., 0.]],
-	// Right face (X)
-	[[1., 0., 1.], [1., 0., 0.], [1., 1., 0.], [1., 1., 1.]],
-	// Front face (NEG_Z)
-	[[1., 0., 0.], [0., 0., 0.], [0., 1., 0.], [1., 1., 0.]],
-	// Back face (Z)
-	[[0., 0., 1.], [1., 0., 1.], [1., 1., 1.], [0., 1., 1.]],
-	// Top face (Y)
-	[[0., 1., 1.], [1., 1., 1.], [1., 1., 0.], [0., 1., 0.]],
-	// Bottom face (NEG_Y)
-	[[0., 0., 0.], [1., 0., 0.], [1., 0., 1.], [0., 0., 1.]],
+/// These define the actual 3D positions of the quad corners
+///
+///	2-->3
+/// ^
+///	|
+/// 1<--0
+///
+const QUAD_VERTICES: [[[i32; 3]; 4]; 6] = [
+    // Left face (NEG_X) - vertices ordered for consistent winding
+    [[0, 0, 0], [0, 0, 1], [0, 1, 1], [0, 1, 0]],
+    // Right face (X)
+    [[1, 0, 1], [1, 0, 0], [1, 1, 0], [1, 1, 1]],
+    // Front face (NEG_Z)
+    [[1, 0, 0], [0, 0, 0], [0, 1, 0], [1, 1, 0]],
+    // Back face (Z)
+    [[0, 0, 1], [1, 0, 1], [1, 1, 1], [0, 1, 1]],
+    // Top face (Y)
+    [[0, 1, 1], [1, 1, 1], [1, 1, 0], [0, 1, 0]],
+    // Bottom face (NEG_Y)
+    [[0, 0, 0], [1, 0, 0], [1, 0, 1], [0, 0, 1]],
 ];
-
-/// UV coordinates for each face
-const QUAD_UVS: [fn([f32; 2]) -> [[f32; 2]; 4]; 6] = [
-	|[fs, fe]| [[fe, fs], [fs, fs], [fs, fe], [fe, fe]], // Left
-	|[fs, fe]| [[fs, fs], [fe, fs], [fe, fe], [fs, fe]], // Right
-	|[fs, fe]| [[fe, fs], [fs, fs], [fs, fe], [fe, fe]], // Front
-	|[fs, fe]| [[fs, fs], [fe, fs], [fe, fe], [fs, fe]], // Back
-	|[fs, fe]| [[fs, fe], [fe, fe], [fe, fs], [fs, fs]], // Top
-	|[fs, fe]| [[fs, fs], [fe, fs], [fe, fe], [fs, fe]], // Bottom
-];
-
+/*
 const HALF: f32 = 1.;
 
 /// Edge vertices for the marching cubes algorithm
@@ -334,7 +313,7 @@ const EDGE_VERTICES: [[Vec3; 2]; 12] = [
 	[Vec3::new(HALF, 0f32, HALF), Vec3::new(HALF, HALF, HALF)], // Edge 10
 	[Vec3::new(0f32, 0f32, HALF), Vec3::new(0f32, HALF, HALF)], // Edge 11
 ];
-
+*/
 
 // =============================================
 // Geometry Buffer

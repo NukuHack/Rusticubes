@@ -8,22 +8,6 @@ struct ChunkUniform {
 @group(1) @binding(0) var<uniform> camera: CameraUniform;
 @group(2) @binding(0) var<uniform> chunk: ChunkUniform;
 
-struct VertexInput {
-    @location(0) position: vec3f,
-    @location(1) normal: vec3f,
-    @location(2) uv: vec2f,
-};
-
-struct VertexOutput {
-    @builtin(position) clip_position: vec4f,
-    @location(0) uv: vec2f,
-};
-
-
-
-
-
-
 // Constants matching your Rust implementation
 const Z_SHIFT: u32 = 0u;
 const Y_SHIFT: u32 = 26u;
@@ -68,3 +52,37 @@ fn to_world_pos(coord: u64) -> vec3<f32> {
     );
 }
 
+fn to_bytes(pos: u32) -> vec3<f32> {
+    // Unpack x, y, z (each 5 bits, stored in bits 0-14 of the u32)
+    let x = f32((pos >> 0u)  & 0x1Fu);  // bits 0-4  (mask = 0b11111 or 0x1F)
+    let y = f32((pos >> 5u)  & 0x1Fu);  // bits 5-9  (shift by 5, mask 0x1F)
+    let z = f32((pos >> 10u) & 0x1Fu);  // bits 10-14 (shift by 10, mask 0x1F)
+    // Note: Uses 15 bits total (5 bits per axis)
+
+    return vec3<f32>(x, y, z);
+}
+fn to_normal(pos :u32) -> u32 {
+    return pos >> 16u;
+}
+
+struct VertexInput {
+    @location(0) packed_data: u32,
+    
+    //@location(2) uv: vec2f,
+};
+/*
+// normal's ordering
+const CUBE_FACES: [Vec3; 6] = [
+    Vec3::NEG_X, // [0] Left face
+    Vec3::X,     // [1] Right face  
+    Vec3::NEG_Z, // [2] Front face
+    Vec3::Z,     // [3] Back face
+    Vec3::Y,     // [4] Top face
+    Vec3::NEG_Y, // [5] Bottom face
+];
+*/
+
+struct VertexOutput {
+    @builtin(position) clip_position: vec4f,
+    @location(0) uv: vec2f,
+};

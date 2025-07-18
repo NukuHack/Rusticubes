@@ -1,7 +1,7 @@
 
 use wgpu::util::DeviceExt;
 use ahash::AHasher;
-use glam::Vec3;
+use glam::IVec3;
 use std::{ collections::HashMap, hash::BuildHasherDefault };
 use crate::block::main::{Block, Chunk};
 use crate::block::math::{ChunkCoord, BlockPosition};
@@ -44,11 +44,10 @@ impl Chunk {
 			if block.is_empty() {
 				continue;
 			}
-
-			let local_pos:Vec3 = BlockPosition::from(pos).into();
+			let local_pos:IVec3 = BlockPosition::from(pos).into();
 			match block {
-				Block::Marching(_, points) => {
-					builder.add_marching_cube(local_pos, points);
+				Block::Marching(_, _points) => {
+					//builder.add_marching_cube(local_pos, points);
 				}
 				Block::Simple(..) => {
 					builder.add_cube(local_pos, block.texture_coords(), self, neighbors);

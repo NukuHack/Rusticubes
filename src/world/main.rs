@@ -3,7 +3,7 @@ use crate::ext::ptr;
 use crate::block::math::{BlockPosition, ChunkCoord};
 use crate::block::main::{Block, Chunk};
 use ahash::AHasher;
-use glam::Vec3;
+use glam::{IVec3, Vec3};
 use std::{
 	collections::{HashMap, HashSet},
 	hash::BuildHasherDefault,
@@ -47,7 +47,7 @@ impl World {
 	}
 
 	#[inline]
-	pub fn get_block(&self, world_pos: Vec3) -> &Block {
+	pub fn get_block(&self, world_pos: IVec3) -> &Block {
 		let chunk_coord = ChunkCoord::from_world_pos(world_pos);
 		let local_pos: BlockPosition = world_pos.into();
 		let index:usize = local_pos.into();
@@ -59,7 +59,7 @@ impl World {
 	}
 
 	#[inline]
-	pub fn get_block_mut(&mut self, world_pos: Vec3) -> Option<&mut Block> {
+	pub fn get_block_mut(&mut self, world_pos: IVec3) -> Option<&mut Block> {
 		let chunk_coord = ChunkCoord::from_world_pos(world_pos);
 		let local_pos: BlockPosition = world_pos.into();
 		let index: usize = local_pos.into();
@@ -71,8 +71,8 @@ impl World {
 				&mut chunk.palette[palette_idx as usize]
 			})
 	}
-
-	pub fn set_block(&mut self, world_pos: Vec3, block: Block) {
+	#[inline]
+	pub fn set_block(&mut self, world_pos: IVec3, block: Block) {
 		let chunk_coord = ChunkCoord::from_world_pos(world_pos);
 
 		if !self.chunks.contains_key(&chunk_coord) {
@@ -89,7 +89,7 @@ impl World {
 			}
 		}
 	}
-
+	#[inline]
 	/// Loads a new chunk
 	pub fn load_chunk(&mut self, chunk_coord: ChunkCoord) {
 		let chunk = Chunk::new(1u16);
@@ -100,7 +100,7 @@ impl World {
 			chunk
 		);
 	}
-
+	#[inline]
 	/// Loads a chunk from storage
 	pub fn generate_chunk(&mut self, chunk_coord: ChunkCoord, seed: u32) {
 		let chunk = match Chunk::generate(chunk_coord, seed) {
@@ -118,7 +118,7 @@ impl World {
 
 	/// Updates loaded chunks based on player position
 	pub fn update_loaded_chunks(&mut self, center: Vec3, radius: f32, force: bool) {
-		let center_coord = ChunkCoord::from_world_pos(center);
+		let center_coord = ChunkCoord::from_world_posf(center);
 		let (center_x, center_y, center_z) = center_coord.unpack();
 		let radius_i32 = radius as i32;
 		let radius_sq = (radius * radius) as i32;

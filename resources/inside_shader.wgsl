@@ -1,8 +1,6 @@
-
-
 @vertex
 fn vs_main(vertex: VertexInput) -> @builtin(position) vec4f {
-    return camera.view_proj * vec4f(vertex.position +  to_world_pos(chunk.position), 1f);
+    return camera.view_proj * vec4f(to_bytes(vertex.packed_data) +  to_world_pos(chunk.position), 1f);
 }
 
 @fragment
