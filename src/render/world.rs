@@ -1,4 +1,5 @@
 
+use crate::render::meshing::Vertex;
 use wgpu::util::DeviceExt;
 use ahash::AHasher;
 use glam::IVec3;
@@ -23,7 +24,7 @@ pub struct Chunk {
 }
 */
 impl Chunk {
-	pub fn make_mesh(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, neighbors: &[Option<&Chunk>; 6], force: bool) {
+	pub fn make_mesh(&mut self, device: &wgpu::Device, _queue: &wgpu::Queue, neighbors: &[Option<&Chunk>; 6], force: bool) {
 		if !force && !self.dirty && self.mesh.is_some() {
 			return;
 		}
@@ -53,15 +54,7 @@ impl Chunk {
 			}
 		}
 
-		if let Some(mesh) = &mut self.mesh {
-			mesh.update(device, queue, &builder.indices, &builder.vertices);
-		} else {
-			self.mesh = Some(GeometryBuffer::new(
-				device,
-				&builder.indices,
-				&builder.vertices,
-			));
-		}
+		self.mesh = Some(GeometryBuffer::new(device, &builder.instances));
 		self.dirty = false;
 	}
 }
@@ -155,14 +148,14 @@ impl World {
 			}
 			if let (Some(mesh), Some(bind_group)) = (&chunk.mesh, &chunk.bind_group) {
 				// Skip if mesh has no indices (shouldn't happen but good to check)
-				if mesh.num_indices == 0 {
+				if mesh.num_instances == 0 {
 					continue;
 				}
 
 				render_pass.set_bind_group(2, bind_group, &[]);
-				render_pass.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
-				render_pass.set_index_buffer(mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
-				render_pass.draw_indexed(0..mesh.num_indices, 0, 0..1);
+				render_pass.set_vertex_buffer(1, mesh.instance_buffer.slice(..));
+
+	            render_pass.draw(0..6, 0..mesh.num_instances as u32);
 			}
 		}
 	}

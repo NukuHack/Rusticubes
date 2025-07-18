@@ -46,72 +46,83 @@ fn to_world_pos(coord: u64) -> vec3f {
 	);
 }
 
-const NORMALS: array<vec3f, 8> = array<vec3f, 8>(
-    vec3f(-1.0, 0.0, 0.0),   // [0] Left face
-    vec3f(1.0, 0.0, 0.0),    // [1] Right face
-    vec3f(0.0, 0.0, -1.0),   // [2] Front face
-    vec3f(0.0, 0.0, 1.0),    // [3] Back face
-    vec3f(0.0, 1.0, 0.0),    // [4] Top face
-    vec3f(0.0, -1.0, 0.0),    // [5] Bottom face
-    vec3f(0.0, 0.0, 0.0),    // 6: Unused (dummy)
-    vec3f(0.0, 0.0, 0.0)     // 7: Unused (dummy)
+fn normal_to_rot(x: f32, y: f32, z: f32, normal: u32) -> vec3f {
+	var out = vec3f(x, y, z);
+	if normal == 0 {
+		out = vec3f(y, x, z);  // Left face
+	} else if normal == 1 {
+		out = vec3f(y+1.0, -x+1.0, z);// Right face
+	} else if normal == 2 {
+		out = vec3f(x, z, y);   // Front face
+	} else if normal == 3 {
+		out = vec3f(x, -z+1.0, y+1.0);// Back face
+	} else if normal == 4 {
+		out = vec3f(x, y + 1.0, z);  // Top face
+	} else if normal == 5 {
+		out = vec3f(x, -y, -z+1.0); // Bottom face
+	}
+	return out;
+}
+
+const NORMALS: array<vec3f, 6> = array<vec3f, 6>(
+	vec3f(-1.0, 0.0, 0.0),   // [0] Left face
+	vec3f(1.0, 0.0, 0.0),    // [1] Right face
+	vec3f(0.0, 0.0, -1.0),   // [2] Front face
+	vec3f(0.0, 0.0, 1.0),    // [3] Back face
+	vec3f(0.0, 1.0, 0.0),    // [4] Top face
+	vec3f(0.0, -1.0, 0.0)    // [5] Bottom face
 );
 
 struct VertexOutput {
 	@builtin(position) clip_position: vec4f,
-    @location(0) world_normal: vec3f,
-    @location(1) uv: vec2f,
+	@location(0) world_normal: vec3f,
+	@location(1) uv: vec2f,
 };
-
 
 @vertex
 fn vs_main(
-	@location(0) packed_data: u32,
-	@builtin(vertex_index) vert_idx: u32  // Built-in vertex index
+	@location(0) vertex_data: u32,
+	@location(1) instance_data: u32,
+	@builtin(vertex_index) vert_idx: u32
 ) -> VertexOutput {
-	// Unpack x, y, z (each 5 bits, stored in bits 0-14 of the u32)
-	let x = f32((packed_data >> 0u)  & 0x1Fu);  // bits 0-4  (mask = 0b11111 or 0x1F)
-	let y = f32((packed_data >> 5u)  & 0x1Fu);  // bits 5-9  (shift by 5, mask 0x1F)
-	let z = f32((packed_data >> 10u) & 0x1Fu);  // bits 10-14 (shift by 10, mask 0x1F)
-	// Note: Uses 15 bits total (5 bits per axis)
-
-	/*
-	// normal's ordering
-	[0] Left face
-	[1] Right face
-	[2] Front face
-	[3] Back face
-	[4] Top face
-	[5] Bottom face
-	*/
-	let normal_idx = (packed_data >> 16u) & 0x7u;
-	let normal = NORMALS[normal_idx];
-
-
-	var out: VertexOutput;
-
-	// First apply chunk position (as translation), then camera view_proj
-	let world_pos = vec3f(x, y, z) + to_world_pos(chunk_pos);
-	out.clip_position = camera_proj * vec4f(world_pos, 1f);
-
-    out.world_normal = normalize(normal);
+	// Unpack vertex position (5 bits per axis)
+	let vx = f32((vertex_data >> 0u) & 0x1Fu);
+	let vy = f32((vertex_data >> 5u) & 0x1Fu);
+	let vz = f32((vertex_data >> 10u) & 0x1Fu);
 	
-	// Calculate UV based on vertex index within the current quad
-	// Since each quad has 4 vertices, we use modulo 4 to get the local vertex index
-	var local_vertex = vert_idx % 4u;
-	if local_vertex == 2u { // 2 and 3 needs to be switched because I'm creating them in a strange order
-		local_vertex = 3u;
-	} else if local_vertex == 3u {
-		local_vertex = 2u;
-	}
-	// Custom quad UV mapping:
-	// Vertex 0: (0, 0) - bottom-left
-	// Vertex 1: (1, 0) - bottom-right
-	// Vertex 2: (0, 1) - top-left
-	// Vertex 3: (1, 1) - top-right
-	out.uv = vec2f(f32(local_vertex & 1u), f32(local_vertex >> 1u));
-		
-	return out;
+	// Unpack instance position (5 bits per axis)
+	let ix = f32((instance_data >> 0u) & 0x1Fu);
+	let iy = f32((instance_data >> 5u) & 0x1Fu);
+	let iz = f32((instance_data >> 10u) & 0x1Fu);
+	
+	// Get normal from instance data (bits 16-18)
+	let normal_idx = (instance_data >> 16u) & 0x7u;
+
+	let model_pos = normal_to_rot(vx, vy, vz, normal_idx); // Combine vertex and instance positions
+	let instance_pos = vec3f(ix, iy, iz);
+	
+	let normal = NORMALS[normal_idx];
+	
+	var output: VertexOutput;
+	
+	// Apply chunk position (as translation), then camera view_proj
+	let world_pos = model_pos + instance_pos + to_world_pos(chunk_pos);
+	output.clip_position = camera_proj * vec4f(world_pos, 1.0);
+	
+	output.world_normal = normal;
+	
+	// Calculate UV based on original vertex positions
+	// Since your quad is defined with positions:
+	// [0,0,0], [0,0,1], [1,0,1], [1,0,1], [1,0,0], [0,0,0]
+	// The UVs should be:
+	// [0,0], [1,0], [1,1], [1,1], [0,1], [0,0]
+	let local_idx = vert_idx % 6u;
+	output.uv = vec2f(
+		select(0.0, 1.0, local_idx == 1u || local_idx == 2u || local_idx == 3u),
+		select(0.0, 1.0, local_idx == 2u || local_idx == 3u || local_idx == 4u)
+	);
+	
+	return output;
 }
 
 // The rest of your shader can remain the same
@@ -123,23 +134,14 @@ fn vs_main(
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4f {
-	/*// For solid color rectangles
-	if (in.uv == vec2f(0.0,0.0) {
-		return vec4f(0.0,0.0,0.0,0.0);
-	}*/
-    // Softer directional light (less intense)
-    let light_dir = normalize(vec3f(0.5, 1.0, 0.5));
-    
-    // More subtle lighting calculation:
-    // - Higher ambient (0.35)
-    // - Less intense diffuse (0.55)
-    let light_strength = 0.35 + 0.55 * max(dot(in.world_normal, light_dir), 0.0);
-    
-    // Optional: Add some soft hemispheric lighting
-    let up = vec3f(0.0, 1.0, 0.0);
-    let hemi_light = 0.5 + 0.5 * dot(in.world_normal, up);
-    let final_light = mix(light_strength, hemi_light, 0.3);
+	let light_dir = normalize(vec3f(0.5, 1.0, 0.5));
+	let light_strength = 0.35 + 0.55 * max(dot(in.world_normal, light_dir), 0.0);
+	
+	let up = vec3f(0.0, 1.0, 0.0);
+	let hemi_light = 0.5 + 0.5 * dot(in.world_normal, up);
+	let final_light = mix(light_strength, hemi_light, 0.3);
 
-    let texture_color = textureSample(t_diffuse, s_diffuse, in.uv, 0);
-    return vec4f(texture_color.rgb * final_light, texture_color.a);
+	let texture_color = textureSample(t_diffuse, s_diffuse, in.uv, 0);
+	return vec4f(texture_color.rgb * final_light, texture_color.a);
 }
+

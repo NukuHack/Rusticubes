@@ -13,7 +13,12 @@ use wgpu::util::DeviceExt;
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable, Default)]
 pub struct Vertex {
-	pub packed_data: u32, 
+    pub position: u32,  // 5 bits per axis (x,y,z)
+}
+#[repr(C)]
+#[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct InstanceRaw {
+	pub packed_data: u32,  // 5 bits per axis (x,y,z) + normal index in bits 16-18
 }
 
 impl Vertex {
@@ -33,6 +38,21 @@ impl Vertex {
 		}
 	}
 }
+impl InstanceRaw {
+    pub fn desc() -> wgpu::VertexBufferLayout<'static> {
+        wgpu::VertexBufferLayout {
+            array_stride: mem::size_of::<Self>() as wgpu::BufferAddress,
+            step_mode: wgpu::VertexStepMode::Instance, // This marks it as instance data
+            attributes: &[
+                wgpu::VertexAttribute {
+                    offset: 0,
+                    shader_location: 1,
+                    format: wgpu::VertexFormat::Uint32,
+                },
+            ],
+        }
+    }
+}
 
 // =============================================
 // Chunk Mesh Builder
@@ -40,16 +60,7 @@ impl Vertex {
 
 /// Builder for constructing chunk meshes efficiently
 pub struct ChunkMeshBuilder {
-	pub vertices: Vec<Vertex>,
-	pub indices: Vec<u16>,
-	current_vertex: u32,
-}
-
-impl Default for ChunkMeshBuilder {
-	#[inline]
-	fn default() -> Self {
-		Self::new()
-	}
+	pub instances: Vec<InstanceRaw>,
 }
 
 impl ChunkMeshBuilder {
@@ -57,9 +68,7 @@ impl ChunkMeshBuilder {
 	#[inline]
 	pub fn new() -> Self {
 		Self { // set the starting capacity smaller because now with all the culling there is chance for a chunk to be invisible
-			vertices: Vec::with_capacity(Chunk::SIZE * 4), // Average 4 vertices per cube
-			indices: Vec::with_capacity(Chunk::SIZE * 6),  // Average 6 indices per cube
-			current_vertex: 0,
+			instances: Vec::with_capacity(Chunk::SIZE),
 		}
 	}
 	pub fn add_cube(&mut self, pos: IVec3, _texture_map: [f32; 2], chunk: &Chunk, neighbors: &[Option<&Chunk>; 6]) {
@@ -112,27 +121,13 @@ impl ChunkMeshBuilder {
 	    
 		unreachable!("Position should be outside current chunk");  // Position is inside current chunk
 	}
-	#[inline]fn add_quad(&mut self, position: IVec3, idx: usize) {
-		let base = self.current_vertex as u16;
-				
-		let vertices = QUAD_VERTICES[idx];
-		
-		// Add vertices without any UV data - shader will calculate everything
-		for i in 0..4 {
-			let position = u16::from((position.x + vertices[i][0]) as u16 | ((position.y + vertices[i][1]) as u16) << 5 | ((position.z + vertices[i][2]) as u16) << 10) as u32;
-			self.vertices.push(Vertex {
-				packed_data: (position | (idx as u32) << 16)
-			});
-		}
-		
-		// Add indices (two triangles forming a quad)
-		// This order matches the shader's expectation:
-		// Vertex 0: (0, 0) - bottom-left
-		// Vertex 1: (1, 0) - bottom-right  
-		// Vertex 2: (1, 1) - top-right
-		// Vertex 3: (0, 1) - top-left
-		self.indices.extend(&[base, base + 1, base + 2, base + 2, base + 3, base]);
-		self.current_vertex += 4;
+	#[inline]fn add_quad(&mut self, position: IVec3, idx: usize) {		
+		// Add instances without any UV data - shader will calculate everything
+
+		let position = u16::from((position.x) as u16 | ((position.y) as u16) << 5 | ((position.z) as u16) << 10) as u32;
+		self.instances.push(InstanceRaw {
+			packed_data: (position | (idx as u32) << 16)
+		});
 	}
 }
 
@@ -147,28 +142,6 @@ const CUBE_FACES: [IVec3; 6] = [
 	IVec3::NEG_Y, // [5] Bottom face
 ];
 
-/// Quad vertices relative to position for each face
-/// These define the actual 3D positions of the quad corners
-///
-///	2-->3
-/// ^
-///	|
-/// 1<--0
-///
-const QUAD_VERTICES: [[[i32; 3]; 4]; 6] = [
-    // Left face (NEG_X) - vertices ordered for consistent winding
-    [[0, 0, 0], [0, 0, 1], [0, 1, 1], [0, 1, 0]],
-    // Right face (X)
-    [[1, 0, 1], [1, 0, 0], [1, 1, 0], [1, 1, 1]],
-    // Front face (NEG_Z)
-    [[1, 0, 0], [0, 0, 0], [0, 1, 0], [1, 1, 0]],
-    // Back face (Z)
-    [[0, 0, 1], [1, 0, 1], [1, 1, 1], [0, 1, 1]],
-    // Top face (Y)
-    [[0, 1, 1], [1, 1, 1], [1, 1, 0], [0, 1, 0]],
-    // Bottom face (NEG_Y)
-    [[0, 0, 0], [1, 0, 0], [1, 0, 1], [0, 0, 1]],
-];
 
 // =============================================
 // Geometry Buffer
@@ -177,116 +150,37 @@ const QUAD_VERTICES: [[[i32; 3]; 4]; 6] = [
 /// GPU buffer storage for geometry data
 #[derive(Debug, Clone, PartialEq)]
 pub struct GeometryBuffer {
-	pub vertex_buffer: wgpu::Buffer,
-	pub index_buffer: wgpu::Buffer,
-	pub num_indices: u32,
-	pub num_vertices: u32,
-	pub vertex_capacity: usize,
-	pub index_capacity: usize,
+	pub instance_buffer: wgpu::Buffer,
+	pub num_instances: u32,
 }
 
 impl GeometryBuffer {
 	/// Creates a new geometry buffer with the given data
-	pub fn new(device: &wgpu::Device, indices: &[u16], vertices: &[Vertex]) -> Self {
-		if vertices.is_empty() && indices.is_empty() {
+	pub fn new(device: &wgpu::Device, instances: &[InstanceRaw]) -> Self {
+		if instances.is_empty() {
 			return Self::empty(device);
 		}
 
 		Self {
-			vertex_buffer: device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+			instance_buffer: device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
 				label: Some("Vertex Buffer"),
-				contents: bytemuck::cast_slice(vertices),
+				contents: bytemuck::cast_slice(instances),
 				usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
 			}),
-			index_buffer: device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-				label: Some("Index Buffer"),
-				contents: bytemuck::cast_slice(indices),
-				usage: wgpu::BufferUsages::INDEX | wgpu::BufferUsages::COPY_DST,
-			}),
-			num_indices: indices.len() as u32,
-			num_vertices: vertices.len() as u32,
-			vertex_capacity: vertices.len(),
-			index_capacity: indices.len(),
+			num_instances: instances.len() as u32,
 		}
 	}
 
 	/// Creates an empty geometry buffer
 	pub fn empty(device: &wgpu::Device) -> Self {
-		let vertex_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-			label: Some("Empty Vertex Buffer"),
-			size: mem::size_of::<Vertex>() as wgpu::BufferAddress,
-			usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-			mapped_at_creation: false,
-		});
-
-		let index_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-			label: Some("Empty Index Buffer"),
-			size: mem::size_of::<u16>() as wgpu::BufferAddress,
-			usage: wgpu::BufferUsages::INDEX | wgpu::BufferUsages::COPY_DST,
-			mapped_at_creation: false,
-		});
-
 		Self {
-			vertex_buffer,
-			index_buffer,
-			num_indices: 0,
-			num_vertices: 0,
-			vertex_capacity: 0,
-			index_capacity: 0,
-		}
-	}
-
-	/// Updates the buffer contents, reallocating if necessary
-	pub fn update(
-		&mut self,
-		device: &wgpu::Device,
-		queue: &wgpu::Queue,
-		indices: &[u16],
-		vertices: &[Vertex],
-	) {
-		// Helper to align buffer sizes
-		#[inline]
-		fn align_size(size: usize, alignment: usize) -> usize {
-			((size + alignment - 1) / alignment) * alignment
-		}
-
-		// Handle vertex buffer update
-		if vertices.len() > self.vertex_capacity {
-			// Reallocate if capacity is insufficient
-			self.vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-				label: Some("Vertex Buffer"),
-				contents: bytemuck::cast_slice(vertices),
+			instance_buffer : device.create_buffer(&wgpu::BufferDescriptor {
+				label: Some("Empty Vertex Buffer"),
+				size: mem::size_of::<InstanceRaw>() as wgpu::BufferAddress,
 				usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-			});
-			self.vertex_capacity = vertices.len();
-		} else if !vertices.is_empty() {
-			// Update existing buffer with proper alignment
-			let vertex_slice = bytemuck::cast_slice(vertices);
-			let aligned_size = align_size(vertex_slice.len(), wgpu::COPY_BUFFER_ALIGNMENT as usize);
-			let mut aligned_data = vertex_slice.to_vec();
-			aligned_data.resize(aligned_size, 0);
-			queue.write_buffer(&self.vertex_buffer, 0, &aligned_data);
+				mapped_at_creation: false,
+			}),
+			num_instances: 0,
 		}
-
-		// Handle index buffer update
-		if indices.len() > self.index_capacity {
-			// Reallocate if capacity is insufficient
-			self.index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-				label: Some("Index Buffer"),
-				contents: bytemuck::cast_slice(indices),
-				usage: wgpu::BufferUsages::INDEX | wgpu::BufferUsages::COPY_DST,
-			});
-			self.index_capacity = indices.len();
-		} else if !indices.is_empty() {
-			// Update existing buffer with proper alignment
-			let index_slice = bytemuck::cast_slice(indices);
-			let aligned_size = align_size(index_slice.len(), wgpu::COPY_BUFFER_ALIGNMENT as usize);
-			let mut aligned_data = index_slice.to_vec();
-			aligned_data.resize(aligned_size, 0);
-			queue.write_buffer(&self.index_buffer, 0, &aligned_data);
-		}
-
-		self.num_indices = indices.len() as u32;
-		self.num_vertices = vertices.len() as u32;
 	}
 }
