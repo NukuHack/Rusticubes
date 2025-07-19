@@ -33,20 +33,20 @@ fn to_world_pos(coord: u64) -> vec3f {
 	);
 }
 
-fn normal_to_rot(x: f32, y: f32, z: f32, normal: u32) -> vec3f {
-	var out = vec3f(x, y, z);
+fn normal_to_rot(pos: vec3f, normal: u32) -> vec3f {
+	var out = pos;
 	if normal == 0 {
-		out = vec3f(y, x, z);  // Left face
+		out = vec3f(pos.y, pos.x, pos.z);  // Left face
 	} else if normal == 1 {
-		out = vec3f(y+1.0, -x+1.0, z);// Right face
+		out = vec3f(pos.y+1.0, (-pos.x)+1.0, pos.z);// Right face
 	} else if normal == 2 {
-		out = vec3f(x, z, y);   // Front face
+		out = vec3f(pos.x, pos.z, pos.y);   // Front face
 	} else if normal == 3 {
-		out = vec3f(x, -z+1.0, y+1.0);// Back face
+		out = vec3f(pos.x, (-pos.z)+1.0, pos.y+1.0);// Back face
 	} else if normal == 4 {
-		out = vec3f(x, y + 1.0, z);  // Top face
+		out = vec3f(pos.x, pos.y + 1.0, pos.z);  // Top face
 	} else if normal == 5 {
-		out = vec3f(x, -y, -z+1.0); // Bottom face
+		out = vec3f(pos.x, -pos.y, (-pos.z)+1.0); // Bottom face
 	}
 	return out;
 }
@@ -73,26 +73,30 @@ fn vs_main(
 	@builtin(vertex_index) vert_idx: u32
 ) -> VertexOutput {
 	// Unpack vertex position (5 bits per axis)
-	let vx = f32((vertex_data >> 0u) & 0x1Fu);
-	let vy = f32((vertex_data >> 5u) & 0x1Fu);
-	let vz = f32((vertex_data >> 10u) & 0x1Fu);
+	let vertex_pos = vec3f(
+		f32((vertex_data >> 0u) & 0x1Fu),
+		f32((vertex_data >> 5u) & 0x1Fu),
+		f32((vertex_data >> 10u) & 0x1Fu)
+		);
 	
-	// Unpack instance position (5 bits per axis)
-	let ix = f32((instance_data >> 0u) & 0x1Fu);
-	let iy = f32((instance_data >> 5u) & 0x1Fu);
-	let iz = f32((instance_data >> 10u) & 0x1Fu);
+	// Unpack instance position (4 bits per axis) 0-15 as position
+	let instance_pos = vec3f(
+		f32((instance_data >> 0u) & 0xFu),
+		f32((instance_data >> 4u) & 0xFu),
+		f32((instance_data >> 8u) & 0xFu)
+		);
 	
 	// Get normal from instance data (bits 16-18)
-	let normal_idx = (instance_data >> 16u) & 0x7u;
+	let normal_idx = (instance_data >> 12u) & 0x7u;
 
-	let model_pos = normal_to_rot(vx, vy, vz, normal_idx); // Combine vertex and instance positions
+	let model_pos = normal_to_rot(vertex_pos, normal_idx); // Combine vertex and instance positions
 	
 	let normal = NORMALS[normal_idx];
 	
 	var output: VertexOutput;
 	
 	// Apply chunk position (as translation), then camera view_proj
-	let world_pos = to_world_pos(chunk_pos) + model_pos + vec3f(ix, iy, iz);
+	let world_pos = to_world_pos(chunk_pos) + model_pos + instance_pos;
 	output.clip_position = camera_proj * vec4f(world_pos, 1.0);
 	
 	output.world_normal = normal;

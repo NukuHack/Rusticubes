@@ -71,6 +71,7 @@ impl ChunkMeshBuilder {
 			instances: Vec::with_capacity(Chunk::SIZE),
 		}
 	}
+	// pos is allways 0-15
 	pub fn add_cube(&mut self, pos: IVec3, _texture_map: [f32; 2], chunk: &Chunk, neighbors: &[Option<&Chunk>; 6]) {
 		for (idx, normal) in CUBE_FACES.iter().enumerate() {
 			let neighbor_pos: IVec3 = pos + *normal;
@@ -105,7 +106,7 @@ impl ChunkMeshBuilder {
 
 	    // Chunk boundaries in i32 coordinates
 	    const LEFT_EDGE: i32 = -1;
-	    const RIGHT_EDGE: i32 = 16;  // Assuming 16x16x16 chunks
+	    const RIGHT_EDGE: i32 = Chunk::SIZE_I;
 	    
 	    // Check X axis first (most common)
 	    if neighbor_pos.x == LEFT_EDGE { return neighbors[0]; }  // -X (Left)
@@ -124,9 +125,9 @@ impl ChunkMeshBuilder {
 	#[inline]fn add_quad(&mut self, position: IVec3, idx: usize) {		
 		// Add instances without any UV data - shader will calculate everything
 
-		let position = u16::from((position.x) as u16 | ((position.y) as u16) << 5 | ((position.z) as u16) << 10) as u32;
+		let position:u16 = BlockPosition::from(position).into();
 		self.instances.push(InstanceRaw {
-			packed_data: (position | (idx as u32) << 16)
+			packed_data: (position as u32 | (idx as u32) << 12)
 		});
 	}
 }

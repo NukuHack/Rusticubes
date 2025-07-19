@@ -14,9 +14,6 @@ pub struct Pipeline {
 	pub chunk_pipeline: wgpu::RenderPipeline,
 	pub post_pipeline: wgpu::RenderPipeline,
 	pub sky_pipeline: wgpu::RenderPipeline,
-	// Cached layouts
-	pub post_bind_group_layout: wgpu::BindGroupLayout,
-	pub post_pipeline_layout: wgpu::PipelineLayout,
 }
 
 impl Pipeline {
@@ -25,32 +22,33 @@ impl Pipeline {
 	pub fn new(
 		device: &wgpu::Device,
 		config: &wgpu::SurfaceConfiguration,
-		layout: &wgpu::PipelineLayout,
+		layouts: &[&wgpu::BindGroupLayout],
 	) -> Self {
 		// Create shaders
 		let shaders = Shaders::new(device);
 
 		// Create post processing bind group layout and pipeline layout once
 		let post_bind_group_layout = create_post_bind_group_layout(device);
-		let post_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+		let post_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
 			label: Some("Post Processing Pipeline Layout"),
 			bind_group_layouts: &[&post_bind_group_layout],
 			push_constant_ranges: &[],
 		});
+		let chunk_layout: wgpu::PipelineLayout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+			label: Some("Chunk Render Pipeline Layout"),
+			bind_group_layouts: layouts,
+			..Default::default()
+		});
+		let sky_layout: wgpu::PipelineLayout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+			label: Some("Sky Render Pipeline Layout"),
+			bind_group_layouts: &[layouts[0],layouts[1]],
+			..Default::default()
+		});
 
 		Self {
-			chunk_pipeline: create_chunk_pipeline(device, layout, &shaders.chunk, config.format),
-			post_pipeline: create_post_pipeline(
-				device,
-				&shaders.post,
-				config.format,
-				&post_pipeline_layout,
-			),
-			sky_pipeline: create_sky_pipeline(device, &shaders.sky, config.format),
-
-			// Store layouts for reuse
-			post_bind_group_layout,
-			post_pipeline_layout,
+			chunk_pipeline: create_chunk_pipeline(device, &chunk_layout, &shaders.chunk, config.format),
+			post_pipeline: create_post_pipeline(device, &post_layout, &shaders.post, config.format),
+			sky_pipeline: create_sky_pipeline(device, &sky_layout, &shaders.sky, config.format),
 		}
 	}
 }
@@ -67,8 +65,8 @@ impl Shaders {
 	fn new(device: &wgpu::Device) -> Self {
 		// Load shader sources first
 		let chunk_shader = get_string!("chunk_shader.wgsl");
-		let sky_shader = get_string!("sky_shader.wgsl");
 		let fxaa_shader = get_string!("fxaa.wgsl");
+		let sky_shader = get_string!("sky_shader.wgsl");
 
 		Self {
 			chunk: create_shader(device, "Chunk Shader", &chunk_shader),
@@ -146,9 +144,9 @@ fn create_chunk_pipeline(
 #[inline]
 fn create_post_pipeline(
 	device: &wgpu::Device,
+	layout: &wgpu::PipelineLayout,
 	shader: &wgpu::ShaderModule,
 	format: wgpu::TextureFormat,
-	layout: &wgpu::PipelineLayout,
 ) -> wgpu::RenderPipeline {
 	create_base_pipeline(
 		device,
@@ -159,6 +157,24 @@ fn create_post_pipeline(
 		None,
 		default_primitive_state(),
 		"Post Processing Pipeline",
+	)
+}
+#[inline]
+fn create_sky_pipeline(
+	device: &wgpu::Device,
+	layout: &wgpu::PipelineLayout,
+	shader: &wgpu::ShaderModule,
+	format: wgpu::TextureFormat,
+) -> wgpu::RenderPipeline {
+	create_base_pipeline(
+		device,
+		Some(layout),
+		shader,
+		format,
+		&[],
+		Some(depth_stencil_state()),
+		default_primitive_state(),
+		"Sky Render Pipeline",
 	)
 }
 #[inline]
@@ -187,47 +203,7 @@ fn create_post_bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout
 		],
 	})
 }
-#[inline]
-fn create_sky_pipeline(
-	device: &wgpu::Device,
-	shader: &wgpu::ShaderModule,
-	format: wgpu::TextureFormat,
-) -> wgpu::RenderPipeline {
-	device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-		label: Some("Sky Render Pipeline"),
-		layout: None,
-		vertex: wgpu::VertexState {
-			module: shader,
-			entry_point: Some("vs_main"),
-			compilation_options: Default::default(),
-			buffers: &[],
-		},
-		fragment: Some(wgpu::FragmentState {
-			module: shader,
-			entry_point: Some("fs_main"),
-			compilation_options: Default::default(),
-			targets: &[Some(wgpu::ColorTargetState {
-				format,
-				blend: None,
-				write_mask: wgpu::ColorWrites::ALL,
-			})],
-		}),
-		primitive: wgpu::PrimitiveState {
-			topology: wgpu::PrimitiveTopology::TriangleList,
-			..Default::default()
-		},
-		depth_stencil: Some(wgpu::DepthStencilState {
-			format: texture::DEPTH_FORMAT,
-			depth_write_enabled: false,
-			depth_compare: wgpu::CompareFunction::LessEqual,
-			stencil: wgpu::StencilState::default(),
-			bias: wgpu::DepthBiasState::default(),
-		}),
-		multisample: wgpu::MultisampleState::default(),
-		multiview: None,
-		cache: None,
-	})
-}
+
 
 // --- Pipeline Configuration ---
 #[inline]
@@ -270,32 +246,35 @@ pub fn render_all(current_state: &mut State) -> Result<(), wgpu::SurfaceError> {
 
 	// Reusable render pass descriptors
 	let binding = current_state.texture_manager().depth_texture().create_view(&wgpu::TextureViewDescriptor::default());
-	let sky_pass_descriptor = wgpu::RenderPassDescriptor {
-		label: Some("Sky Render Pass"),
-		color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-			view: &view,
-			resolve_target: None,
-			ops: wgpu::Operations {
-				load: wgpu::LoadOp::Load,
-				store: wgpu::StoreOp::Store,
-			},
-		})],
-		depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-			view: &binding,
-			depth_ops: Some(wgpu::Operations {
-				load: wgpu::LoadOp::Clear(1.0),
-				store: wgpu::StoreOp::Store,
+	{
+		let sky_pass_descriptor = wgpu::RenderPassDescriptor {
+			label: Some("Sky Render Pass"),
+			color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+				view: &view,
+				resolve_target: None,
+				ops: wgpu::Operations {
+					load: wgpu::LoadOp::Load,
+					store: wgpu::StoreOp::Store,
+				},
+			})],
+			depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+				view: &binding,
+				depth_ops: Some(wgpu::Operations {
+					load: wgpu::LoadOp::Clear(1.0),
+					store: wgpu::StoreOp::Store,
+				}),
+				stencil_ops: None,
 			}),
-			stencil_ops: None,
-		}),
-		occlusion_query_set: None,
-		timestamp_writes: None,
-	};
+			occlusion_query_set: None,
+			timestamp_writes: None,
+		};
 
-	let mut sky_pass = encoder.begin_render_pass(&sky_pass_descriptor);
-	sky_pass.set_pipeline(&current_state.pipeline().sky_pipeline);
-	sky_pass.draw(0..3, 0..1);
-	drop(sky_pass);
+		let mut sky_pass = encoder.begin_render_pass(&sky_pass_descriptor);
+		sky_pass.set_pipeline(&current_state.pipeline().sky_pipeline);
+		sky_pass.set_bind_group(0, current_state.texture_manager().bind_group(), &[]);
+		sky_pass.set_bind_group(1, current_state.camera_system().bind_group(), &[]);
+		sky_pass.draw(0..6, 0..1); // Now 6 vertices instead of 3
+	}
 
 	// 3D pass
 	if current_state.is_world_running {
@@ -312,7 +291,7 @@ pub fn render_all(current_state: &mut State) -> Result<(), wgpu::SurfaceError> {
 			depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
 				view: &binding,
 				depth_ops: Some(wgpu::Operations {
-					load: wgpu::LoadOp::Load,
+					load: wgpu::LoadOp::Clear(1.0),
 					store: wgpu::StoreOp::Store,
 				}),
 				stencil_ops: None,
@@ -389,7 +368,6 @@ pub fn render_all(current_state: &mut State) -> Result<(), wgpu::SurfaceError> {
 			timestamp_writes: None,
 		});
 
-		// Use the UIManager's render method instead of manual rendering
 		current_state.ui_manager.render(&mut ui_rpass);
 	}
 

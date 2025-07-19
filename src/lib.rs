@@ -184,18 +184,14 @@ impl<'a> State<'a> {
 			},],
 			label: Some("chunk_bind_group_layout"),
 		});
-		let render_pipeline_layout: wgpu::PipelineLayout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-			label: Some("Render Pipeline Layout"),
-			bind_group_layouts: &[
+		//wgpu::BindGroupLayout
+		let layouts = [
 				&texture_manager.bind_group_layout(),
 				&camera_system.bind_group_layout(),
 				&chunk_bind_group_layout,
+			];
 
-			],
-			..Default::default()
-		});
-
-		let pipeline: render::pipeline::Pipeline = render::pipeline::Pipeline::new(&device, &config, &render_pipeline_layout);
+		let pipeline: render::pipeline::Pipeline = render::pipeline::Pipeline::new(&device, &config, &layouts);
 
 		let mut ui_manager:ui::manager::UIManager = ui::manager::UIManager::new(&device, &config, &queue);
 		ui_manager.setup_ui();
