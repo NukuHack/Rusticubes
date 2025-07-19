@@ -40,6 +40,7 @@ pub mod render { // rendering related
 	pub mod texture;
 	pub mod pipeline;
 	pub mod world;
+	pub mod skybox;
 }
 pub mod game { // game related, instance related
 	pub mod items; // the items and item stack impl.
@@ -99,6 +100,8 @@ pub struct RenderContext<'a> {
 	config: wgpu::SurfaceConfiguration,
 	size: winit::dpi::PhysicalSize<u32>,
 	chunk_bind_group_layout:  wgpu::BindGroupLayout,
+	skybox_bind_group_layout:  wgpu::BindGroupLayout,
+	skybox: render::skybox::Skybox,
 }
 
 impl<'a> State<'a> {
@@ -184,17 +187,65 @@ impl<'a> State<'a> {
 			},],
 			label: Some("chunk_bind_group_layout"),
 		});
+		let skybox_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+			entries: &[
+				wgpu::BindGroupLayoutEntry {
+					binding: 0,
+					visibility: wgpu::ShaderStages::FRAGMENT,
+					ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+					count: None,
+				},
+				wgpu::BindGroupLayoutEntry {
+					binding: 1,
+					visibility: wgpu::ShaderStages::FRAGMENT,
+					ty: wgpu::BindingType::Texture {
+						sample_type: wgpu::TextureSampleType::Float { filterable: true },
+						view_dimension: wgpu::TextureViewDimension::D2,
+						multisampled: false,
+					},
+					count: None,
+				},
+			],
+			label: Some("skybox_bind_group_layout"),
+		});
+		let post_bind_group_layout =  device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+			label: Some("Post Processing Bind Group Layout"),
+			entries: &[
+				// Texture
+				wgpu::BindGroupLayoutEntry {
+					binding: 0,
+					visibility: wgpu::ShaderStages::FRAGMENT,
+					ty: wgpu::BindingType::Texture {
+						sample_type: wgpu::TextureSampleType::Float { filterable: true },
+						view_dimension: wgpu::TextureViewDimension::D2,
+						multisampled: false,
+					},
+					count: None,
+				},
+				// Sampler
+				wgpu::BindGroupLayoutEntry {
+					binding: 1,
+					visibility: wgpu::ShaderStages::FRAGMENT,
+					ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+					count: None,
+				},
+			],
+		});
 		//wgpu::BindGroupLayout
 		let layouts = [
-				&texture_manager.bind_group_layout(),
-				&camera_system.bind_group_layout(),
-				&chunk_bind_group_layout,
-			];
+			&texture_manager.bind_group_layout(),
+			&camera_system.bind_group_layout(),
+			&chunk_bind_group_layout,
+			&skybox_bind_group_layout,
+			&post_bind_group_layout,
+		];
 
 		let pipeline: render::pipeline::Pipeline = render::pipeline::Pipeline::new(&device, &config, &layouts);
 
 		let mut ui_manager:ui::manager::UIManager = ui::manager::UIManager::new(&device, &config, &queue);
 		ui_manager.setup_ui();
+
+		let skybox = render::skybox::Skybox::new(&device, &queue, &skybox_bind_group_layout,"basic_skybox.jpg").expect("basic skybox should work");
 		
 		let render_context: RenderContext = RenderContext{
 			surface,
@@ -203,6 +254,8 @@ impl<'a> State<'a> {
 			config,
 			size,
 			chunk_bind_group_layout,
+			skybox_bind_group_layout,
+			skybox,
 		};
 
 		Self {
@@ -260,6 +313,14 @@ impl<'a> State<'a> {
 	pub fn ui_manager(&self) -> &ui::manager::UIManager {
 		&self.ui_manager
 	}
+	#[inline]
+	pub fn skybox(&self) -> &render::skybox::Skybox {
+		&self.render_context.skybox
+	}
+
+
+
+
 	#[inline]
 	pub fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) -> bool {
 		if new_size.width > 0 && new_size.height > 0 {

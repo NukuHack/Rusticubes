@@ -19,29 +19,30 @@ pub struct Pipeline {
 impl Pipeline {
 	/// Creates all render pipelines with proper configuration
 	#[inline]
-	pub fn new(
-		device: &wgpu::Device,
-		config: &wgpu::SurfaceConfiguration,
-		layouts: &[&wgpu::BindGroupLayout],
-	) -> Self {
+	pub fn new(device: &wgpu::Device, config: &wgpu::SurfaceConfiguration, layouts: &[&wgpu::BindGroupLayout]) -> Self {
+/*layouts = [
+	&texture_manager.bind_group_layout(),
+	&camera_system.bind_group_layout(),
+	&chunk_bind_group_layout,
+	&skybox_bind_group_layout
+	&post_bind_group_layout
+];*/
 		// Create shaders
 		let shaders = Shaders::new(device);
 
-		// Create post processing bind group layout and pipeline layout once
-		let post_bind_group_layout = create_post_bind_group_layout(device);
 		let post_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
 			label: Some("Post Processing Pipeline Layout"),
-			bind_group_layouts: &[&post_bind_group_layout],
+			bind_group_layouts: &[layouts[4]],
 			push_constant_ranges: &[],
 		});
 		let chunk_layout: wgpu::PipelineLayout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
 			label: Some("Chunk Render Pipeline Layout"),
-			bind_group_layouts: layouts,
+			bind_group_layouts: &[layouts[0],layouts[1],layouts[2]],
 			..Default::default()
 		});
 		let sky_layout: wgpu::PipelineLayout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
 			label: Some("Sky Render Pipeline Layout"),
-			bind_group_layouts: &[layouts[0],layouts[1]],
+			bind_group_layouts: &[layouts[3],layouts[1]],
 			..Default::default()
 		});
 
@@ -172,36 +173,10 @@ fn create_sky_pipeline(
 		shader,
 		format,
 		&[],
-		Some(depth_stencil_state()),
+		None,
 		default_primitive_state(),
 		"Sky Render Pipeline",
 	)
-}
-#[inline]
-fn create_post_bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
-	device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-		label: Some("Post Processing Bind Group Layout"),
-		entries: &[
-			// Texture
-			wgpu::BindGroupLayoutEntry {
-				binding: 0,
-				visibility: wgpu::ShaderStages::FRAGMENT,
-				ty: wgpu::BindingType::Texture {
-					sample_type: wgpu::TextureSampleType::Float { filterable: true },
-					view_dimension: wgpu::TextureViewDimension::D2,
-					multisampled: false,
-				},
-				count: None,
-			},
-			// Sampler
-			wgpu::BindGroupLayoutEntry {
-				binding: 1,
-				visibility: wgpu::ShaderStages::FRAGMENT,
-				ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-				count: None,
-			},
-		],
-	})
 }
 
 
@@ -247,7 +222,7 @@ pub fn render_all(current_state: &mut State) -> Result<(), wgpu::SurfaceError> {
 	// Reusable render pass descriptors
 	let binding = current_state.texture_manager().depth_texture().create_view(&wgpu::TextureViewDescriptor::default());
 	{
-		let sky_pass_descriptor = wgpu::RenderPassDescriptor {
+		let mut sky_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
 			label: Some("Sky Render Pass"),
 			color_attachments: &[Some(wgpu::RenderPassColorAttachment {
 				view: &view,
@@ -257,23 +232,17 @@ pub fn render_all(current_state: &mut State) -> Result<(), wgpu::SurfaceError> {
 					store: wgpu::StoreOp::Store,
 				},
 			})],
-			depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-				view: &binding,
-				depth_ops: Some(wgpu::Operations {
-					load: wgpu::LoadOp::Clear(1.0),
-					store: wgpu::StoreOp::Store,
-				}),
-				stencil_ops: None,
-			}),
+			depth_stencil_attachment: None,
 			occlusion_query_set: None,
 			timestamp_writes: None,
-		};
-
-		let mut sky_pass = encoder.begin_render_pass(&sky_pass_descriptor);
+		});
 		sky_pass.set_pipeline(&current_state.pipeline().sky_pipeline);
-		sky_pass.set_bind_group(0, current_state.texture_manager().bind_group(), &[]);
+		
+		sky_pass.set_bind_group(0, &current_state.skybox().bind_group, &[]);
+		
+		//sky_pass.set_bind_group(0, current_state.texture_manager().bind_group(), &[]);
 		sky_pass.set_bind_group(1, current_state.camera_system().bind_group(), &[]);
-		sky_pass.draw(0..6, 0..1); // Now 6 vertices instead of 3
+		sky_pass.draw(0..36, 0..1);
 	}
 
 	// 3D pass

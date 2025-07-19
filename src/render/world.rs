@@ -116,10 +116,7 @@ impl Chunk {
 		// Create position buffer
 		let position_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
 			label: Some("Chunk Position Buffer"),
-			contents: bytemuck::cast_slice(&[
-				chunk_pos.into(),
-				0.0 as u64,
-			]),
+			contents: bytemuck::cast_slice(&[<ChunkCoord as Into<u64>>::into(chunk_pos)]),
 			usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
 		});
 
