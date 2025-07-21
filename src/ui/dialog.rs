@@ -81,10 +81,7 @@ impl DialogManager {
 	}
 
 	/// Shows a dialog with a callback (non-blocking)
-	pub fn ask_with_callback<F>(&self, prompt: impl Into<String>, callback: F) -> u8
-	where
-		F: FnMut(bool) + 'static,
-	{
+	pub fn ask_with_callback<F: FnMut(bool) + 'static>(&self, prompt: impl Into<String>, callback: F) -> u8 {
 		let prompt = prompt.into();
 		let id: u8 = self.inner.counter.fetch_add(1, Ordering::Relaxed);
 		let response_holder = Arc::new(Mutex::new(None));

@@ -5,32 +5,32 @@
 // Assuming CHUNK_SIZE_I is passed as a uniform or constant
 const CHUNK_SIZE_I: i32 = 16i; // Adjust based on your actual chunk size
 
-fn extract_x(coord: u64) -> i32 {
-	let x = i32((coord >> 38u) & u64(0x3FFFFFFu));
-	// Simplified sign extension using arithmetic shift
-	return (x << 38u) >> 38u;  // Matches 26-bit sign extension
-}
-fn extract_y(coord: u64) -> i32 {
-	let y = i32((coord >> 26u) & u64(0xFFFu));
-	// Simplified sign extension
-	return (y << 52u) >> 52u;  // Matches 12-bit sign extension
-}
-fn extract_z(coord: u64) -> i32 {
-	let z = i32(coord & u64(0x3FFFFFFu));
-	// Simplified sign extension
-	return (z << 38u) >> 38u;  // Matches 26-bit sign extension
-}
-// Main function to convert ChunkCoord to world position
 fn to_world_pos(coord: u64) -> vec3f {
-	let x = extract_x(coord);
-	let y = extract_y(coord);
-	let z = extract_z(coord);
-	
-	return vec3f(
-		f32(x * CHUNK_SIZE_I),
-		f32(y * CHUNK_SIZE_I),
-		f32(z * CHUNK_SIZE_I)
-	);
+    // Extract and sign-extend x (26 bits)
+    let xr = i32((coord >> 38) & 0x3FFFFFF);
+    let x = (xr << 38) >> 38;
+    
+    // Extract and sign-extend y (12 bits)
+    let yr = i32((coord >> 26) & 0xFFF);
+    let y = (yr << 52) >> 52;
+    
+    // Extract and sign-extend z (26 bits)
+    let zr = i32(coord & 0x3FFFFFF);
+    let z = (zr << 38) >> 38;
+    
+    return vec3f(
+        f32(x * CHUNK_SIZE_I),
+        f32(y * CHUNK_SIZE_I),
+        f32(z * CHUNK_SIZE_I)
+    );
+}
+
+fn to_chunk_pos(coord: u32) -> vec3f {
+    return vec3f(
+        f32((coord >> 0) & 0xF),
+        f32((coord >> 4) & 0xF),
+        f32((coord >> 8) & 0xF)
+    );
 }
 
 fn normal_to_rot(pos: vec3f, normal: u32) -> vec3f {
@@ -72,19 +72,10 @@ fn vs_main(
 	@location(1) instance_data: u32,
 	@builtin(vertex_index) vert_idx: u32
 ) -> VertexOutput {
-	// Unpack vertex position (5 bits per axis)
-	let vertex_pos = vec3f(
-		f32((vertex_data >> 0u) & 0x1Fu),
-		f32((vertex_data >> 5u) & 0x1Fu),
-		f32((vertex_data >> 10u) & 0x1Fu)
-		);
-	
-	// Unpack instance position (4 bits per axis) 0-15 as position
-	let instance_pos = vec3f(
-		f32((instance_data >> 0u) & 0xFu),
-		f32((instance_data >> 4u) & 0xFu),
-		f32((instance_data >> 8u) & 0xFu)
-		);
+	// Unpack vertex position using 4-bit extractor
+	let vertex_pos = to_chunk_pos(vertex_data);
+	// Unpack instance position
+	let instance_pos = to_chunk_pos(instance_data);
 	
 	// Get normal from instance data (bits 16-18)
 	let normal_idx = (instance_data >> 12u) & 0x7u;

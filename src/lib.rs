@@ -172,7 +172,31 @@ impl<'a> State<'a> {
 
 		surface.configure(&device, &config);
 
-		let texture_manager: render::texture::TextureManager = render::texture::TextureManager::new(&device, &queue, &config);
+		let post_bind_group_layout =  device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+			label: Some("Post Processing Bind Group Layout"),
+			entries: &[
+				// Texture
+				wgpu::BindGroupLayoutEntry {
+					binding: 0,
+					visibility: wgpu::ShaderStages::FRAGMENT,
+					ty: wgpu::BindingType::Texture {
+						sample_type: wgpu::TextureSampleType::Float { filterable: true },
+						view_dimension: wgpu::TextureViewDimension::D2,
+						multisampled: false,
+					},
+					count: None,
+				},
+				// Sampler
+				wgpu::BindGroupLayoutEntry {
+					binding: 1,
+					visibility: wgpu::ShaderStages::FRAGMENT,
+					ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+					count: None,
+				},
+			],
+		});
+
+		let texture_manager: render::texture::TextureManager = render::texture::TextureManager::new(&device, &queue, &config, &post_bind_group_layout);
 
 		let chunk_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
 			entries: &[wgpu::BindGroupLayoutEntry {
@@ -207,29 +231,6 @@ impl<'a> State<'a> {
 				},
 			],
 			label: Some("skybox_bind_group_layout"),
-		});
-		let post_bind_group_layout =  device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-			label: Some("Post Processing Bind Group Layout"),
-			entries: &[
-				// Texture
-				wgpu::BindGroupLayoutEntry {
-					binding: 0,
-					visibility: wgpu::ShaderStages::FRAGMENT,
-					ty: wgpu::BindingType::Texture {
-						sample_type: wgpu::TextureSampleType::Float { filterable: true },
-						view_dimension: wgpu::TextureViewDimension::D2,
-						multisampled: false,
-					},
-					count: None,
-				},
-				// Sampler
-				wgpu::BindGroupLayoutEntry {
-					binding: 1,
-					visibility: wgpu::ShaderStages::FRAGMENT,
-					ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-					count: None,
-				},
-			],
 		});
 		//wgpu::BindGroupLayout
 		let layouts = [

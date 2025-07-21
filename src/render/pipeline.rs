@@ -2,7 +2,7 @@
 use crate::ext::ptr;
 use wgpu::util::DeviceExt;
 use crate::State;
-use crate::render::meshing::{Vertex, InstanceRaw};
+use crate::render::meshing::{Vertex, InstanceRaw, VERTICES};
 use crate::render::texture;
 use crate::get_string;
 use wgpu;
@@ -274,25 +274,17 @@ pub fn render_all(current_state: &mut State) -> Result<(), wgpu::SurfaceError> {
 		rpass.set_bind_group(0, current_state.texture_manager().bind_group(), &[]);
 		rpass.set_bind_group(1, current_state.camera_system().bind_group(), &[]);
 		{
-			//let indices = vec![0, 1, 2, 2, 3, 0]; // Two triangles forming a quad
-			let mut vertices: Vec<Vertex> = vec!();
-			let pos = [[0, 0, 0], [0, 0, 1], [1, 0, 1], [1, 0, 1], [1, 0, 0], [0, 0, 0]];
-			for i in 0..pos.len() {
-				let position = u16::from((pos[i][0]) as u16 | ((pos[i][1]) as u16) << 5 | ((pos[i][2]) as u16) << 10) as u32;
-				vertices.push(Vertex { position: position });
-			}
 			// Create vertex buffer
-			let vertex_buffer = current_state.device().create_buffer_init(&wgpu::util::BufferInitDescriptor {
-				label: Some("Vertex Buffer"),
-				contents: bytemuck::cast_slice(&vertices),
-				usage: wgpu::BufferUsages::VERTEX,
-			});
+	        let vertex_buffer = current_state.device().create_buffer_init(&wgpu::util::BufferInitDescriptor {
+	            label: Some("Vertex Buffer"), contents: bytemuck::cast_slice(&VERTICES), usage: wgpu::BufferUsages::VERTEX });
+	        rpass.set_vertex_buffer(0, vertex_buffer.slice(..));
+
+			//let indices = vec![0, 1, 2, 2, 3, 0]; // Two triangles forming a quad
 			/*let index_buffer = current_state.device().create_buffer_init(&wgpu::util::BufferInitDescriptor {
 				label: Some("Index Buffer"),
 				contents: bytemuck::cast_slice(&indices),
 				usage: wgpu::BufferUsages::INDEX,
 			});*/
-			rpass.set_vertex_buffer(0, vertex_buffer.slice(..));
 			//rpass.set_index_buffer(index_buffer.slice(..), wgpu::IndexFormat::Uint16);
 		}
 		ptr::get_gamestate().world().render_chunks(&mut rpass);

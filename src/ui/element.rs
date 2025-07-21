@@ -29,9 +29,8 @@ pub enum UIElementData {
 	},
 }
 
-impl Default for UIElementData {
-	#[inline]
-	fn default() -> Self { UIElementData::Panel }
+impl UIElementData {
+	#[inline] pub const fn default() -> Self { UIElementData::Panel }
 }
 
 impl fmt::Debug for UIElementData {
@@ -89,9 +88,8 @@ pub struct UIElement {
 	pub enabled: bool,
 }
 
-impl Default for UIElement {
-	#[inline]
-	fn default() -> Self {
+impl UIElement {
+	#[inline] pub const fn default() -> Self {
 		Self {
 			id: 0,
 			data: UIElementData::default(),
@@ -123,11 +121,22 @@ impl fmt::Debug for UIElement {
 impl UIElement {
 	// Element creation
 	#[inline]
-	pub fn new(id: usize, element_type: UIElementData) -> Self {
-		Self { id, data: element_type, color: Color::DEF_COLOR, ..Default::default() }
+	pub const fn new(id: usize, element_data: UIElementData) -> Self {
+		Self {
+			id,
+			data: element_data,
+			position: (0.0, 0.0),
+			size: (0.0, 0.0),
+			color: Color::DEF_COLOR,
+			hovered: false,
+			z_index: 0,
+			visible: true,
+			border: Border::NONE,
+			enabled: true,
+		}
 	}
 	#[inline]
-	pub fn panel(id: usize) -> Self { Self::new(id, UIElementData::Panel) }
+	pub const fn panel(id: usize) -> Self { Self::new(id, UIElementData::Panel) }
 	#[inline]
 	pub fn label<T: Textlike>(id: usize, text: T) -> Self {
 		Self::new(id, UIElementData::Label { text: text.into(), text_color: Color::DEF_COLOR })
@@ -137,7 +146,7 @@ impl UIElement {
 		Self::new(id, UIElementData::Button { text: text.into(), text_color: Color::DEF_COLOR, on_click: None })
 	}
 	#[inline]
-	pub fn input(id: usize) -> Self {
+	pub const fn input(id: usize) -> Self {
 		Self::new(id, UIElementData::InputField { text: String::new(), text_color: Color::DEF_COLOR, placeholder: None })
 	}
 	#[inline]
@@ -160,7 +169,7 @@ impl UIElement {
 		})
 	}
 	#[inline]
-	pub fn divider(id: usize) -> Self { Self::new(id, UIElementData::Divider) }
+	pub const fn divider(id: usize) -> Self { Self::new(id, UIElementData::Divider) }
 	#[inline]
 	pub fn multi_state_button<T: Textlike>(id: usize, states: Vec<T>) -> Self {
 		Self::new(id, UIElementData::MultiStateButton {
@@ -170,7 +179,7 @@ impl UIElement {
 		})
 	}
 	#[inline]
-	pub fn slider(id: usize, min_value: f32, max_value: f32) -> Self {
+	pub const fn slider(id: usize, min_value: f32, max_value: f32) -> Self {
 		Self::new(id, UIElementData::Slider {
 			min_value, max_value, //vertical: false,
 			slider_color: Color::DEF_COLOR,

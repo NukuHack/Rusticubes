@@ -23,7 +23,7 @@ pub struct InstanceRaw {
 
 impl Vertex {
 	/// Describes the vertex buffer layout for wgpu
-	pub fn desc() -> wgpu::VertexBufferLayout<'static> {
+	pub const fn desc() -> wgpu::VertexBufferLayout<'static> {
 		wgpu::VertexBufferLayout {
 			array_stride: mem::size_of::<Self>() as wgpu::BufferAddress,
 			step_mode: wgpu::VertexStepMode::Vertex,
@@ -37,9 +37,14 @@ impl Vertex {
 			],
 		}
 	}
+	pub const fn new(pos: u32) -> Self {
+		Self{
+			position: pos
+		}
+	}
 }
 impl InstanceRaw {
-    pub fn desc() -> wgpu::VertexBufferLayout<'static> {
+    pub const fn desc() -> wgpu::VertexBufferLayout<'static> {
         wgpu::VertexBufferLayout {
             array_stride: mem::size_of::<Self>() as wgpu::BufferAddress,
             step_mode: wgpu::VertexStepMode::Instance, // This marks it as instance data
@@ -142,6 +147,15 @@ const CUBE_FACES: [IVec3; 6] = [
 	IVec3::Y,     // [4] Top face
 	IVec3::NEG_Y, // [5] Bottom face
 ];
+pub const VERTICES: [Vertex; 6] = {
+    let p0 = Vertex::new((0 as u16 | (0 as u16) << 4 | (0 as u16) << 8) as u32);
+    let p1 = Vertex::new((0 as u16 | (0 as u16) << 4 | (1 as u16) << 8) as u32);
+    let p2 = Vertex::new((1 as u16 | (0 as u16) << 4 | (1 as u16) << 8) as u32);
+    let p3 = Vertex::new((1 as u16 | (0 as u16) << 4 | (1 as u16) << 8) as u32);
+    let p4 = Vertex::new((1 as u16 | (0 as u16) << 4 | (0 as u16) << 8) as u32);
+    let p5 = Vertex::new((0 as u16 | (0 as u16) << 4 | (0 as u16) << 8) as u32);
+    [p0, p1, p2, p3, p4, p5]
+};
 
 
 // =============================================

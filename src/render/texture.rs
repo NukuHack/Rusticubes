@@ -47,11 +47,12 @@ impl TextureManager {
 		device: &wgpu::Device,
 		queue: &wgpu::Queue,
 		config: &wgpu::SurfaceConfiguration,
+		post_layout: &wgpu::BindGroupLayout,
 	) -> Self {
 		let depth_texture = create_depth_texture(device, config, "Depth Texture");
 
 		let (render_texture, render_texture_view) = create_render_texture(device, config);
-		let post_processing_bind_group = create_post_processing_bind_group(device, &render_texture_view);
+		let post_processing_bind_group = create_post_processing_bind_group(device, &render_texture_view, post_layout);
 
 		// Create resources
 		let bind_group_layout = create_texture_array_bind_group_layout(&device);
@@ -78,32 +79,25 @@ impl TextureManager {
 		}
 	}
 
-	#[inline]
-	pub fn depth_texture(&self) -> &wgpu::Texture {
+	#[inline] pub const fn depth_texture(&self) -> &wgpu::Texture {
 		&self.depth_texture
 	}
-	#[inline]
-	pub fn depth_texture_mut(&mut self) -> &mut wgpu::Texture {
+	#[inline] pub const fn depth_texture_mut(&mut self) -> &mut wgpu::Texture {
 		&mut self.depth_texture
 	}
-	#[inline]
-	pub fn bind_group(&self) -> &wgpu::BindGroup {
+	#[inline] pub const fn bind_group(&self) -> &wgpu::BindGroup {
 		&self.bind_group
 	}
-	#[inline]
-	pub fn bind_group_layout(&self) -> &wgpu::BindGroupLayout {
+	#[inline] pub const fn bind_group_layout(&self) -> &wgpu::BindGroupLayout {
 		&self.bind_group_layout
 	}
-	#[inline]
-	pub fn render_texture(&self) -> &wgpu::Texture {
+	#[inline] pub const fn render_texture(&self) -> &wgpu::Texture {
 		&self.render_texture
 	}
-	#[inline]
-	pub fn render_texture_view(&self) -> &wgpu::TextureView {
+	#[inline] pub const fn render_texture_view(&self) -> &wgpu::TextureView {
 		&self.render_texture_view
 	}
-	#[inline]
-	pub fn post_processing_bind_group(&self) -> &wgpu::BindGroup {
+	#[inline] pub const fn post_processing_bind_group(&self) -> &wgpu::BindGroup {
 		&self.post_processing_bind_group
 	}
 }
@@ -278,29 +272,8 @@ fn create_render_texture(
 fn create_post_processing_bind_group(
 	device: &wgpu::Device,
 	render_texture_view: &wgpu::TextureView,
+	layout: &wgpu::BindGroupLayout,
 ) -> wgpu::BindGroup {
-	let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-		label: Some("Post Processing Bind Group Layout"),
-		entries: &[
-			wgpu::BindGroupLayoutEntry {
-				binding: 0,
-				visibility: wgpu::ShaderStages::FRAGMENT,
-				ty: wgpu::BindingType::Texture {
-					sample_type: wgpu::TextureSampleType::Float { filterable: true },
-					view_dimension: wgpu::TextureViewDimension::D2,
-					multisampled: false,
-				},
-				count: None,
-			},
-			wgpu::BindGroupLayoutEntry {
-				binding: 1,
-				visibility: wgpu::ShaderStages::FRAGMENT,
-				ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-				count: None,
-			},
-		],
-	});
-
 	let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
 		label: Some("Post Processing Sampler"),
 		address_mode_u: wgpu::AddressMode::ClampToEdge,
@@ -314,7 +287,7 @@ fn create_post_processing_bind_group(
 
 	device.create_bind_group(&wgpu::BindGroupDescriptor {
 		label: Some("Post Processing Bind Group"),
-		layout: &layout,
+		layout,
 		entries: &[
 			wgpu::BindGroupEntry {
 				binding: 0,
