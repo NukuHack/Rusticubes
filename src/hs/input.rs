@@ -7,9 +7,8 @@ pub struct InputSystem {
 	pub modifiers: ModifiersState,
 	mouse_captured: bool,
 }
-impl Default for InputSystem {
-	#[inline]
-	fn default() -> Self {
+impl InputSystem {
+	#[inline] pub const fn default() -> Self {
 		Self {
 			previous_mouse: None,
 			mouse_button_state: MouseButtonState::default(),
@@ -19,18 +18,24 @@ impl Default for InputSystem {
 	}
 }
 impl InputSystem {
-	pub fn set_mouse_captured(&mut self, is_captured:bool) {
+	#[inline] pub const fn set_mouse_captured(&mut self, is_captured:bool) {
 		self.mouse_captured = is_captured;
 	}
 
-	#[inline]
-	pub fn mouse_captured(&self) -> bool {
+	#[inline] pub const fn mouse_captured(&self) -> bool {
 		self.mouse_captured
 	}
 }
 
-#[derive(Default)]
 pub struct MouseButtonState {
 	pub left: bool,
 	pub right: bool,
+}
+impl MouseButtonState {
+	pub const fn default() -> Self {
+		Self {
+			left : false,
+			right : false,
+		}
+	}
 }

@@ -47,7 +47,7 @@ impl Chunk {
 			let local_pos:IVec3 = BlockPosition::from(pos).into();
 			match block {
 				Block::Simple(..) => {
-					builder.add_cube(local_pos, block.texture_coords(), self, neighbors);
+					builder.add_cube(local_pos, self, neighbors);
 				},
 				_ => {},
 			}

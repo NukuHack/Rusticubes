@@ -9,7 +9,7 @@ pub struct AABB {
 impl AABB {
 	/// Creates a new AABB from min and max coordinates
 	#[inline]
-	pub fn new(min: Vec3, max: Vec3) -> Self {
+	pub const fn new(min: Vec3, max: Vec3) -> Self {
 		Self { min, max }
 	}
 	
@@ -58,7 +58,7 @@ impl AABB {
 	
 	/// Checks if this AABB overlaps with another AABB
 	#[inline]
-	pub fn intersects(&self, other: &AABB) -> bool {
+	pub const fn intersects(&self, other: &AABB) -> bool {
 		self.min.x <= other.max.x &&
 		self.max.x >= other.min.x &&
 		self.min.y <= other.max.y &&
@@ -69,7 +69,7 @@ impl AABB {
 	
 	/// Checks if a point is inside the AABB
 	#[inline]
-	pub fn contains_point(&self, point: Vec3) -> bool {
+	pub const fn contains_point(&self, point: Vec3) -> bool {
 		point.x >= self.min.x &&
 		point.x <= self.max.x &&
 		point.y >= self.min.y &&
@@ -145,7 +145,7 @@ impl AABB {
 	
 	/// Checks if this AABB completely contains another AABB
 	#[inline]
-	pub fn contains(&self, other: &AABB) -> bool {
+	pub const fn contains(&self, other: &AABB) -> bool {
 		self.min.x <= other.min.x &&
 		self.max.x >= other.max.x &&
 		self.min.y <= other.min.y &&

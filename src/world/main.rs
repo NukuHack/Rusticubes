@@ -31,18 +31,15 @@ impl World {
 		}
 	}
 
-	#[inline]
-	pub fn chunk_count(&self) -> usize {
+	#[inline] pub fn chunk_count(&self) -> usize {
 		self.chunks.len()
 	}
 
-	#[inline]
-	pub fn get_chunk(&self, coord: ChunkCoord) -> Option<&Chunk> {
+	#[inline] pub fn get_chunk(&self, coord: ChunkCoord) -> Option<&Chunk> {
 		self.chunks.get(&coord)
 	}
 
-	#[inline]
-	pub fn get_chunk_mut(&mut self, coord: ChunkCoord) -> Option<&mut Chunk> {
+	#[inline] pub fn get_chunk_mut(&mut self, coord: ChunkCoord) -> Option<&mut Chunk> {
 		self.chunks.get_mut(&coord)
 	}
 
@@ -158,14 +155,12 @@ impl World {
 		}
 	}
 
-	#[inline]
-	pub fn set_chunk(&mut self, chunk_coord: ChunkCoord, chunk: Chunk) {
+	#[inline] pub fn set_chunk(&mut self, chunk_coord: ChunkCoord, chunk: Chunk) {
 		self.chunks.insert(chunk_coord, chunk);
 		self.loaded_chunks.insert(chunk_coord);
 	}
 
-	#[inline]
-	pub fn unload_chunk(&mut self, chunk_coord: ChunkCoord) {
+	#[inline] pub fn unload_chunk(&mut self, chunk_coord: ChunkCoord) {
 		self.chunks.remove(&chunk_coord);
 		self.loaded_chunks.remove(&chunk_coord);
 	}

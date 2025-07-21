@@ -29,15 +29,15 @@ pub enum InventoryUIState {
 // 3. Better builder pattern for InventoryUIState
 impl InventoryUIState {
 	#[inline]
-	pub fn pl() -> PlayerInvBuilder {
+	pub const fn pl() -> PlayerInvBuilder {
 		PlayerInvBuilder::new()
 	}
 	#[inline]
-	pub fn str() -> StorageInvBuilder {
+	pub const fn str() -> StorageInvBuilder {
 		StorageInvBuilder::new()
 	}
 	#[inline]
-	pub fn craft() -> CraftingInvBuilder {
+	pub const fn craft() -> CraftingInvBuilder {
 		CraftingInvBuilder::new()
 	}
 }
@@ -47,16 +47,16 @@ pub struct PlayerInvBuilder {
 
 impl PlayerInvBuilder {
 	#[inline]
-	fn new() -> Self {
+	const fn new() -> Self {
 		Self { inv: InvState::default() }
 	}
 	#[inline]
-	pub fn inv(mut self, inv: InvState) -> Self {
+	pub const fn inv(mut self, inv: InvState) -> Self {
 		self.inv = inv;
 		self
 	}
 	#[inline]
-	pub fn b(self) -> InventoryUIState {
+	pub const fn b(self) -> InventoryUIState {
 		InventoryUIState::Player { inv: self.inv }
 	}
 }
@@ -66,24 +66,24 @@ pub struct StorageInvBuilder {
 }
 impl StorageInvBuilder {
 	#[inline]
-	fn new() -> Self {
+	const fn new() -> Self {
 		Self { 
 			inv: InvState::Items, 
 			size: SlotCount::MED 
 		}
 	}
 	#[inline]
-	pub fn inv(mut self, inv: InvState) -> Self {
+	pub const fn inv(mut self, inv: InvState) -> Self {
 		self.inv = inv;
 		self
 	}
 	#[inline]
-	pub fn size(mut self, size: SlotCount) -> Self {
+	pub const fn size(mut self, size: SlotCount) -> Self {
 		self.size = size;
 		self
 	}
 	#[inline]
-	pub fn b(self) -> InventoryUIState {
+	pub const fn b(self) -> InventoryUIState {
 		InventoryUIState::Storage { 
 			inv: self.inv, 
 			size: self.size 
@@ -97,7 +97,7 @@ pub struct CraftingInvBuilder {
 }
 impl CraftingInvBuilder {
 	#[inline]
-	fn new() -> Self {
+	const fn new() -> Self {
 		Self { 
 			inv: InvState::Items, 
 			size: SlotCount::custom(3, 3),
@@ -105,22 +105,22 @@ impl CraftingInvBuilder {
 		}
 	}
 	#[inline]
-	pub fn inv(mut self, inv: InvState) -> Self {
+	pub const fn inv(mut self, inv: InvState) -> Self {
 		self.inv = inv;
 		self
 	}
 	#[inline]
-	pub fn input(mut self, size: SlotCount) -> Self {
+	pub const fn input(mut self, size: SlotCount) -> Self {
 		self.size = size;
 		self
 	}
 	#[inline]
-	pub fn result(mut self, result: SlotCount) -> Self {
+	pub const fn result(mut self, result: SlotCount) -> Self {
 		self.result = result;
 		self
 	}
 	#[inline]
-	pub fn b(self) -> InventoryUIState {
+	pub const fn b(self) -> InventoryUIState {
 		InventoryUIState::Crafting { 
 			inv: self.inv, 
 			size: self.size, 
@@ -128,17 +128,16 @@ impl CraftingInvBuilder {
 		}
 	}
 }
-impl Default for InventoryUIState {
+impl InventoryUIState {
 	#[inline]
-	fn default() -> Self {
+	pub const fn default() -> Self {
 		Self::Player { inv: InvState::default() }
 	}
 }
 
 
-#[derive(PartialEq, Clone, Copy, Default, Debug)]
+#[derive(PartialEq, Clone, Copy, Debug)]
 pub enum InvState {
-	#[default]
 	All,    // everything
 	Items,  // hotbar and items
 	Armor,  // only equipables
@@ -146,9 +145,14 @@ pub enum InvState {
 	Hotbar, // hotbar
 	None,   // ofc nothing
 }
-#[derive(PartialEq, Clone, Copy, Default)]
+
+impl  InvState {
+	pub const fn default() -> Self {
+		Self::All
+	}
+}
+#[derive(PartialEq, Clone, Copy)]
 pub enum AreaType {
-	#[default]
 	Panel,
 	Inventory,
 	Hotbar,
@@ -157,6 +161,11 @@ pub enum AreaType {
 	Storage,
 	Input,
 	Output,
+}
+impl AreaType {
+	pub const fn default() -> Self {
+		Self::Inventory
+	}
 }
 impl std::fmt::Debug for AreaType {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -178,14 +187,12 @@ pub struct SlotCount {
 	pub columns: u8,
 }
 
-impl Default for SlotCount {
+impl SlotCount {
 	#[inline]
-	fn default() -> Self {
+	pub const fn default() -> Self {
 		Self::SMALL
 	}
-}
 
-impl SlotCount {
 	// predefined sizes
 	pub const NONE: Self = Self { rows: 0, columns: 0 }; // 0
 	pub const TINY: Self = Self { rows: 3, columns: 5 }; // 15
@@ -195,15 +202,15 @@ impl SlotCount {
 	pub const GIANT: Self = Self { rows: 7, columns: 13 }; // 101
 
 	#[inline]
-	pub fn total(&self) -> usize {
+	pub const fn total(&self) -> usize {
 		self.rows as usize * self.columns as usize
 	}
 
 	#[inline]
-	pub fn custom(height: u8, width: u8) -> Self {
+	pub const fn custom(rows: u8, columns: u8) -> Self {
 		Self {
-			rows: height,
-			columns: width,
+			rows,
+			columns,
 		}
 	}
 }
@@ -236,9 +243,9 @@ pub struct AreaLayout {
 	pub columns: u8,
 }
 
-impl Default for InventoryLayout {
+impl InventoryLayout {
 	#[inline]
-	fn default() -> Self {
+	pub const fn default() -> Self {
 		Self {
 			section_spacing: 0.12,
 			panel_padding: 0.05,
@@ -254,9 +261,9 @@ impl Default for InventoryLayout {
 	}
 }
 
-impl Default for AreaLayout {
+impl AreaLayout {
 	#[inline]
-	fn default() -> Self {
+	pub const fn default() -> Self {
 		Self {
 			name : AreaType::default(),
 			position: (0.0, 0.0),
@@ -265,11 +272,10 @@ impl Default for AreaLayout {
 			columns: 0,
 		}
 	}
-}
 
-impl AreaLayout {
+
 	#[inline]
-	pub fn new(rows: u8, columns: u8, center_pos: (f32, f32), name: AreaType) -> Self {
+	pub const fn new(rows: u8, columns: u8, center_pos: (f32, f32), name: AreaType) -> Self {
 		let width = (columns as f32 * SLOT) + ((columns.saturating_sub(1)) as f32 * PADDING);
 		let height = (rows as f32 * SLOT) + ((rows.saturating_sub(1)) as f32 * PADDING);
 		
@@ -290,20 +296,20 @@ impl AreaLayout {
 	
 	/// Get the bounds of this area (left, bottom, right, top)
 	#[inline]
-	pub fn get_bounds(&self) -> (f32, f32, f32, f32) {
+	pub const fn get_bounds(&self) -> (f32, f32, f32, f32) {
 		let (x, y) = self.position;
 		let (w, h) = self.size;
 		(x, y, x + w, y + h)
 	}
 	#[inline]
-	pub fn contains_point(&self, x: f32, y: f32) -> bool {
+	pub const fn contains_point(&self, x: f32, y: f32) -> bool {
 		let (min_x, min_y, max_x, max_y) = self.get_bounds();
 		x >= min_x && x <= max_x && y >= min_y && y <= max_y
 	}
 	
 	/// Get the center position of this area
 	#[inline]
-	pub fn get_center(&self) -> (f32, f32) {
+	pub const fn get_center(&self) -> (f32, f32) {
 		let (x, y) = self.position;
 		let (w, h) = self.size;
 		(x + w / 2.0, y + h / 2.0)
@@ -311,19 +317,19 @@ impl AreaLayout {
 	
 	/// Get the position for a specific slot (row, col) - returns bottom-left corner
 	#[inline]
-	pub fn get_slot_position(&self, row: u8, col: u8) -> (f32, f32) {
+	pub const fn get_slot_position(&self, row: u8, col: u8) -> (f32, f32) {
 		let x = self.position.0 + (col as f32 * (SLOT + PADDING));
 		let y = self.position.1 + ((self.rows - 1 - row) as f32 * (SLOT + PADDING));
 		(x, y)
 	}
 	/// Get the bounds of a single slot (left, bottom, right, top)
 	#[inline]
-	pub fn get_slot_bounds(&self, row: u8, col: u8) -> (f32, f32, f32, f32) {
+	pub const fn get_slot_bounds(&self, row: u8, col: u8) -> (f32, f32, f32, f32) {
 		let (x, y) = self.get_slot_position(row, col);
 		(x, y, x + SLOT, y + SLOT)
 	}
 	#[inline]
-	pub fn slot_contains_point(&self, row: u8, col: u8, x: f32, y: f32) -> bool {
+	pub const fn slot_contains_point(&self, row: u8, col: u8, x: f32, y: f32) -> bool {
 		let (min_x, min_y, max_x, max_y) = self.get_slot_bounds(row, col);
 		x >= min_x && x <= max_x && y >= min_y && y <= max_y
 	}
@@ -548,7 +554,7 @@ impl InventoryLayout {
 	
 	/// Get the panel's center position
 	#[inline]
-	pub fn get_panel_center(&self) -> (f32, f32) {
+	pub const fn get_panel_center(&self) -> (f32, f32) {
 		(
 			self.panel_position.0 + self.panel_size.0 / 2.0,
 			self.panel_position.1 + self.panel_size.1 / 2.0
@@ -578,13 +584,13 @@ impl InventoryLayout {
 	}
 	/// Get the bounds of the panel area (left, bottom, right, top)
 	#[inline]
-	pub fn get_panel_bounds(&self) -> (f32, f32, f32, f32) {
+	pub const fn get_panel_bounds(&self) -> (f32, f32, f32, f32) {
 		let (x, y) = self.panel_position;
 		let (w, h) = self.panel_size;
 		(x, y, x + w, y + h)
 	}
 	#[inline]
-	pub fn contains_point(&self, x: f32, y: f32) -> bool {
+	pub const fn contains_point(&self, x: f32, y: f32) -> bool {
 		let (min_x, min_y, max_x, max_y) = self.get_panel_bounds();
 		x >= min_x && x <= max_x && y >= min_y && y <= max_y
 	}

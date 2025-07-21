@@ -57,8 +57,7 @@ pub fn format_number(num: f64) -> String {
 
 #[allow(dead_code)]
 impl RunningAverage {
-	#[inline]
-	pub fn new() -> Self {
+	#[inline] pub const fn new() -> Self {
 		RunningAverage {
 			count: 0,
 			average: 0.0,
@@ -82,23 +81,19 @@ impl RunningAverage {
 		}
 	}
 
-	#[inline]
-	pub fn avg(&self) -> f64 {
+	#[inline] pub const fn avg(&self) -> f64 {
 		self.average
 	}
 
-	#[inline]
-	pub fn count(&self) -> u64 {
+	#[inline] pub const fn count(&self) -> u64 {
 		self.count
 	}
 
-	#[inline]
-	pub fn sum(&self) -> f64 {
+	#[inline] pub const fn sum(&self) -> f64 {
 		self.count as f64 * self.average
 	}
 
-	#[inline]
-	pub fn min(&self) -> f64 {
+	#[inline] pub const fn min(&self) -> f64 {
 		if self.count == 0 {
 			f64::NAN
 		} else {
@@ -106,8 +101,7 @@ impl RunningAverage {
 		}
 	}
 
-	#[inline]
-	pub fn max(&self) -> f64 {
+	#[inline] pub const fn max(&self) -> f64 {
 		if self.count == 0 {
 			f64::NAN
 		} else {
@@ -115,19 +109,16 @@ impl RunningAverage {
 		}
 	}
 
-	#[inline]
-	pub fn clear(&mut self) {
+	#[inline] pub const fn clear(&mut self) {
 		self.count = 0;
 		self.average = 0.0;
 		self.inv_count = 0.0;
 		self.min = f64::INFINITY;
 		self.max = f64::NEG_INFINITY;
 	}
-}
 
-impl Default for RunningAverage {
-	#[inline]
-	fn default() -> Self {
+
+	#[inline] pub const fn default() -> Self {
 		Self::new()
 	}
 }

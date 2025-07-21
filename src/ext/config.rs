@@ -94,8 +94,8 @@ pub struct ElementStyle {
 	pub text_color: Option<Color>,
 }
 impl ElementStyle {
-	pub fn text_color(&self) -> Color {
-		self.text_color.unwrap_or(self.color)
+	#[inline] pub const fn text_color(&self) -> Color {
+		if let Some(color) = self.text_color { color } else { self.color }
 	}
 }
 
@@ -150,7 +150,7 @@ pub struct InventoryConfig {
 	pub crafting: ElementStyle,
 }
 impl InventoryConfig {
-	pub fn get_style(&self, area_type : AreaType) -> &ElementStyle {
+	#[inline] pub const fn get_style(&self, area_type : AreaType) -> &ElementStyle {
 		match area_type {
 			AreaType::Panel => &self.panel_bg,
 			AreaType::Inventory => &self.inventory,
@@ -161,10 +161,9 @@ impl InventoryConfig {
 			AreaType::Output => &self.crafting,
 		}
 	}
-}
 
-impl Default for InventoryConfig {
-	fn default() -> Self {
+
+	#[inline] pub const fn default() -> Self {
 		let panel_bg = ElementStyle{
 			color: Color::rgb(25, 25, 40),
 			border: Border::rgbf(60, 60, 90, 0.005),
@@ -218,8 +217,8 @@ impl Default for InventoryConfig {
 	}
 }
 
-impl Default for UITheme {
-	fn default() -> Self {		
+impl UITheme {
+	#[inline] pub const fn default() -> Self {		
 		Self {
 			bg_panel: ElementStyle {
 				color: Color::rgb(15, 15, 25),

@@ -35,20 +35,19 @@ impl Default for Inventory {
 }
 
 impl Inventory {
-	pub fn armor(&self) -> u8 {
+	#[inline] pub const fn armor(&self) -> u8 {
 		self.armor_max
 	}
-	pub fn hotbar(&self) -> u8 {
+	#[inline] pub const fn hotbar(&self) -> u8 {
 		self.hotbar_max
 	}
-	pub fn inv_row(&self) -> u8 {
+	#[inline] pub const fn inv_row(&self) -> u8 {
 		self.inner_max.0
 	}
-	pub fn inv_col(&self) -> u8 {
+	#[inline] pub const fn inv_col(&self) -> u8 {
 		self.inner_max.1
 	}
-
-	pub fn set_layout(&mut self, layout: &inv::InventoryLayout) {
+	#[inline] pub fn set_layout(&mut self, layout: &inv::InventoryLayout) {
 		self.layout = Some(layout.clone());
 	}
 }

@@ -226,7 +226,7 @@ pub struct PlayerController {
 }
 
 /// Tracks movement input states using bit flags
-#[derive(Debug, Default, Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub struct MovementInputs {
 	// Packed movement state: bits 0-5 for directions, bit 6 for run
 	// Bit 0: Forward, Bit 1: Backward, Bit 2: Left, Bit 3: Right, Bit 4: Up, Bit 5: Down, Bit 6: Run
@@ -242,35 +242,28 @@ impl MovementInputs {
 	const DOWN: u8 = 1 << 5;
 	const RUN: u8 = 1 << 6;
 
-	pub fn set_forward(&mut self, pressed: bool) {
+	#[inline] pub const fn set_forward(&mut self, pressed: bool) {
 		self.set_bit(Self::FORWARD, pressed);
 	}
-
-	pub fn set_backward(&mut self, pressed: bool) {
+	#[inline] pub const fn set_backward(&mut self, pressed: bool) {
 		self.set_bit(Self::BACKWARD, pressed);
 	}
-
-	pub fn set_left(&mut self, pressed: bool) {
+	#[inline] pub const fn set_left(&mut self, pressed: bool) {
 		self.set_bit(Self::LEFT, pressed);
 	}
-
-	pub fn set_right(&mut self, pressed: bool) {
+	#[inline] pub const fn set_right(&mut self, pressed: bool) {
 		self.set_bit(Self::RIGHT, pressed);
 	}
-
-	pub fn set_up(&mut self, pressed: bool) {
+	#[inline] pub const fn set_up(&mut self, pressed: bool) {
 		self.set_bit(Self::UP, pressed);
 	}
-
-	pub fn set_down(&mut self, pressed: bool) {
+	#[inline] pub const fn set_down(&mut self, pressed: bool) {
 		self.set_bit(Self::DOWN, pressed);
 	}
-
-	pub fn set_run(&mut self, pressed: bool) {
+	#[inline] pub const fn set_run(&mut self, pressed: bool) {
 		self.set_bit(Self::RUN, pressed);
 	}
-
-	pub fn is_running(&self) -> bool {
+	#[inline] pub const fn is_running(&self) -> bool {
 		self.state & Self::RUN != 0
 	}
 
@@ -284,11 +277,15 @@ impl MovementInputs {
 	}
 
 	/// Clears all movement inputs
-	pub fn clear(&mut self) {
+	#[inline] pub const fn clear(&mut self) {
 		self.state = 0;
 	}
 
-	fn set_bit(&mut self, bit: u8, value: bool) {
+	#[inline] pub const fn default() -> Self {
+		Self { state: 0 }
+	}
+
+	#[inline] const fn set_bit(&mut self, bit: u8, value: bool) {
 		if value {
 			self.state |= bit;
 		} else {
@@ -299,7 +296,7 @@ impl MovementInputs {
 
 impl PlayerController {
 	/// Creates a new controller with initial state from camera config
-	pub fn new(config: CameraConfig) -> Self {
+	#[inline] pub const fn new(config: CameraConfig) -> Self {
 		Self {
 			movement: MovementInputs::default(),
 			mouse_delta: Vec3::ZERO,
@@ -313,7 +310,7 @@ impl PlayerController {
 	}
 
 	/// Processes keyboard input and returns whether the key was handled
-	pub fn process_keyboard(&mut self, key: &Key, is_pressed: bool) -> bool { 
+	#[inline] pub const fn process_keyboard(&mut self, key: &Key, is_pressed: bool) -> bool { 
 		match key {
 			Key::KeyW | Key::ArrowUp => self.movement.set_forward(is_pressed),
 			Key::KeyS | Key::ArrowDown => self.movement.set_backward(is_pressed),
@@ -328,17 +325,17 @@ impl PlayerController {
 	}
 
 	/// Resets all keyboard inputs
-	pub fn reset_keyboard(&mut self) {
+	#[inline] pub const fn reset_keyboard(&mut self) {
 		self.movement.clear();
 	}
 
 	/// Processes mouse movement input
-	pub fn process_mouse(&mut self, delta_x: f32, delta_y: f32) {
+	#[inline] pub fn process_mouse(&mut self, delta_x: f32, delta_y: f32) {
 		self.mouse_delta = Vec3::new(delta_x, delta_y, 0.0);
 	}
 
 	/// Processes mouse scroll input
-	pub fn process_scroll(&mut self, delta: &MouseScrollDelta) {
+	#[inline] pub fn process_scroll(&mut self, delta: &MouseScrollDelta) {
 		self.scroll = match delta {
 			MouseScrollDelta::LineDelta(_, y) => y * 0.5,
 			MouseScrollDelta::PixelDelta(pos) => pos.y as f32 * 0.01,
@@ -347,13 +344,15 @@ impl PlayerController {
 }
 
 /// Helper function to interpolate between two angles, handling wraparound
-fn lerp_angle(from: f32, to: f32, t: f32) -> f32 {
+#[inline] 
+const fn lerp_angle(from: f32, to: f32, t: f32) -> f32 {
 	let diff = ((to - from + std::f32::consts::PI) % (2.0 * std::f32::consts::PI)) - std::f32::consts::PI;
 	from + diff * t
 }
 
 /// Helper function to linearly interpolate between two f32 values
-fn lerp_f32(from: f32, to: f32, t: f32) -> f32 {
+#[inline] 
+const fn lerp_f32(from: f32, to: f32, t: f32) -> f32 {
 	from + (to - from) * t
 }
 
@@ -374,6 +373,7 @@ pub struct CameraUniform {
 }
 
 impl Default for CameraUniform {
+	#[inline] 
 	fn default() -> Self {
 		Self { 
 			view_proj: Mat4::IDENTITY.to_cols_array_2d(),
@@ -383,7 +383,7 @@ impl Default for CameraUniform {
 }
 
 impl CameraUniform {
-	pub fn update_view_proj(&mut self, camera: &Camera, projection: &Projection) {
+	#[inline] pub fn update_view_proj(&mut self, camera: &Camera, projection: &Projection) {
 		self.view_proj = (projection.matrix() * camera.view_matrix()).to_cols_array_2d();
 		self.position = camera.position.extend(0.0).into();
 	}
@@ -449,24 +449,24 @@ impl CameraSystem {
 		}
 	}
 
-	pub fn update(&mut self, queue: &wgpu::Queue) {
+	#[inline] pub fn update(&mut self, queue: &wgpu::Queue) {
 		self.uniform.update_view_proj(&self.camera, &self.projection);
 		queue.write_buffer(&self.buffer, 0, bytemuck::cast_slice(&[self.uniform]));
 	}
 
-	pub fn resize(&mut self, new_size: PhysicalSize<u32>) {
+	#[inline] pub fn resize(&mut self, new_size: PhysicalSize<u32>) {
 		self.projection.resize(new_size);
 	}
 
 	// Getters
-	pub fn camera(&self) -> &Camera { &self.camera }
-	pub fn camera_mut(&mut self) -> &mut Camera { &mut self.camera }
-	pub fn projection(&self) -> &Projection { &self.projection }
-	pub fn projection_mut(&mut self) -> &mut Projection { &mut self.projection }
-	pub fn bind_group_layout(&self) -> &wgpu::BindGroupLayout { &self.bind_group_layout }
-	pub fn bind_group(&self) -> &wgpu::BindGroup { &self.bind_group }
+	#[inline] pub const fn camera(&self) -> &Camera { &self.camera }
+	#[inline] pub const fn camera_mut(&mut self) -> &mut Camera { &mut self.camera }
+	#[inline] pub const fn projection(&self) -> &Projection { &self.projection }
+	#[inline] pub const fn projection_mut(&mut self) -> &mut Projection { &mut self.projection }
+	#[inline] pub const fn bind_group_layout(&self) -> &wgpu::BindGroupLayout { &self.bind_group_layout }
+	#[inline] pub const fn bind_group(&self) -> &wgpu::BindGroup { &self.bind_group }
 
-	pub fn split_mut(&mut self) -> (&mut Camera, &mut Projection) {
+	#[inline] pub const fn split_mut(&mut self) -> (&mut Camera, &mut Projection) {
 		(&mut self.camera, &mut self.projection)
 	}
 }
@@ -479,7 +479,7 @@ pub struct Camera {
 }
 
 impl Camera {
-	pub fn new(position: Vec3, rotation: Vec3) -> Self {
+	#[inline] pub const fn new(position: Vec3, rotation: Vec3) -> Self {
 		Self { position, rotation }
 	}
 
@@ -523,11 +523,11 @@ impl Camera {
 	}
 
 	// Getters and setters
-	pub fn position(&self) -> Vec3 { self.position }
-	pub fn set_position(&mut self, position: Vec3) { self.position = position; }
-	pub fn rotation(&self) -> Vec3 { self.rotation }
-	pub fn set_rotation(&mut self, rotation: Vec3) { self.rotation = rotation; }
-	pub fn translate(&mut self, translation: Vec3) { self.position += translation; }
+	#[inline] pub const fn position(&self) -> Vec3 { self.position }
+	#[inline] pub const fn set_position(&mut self, position: Vec3) { self.position = position; }
+	#[inline] pub const fn rotation(&self) -> Vec3 { self.rotation }
+	#[inline] pub const fn set_rotation(&mut self, rotation: Vec3) { self.rotation = rotation; }
+	#[inline] pub fn translate(&mut self, translation: Vec3) { self.position += translation; }
 }
 
 // Projection representation
@@ -551,26 +551,26 @@ impl Projection {
 		}
 	}
 
-	pub fn resize(&mut self, size: PhysicalSize<u32>) {
+	#[inline] pub fn resize(&mut self, size: PhysicalSize<u32>) {
 		self.aspect = size.width as f32 / size.height as f32;
 		self.update_matrix();
 	}
 
-	pub fn set_fovy(&mut self, fovy: f32) {
+	#[inline] pub fn set_fovy(&mut self, fovy: f32) {
 		self.fovy = fovy;
 		self.update_matrix();
 	}
 
-	fn update_matrix(&mut self) {
+	#[inline] fn update_matrix(&mut self) {
 		self.matrix = Mat4::perspective_rh(self.fovy, self.aspect, self.znear, self.zfar);
 	}
 
 	// Getters
-	pub fn matrix(&self) -> Mat4 { self.matrix }
-	pub fn aspect(&self) -> f32 { self.aspect }
-	pub fn fovy(&self) -> f32 { self.fovy }
-	pub fn znear(&self) -> f32 { self.znear }
-	pub fn zfar(&self) -> f32 { self.zfar }
+	#[inline] pub const fn matrix(&self) -> Mat4 { self.matrix }
+	#[inline] pub const fn aspect(&self) -> f32 { self.aspect }
+	#[inline] pub const fn fovy(&self) -> f32 { self.fovy }
+	#[inline] pub const fn znear(&self) -> f32 { self.znear }
+	#[inline] pub const fn zfar(&self) -> f32 { self.zfar }
 }
 
 // Camera configuration
@@ -593,10 +593,10 @@ pub struct CameraConfig {
 }
 
 impl CameraConfig {
-	pub fn new(position: Vec3) -> Self {
+	#[inline] pub const fn new(position: Vec3) -> Self {
 		Self {
 			position,
-			rotation: Vec3::new(0.,0.,0.), // Looking along negative X axis
+			rotation: Vec3::ZERO, // Looking along negative X axis
 			fovy: std::f32::consts::FRAC_PI_2, // 90 degrees in radians
 			znear: 0.01,
 			zfar: 500.0,
@@ -613,8 +613,8 @@ impl CameraConfig {
 	}
 }
 
-impl Default for CameraConfig {
-	fn default() -> Self {
+impl CameraConfig {
+	#[inline] pub const fn default() -> Self {
 		Self::new(Vec3::ZERO)
 	}
 }

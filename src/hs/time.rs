@@ -26,7 +26,7 @@ impl Time {
 		bytes
 	}
 
-	pub fn from_bytes(bytes: &[u8; 10]) -> Self {
+	pub const fn from_bytes(bytes: &[u8; 10]) -> Self {
 		Self {
 			year: u16::from_le_bytes([bytes[0], bytes[1]]),
 			month: bytes[2],
@@ -144,7 +144,7 @@ impl Time {
 			+ self.second as u64
 	}
 	
-	pub fn day_of_week(&self) -> u8 {
+	pub const fn day_of_week(&self) -> u8 {
 		// Zeller's Congruence algorithm to calculate day of week (0=Sunday, 6=Saturday)
 		let mut m = self.month as i32;
 		let mut y = self.year as i32;
@@ -158,7 +158,7 @@ impl Time {
 		((h + 6) % 7) as u8 // Convert to 0=Monday, 6=Sunday
 	}
 	
-	pub fn weekday_name(&self) -> &'static str {
+	pub const fn weekday_name(&self) -> &'static str {
 		match self.day_of_week() {
 			0 => "Monday",
 			1 => "Tuesday",
@@ -171,16 +171,16 @@ impl Time {
 		}
 	}
 	
-	pub fn is_leap_year(&self) -> bool {
+	pub const fn is_leap_year(&self) -> bool {
 		Self::is_leap_year_(self.year as i32)
 	}
 	
-	pub fn days_in_month(&self) -> u8 {
+	pub const fn days_in_month(&self) -> u8 {
 		Self::days_in_month_(self.month, self.year as i32)
 	}
 
 	// Helper functions
-	fn days_in_month_(month: u8, year: i32) -> u8 {
+	const fn days_in_month_(month: u8, year: i32) -> u8 {
 		match month {
 			1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
 			4 | 6 | 9 | 11 => 30,
@@ -193,7 +193,7 @@ impl Time {
 		if Self::is_leap_year_(year) { 366 } else { 365 }
 	}
 
-	fn is_leap_year_(year: i32) -> bool {
+	const fn is_leap_year_(year: i32) -> bool {
 		year % 4 == 0 && (year % 100 != 0 || year % 400 == 0)
 	}
 
@@ -205,7 +205,7 @@ impl Time {
 		doy
 	}
 
-	fn month_day_from_doy_(mut day_of_year: u16, year: i32) -> (u8, u8) {
+	const fn month_day_from_doy_(mut day_of_year: u16, year: i32) -> (u8, u8) {
 		let mut month = 1;
 		while month <= 12 {
 			let days_in_month = Self::days_in_month_(month, year) as u16;

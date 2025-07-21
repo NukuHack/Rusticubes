@@ -14,11 +14,11 @@ pub struct Vertex {
 }
 
 impl Vertex {
-	#[inline] pub fn new(position: [f32; 2], color: [u8; 4]) -> Self {
+	#[inline] pub const fn new(position: [f32; 2], color: [u8; 4]) -> Self {
 		Self { position, packed_data: pack_color_u8(color) }
 	}
 
-	pub fn desc() -> wgpu::VertexBufferLayout<'static> {
+	pub const fn desc() -> wgpu::VertexBufferLayout<'static> {
 		wgpu::VertexBufferLayout {
 			array_stride: std::mem::size_of::<Vertex>() as wgpu::BufferAddress,
 			step_mode: wgpu::VertexStepMode::Vertex,
@@ -30,7 +30,7 @@ impl Vertex {
 	}
 }
 
-#[inline] fn pack_color_u8(color: [u8; 4]) -> u32 {
+#[inline] const fn pack_color_u8(color: [u8; 4]) -> u32 {
 	(color[0] as u32) << 24 | (color[1] as u32) << 16 | (color[2] as u32) << 8 | color[3] as u32
 }
 
@@ -49,24 +49,19 @@ pub struct UIRenderer {
 }
 
 impl UIRenderer {
-	#[inline]
-	pub fn bind_group_layout(&self) -> &wgpu::BindGroupLayout {
+	#[inline] pub const fn bind_group_layout(&self) -> &wgpu::BindGroupLayout {
 		&self.bind_group_layout
 	}
-	#[inline]
-	pub fn font_sampler(&self) -> &wgpu::Sampler {
+	#[inline] pub const fn font_sampler(&self) -> &wgpu::Sampler {
 		&self.font_sampler
 	}
-	#[inline]
-	pub fn uniform_buffer(&self) -> &wgpu::Buffer {
+	#[inline] pub const fn uniform_buffer(&self) -> &wgpu::Buffer {
 		&self.uniform_buffer
 	}
-	#[inline]
-	pub fn uniform_bind_group(&self) -> &wgpu::BindGroup {
+	#[inline] pub const fn uniform_bind_group(&self) -> &wgpu::BindGroup {
 		&self.uniform_bind_group
 	}
-	#[inline]
-	pub fn uniform_bind_group_layout(&self) -> &wgpu::BindGroupLayout {
+	#[inline] pub const fn uniform_bind_group_layout(&self) -> &wgpu::BindGroupLayout {
 		&self.uniform_bind_group_layout
 	}
 	#[inline] pub fn new(device: &wgpu::Device, queue: &wgpu::Queue) -> Self {
@@ -155,7 +150,7 @@ impl UIRenderer {
 		self.text_textures.clear();
 	}
 	
-	#[inline] pub fn set_pixel_ratio(&mut self, ratio: f32) {
+	#[inline] pub const fn set_pixel_ratio(&mut self, ratio: f32) {
 		self.pixel_ratio = ratio.max(10.0).min(0.5);
 	}
 	
@@ -490,7 +485,7 @@ impl UIRenderer {
 		}
 	}
 
-	#[inline] fn rectangle_indices(&self, base: u32) -> [u32; 6] {
+	#[inline] const fn rectangle_indices(&self, base: u32) -> [u32; 6] {
 		[base, base + 1, base + 2, base + 1, base + 3, base + 2]
 	}
 

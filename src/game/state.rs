@@ -72,47 +72,36 @@ impl GameState {
 			is_running: false,
 		}
 	}
-	#[inline]
-	pub fn world_mut(&mut self) -> &mut world::main::World {
+	#[inline] pub const fn world_mut(&mut self) -> &mut world::main::World {
 		&mut self.world
 	}
-	#[inline]
-	pub fn player_mut(&mut self) -> &mut player::Player {
+	#[inline] pub const fn player_mut(&mut self) -> &mut player::Player {
 		&mut self.player
 	}
-	#[inline]
-	pub fn world_change(&mut self, world : world::main::World) {
+	#[inline] pub fn world_change(&mut self, world : world::main::World) {
 		self.world = world;
 	}
-
-	#[inline]
-	pub fn worldname(&self) -> &String {
+	#[inline] pub const fn worldname(&self) -> &String {
 		&self.worldname
 	}
-	#[inline]
-	pub fn player(&self) -> &player::Player {
+	#[inline] pub const fn player(&self) -> &player::Player {
 		&self.player
 	}
-	#[inline]
-	pub fn world(&self) -> &world::main::World {
+	#[inline] pub const fn world(&self) -> &world::main::World {
 		&self.world
 	}
-	#[inline]
-	pub fn save_path(&self) -> &std::path::PathBuf {
+	#[inline] pub const fn save_path(&self) -> &std::path::PathBuf {
 		&self.save_path
 	}
-	#[inline]
-	pub fn is_running(&self) -> bool {
+	#[inline] pub const fn is_running(&self) -> bool {
 		self.is_running
 	}
-	#[inline]
-	pub fn running(&mut self) -> &mut bool {
+	#[inline] pub const fn running(&mut self) -> &mut bool {
 		&mut self.is_running
 	}
 
 
-	#[inline]
-	pub fn seed(&self) -> &u32 {
+	#[inline] pub const fn seed(&self) -> &u32 {
 		&0u32
 	}
 }

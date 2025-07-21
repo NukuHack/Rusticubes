@@ -190,14 +190,14 @@ impl UIElement {
 	
 	
 	// Builder methods
-	#[inline] pub fn with_position(mut self, x: f32, y: f32) -> Self { self.position = (x, y); self }
-	#[inline] pub fn with_size(mut self, width: f32, height: f32) -> Self { self.size = (width, height); self }
-	#[inline] pub fn with_color(mut self, color: Color) -> Self { self.color = color; self }
-	#[inline] pub fn with_alpha(mut self, a: u8) -> Self { self.color = self.color.with_a(a); self }
-	#[inline] pub fn with_z_index(mut self, z_index: i32) -> Self { self.z_index = z_index; self }
-	#[inline] pub fn with_visible(mut self, visible: bool) -> Self { self.visible = visible; self }
-	#[inline] pub fn with_enabled(mut self, enabled: bool) -> Self { self.enabled = enabled; self }
-	#[inline] pub fn with_border(mut self, border: Border) -> Self { self.border = border; self}
+	#[inline] pub const fn with_position(mut self, x: f32, y: f32) -> Self { self.position = (x, y); self }
+	#[inline] pub const fn with_size(mut self, width: f32, height: f32) -> Self { self.size = (width, height); self }
+	#[inline] pub const fn with_color(mut self, color: Color) -> Self { self.color = color; self }
+	#[inline] pub const fn with_alpha(mut self, a: u8) -> Self { self.color = self.color.with_a(a); self }
+	#[inline] pub const fn with_z_index(mut self, z_index: i32) -> Self { self.z_index = z_index; self }
+	#[inline] pub const fn with_visible(mut self, visible: bool) -> Self { self.visible = visible; self }
+	#[inline] pub const fn with_enabled(mut self, enabled: bool) -> Self { self.enabled = enabled; self }
+	#[inline] pub const fn with_border(mut self, border: Border) -> Self { self.border = border; self}
 
 	#[inline]
 	pub fn with_style(self, style: &ElementStyle) -> Self {
@@ -228,21 +228,21 @@ impl UIElement {
 			
 	// Utility methods
 	#[inline]
-	pub fn get_bounds(&self) -> (f32, f32, f32, f32) {
+	pub const fn get_bounds(&self) -> (f32, f32, f32, f32) {
 		let (x, y) = self.position;
 		let (w, h) = self.size;
 		(x, y, x + w, y + h)
 	}
 	#[inline]
-	pub fn contains_point(&self, x: f32, y: f32) -> bool {
+	pub const fn contains_point(&self, x: f32, y: f32) -> bool {
 		if !self.visible || !self.enabled { return false; }
 		let (min_x, min_y, max_x, max_y) = self.get_bounds();
 		x >= min_x && x <= max_x && y >= min_y && y <= max_y
 	}
 	#[inline]
-	pub fn is_input(&self) -> bool { matches!(self.data, UIElementData::InputField { .. }) }
+	pub const fn is_input(&self) -> bool { matches!(self.data, UIElementData::InputField { .. }) }
 	#[inline]
-	pub fn update_hover_state(&mut self, is_hovered: bool) {
+	pub const fn update_hover_state(&mut self, is_hovered: bool) {
 		self.hovered = is_hovered && self.enabled;
 		match self.data {
 			UIElementData::Button{ .. } | UIElementData::InputField{ .. } | UIElementData::Slider{ .. } | UIElementData::MultiStateButton{ .. } => {
@@ -272,7 +272,7 @@ impl UIElement {
 		}
 	}
 	#[inline]
-	pub fn get_text_mut(&mut self) -> Option<&mut String> {
+	pub const fn get_text_mut(&mut self) -> Option<&mut String> {
 		match &mut self.data {
 			UIElementData::Label { text, .. } |
 			UIElementData::Button { text, .. } |
@@ -307,7 +307,7 @@ impl UIElement {
 		self
 	}
 	#[inline]
-	pub fn with_text_color(mut self, color: Color) -> Self {
+	pub const fn with_text_color(mut self, color: Color) -> Self {
 		match &mut self.data {
 			UIElementData::Label { text_color, .. } |
 			UIElementData::Button { text_color, .. } |
@@ -320,12 +320,12 @@ impl UIElement {
 		self
 	}
 	#[inline]
-	pub fn with_text_alpha(self, a: u8) -> Self {
+	pub const fn with_text_alpha(self, a: u8) -> Self {
 		let color = self.get_text_color().with_a(a);
 		self.with_text_color(color)
 	}
 	#[inline]
-	pub fn get_text_color(&self) -> Color {
+	pub const fn get_text_color(&self) -> Color {
 		let text_color = match &self.data {
 			UIElementData::Label { text_color, .. } |
 			UIElementData::Button { text_color, .. } |
@@ -335,7 +335,9 @@ impl UIElement {
 			UIElementData::Slider { slider_color, .. } => Some(*slider_color),
 			_ => None,
 		};
-		text_color.unwrap_or(self.color)
+		if let Some(color) = text_color {
+			color
+		} else { self.color }
 	}
 	#[inline]
 	pub fn with_placeholder<T: Textlike>(mut self, placeholder: T) -> Self {
@@ -360,7 +362,7 @@ impl UIElement {
 		self
 	}
 	#[inline]
-	pub fn get_current_state(&self) -> Option<usize> {
+	pub const fn get_current_state(&self) -> Option<usize> {
 		if let UIElementData::MultiStateButton { current_state, .. } = &self.data {
 			Some(*current_state)
 		} else {
@@ -369,7 +371,7 @@ impl UIElement {
 	}
 	// Slider-related methods
 	#[inline]
-	pub fn with_step(mut self, step: f32) -> Self {
+	pub const fn with_step(mut self, step: f32) -> Self {
 		if let UIElementData::Slider { step: s, .. } = &mut self.data {
 			*s = Some(step);
 		}
@@ -384,14 +386,14 @@ impl UIElement {
 		self
 	}*/
 	#[inline]
-	pub fn with_value(mut self, value: f32) -> Self {
+	pub const fn with_value(mut self, value: f32) -> Self {
 		if let UIElementData::Slider { min_value, max_value, current_value, .. } = &mut self.data {
 			*current_value = value.clamp(*min_value, *max_value);
 		}
 		self
 	}
 	#[inline]
-	pub fn set_calc_value(&mut self, norm_x: f32, norm_y: f32) {
+	pub const fn set_calc_value(&mut self, norm_x: f32, norm_y: f32) {
 		if let UIElementData::Slider { .. } = &mut self.data {
 			if let Some(value) = self.calc_value(norm_x, norm_y) {
 				self.set_value(value);
@@ -399,41 +401,65 @@ impl UIElement {
 		}
 	}
 	#[inline]
-	pub fn set_value(&mut self, value: f32) {
+	pub const fn set_value(&mut self, value: f32) {
 		if let UIElementData::Slider { current_value, .. } = &mut self.data {
 			*current_value = value;
 		}
 	}
-	#[inline] #[allow(unused_variables)]
-	pub fn calc_value(&self, norm_x: f32, norm_y: f32) -> Option<f32> {
+	#[inline]
+	pub const fn calc_value(&self, norm_x: f32, _norm_y: f32) -> Option<f32> {
 		if let UIElementData::Slider { min_value, max_value, step, .. } = &self.data {
 			// Calculate clicked position relative to slider
 			let (x, y) = self.position;
 			let (w, h) = self.size;
 			
 			// Get click position relative to slider track
-			let track_height = h * 0.5; // set to 0.5 because it's better, even tho visually it's just 0.3
-			let track_y = y + (h - track_height) / 2.0;
+			let track_height = h * 0.5;
+			let _track_y = y + (h - track_height) / 2.0;
 			
-			// Only process if click is within track bounds (vertically)
-			/*if norm_y >= track_y && norm_y <= track_y + track_height*/ {
+			{
 				let handle_width = h * 0.8;
 				let effective_width = w - handle_width;
-				let click_x = (norm_x - x - handle_width / 2.0).clamp(0.0, effective_width);
+				let click_x = if norm_x - x - handle_width / 2.0 < 0.0 {
+					0.0
+				} else if norm_x - x - handle_width / 2.0 > effective_width {
+					effective_width
+				} else {
+					norm_x - x - handle_width / 2.0
+				};
 				
 				// Calculate normalized value (0-1)
 				let normalized_value = click_x / effective_width;
 				
 				// Convert to actual value range
-				let value = min_value + normalized_value * (max_value - min_value);
+				let value = *min_value + normalized_value * (*max_value - *min_value);
 				
-				let mut clamped_value = value.clamp(*min_value, *max_value);
+				let clamped_value = if value < *min_value {
+					*min_value
+				} else if value > *max_value {
+					*max_value
+				} else {
+					value
+				};
 
 				if let Some(step) = step {
-					// Round to the nearest step
-					let stepped_value = (clamped_value / *step).round() * *step;
+					// Round to the nearest step using integer casting
+					let val = clamped_value / *step;
+					let rounded_val = if val >= 0.0 {
+						(val + 0.5) as i32 as f32
+					} else {
+						(val - 0.5) as i32 as f32
+					};
+					let stepped_value = rounded_val * *step;
+					
 					// Ensure we're still within bounds after rounding
-					clamped_value = stepped_value.clamp(*min_value, *max_value);
+					if stepped_value < *min_value {
+						return Some(*min_value);
+					} else if stepped_value > *max_value {
+						return Some(*max_value);
+					} else {
+						return Some(stepped_value);
+					}
 				}
 
 				return Some(clamped_value);
@@ -442,7 +468,7 @@ impl UIElement {
 		None
 	}
 	#[inline]
-	pub fn get_value(&self) -> Option<f32> {
+	pub const fn get_value(&self) -> Option<f32> {
 		if let UIElementData::Slider { current_value, .. } = &self.data {
 			Some(*current_value)
 		} else {
@@ -452,16 +478,16 @@ impl UIElement {
 	
 	// Checkbox-related methods
 	#[inline]
-	pub fn with_checked(mut self, checked: bool) -> Self {
+	pub const fn with_checked(mut self, checked: bool) -> Self {
 		if let UIElementData::Checkbox { checked: c, .. } = &mut self.data { *c = checked; }
 		self
 	}
 	#[inline]
-	pub fn toggle_checked(&mut self) {
+	pub const fn toggle_checked(&mut self) {
 		if let UIElementData::Checkbox { checked, .. } = &mut self.data { *checked = !*checked; }
 	}
 	#[inline]
-	pub fn is_checked(&self) -> Option<bool> {
+	pub const fn is_checked(&self) -> Option<bool> {
 		if let UIElementData::Checkbox { checked, .. } = &self.data { Some(*checked) } else { None }
 	}
 
@@ -474,41 +500,41 @@ impl UIElement {
 		self
 	}
 	#[inline]
-	pub fn with_animation_duration(mut self, duration: f32) -> Self {
+	pub const fn with_animation_duration(mut self, duration: f32) -> Self {
 		if let UIElementData::Animation { frame_duration, .. } = &mut self.data { *frame_duration = duration; }
 		self
 	}
 	#[inline]
-	pub fn with_looping(mut self, looping: bool) -> Self {
+	pub const fn with_looping(mut self, looping: bool) -> Self {
 		if let UIElementData::Animation { looping: l, .. } = &mut self.data { *l = looping; }
 		self
 	}
 	#[inline]
-	pub fn with_smooth_transition(mut self, smooth: bool) -> Self {
+	pub const fn with_smooth_transition(mut self, smooth: bool) -> Self {
 		if let UIElementData::Animation { smooth_transition, .. } = &mut self.data { *smooth_transition = smooth; }
 		self
 	}
 	#[inline]
-	pub fn with_blend_delay(mut self, delay: u32) -> Self {
+	pub const fn with_blend_delay(mut self, delay: u32) -> Self {
 		if let UIElementData::Animation { blend_delay, .. } = &mut self.data { *blend_delay = delay; }
 		self
 	}
 	#[inline]
-	pub fn play(&mut self) {
+	pub const fn play(&mut self) {
 		if let UIElementData::Animation { playing, .. } = &mut self.data { *playing = true; }
 	}
 	#[inline]
-	pub fn pause(&mut self) {
+	pub const fn pause(&mut self) {
 		if let UIElementData::Animation { playing, .. } = &mut self.data { *playing = false; }
 	}
 	#[inline]
-	pub fn reset(&mut self) {
+	pub const fn reset(&mut self) {
 		if let UIElementData::Animation { current_frame, elapsed_time, .. } = &mut self.data {
 			*current_frame = 0; *elapsed_time = 0.0;
 		}
 	}
 	#[inline]
-	pub fn update_anim(&mut self, delta_time: f32) {
+	pub const fn update_anim(&mut self, delta_time: f32) {
 		if let UIElementData::Animation {
 			frames, current_frame, frame_duration, elapsed_time, looping, playing, ..
 		} = &mut self.data {
@@ -532,14 +558,36 @@ impl UIElement {
 		}
 	}
 	#[inline]
-	pub fn get_packed_anim_data(&self) -> Option<[u32;2]> {
+	pub const fn get_packed_anim_data(&self) -> Option<[u32; 2]> {
 		if let UIElementData::Animation {
-			frames, current_frame, frame_duration, elapsed_time,   smooth_transition, blend_delay, ..
-		} = &self.data {
+			frames,
+			current_frame,
+			frame_duration,
+			elapsed_time,
+			smooth_transition,
+			blend_delay,
+			..
+		} = &self.data
+		{
 			let frame_count = frames.len() as u32;
-			let next_frame = if *smooth_transition { (*current_frame + 1) % frame_count } else { *current_frame };
+			let next_frame = if *smooth_transition {
+				(*current_frame + 1) % frame_count
+			} else {
+				*current_frame
+			};
 			let packed_frames = (*current_frame & 0xFFFF) | ((next_frame & 0xFFFF) << 16);
-			let raw_progress = ((elapsed_time / frame_duration) * 100.0) as u32;
+			
+			// Convert to integer arithmetic by working in hundredths (like fixed-point)
+			let elapsed_hundredths = (*elapsed_time * 100.0) as u32;
+			let duration_hundredths = (*frame_duration * 100.0) as u32;
+			
+			// Calculate progress using integer division (0-100 range)
+			let raw_progress = if duration_hundredths > 0 {
+				(elapsed_hundredths * 100) / duration_hundredths
+			} else {
+				0
+			};
+			
 			let packed_progress = (raw_progress & 0xFFFF) | ((*blend_delay & 0xFFFF) << 16);
 			return Some([packed_frames, packed_progress]);
 		}
@@ -572,7 +620,7 @@ use winit::keyboard::KeyCode as Key;
 
 // Input handling utilities (unchanged)
 #[inline]
-pub fn key_to_char(key: Key, shift: bool) -> Option<char> {
+pub const fn key_to_char(key: Key, shift: bool) -> Option<char> {
 	match key {
 			// Alphabet
 		Key::KeyA => Some(if shift { 'A' } else { 'a' }),

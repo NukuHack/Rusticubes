@@ -77,7 +77,7 @@ impl ChunkMeshBuilder {
 		}
 	}
 	// pos is allways 0-15
-	pub fn add_cube(&mut self, pos: IVec3, _texture_map: [f32; 2], chunk: &Chunk, neighbors: &[Option<&Chunk>; 6]) {
+	pub fn add_cube(&mut self, pos: IVec3, chunk: &Chunk, neighbors: &[Option<&Chunk>; 6]) {
 		for (idx, normal) in CUBE_FACES.iter().enumerate() {
 			let neighbor_pos: IVec3 = pos + *normal;
 			

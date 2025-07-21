@@ -27,20 +27,17 @@ impl Block {
 	const ROT_SHIFT_Z: u8 = 4;
 
 	/// Creates a default empty block
-	#[inline]
-	pub const fn default() -> Self {
+	#[inline] pub const fn default() -> Self {
 		Self::Simple(0, BlockRotation::XplusYplus)
 	}
 
 	/// Creates a new simple block with default material
-	#[inline]
-	pub const fn new(material: Material) -> Self {
+	#[inline] pub const fn new(material: Material) -> Self {
 		Self::Simple(material, BlockRotation::XplusYplus)
 	}
 
 	/// Extracts rotation
-	#[inline]
-	pub fn get_rotation(&self) -> Option<BlockRotation> {
+	#[inline] pub const fn get_rotation(&self) -> Option<BlockRotation> {
 		match self {
 			Block::Simple(_, rot) => Some(*rot),
 			_ => None,
@@ -55,22 +52,14 @@ impl Block {
 		}
 	}
 
-	#[inline]
-	pub fn is_empty(&self) -> bool {
+	#[inline] pub const fn is_empty(&self) -> bool {
 		match self {
 			Block::Simple(material, _) => *material == 0,
 			Block::None => true,
 		}
 	}
 
-	#[inline]
-	pub fn texture_coords(&self) -> [f32; 2] {
-		let material: f32 = self.material() as f32;
-		[(material - 1.0).max(0.0), material]
-	}
-
-	#[inline]
-	pub fn material(&self) -> Material {
+	#[inline] pub const fn material(&self) -> Material {
 		match self {
 			Block::Simple(material, _) => *material,
 			Block::None => 0,
@@ -113,8 +102,7 @@ pub enum BlockStorage {
 
 impl BlockStorage {
 	/// Gets the palette index at the given position
-	#[inline]
-	pub fn get(&self, index: usize) -> u8 {
+	#[inline] pub const fn get(&self, index: usize) -> u8 {
 		match self {
 			BlockStorage::Uniform(palette_idx) => *palette_idx,
 			BlockStorage::Sparse(indices) => indices[index],
@@ -364,7 +352,7 @@ impl Chunk {
 		block.is_empty()
 	}
 
-	pub fn contains_position(&self, pos: IVec3) -> bool {
+	#[inline] pub const fn contains_position(&self, pos: IVec3) -> bool {
 		// Check if position is outside chunk bounds
 		if pos.x < 0
 			|| pos.y < 0
@@ -379,14 +367,12 @@ impl Chunk {
 	}
 
 	/// Returns a reference to the mesh if it exists
-	#[inline]
-	pub fn mesh(&self) -> Option<&GeometryBuffer> {
+	#[inline] pub const fn mesh(&self) -> Option<&GeometryBuffer> {
 		self.mesh.as_ref()
 	}
 
 	/// Returns a reference to the bind group if it exists
-	#[inline]
-	pub fn bind_group(&self) -> Option<&wgpu::BindGroup> {
+	#[inline] pub const fn bind_group(&self) -> Option<&wgpu::BindGroup> {
 		self.bind_group.as_ref()
 	}
 }

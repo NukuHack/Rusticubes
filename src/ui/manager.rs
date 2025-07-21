@@ -10,17 +10,18 @@ use crate::{
 };
 use winit::keyboard::KeyCode as Key;
 
-#[derive(PartialEq, Clone, Copy, Default)]
+#[derive(PartialEq, Clone, Copy)]
 pub struct UIStateID(u32);
 
 impl UIStateID {
 	#[inline] pub fn new(id: u32) -> Self { Self(id) }
+	#[inline] pub const fn default() -> Self { Self(0) }
 }
 
 
 // Update the UIStateID implementation to include Inventory
-impl From<&UIState> for UIStateID {
-	fn from(state: &UIState) -> Self {
+impl UIStateID {
+	pub const fn from(state: &UIState) -> Self {
 		#[allow(unreachable_patterns)]
 		match state {
 			UIState::None => UIStateID(0),
@@ -41,27 +42,6 @@ impl From<&UIState> for UIStateID {
 	}
 }
 
-impl From<UIStateID> for UIState {
-	fn from(id: UIStateID) -> Self {
-		#[allow(unreachable_patterns)]
-		match id.0 {
-			0 => UIState::None,
-			1 => UIState::BootScreen,
-			2 => UIState::WorldSelection,
-			3 => UIState::Multiplayer,
-			4 => UIState::NewWorld,
-			5 => UIState::Escape,
-			6 => UIState::InGame,
-			7 => UIState::Settings(UIStateID::default()),
-			8 => UIState::Confirm(UIStateID::default(), 0),
-			9 => UIState::Loading,
-			10 => UIState::Error(UIStateID::default(), 0),
-			11 => UIState::ConnectLocal,
-			12 => UIState::Inventory(inventory::InventoryUIState::default()),
-			_ => UIState::None,
-		}
-	}
-}
 
 #[derive(PartialEq, Clone, Default)]
 pub enum UIState {
@@ -82,14 +62,34 @@ pub enum UIState {
 }
 
 impl UIState {
-	pub fn inner(&self) -> Option<u8> {
+	pub const fn from(id: UIStateID) -> Self {
+		#[allow(unreachable_patterns)]
+		match id.0 {
+			0 => UIState::None,
+			1 => UIState::BootScreen,
+			2 => UIState::WorldSelection,
+			3 => UIState::Multiplayer,
+			4 => UIState::NewWorld,
+			5 => UIState::Escape,
+			6 => UIState::InGame,
+			7 => UIState::Settings(UIStateID::default()),
+			8 => UIState::Confirm(UIStateID::default(), 0),
+			9 => UIState::Loading,
+			10 => UIState::Error(UIStateID::default(), 0),
+			11 => UIState::ConnectLocal,
+			12 => UIState::Inventory(inventory::InventoryUIState::default()),
+			_ => UIState::None,
+		}
+	}
+
+	pub const fn inner(&self) -> Option<u8> {
 		match self {
 			UIState::Confirm(_, id) | UIState::Error(_, id) => Some(*id),
 			_ => None,
 		}
 	}
 	
-	pub fn inner_state(&self) -> UIState {
+	pub const fn inner_state(&self) -> UIState {
 		match self {
 			UIState::Confirm(id, _) | UIState::Error(id, _) |
 			UIState::Settings(id) => UIState::from(*id),
@@ -234,8 +234,8 @@ impl UIManager {
 		}
 	}
 
-	#[inline] pub fn renderer(&self) -> &UIRenderer { &self.renderer }
-	#[inline] pub fn renderer_mut(&mut self) -> &mut UIRenderer { &mut self.renderer }
+	#[inline] pub const fn renderer(&self) -> &UIRenderer { &self.renderer }
+	#[inline] pub const fn renderer_mut(&mut self) -> &mut UIRenderer { &mut self.renderer }
 	
 	#[inline]
 	pub fn update(&mut self, _device: &wgpu::Device, queue: &wgpu::Queue) {
@@ -311,7 +311,7 @@ impl UIManager {
 		}
 	}
 	
-	#[inline] pub fn clear_focused_element(&mut self) { self.focused_element = None; }
+	#[inline] pub const fn clear_focused_element(&mut self) { self.focused_element = None; }
 	
 	#[inline]
 	pub fn process_text_input(&mut self, c: char) {
@@ -324,10 +324,10 @@ impl UIManager {
 		}
 	}
 	
-	#[inline] pub fn toggle_visibility(&mut self) { self.visibility = !self.visibility; }
-	#[inline] pub fn get_focused_element(&self) -> Option<&UIElement> { self.focused_element.and_then(|idx| self.elements.get(idx)) }
-	#[inline] pub fn get_focused_element_mut(&mut self) -> Option<&mut UIElement> { self.focused_element.and_then(|idx| self.elements.get_mut(idx)) }
-	#[inline] pub fn next_id(&mut self) -> usize { let id = self.next_id; self.next_id += 1; id }
+	#[inline] pub const fn toggle_visibility(&mut self) { self.visibility = !self.visibility; }
+	#[inline] pub fn get_focused_element(&self) -> Option<&UIElement> { if let Some(idx) = self.focused_element { self.elements.get(idx) } else { None } }
+	#[inline] pub fn get_focused_element_mut(&mut self) -> Option<&mut UIElement> { if let Some(idx) = self.focused_element { self.elements.get_mut(idx) } else { None } }
+	#[inline] pub const fn next_id(&mut self) -> usize { let id = self.next_id; self.next_id += 1; id }
 		
 	#[inline]
 	pub fn handle_click_press(&mut self, norm_x: f32, norm_y: f32) -> bool {
@@ -472,7 +472,7 @@ pub fn get_element_data_dy_id(id: usize) -> String {
 }
 
 #[inline]
-pub fn convert_mouse_position(window_size: (u32, u32), mouse_pos: &winit::dpi::PhysicalPosition<f64>) -> (f32, f32) {
+pub const fn convert_mouse_position(window_size: (u32, u32), mouse_pos: &winit::dpi::PhysicalPosition<f64>) -> (f32, f32) {
 	let (x, y) = (mouse_pos.x as f32, mouse_pos.y as f32);
 	let (width, height) = (window_size.0 as f32, window_size.1 as f32);
 	((2.0 * x / width) - 1.0, (2.0 * (height - y) / height) - 1.0)

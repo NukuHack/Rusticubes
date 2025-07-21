@@ -44,8 +44,8 @@ pub struct ItemData {
 }
 
 // Implement Default where it makes sense
-impl Default for ItemStack {
-	fn default() -> Self {
+impl ItemStack {
+	#[inline] pub const fn default() -> Self {
 		Self {
 			item: Item::Item(ItemId(0)),
 			quantity: 1,
@@ -56,7 +56,7 @@ impl Default for ItemStack {
 
 // Add convenience methods
 impl ItemStack {
-	pub fn new_block(block: BlockId, quantity: u32) -> Self {
+	#[inline] pub const fn new_block(block: BlockId, quantity: u32) -> Self {
 		Self {
 			item: Item::Block(block),
 			quantity,
@@ -64,7 +64,7 @@ impl ItemStack {
 		}
 	}
 	
-	pub fn new_item(item: ItemId, quantity: u32) -> Self {
+	#[inline] pub const fn new_item(item: ItemId, quantity: u32) -> Self {
 		Self {
 			item: Item::Item(item),
 			quantity,
@@ -72,11 +72,11 @@ impl ItemStack {
 		}
 	}
 	
-	pub fn is_block(&self) -> bool {
+	#[inline] pub const fn is_block(&self) -> bool {
 		matches!(self.item, Item::Block(_))
 	}
 	
-	pub fn is_item(&self) -> bool {
+	#[inline] pub const fn is_item(&self) -> bool {
 		matches!(self.item, Item::Item(_))
 	}
 }

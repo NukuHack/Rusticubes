@@ -8,7 +8,7 @@ pub struct Rand {
 impl Rand {
 	/// Creates a new RNG with the given seed
 	#[inline(always)]
-	pub fn new(seed: u32) -> Self {
+	pub const fn new(seed: u32) -> Self {
 		Self { seed }
 	}
 	
@@ -26,13 +26,13 @@ impl Rand {
 	
 	/// Returns a random f32 in [0, 1)
 	#[inline(always)]
-	pub fn next_f32(&mut self) -> f32 {
+	pub const fn next_f32(&mut self) -> f32 {
 		self.next_u32() as f32 / u32::MAX as f32
 	}
 	
 	/// Returns a random u32
 	#[inline(always)]
-	pub fn next_u32(&mut self) -> u32 {
+	pub const fn next_u32(&mut self) -> u32 {
 		let rand = Self::xorshift(self.seed);
 		self.seed = rand;
 		rand
@@ -40,7 +40,7 @@ impl Rand {
 	
 	/// Returns a random f32 in [min, max)
 	#[inline(always)]
-	pub fn range_f32(&mut self, min: f32, max: f32) -> f32 {
+	pub const fn range_f32(&mut self, min: f32, max: f32) -> f32 {
 		self.next_f32() * (max - min) + min
 	}
 	
@@ -48,7 +48,7 @@ impl Rand {
 	
 	/// PCG hash function variant
 	#[inline(always)]
-	pub fn pcg_hash(input: u32) -> u32 {
+	pub const fn pcg_hash(input: u32) -> u32 {
 		let mut seed = input.wrapping_mul(747796405).wrapping_add(2891336453);
 		seed = ((seed >> ((seed >> 28) + 4)) ^ seed).wrapping_mul(277803737);
 		(seed >> 22) ^ seed
@@ -56,7 +56,7 @@ impl Rand {
 	
 	/// Xorshift algorithm (fast)
 	#[inline(always)]
-	pub fn xorshift(mut seed: u32) -> u32 {
+	pub const fn xorshift(mut seed: u32) -> u32 {
 		seed ^= seed << 13;
 		seed ^= seed >> 17;
 		seed ^= seed << 5;
@@ -65,7 +65,7 @@ impl Rand {
 	
 	/// PCG32 variant (fast)
 	#[inline(always)]
-	pub fn pcg32_fast(seed: u32) -> u32 {
+	pub const fn pcg32_fast(seed: u32) -> u32 {
 		let x = 0x15ea5e5;
 		let count = x >> 29;
 		let y = seed >> 15;
@@ -75,7 +75,7 @@ impl Rand {
 	
 	/// PCG with better mixing
 	#[inline(always)]
-	pub fn pcg_improved(input: u32) -> u32 {
+	pub const fn pcg_improved(input: u32) -> u32 {
 		let state = input.wrapping_add(0x9e3779b9);
 		state
 			.wrapping_mul(0x85ebca6b)
@@ -117,7 +117,7 @@ pub fn random_bool() -> bool {
 }
 
 // Sigmoid-like interpolation (recommended)
-pub fn smooth_interpolate(noise: f32) -> f32 {
+pub const fn smooth_interpolate(noise: f32) -> f32 {
 	// Uses a sigmoid-like curve that doesn't flatten at 0
 	let scaled = noise * 2.0; // increase sensitivity
 	let sigmoid = scaled / (1.0 + scaled.abs()); // smooth sigmoid
@@ -136,7 +136,7 @@ pub struct Noise {
 
 impl Noise {
 	#[inline(always)]
-	pub fn new(seed: u32) -> Self {
+	pub const fn new(seed: u32) -> Self {
 		Self { seed }
 	}
 	

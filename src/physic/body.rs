@@ -13,7 +13,7 @@ pub struct PhysicsBody {
 
 impl PhysicsBody {
 	#[inline]
-	pub fn new(aabb: AABB) -> Self {
+	pub const fn new(aabb: AABB) -> Self {
 		Self {
 			aabb,
 			velocity: Vec3::ZERO,

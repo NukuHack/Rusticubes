@@ -29,63 +29,54 @@ impl ChunkCoord {
 	const X_MASK: u64 = (1 << 26) - 1;
 
 	/// Creates a new chunk coordinate
-	#[inline]
-	pub const fn new(x: i32, y: i32, z: i32) -> Self {
+	#[inline] pub const fn new(x: i32, y: i32, z: i32) -> Self {
 		Self(Self::pack(x, y, z))
 	}
 
 	/// Packs coordinates into a u64
-	#[inline]
-	pub const fn pack(x: i32, y: i32, z: i32) -> u64 {
+	#[inline] pub const fn pack(x: i32, y: i32, z: i32) -> u64 {
 		((x as u64 & Self::X_MASK) << Self::X_SHIFT)
 			| ((y as u64 & Self::Y_MASK) << Self::Y_SHIFT)
 			| (z as u64 & Self::Z_MASK)
 	}
 
 	/// Extracts (x, y, z) coordinates
-	#[inline]
-	pub const fn unpack(self) -> (i32, i32, i32) {
+	#[inline] pub const fn unpack(self) -> (i32, i32, i32) {
 		(self.x(), self.y(), self.z())
 	}
 	/// Extracts (x, y, z) coordinates and make them world pos
-	#[inline]
-	pub const fn unpack_to_worldpos(self) -> (i32, i32, i32) {
+	#[inline] pub const fn unpack_to_worldpos(self) -> (i32, i32, i32) {
 		(self.x()*Chunk::SIZE_I, self.y()*Chunk::SIZE_I, self.z()*Chunk::SIZE_I)
 	}
 
 	/// Extracts X coordinate with sign extension
-	#[inline]
-	pub const fn x(self) -> i32 {
+	#[inline] pub const fn x(self) -> i32 {
 		((self.0 >> Self::X_SHIFT) as i32)
 			.wrapping_shl(6)
 			.wrapping_shr(6)
 	}
 
 	/// Extracts Y coordinate with sign extension
-	#[inline]
-	pub const fn y(self) -> i32 {
+	#[inline] pub const fn y(self) -> i32 {
 		((self.0 >> Self::Y_SHIFT) as i32 & Self::Y_MASK as i32)
 			.wrapping_shl(20)
 			.wrapping_shr(20)
 	}
 
 	/// Extracts Z coordinate with sign extension
-	#[inline]
-	pub const fn z(self) -> i32 {
+	#[inline] pub const fn z(self) -> i32 {
 		(self.0 as i32 & Self::Z_MASK as i32)
 			.wrapping_shl(6)
 			.wrapping_shr(6)
 	}
 
 	/// Converts to u64 
-	#[inline]
-	pub fn into_u64(self) -> u64 {
+	#[inline] pub fn into_u64(self) -> u64 {
 		self.into()
 	}
 
 	/// Converts to world position (chunk min corner)
-	#[inline]
-	pub fn to_world_pos(self) -> Vec3 {
+	#[inline] pub fn to_world_pos(self) -> Vec3 {
 		let chunk_size = Chunk::SIZE_I;
 		Vec3::new(
 			(self.x() * chunk_size) as f32,
@@ -95,8 +86,7 @@ impl ChunkCoord {
 	}
 
 	/// Creates from world position
-	#[inline]
-	pub fn from_world_pos(world_pos: IVec3) -> Self {
+	#[inline] pub fn from_world_pos(world_pos: IVec3) -> Self {
 		let chunk_size = Chunk::SIZE_I;
 		Self::new(
 			world_pos.x.div_euclid(chunk_size),
@@ -104,8 +94,7 @@ impl ChunkCoord {
 			world_pos.z.div_euclid(chunk_size),
 		)
 	}
-	#[inline]
-	pub fn from_world_posf(world_pos: Vec3) -> Self {
+	#[inline] pub fn from_world_posf(world_pos: Vec3) -> Self {
 		let chunk_size = Chunk::SIZE_I;
 		Self::new(
 			world_pos.x.div_euclid(chunk_size as f32) as i32,
@@ -115,8 +104,7 @@ impl ChunkCoord {
 	}
 
 	/// Offsets the chunk coordinate by `dx`, `dy`, `dz` (wrapping not applied since chunks are infinite)
-	#[inline]
-	pub fn offset(&self, dx: i32, dy: i32, dz: i32) -> Self {
+	#[inline] pub const fn offset(&self, dx: i32, dy: i32, dz: i32) -> Self {
 		Self::new(
 			self.x().wrapping_add(dx),
 			self.y().wrapping_add(dy),
@@ -125,8 +113,7 @@ impl ChunkCoord {
 	}
 
 	/// Returns the 6 directly adjacent chunk coordinates (no diagonals)
-	#[inline]
-	pub fn get_adjacent(&self) -> [ChunkCoord; 6] {
+	#[inline] pub const fn get_adjacent(&self) -> [ChunkCoord; 6] {
 		[
 			self.offset(1, 0, 0),  // +X
 			self.offset(-1, 0, 0), // -X
@@ -138,8 +125,7 @@ impl ChunkCoord {
 	}
 
 	/// Checks if this chunk is adjacent to another chunk (direct neighbors)
-	#[inline]
-	pub fn is_adjacent(&self, other: ChunkCoord) -> bool {
+	#[inline] pub fn is_adjacent(&self, other: ChunkCoord) -> bool {
 		let dx = self.x().abs_diff(other.x());
 		let dy = self.y().abs_diff(other.y());
 		let dz = self.z().abs_diff(other.z());
@@ -169,9 +155,7 @@ pub struct BlockPosition(u16);
 
 impl BlockPosition {
 	/// Creates a new BlockPosition from x,y,z coordinates (0-15)
-	#[inline]
-	// Current implementation:
-	pub const fn new(x: u8, y: u8, z: u8) -> Self {
+	#[inline] pub const fn new(x: u8, y: u8, z: u8) -> Self {
 		Self((x as u16) << 0 | ((y as u16) << 4) | ((z as u16) << 8))
 	}
 
@@ -181,39 +165,33 @@ impl BlockPosition {
 		value.into()
 	}
 	/// Creates a new BlockPosition from a linear index (0-4095)
-	#[inline]
-	pub const fn from_index(index: u16) -> Self {
+	#[inline] pub const fn from_index(index: u16) -> Self {
 		debug_assert!(index < 4096, "Index must be 0-4095");
 		Self(index)
 	}
 
 	/// Gets the x coordinate (0-15)
-	#[inline]
-	pub const fn x(&self) -> u8 {
+	#[inline] pub const fn x(&self) -> u8 {
 		(self.0 & 0x000F) as u8
 	}
 
 	/// Gets the y coordinate (0-15)
-	#[inline]
-	pub const fn y(&self) -> u8 {
+	#[inline] pub const fn y(&self) -> u8 {
 		((self.0 >> 4) & 0x000F) as u8
 	}
 
 	/// Gets the z coordinate (0-15)
-	#[inline]
-	pub const fn z(&self) -> u8 {
+	#[inline] pub const fn z(&self) -> u8 {
 		((self.0 >> 8) & 0x000F) as u8
 	}
 
 	/// Gets the linear index (0-4095)
-	#[inline]
-	pub const fn index(&self) -> u16 {
+	#[inline] pub const fn index(&self) -> u16 {
 		self.0
 	}
 
 	/// Offsets the position by dx, dy, dz (wrapping within chunk)
-	#[inline]
-	pub fn offset(&self, dx: i8, dy: i8, dz: i8) -> Self {
+	#[inline] pub const fn offset(&self, dx: i8, dy: i8, dz: i8) -> Self {
 		let chunk_size = Chunk::SIZE_I;
 		let x = (self.x() as i32 + dx as i32).rem_euclid(chunk_size) as u8;
 		let y = (self.y() as i32 + dy as i32).rem_euclid(chunk_size) as u8;
@@ -222,8 +200,7 @@ impl BlockPosition {
 	}
 
 	/// Returns the 6 directly adjacent block positions within the chunk (no diagonals)
-	#[inline]
-	pub fn get_adjacent(&self) -> [BlockPosition; 6] {
+	#[inline] pub const fn get_adjacent(&self) -> [BlockPosition; 6] {
 		[
 			self.offset(1, 0, 0),  // +X
 			self.offset(-1, 0, 0), // -X
@@ -235,8 +212,7 @@ impl BlockPosition {
 	}
 
 	/// Checks if this position is adjacent to another position
-	#[inline]
-	pub fn is_adjacent(&self, other: BlockPosition) -> bool {
+	#[inline] pub const fn is_adjacent(&self, other: BlockPosition) -> bool {
 		let dx = self.x().abs_diff(other.x());
 		let dy = self.y().abs_diff(other.y());
 		let dz = self.z().abs_diff(other.z());
@@ -397,7 +373,7 @@ pub enum BlockRotation {
 impl BlockRotation {
 
 	/// Returns the primary axis of this rotation
-	pub fn primary_axis(self) -> Axis {
+	#[inline] pub const fn primary_axis(self) -> Axis {
 		match self {
 			BlockRotation::XplusYplus | BlockRotation::XplusYminus |
 			BlockRotation::XplusZplus | BlockRotation::XplusZminus => Axis::Xplus,
@@ -420,7 +396,7 @@ impl BlockRotation {
 	}
 
 	/// Returns the secondary axis of this rotation
-	pub fn secondary_axis(self) -> Axis {
+	#[inline] pub const fn secondary_axis(self) -> Axis {
 		match self {
 			BlockRotation::XplusYplus | BlockRotation::XminusYplus |
 			BlockRotation::YplusXplus | BlockRotation::YminusXplus  => Axis::Xplus,
