@@ -10,14 +10,13 @@ const REACH: f32 = 6.0;
 
 /// Helper function to update a chunk mesh after modification
 #[inline]
-fn update_chunk_mesh(world: &mut World, pos: IVec3) {
-	let chunk_pos = ChunkCoord::from_world_pos(pos);
+fn update_chunk_mesh(world: &mut World, chunk_coord: ChunkCoord) {
 	
 	// Get raw pointer to the world's chunks
 	let world_ptr = world as *mut World;
 	
 	// Get mutable reference to our chunk
-	if let Some(chunk) = world.get_chunk_mut(chunk_pos) {
+	if let Some(chunk) = world.get_chunk_mut(chunk_coord) {
 		let state = ptr::get_state();
 		
 		// SAFETY:
@@ -26,22 +25,21 @@ fn update_chunk_mesh(world: &mut World, pos: IVec3) {
 		// 3. We don't modify through these references
 		let neighbors = unsafe {
 			let world_ref = &*world_ptr;
-			[
-				world_ref.get_chunk(chunk_pos.offset(-1, 0, 0)),  // Left
-				world_ref.get_chunk(chunk_pos.offset(1, 0, 0)), // Right
-				world_ref.get_chunk(chunk_pos.offset(0, 0, -1)),   // Front
-				world_ref.get_chunk(chunk_pos.offset(0, 0, 1)), // Back
-				world_ref.get_chunk(chunk_pos.offset(0, 1, 0)), // Top
-				world_ref.get_chunk(chunk_pos.offset(0, -1, 0)),   // Bottom
-			]
+			world_ref.get_neighboring_chunks(chunk_coord)
 		};
 
 		chunk.make_mesh(
 			state.device(),
 			state.queue(),
-			&neighbors,
+			neighbors,
 			true,
 		);
+
+		for coord in chunk_coord.get_adjacent().iter() {
+		    if let Some(neighbor_chunk) = world.get_chunk_mut(*coord) {
+				neighbor_chunk.final_mesh = false;
+		    }
+		}
 	}
 }
 
@@ -131,7 +129,7 @@ pub fn place_looked_block() {
     if let Some((block_pos, normal)) = raycast_to_block(camera, world, REACH) {
         let placement_pos = block_pos + normal;
         world.set_block(placement_pos, Block::new(1));
-        update_chunk_mesh(world, placement_pos);
+        update_chunk_mesh(world, ChunkCoord::from_world_pos(placement_pos));
     }
 }
 
@@ -145,7 +143,7 @@ pub fn remove_targeted_block() {
 
 	if let Some((block_pos, _)) = raycast_to_block(state.camera_system.camera(), world, REACH) {
 		world.set_block(block_pos, Block::None);
-		update_chunk_mesh(world, block_pos);
+		update_chunk_mesh(world, ChunkCoord::from_world_pos(block_pos));
 	}
 }
 
@@ -157,18 +155,13 @@ pub fn add_full_chunk() {
 	if !state.is_world_running {
 		return;
 	}
-	let chunk_pos = ChunkCoord::from_world_posf(state.camera_system.camera().position());
+	let pos:Vec3 = state.camera_system.camera().position();
+	let chunk_coord = ChunkCoord::from_world_posf(pos);
 
 	let world = ptr::get_gamestate().world_mut();
-	world.load_chunk(chunk_pos);
-	world.create_bind_group(chunk_pos);
-	if let Some(chunk) = ptr::get_gamestate()
-		.world_mut()
-		.get_chunk_mut(chunk_pos)
-	{
-		let state_b = ptr::get_state();
-		chunk.make_mesh(state_b.device(), state_b.queue(), &world.get_neighboring_chunks(chunk_pos), true);
-	}
+	world.load_chunk(chunk_coord);
+	world.create_bind_group(chunk_coord);
+	update_chunk_mesh(world, chunk_coord);
 }
 
 /// Loads chunks around the camera in a radius

@@ -1,4 +1,5 @@
 
+use crate::render::world::NeighboringChunks;
 use crate::block::main::Chunk;
 use crate::block::math::BlockPosition;
 use glam::IVec3;
@@ -13,7 +14,7 @@ use wgpu::util::DeviceExt;
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable, Default)]
 pub struct Vertex {
-    pub position: u32,  // 5 bits per axis (x,y,z)
+	pub position: u32,  // 5 bits per axis (x,y,z)
 }
 #[repr(C)]
 #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
@@ -44,19 +45,19 @@ impl Vertex {
 	}
 }
 impl InstanceRaw {
-    pub const fn desc() -> wgpu::VertexBufferLayout<'static> {
-        wgpu::VertexBufferLayout {
-            array_stride: mem::size_of::<Self>() as wgpu::BufferAddress,
-            step_mode: wgpu::VertexStepMode::Instance, // This marks it as instance data
-            attributes: &[
-                wgpu::VertexAttribute {
-                    offset: 0,
-                    shader_location: 1,
-                    format: wgpu::VertexFormat::Uint32,
-                },
-            ],
-        }
-    }
+	pub const fn desc() -> wgpu::VertexBufferLayout<'static> {
+		wgpu::VertexBufferLayout {
+			array_stride: mem::size_of::<Self>() as wgpu::BufferAddress,
+			step_mode: wgpu::VertexStepMode::Instance, // This marks it as instance data
+			attributes: &[
+				wgpu::VertexAttribute {
+					offset: 0,
+					shader_location: 1,
+					format: wgpu::VertexFormat::Uint32,
+				},
+			],
+		}
+	}
 }
 
 // =============================================
@@ -77,16 +78,16 @@ impl ChunkMeshBuilder {
 		}
 	}
 	// pos is allways 0-15
-	pub fn add_cube(&mut self, pos: IVec3, chunk: &Chunk, neighbors: &[Option<&Chunk>; 6]) {
+	pub fn add_cube(&mut self, pos: IVec3, chunk: &Chunk, neighbors: &NeighboringChunks) {
 		for (idx, normal) in CUBE_FACES.iter().enumerate() {
 			let neighbor_pos: IVec3 = pos + *normal;
 			
-			if !self.should_cull_face(neighbor_pos, chunk, neighbors) {
+			if !self.should_cull_face(neighbor_pos, chunk, &neighbors) {
 				self.add_quad(pos, idx);
 			}
 		}
 	}
-	#[inline]fn should_cull_face(&self, pos: IVec3, chunk: &Chunk, neighbors: &[Option<&Chunk>; 6]) -> bool {    
+	#[inline] fn should_cull_face(&self, pos: IVec3, chunk: &Chunk, neighbors: &NeighboringChunks) -> bool {    
 		// Check if position is inside current chunk
 		let idx = usize::from(BlockPosition::from(pos));
 		if chunk.contains_position(pos) {
@@ -94,7 +95,7 @@ impl ChunkMeshBuilder {
 		}
 		
 		// Position is in neighboring chunk
-		let neighbor_chunk = self.get_neighbor_chunk_and_local_pos(pos, neighbors);
+		let neighbor_chunk = self.get_neighbor_chunk_and_local_pos(pos, &neighbors);
 		
 		match neighbor_chunk {
 			Some(chunk) => {
@@ -103,31 +104,29 @@ impl ChunkMeshBuilder {
 			None => true, // No neighbor chunk means not loaded cull for now and reload mesh if it loads in
 		}
 	}
-	#[inline]fn get_neighbor_chunk_and_local_pos<'a>(&self, neighbor_pos: IVec3, neighbors: &[Option<&'a Chunk>; 6]) -> Option<&'a Chunk> {
+	#[inline] fn get_neighbor_chunk_and_local_pos<'a>(&self, neighbor_pos: IVec3, neighbors: &NeighboringChunks<'a>) -> Option<&'a Chunk> {
 		// Calculate which neighbor we need to check
 		// The neighbor indices should match the order in CUBE_FACES_F:
 		// [0] = Left (-X), [1] = Right (+X), [2] = Front (-Z), [3] = Back (+Z), [4] = Top (+Y), [5] = Bottom (-Y)
 		// Precompute the bit patterns for comparison (avoids FP math)
 
-	    // Chunk boundaries in i32 coordinates
-	    const LEFT_EDGE: i32 = -1;
-	    const RIGHT_EDGE: i32 = Chunk::SIZE_I;
-	    
-	    // Check X axis first (most common)
-	    if neighbor_pos.x == LEFT_EDGE { return neighbors[0]; }  // -X (Left)
-	    if neighbor_pos.x == RIGHT_EDGE { return neighbors[1]; }  // +X (Right)
-	    
-	    // Then Z axis
-	    if neighbor_pos.z == LEFT_EDGE { return neighbors[2]; }  // -Z (Front)
-	    if neighbor_pos.z == RIGHT_EDGE { return neighbors[3]; }  // +Z (Back)
-	    
-	    // Finally Y axis
-	    if neighbor_pos.y == RIGHT_EDGE { return neighbors[4]; }  // +Y (Top)
-	    if neighbor_pos.y == LEFT_EDGE { return neighbors[5]; }   // -Y (Bottom)
-	    
+		// Chunk boundaries in i32 coordinates
+		const LEFT_EDGE: i32 = -1;
+		const RIGHT_EDGE: i32 = Chunk::SIZE_I;
+		
+		// Check X axis first (most common)
+		if neighbor_pos.x == LEFT_EDGE { return neighbors.left(); }  // -X (Left)
+		if neighbor_pos.x == RIGHT_EDGE { return neighbors.right(); }  // +X (Right)
+		// Then Z axis
+		if neighbor_pos.z == LEFT_EDGE { return neighbors.front(); }  // -Z (Front)
+		if neighbor_pos.z == RIGHT_EDGE { return neighbors.back(); }  // +Z (Back)
+		// Finally Y axis
+		if neighbor_pos.y == RIGHT_EDGE { return neighbors.top(); }  // +Y (Top)
+		if neighbor_pos.y == LEFT_EDGE { return neighbors.bottom(); }   // -Y (Bottom)
+		
 		unreachable!("Position should be outside current chunk");  // Position is inside current chunk
 	}
-	#[inline]fn add_quad(&mut self, position: IVec3, idx: usize) {		
+	#[inline] fn add_quad(&mut self, position: IVec3, idx: usize) {		
 		// Add instances without any UV data - shader will calculate everything
 
 		let position:u16 = BlockPosition::from(position).into();
@@ -148,13 +147,13 @@ const CUBE_FACES: [IVec3; 6] = [
 	IVec3::NEG_Y, // [5] Bottom face
 ];
 pub const VERTICES: [Vertex; 6] = {
-    let p0 = Vertex::new((0 as u16 | (0 as u16) << 4 | (0 as u16) << 8) as u32);
-    let p1 = Vertex::new((0 as u16 | (0 as u16) << 4 | (1 as u16) << 8) as u32);
-    let p2 = Vertex::new((1 as u16 | (0 as u16) << 4 | (1 as u16) << 8) as u32);
-    let p3 = Vertex::new((1 as u16 | (0 as u16) << 4 | (1 as u16) << 8) as u32);
-    let p4 = Vertex::new((1 as u16 | (0 as u16) << 4 | (0 as u16) << 8) as u32);
-    let p5 = Vertex::new((0 as u16 | (0 as u16) << 4 | (0 as u16) << 8) as u32);
-    [p0, p1, p2, p3, p4, p5]
+	let p0 = Vertex::new((0 as u16 | (0 as u16) << 4 | (0 as u16) << 8) as u32);
+	let p1 = Vertex::new((0 as u16 | (0 as u16) << 4 | (1 as u16) << 8) as u32);
+	let p2 = Vertex::new((1 as u16 | (0 as u16) << 4 | (1 as u16) << 8) as u32);
+	let p3 = Vertex::new((1 as u16 | (0 as u16) << 4 | (1 as u16) << 8) as u32);
+	let p4 = Vertex::new((1 as u16 | (0 as u16) << 4 | (0 as u16) << 8) as u32);
+	let p5 = Vertex::new((0 as u16 | (0 as u16) << 4 | (0 as u16) << 8) as u32);
+	[p0, p1, p2, p3, p4, p5]
 };
 
 

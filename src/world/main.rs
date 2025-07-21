@@ -71,18 +71,33 @@ impl World {
 	#[inline]
 	pub fn set_block(&mut self, world_pos: IVec3, block: Block) {
 		let chunk_coord = ChunkCoord::from_world_pos(world_pos);
-
-		if !self.chunks.contains_key(&chunk_coord) {
+		
+		// Get immutable access first to check conditions
+		let needs_new_chunk = !self.chunks.contains_key(&chunk_coord);
+		let is_border_block = self.get_chunk(chunk_coord)
+			.map(|chunk| chunk.is_border_block(world_pos.into()))
+			.unwrap_or(false);
+		
+		// Only get mutable access if we actually need to modify
+		let chunk = if needs_new_chunk {
 			self.set_chunk(chunk_coord, Chunk::empty());
-		}
-
-		if let Some(chunk) = self.chunks.get_mut(&chunk_coord) {
-			let local_pos: BlockPosition = world_pos.into();
-			let index: usize = local_pos.into();
-
-			// Only set if the block is actually different
-			if chunk.get_block(index) != &block {
-				chunk.set_block(index, block);
+			self.get_chunk_mut(chunk_coord).expect("Chunk should exist after insertion")
+		} else {
+			self.get_chunk_mut(chunk_coord).expect("Chunk should exist")
+		};
+		
+		let local_pos: BlockPosition = world_pos.into();
+		let index: usize = local_pos.into();
+		
+		// Only proceed if the block is actually different
+		if chunk.get_block(index) != &block {
+			chunk.set_block(index, block);
+			if is_border_block {
+				for coord in chunk_coord.get_adjacent().iter() {
+				    if let Some(neighbor_chunk) = self.get_chunk_mut(*coord) {
+						neighbor_chunk.final_mesh = false;
+				    }
+				}
 			}
 		}
 	}

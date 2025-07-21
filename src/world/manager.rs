@@ -289,6 +289,7 @@ impl Chunk {
 			palette,
 			storage,
 			dirty: true,
+			final_mesh: false,
 			mesh: None,
 			bind_group: None,
 		})
@@ -534,7 +535,6 @@ pub fn load_entire_world(path: &PathBuf) -> Result<()> {
 	})?;
 	// Apply the loaded world
 	ptr::get_gamestate().world_change(loaded_world);
-	ptr::get_gamestate().world_mut().remake_rendering();
 		
 	Ok(())
 }

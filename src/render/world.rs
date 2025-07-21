@@ -1,13 +1,38 @@
 
 use wgpu::util::DeviceExt;
-use ahash::AHasher;
 use glam::IVec3;
-use std::{ collections::HashMap, hash::BuildHasherDefault };
 use crate::block::main::{Block, Chunk};
 use crate::block::math::{ChunkCoord, BlockPosition};
 use crate::render::meshing::{ChunkMeshBuilder, GeometryBuffer};
 use crate::ext::ptr;
 use crate::world::main::World;
+
+pub struct NeighboringChunks<'a> {
+	chunks: [Option<&'a Chunk>; 6],
+}
+
+impl<'a> NeighboringChunks<'a> {
+	pub fn new(chunks: [Option<&'a Chunk>; 6]) -> Self {
+		Self { chunks }
+	}
+
+	// Directional accessors
+	pub fn left(&self) -> Option<&'a Chunk> { self.chunks[0] }    // (-1, 0, 0)
+	pub fn right(&self) -> Option<&'a Chunk> { self.chunks[1] }    // (1, 0, 0)
+	pub fn front(&self) -> Option<&'a Chunk> { self.chunks[2] }   // (0, 0, -1)
+	pub fn back(&self) -> Option<&'a Chunk> { self.chunks[3] }    // (0, 0, 1)
+	pub fn top(&self) -> Option<&'a Chunk> { self.chunks[4] }     // (0, 1, 0)
+	pub fn bottom(&self) -> Option<&'a Chunk> { self.chunks[5] }  // (0, -1, 0)
+
+    pub fn is_some(&self) -> bool {
+        self.chunks.iter().all(Option::is_some)
+    }
+
+    // Add an iter() method that returns an iterator over Option<&Chunk>
+    pub fn iter(&self) -> impl Iterator<Item = Option<&'a Chunk>> + '_ {
+        self.chunks.iter().copied()
+    }
+}
 
 // =============================================
 // Extra Rendering related Implementations
@@ -23,9 +48,15 @@ pub struct Chunk {
 }
 */
 impl Chunk {
-	pub fn make_mesh(&mut self, device: &wgpu::Device, _queue: &wgpu::Queue, neighbors: &[Option<&Chunk>; 6], force: bool) {
+	pub fn make_mesh(&mut self, device: &wgpu::Device, _queue: &wgpu::Queue, neighbors: NeighboringChunks, force: bool) {
 		if !force && !self.dirty && self.mesh.is_some() {
-			return;
+			if self.final_mesh {
+				return;
+			} else {
+				if !neighbors.is_some() {
+					return;
+				}
+			}
 		}
 
 		// Early return if chunk is empty
@@ -47,7 +78,7 @@ impl Chunk {
 			let local_pos:IVec3 = BlockPosition::from(pos).into();
 			match block {
 				Block::Simple(..) => {
-					builder.add_cube(local_pos, self, neighbors);
+					builder.add_cube(local_pos, self, &neighbors);
 				},
 				_ => {},
 			}
@@ -55,60 +86,56 @@ impl Chunk {
 
 		self.mesh = Some(GeometryBuffer::new(device, &builder.instances));
 		self.dirty = false;
+		if neighbors.is_some() {
+			self.final_mesh = true;
+		} else {
+			self.final_mesh = false;
+		}
 	}
 }
 impl World {
-	/// Generates meshes for all dirty chunks
+	/// Generates meshes for all dirty chunks and all non final meshed ones
 	#[inline]
 	pub fn make_chunk_meshes(&mut self, device: &wgpu::Device, queue: &wgpu::Queue) {
-		// Define the full HashMap type including the hasher
-		type ChunkMap = HashMap<ChunkCoord, Chunk, BuildHasherDefault<AHasher>>;
 		
-		// Get raw pointer with explicit type
-		let chunks_ptr: *const ChunkMap = &self.chunks as *const ChunkMap;
-		
-		for (chunk_pos, chunk) in self.chunks.iter_mut() {
+		// Get raw pointer to the world's chunks
+		let world_ptr = self as *mut World;
+
+		for (chunk_coord, chunk) in self.chunks.iter_mut() {
 			if chunk.is_empty() {
 				continue;
 			}
 
 			// SAFETY:
-			// 1. We only access different chunks than the one we're mutating
-			// 2. The references don't outlive the current iteration
-			// 3. We don't modify the chunks through these references
+			// 1. We only use the pointer to access different chunks than the one we're modifying
+			// 2. The references don't outlive this scope
+			// 3. We don't modify through these references
 			let neighbors = unsafe {
-				let chunks: &ChunkMap = &*chunks_ptr;
-				[
-					chunks.get(&chunk_pos.offset(-1, 0, 0)),  // Left
-					chunks.get(&chunk_pos.offset(1, 0, 0)),   // Right
-					chunks.get(&chunk_pos.offset(0, 0, -1)),  // Front
-					chunks.get(&chunk_pos.offset(0, 0, 1)),   // Back
-					chunks.get(&chunk_pos.offset(0, 1, 0)),   // Top
-					chunks.get(&chunk_pos.offset(0, -1, 0)),  // Bottom
-				]
+				let world_ref = &*world_ptr;
+				world_ref.get_neighboring_chunks(*chunk_coord)
 			};
 
-			chunk.make_mesh(device, queue, &neighbors, false);
+			chunk.make_mesh(device, queue, neighbors, false);
 		}
 	}
 
 	#[inline]
-	pub fn get_neighboring_chunks(&self, chunk_pos: ChunkCoord) -> [Option<&Chunk>;6] {
-		self.chunks.get(&chunk_pos);
-
-		[
-			self.chunks.get(&chunk_pos.offset(-1, 0, 0)),  // Left
-			self.chunks.get(&chunk_pos.offset(1, 0, 0)),   // Right
-			self.chunks.get(&chunk_pos.offset(0, 0, -1)),  // Front
-			self.chunks.get(&chunk_pos.offset(0, 0, 1)),   // Back
-			self.chunks.get(&chunk_pos.offset(0, 1, 0)),    // Top
-			self.chunks.get(&chunk_pos.offset(0, -1, 0)),   // Bottom
-		]
+	pub fn get_neighboring_chunks(&self, chunk_coord: ChunkCoord) -> NeighboringChunks {
+		//self.chunks.get(&chunk_coord);
+		let neigh = chunk_coord.get_adjacent();
+		NeighboringChunks::new([
+			self.get_chunk(neigh[0]),  // Left
+			self.get_chunk(neigh[1]), // Right
+			self.get_chunk(neigh[2]),   // Front
+			self.get_chunk(neigh[3]), // Back
+			self.get_chunk(neigh[4]), // Top
+			self.get_chunk(neigh[5]),   // Bottom
+		])
 	}
 }
 impl Chunk {
 	/// Recreates chunk's bind group
-	pub fn create_bind_group(&mut self, chunk_pos: ChunkCoord) {
+	pub fn create_bind_group(&mut self, chunk_coord: ChunkCoord) {
 		let state = ptr::get_state();
 		let device = state.device();
 		let chunk_bind_group_layout = &state.render_context.chunk_bind_group_layout;
@@ -116,7 +143,7 @@ impl Chunk {
 		// Create position buffer
 		let position_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
 			label: Some("Chunk Position Buffer"),
-			contents: bytemuck::cast_slice(&[<ChunkCoord as Into<u64>>::into(chunk_pos)]),
+			contents: bytemuck::cast_slice(&[<ChunkCoord as Into<u64>>::into(chunk_coord)]),
 			usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
 		});
 
@@ -137,7 +164,7 @@ impl Chunk {
 
 impl World {
 	pub fn render_chunks<'a>(&'a self, render_pass: &mut wgpu::RenderPass<'a>) {
-		for (_chunk_pos, chunk) in self.chunks.iter() {
+		for (_chunk_coord, chunk) in self.chunks.iter() {
 			// Skip empty chunks entirely - no mesh or bind group needed
 			if chunk.is_empty() {
 				continue;
@@ -151,16 +178,7 @@ impl World {
 				render_pass.set_bind_group(2, bind_group, &[]);
 				render_pass.set_vertex_buffer(1, mesh.instance_buffer.slice(..));
 
-	            render_pass.draw(0..6, 0..mesh.num_instances as u32);
-			}
-		}
-	}
-
-	pub fn remake_rendering(&mut self) {
-		for (coord, chunk) in self.chunks.iter_mut() {
-			chunk.create_bind_group(*coord);
-			if !self.loaded_chunks.contains(&coord) {
-				self.loaded_chunks.insert(*coord);
+				render_pass.draw(0..6, 0..mesh.num_instances as u32);
 			}
 		}
 	}

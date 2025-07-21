@@ -90,6 +90,7 @@ pub struct Chunk {
 	pub palette: Vec<Block>, // Max 256 entries (index 0 = air, indices 1-255 = blocks)
 	pub storage: BlockStorage, // Palette indices for each block position
 	pub dirty: bool,
+	pub final_mesh: bool,
 	pub mesh: Option<GeometryBuffer>,
 	pub bind_group: Option<wgpu::BindGroup>,
 }
@@ -165,6 +166,7 @@ impl Chunk {
 			palette: vec![Block::None],  // Index 0 is always air
 			storage: BlockStorage::Uniform(0u8), // All blocks point to air
 			dirty: false,
+			final_mesh: false,
 			mesh: None,
 			bind_group: None,
 		}
@@ -331,7 +333,6 @@ impl Chunk {
 		}
 	}
 
-
 	/// Sets a block at the given index
 	pub fn set_block(&mut self, index: usize, block: Block) {
 		let palette_idx = self.palette_add(block);
@@ -364,6 +365,16 @@ impl Chunk {
 			return false;
 		}
 		else { true }
+	}
+	#[inline] pub const fn is_border_block(&self, pos: IVec3) -> bool {
+		// Check if position barely inside the chunk
+		if pos.x == 0 || pos.x == 15
+			|| pos.y == 0 || pos.y == 15
+			|| pos.z == 0 || pos.z == 15
+		{
+			return true;
+		}
+		false
 	}
 
 	/// Returns a reference to the mesh if it exists

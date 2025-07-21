@@ -115,12 +115,12 @@ impl ChunkCoord {
 	/// Returns the 6 directly adjacent chunk coordinates (no diagonals)
 	#[inline] pub const fn get_adjacent(&self) -> [ChunkCoord; 6] {
 		[
-			self.offset(1, 0, 0),  // +X
 			self.offset(-1, 0, 0), // -X
+			self.offset(1, 0, 0),  // +X
+			self.offset(0, 0, -1), // -Z
+			self.offset(0, 0, 1),  // +Z
 			self.offset(0, 1, 0),  // +Y
 			self.offset(0, -1, 0), // -Y
-			self.offset(0, 0, 1),  // +Z
-			self.offset(0, 0, -1), // -Z
 		]
 	}
 
@@ -202,12 +202,12 @@ impl BlockPosition {
 	/// Returns the 6 directly adjacent block positions within the chunk (no diagonals)
 	#[inline] pub const fn get_adjacent(&self) -> [BlockPosition; 6] {
 		[
-			self.offset(1, 0, 0),  // +X
 			self.offset(-1, 0, 0), // -X
+			self.offset(1, 0, 0),  // +X
+			self.offset(0, 0, -1), // -Z
+			self.offset(0, 0, 1),  // +Z
 			self.offset(0, 1, 0),  // +Y
 			self.offset(0, -1, 0), // -Y
-			self.offset(0, 0, 1),  // +Z
-			self.offset(0, 0, -1), // -Z
 		]
 	}
 

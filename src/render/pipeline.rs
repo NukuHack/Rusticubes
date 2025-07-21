@@ -20,13 +20,13 @@ impl Pipeline {
 	/// Creates all render pipelines with proper configuration
 	#[inline]
 	pub fn new(device: &wgpu::Device, config: &wgpu::SurfaceConfiguration, layouts: &[&wgpu::BindGroupLayout]) -> Self {
-/*layouts = [
-	&texture_manager.bind_group_layout(),
-	&camera_system.bind_group_layout(),
-	&chunk_bind_group_layout,
-	&skybox_bind_group_layout
-	&post_bind_group_layout
-];*/
+	/*layouts = [
+		&texture_manager.bind_group_layout(),
+		&camera_system.bind_group_layout(),
+		&chunk_bind_group_layout,
+		&skybox_bind_group_layout
+		&post_bind_group_layout
+	];*/
 		// Create shaders
 		let shaders = Shaders::new(device);
 
