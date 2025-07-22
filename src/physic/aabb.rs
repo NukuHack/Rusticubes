@@ -2,6 +2,7 @@ use glam::{Vec3, IVec3};
 
 /// Default gravity constant (Earth gravity: 9.8 m/s²)
 pub const GRAVITY: Vec3 = Vec3::new(0.0, -9.8, 0.0);
+pub const DRAG_COEFFICIENT: f32 = 0.98;
 
 /// Axis-Aligned Bounding Box for collision detection and spatial queries
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -41,9 +42,8 @@ impl AABB {
         let half_size = size * 0.5;
         Self::from_center(Vec3::ZERO, half_size)
     }
-}
 
-impl AABB {
+
     /// Returns the dimensions (width, height, depth) of the AABB
     #[inline]
     pub fn dimensions(&self) -> Vec3 {
@@ -83,9 +83,8 @@ impl AABB {
         self.min.y <= self.max.y && 
         self.min.z <= self.max.z
     }
-}
 
-impl AABB {
+
     /// Checks if this AABB overlaps with another AABB
     #[inline]
     pub const fn intersects(&self, other: &Self) -> bool {
@@ -120,9 +119,8 @@ impl AABB {
         let dz = (point.z - self.max.z).max(0.0).max(self.min.z - point.z);
         dx * dx + dy * dy + dz * dz
     }
-}
 
-impl AABB {
+
     /// Returns a new AABB translated by the given vector
     #[inline]
     pub fn translate(&self, translation: Vec3) -> Self {
@@ -282,9 +280,8 @@ impl PhysicsBody {
             ..Self::new(aabb)
         }
     }
-}
 
-impl PhysicsBody {
+
     /// Updates the physics body for one timestep
     pub fn update(&mut self, dt: f32, gravity: Vec3) {
         if self.is_kinematic {
@@ -298,8 +295,7 @@ impl PhysicsBody {
         self.velocity += self.acceleration * dt;
         
         // Apply air resistance/drag (simple model)
-        let drag_coefficient: f32 = 0.98;
-        self.velocity *= drag_coefficient.powf(dt);
+        self.velocity *= DRAG_COEFFICIENT.powf(dt);
         
         // Integrate position
         self.aabb = self.aabb.translate(self.velocity * dt);
@@ -337,9 +333,8 @@ impl PhysicsBody {
     pub fn kinetic_energy(&self) -> f32 {
         0.5 * self.mass * self.velocity.length_squared()
     }
-}
 
-impl PhysicsBody {
+
     /// Resolves collision with another AABB and applies physics response
     pub fn resolve_collision_with_aabb(&mut self, other: &AABB) -> Option<Vec3> {
         if self.is_kinematic {

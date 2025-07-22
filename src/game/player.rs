@@ -1,7 +1,11 @@
-use glam::Vec3;
+use crate::ext::config::CameraConfig;
+use glam::{Vec3, Mat4, Quat};
 use winit::event::*;
 use winit::keyboard::KeyCode as Key;
+use winit::dpi::PhysicalSize;
+use wgpu::util::DeviceExt;
 use crate::game::inventory;
+use crate::physic::aabb;
 
 /// Movement mode enum
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -24,7 +28,7 @@ pub enum CameraMode {
 	Instant,
 }
 
-/// Represents a player with camera controls and movement capabilities
+/// Represents a player with integrated camera system and movement capabilities
 pub struct Player {
 	position: Vec3,
 	config: CameraConfig,
@@ -32,19 +36,39 @@ pub struct Player {
 	movement_mode: MovementMode,
 	camera_mode: CameraMode,
 	inventory: inventory::Inventory,
+	body: aabb::PhysicsBody,
+	camera_system: CameraSystem,
 }
+
 const MOUSE_TO_SCREEN: f32 = 0.0056789;
+const SAFE_FRAC_PI_2: f32 = std::f32::consts::FRAC_PI_2 - 0.0001;
+
 #[allow(dead_code)]
 impl Player {
 	/// Creates a new player with default position and given camera configuration
-	pub fn new(config: CameraConfig) -> Self {
+	pub fn new(
+		config: CameraConfig, 
+		position: Vec3, 
+		device: &wgpu::Device, 
+		size: PhysicalSize<u32>,
+		bind_group_layout: &wgpu::BindGroupLayout,
+	) -> Self {
+		let aabb = aabb::AABB::new(
+			Vec3::new(position.x - 0.4, position.y, position.z - 0.4),
+			Vec3::new(position.x + 0.4, position.y + 1.8, position.z + 0.4)
+		);
+		
+		let camera_system = CameraSystem::new(device, size, config, bind_group_layout);
+		
 		Self {
-			position: Vec3::ZERO,
+			position,
 			config,
 			controller: PlayerController::new(config),
 			movement_mode: MovementMode::Flat,
 			camera_mode: CameraMode::Smooth,
 			inventory: inventory::Inventory::default(),
+			body: aabb::PhysicsBody::new(aabb),
+			camera_system,
 		}
 	}
 
@@ -54,30 +78,22 @@ impl Player {
 	}
 
 	/// Updates player state and returns movement delta
-	pub fn update(
-		&mut self,
-		camera_system: &mut CameraSystem,
-		delta_time: f32,
-	) -> Vec3 {
+	pub fn update(&mut self, delta_time: f32, queue: &wgpu::Queue) -> Vec3 {
 		// Clamp delta time to prevent physics issues with large frame times
 		let dt = delta_time.min(0.01);
 
-		// Split mutable borrows to avoid holding multiple mutable references
-		let (camera, projection) = camera_system.split_mut();
+		self.update_rotation(dt);
+		let movement = self.calculate_movement(dt);
 		
-		self.update_rotation(camera, dt);
-		let movement = self.calculate_movement(camera, dt);
-		
-		self.apply_movement(movement, camera);
-		self.handle_zoom(projection);
+		// Update the camera system's GPU resources
+		self.camera_system.update(queue, self.position.clone());
 		
 		movement
 	}
 
 	/// Appends position to both player and camera
-	pub fn append_position(&mut self, offset: Vec3, camera: &mut Camera) {
+	pub fn append_position(&mut self, offset: Vec3) {
 		self.position += offset;
-		camera.set_position(self.position);
 	}
 
 	pub fn controller(&mut self) -> &mut PlayerController {
@@ -94,8 +110,28 @@ impl Player {
 		self.camera_mode = mode;
 	}
 
+	/// Resizes the camera projection
+	pub fn resize(&mut self, new_size: PhysicalSize<u32>) {
+		self.camera_system.resize(new_size);
+	}
+
+	/// Handles zooming via mouse scroll
+	pub fn camera(&self) -> &Camera {
+		&self.camera_system.camera
+	}
+
+	/// Gets the camera system for rendering
+	pub fn camera_system(&self) -> &CameraSystem {
+		&self.camera_system
+	}
+
+	/// Gets the camera system mutably
+	pub fn camera_system_mut(&mut self) -> &mut CameraSystem {
+		&mut self.camera_system
+	}
+
 	/// Updates camera rotation based on controller input
-	fn update_rotation(&mut self, camera: &mut Camera, dt: f32) {
+	fn update_rotation(&mut self, dt: f32) {
 		// Apply mouse input to target rotation
 		// mouse_x controls yaw (horizontal rotation)
 		// mouse_y controls pitch (vertical rotation)
@@ -128,7 +164,7 @@ impl Player {
 		}
 
 		// Apply rotation to camera
-		camera.set_rotation(Vec3::new(
+		self.camera_system.camera_mut().set_rotation(Vec3::new(
 			self.controller.current_pitch,
 			self.controller.current_yaw,
 			0.0
@@ -139,7 +175,7 @@ impl Player {
 	}
 
 	/// Calculates movement vector based on current inputs
-	fn calculate_movement(&mut self, camera: &Camera, dt: f32) -> Vec3 {
+	fn calculate_movement(&mut self, dt: f32) -> Vec3 {
 		let run_multiplier = if self.controller.movement.is_running() {
 			self.config.run_multiplier
 		} else {
@@ -154,15 +190,15 @@ impl Player {
 		let target_velocity = match self.movement_mode {
 			MovementMode::CameraRelative => {
 				// Relative to camera orientation
-				camera.right() * movement_dir.x 
-					+ camera.up() * movement_dir.y 
-					+ camera.forward() * movement_dir.z 
+				self.camera_system.camera().right() * movement_dir.x 
+					+ self.camera_system.camera().up() * movement_dir.y 
+					+ self.camera_system.camera().forward() * movement_dir.z 
 			}
 			MovementMode::Flat => {
 				// Relative to camera yaw only (ignores camera pitch) 
-				camera.right() * movement_dir.x 
+				self.camera_system.camera().right() * movement_dir.x 
 					+ Vec3::Y * movement_dir.y 
-					+ camera.flat_forward() * movement_dir.z
+					+ self.camera_system.camera().flat_forward() * movement_dir.z
 			}
 			MovementMode::WorldRelative => {
 				// Relative to world axes 
@@ -174,9 +210,9 @@ impl Player {
 
 		// Apply acceleration based on whether we're moving or stopping
 		let acceleration = if target_velocity.length_squared() > 0.0 { 
-			self.config.acceleration 
+			15.
 		} else { 
-			self.config.deceleration 
+			10.
 		};
 		
 		self.controller.velocity = self.controller.velocity.lerp(
@@ -187,27 +223,10 @@ impl Player {
 		self.controller.velocity * dt
 	}
 
-	/// Applies movement to player position and camera
-	fn apply_movement(&mut self, movement: Vec3, camera: &mut Camera) {
-		self.position += movement;
-		camera.set_position(self.position);
-	}
-
-	/// Handles zooming via mouse scroll
-	fn handle_zoom(&mut self, projection: &mut Projection) {
-		if self.controller.scroll.abs() > f32::EPSILON {
-			let delta = self.controller.scroll * self.config.zoom_sensitivity;
-			projection.set_fovy(
-				(projection.fovy() - delta)
-					.clamp(self.config.min_fov, self.config.max_fov)
-			);
-			self.controller.scroll = 0.0;
-		}
-	}
-
 	pub fn inventory(&self) -> &inventory::Inventory {
 		&self.inventory
 	}
+	
 	pub fn inventory_mut(&mut self) -> &mut inventory::Inventory {
 		&mut self.inventory
 	}
@@ -343,27 +362,6 @@ impl PlayerController {
 	}
 }
 
-/// Helper function to interpolate between two angles, handling wraparound
-#[inline] 
-const fn lerp_angle(from: f32, to: f32, t: f32) -> f32 {
-	let diff = ((to - from + std::f32::consts::PI) % (2.0 * std::f32::consts::PI)) - std::f32::consts::PI;
-	from + diff * t
-}
-
-/// Helper function to linearly interpolate between two f32 values
-#[inline] 
-const fn lerp_f32(from: f32, to: f32, t: f32) -> f32 {
-	from + (to - from) * t
-}
-
-// Rest of the code remains the same...
-use glam::{Mat4, Quat};
-use wgpu::util::DeviceExt;
-use winit::dpi::PhysicalSize;
-
-// Constants
-pub const SAFE_FRAC_PI_2: f32 = std::f32::consts::FRAC_PI_2 - 0.0001;
-
 // Uniform buffer data
 #[repr(C, align(16))]
 #[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
@@ -372,20 +370,17 @@ pub struct CameraUniform {
 	position: [f32; 4],
 }
 
-impl Default for CameraUniform {
-	#[inline] 
-	fn default() -> Self {
+impl CameraUniform {
+	#[inline] pub fn default() -> Self {
 		Self { 
 			view_proj: Mat4::IDENTITY.to_cols_array_2d(),
 			position: [0.0; 4],
 		}
 	}
-}
 
-impl CameraUniform {
-	#[inline] pub fn update_view_proj(&mut self, camera: &Camera, projection: &Projection) {
-		self.view_proj = (projection.matrix() * camera.view_matrix()).to_cols_array_2d();
-		self.position = camera.position.extend(0.0).into();
+	#[inline] pub fn update_view_proj(&mut self, camera: &Camera, pos: Vec3, projection: &Projection) {
+		self.view_proj = (projection.matrix() * camera.view_matrix(pos)).to_cols_array_2d();
+		self.position = pos.extend(0.0).into();
 	}
 }
 
@@ -396,7 +391,6 @@ pub struct CameraSystem {
 	uniform: CameraUniform,
 	buffer: wgpu::Buffer,
 	bind_group: wgpu::BindGroup,
-	bind_group_layout: wgpu::BindGroupLayout,
 }
 
 impl CameraSystem {
@@ -404,30 +398,16 @@ impl CameraSystem {
 		device: &wgpu::Device,
 		size: PhysicalSize<u32>,
 		config: CameraConfig,
+		bind_group_layout: &wgpu::BindGroupLayout,
 	) -> Self {
-		let camera = Camera::new(config.position, config.rotation);
+		let camera = Camera::new(config.rotation);
 		let projection = Projection::new(size, config.fovy, config.znear, config.zfar);
-		let mut uniform = CameraUniform::default();
-		uniform.update_view_proj(&camera, &projection);
+		let uniform = CameraUniform::default();
 		
 		let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
 			label: Some("Camera Buffer"),
 			contents: bytemuck::cast_slice(&[uniform]),
 			usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-		});
-
-		let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-			entries: &[wgpu::BindGroupLayoutEntry {
-				binding: 0,
-				visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
-				ty: wgpu::BindingType::Buffer {
-					ty: wgpu::BufferBindingType::Uniform,
-					has_dynamic_offset: false,
-					min_binding_size: None,
-				},
-				count: None,
-			}],
-			label: Some("camera_bind_group_layout"),
 		});
 
 		let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -445,12 +425,11 @@ impl CameraSystem {
 			uniform,
 			buffer,
 			bind_group,
-			bind_group_layout,
 		}
 	}
 
-	#[inline] pub fn update(&mut self, queue: &wgpu::Queue) {
-		self.uniform.update_view_proj(&self.camera, &self.projection);
+	#[inline] pub fn update(&mut self, queue: &wgpu::Queue, pos: Vec3) {
+		self.uniform.update_view_proj(&self.camera, pos, &self.projection);
 		queue.write_buffer(&self.buffer, 0, bytemuck::cast_slice(&[self.uniform]));
 	}
 
@@ -463,34 +442,28 @@ impl CameraSystem {
 	#[inline] pub const fn camera_mut(&mut self) -> &mut Camera { &mut self.camera }
 	#[inline] pub const fn projection(&self) -> &Projection { &self.projection }
 	#[inline] pub const fn projection_mut(&mut self) -> &mut Projection { &mut self.projection }
-	#[inline] pub const fn bind_group_layout(&self) -> &wgpu::BindGroupLayout { &self.bind_group_layout }
 	#[inline] pub const fn bind_group(&self) -> &wgpu::BindGroup { &self.bind_group }
-
-	#[inline] pub const fn split_mut(&mut self) -> (&mut Camera, &mut Projection) {
-		(&mut self.camera, &mut self.projection)
-	}
 }
 
 // Camera representation with improved rotation handling
 #[derive(Debug)]
 pub struct Camera {
-	position: Vec3,
 	rotation: Vec3, // x: pitch, y: yaw, z: roll (unused)
 }
 
 impl Camera {
-	#[inline] pub const fn new(position: Vec3, rotation: Vec3) -> Self {
-		Self { position, rotation }
+	#[inline] pub const fn new(rotation: Vec3) -> Self {
+		Self { rotation }
 	}
 
-	pub fn view_matrix(&self) -> Mat4 {
+	pub fn view_matrix(&self, pos: Vec3) -> Mat4 {
 		// Create rotation quaternion from yaw then pitch
 		let yaw_quat = Quat::from_rotation_y(self.rotation.y);
 		let pitch_quat = Quat::from_rotation_x(self.rotation.x);
 		let _rotation_quat = yaw_quat * pitch_quat;
 		
 		// Create view matrix
-		Mat4::look_to_rh(self.position, self.forward(), self.up())
+		Mat4::look_to_rh(pos, self.forward(), self.up())
 	}
 
 	// Direction vectors with proper quaternion composition
@@ -523,11 +496,8 @@ impl Camera {
 	}
 
 	// Getters and setters
-	#[inline] pub const fn position(&self) -> Vec3 { self.position }
-	#[inline] pub const fn set_position(&mut self, position: Vec3) { self.position = position; }
 	#[inline] pub const fn rotation(&self) -> Vec3 { self.rotation }
 	#[inline] pub const fn set_rotation(&mut self, rotation: Vec3) { self.rotation = rotation; }
-	#[inline] pub fn translate(&mut self, translation: Vec3) { self.position += translation; }
 }
 
 // Projection representation
@@ -573,48 +543,15 @@ impl Projection {
 	#[inline] pub const fn zfar(&self) -> f32 { self.zfar }
 }
 
-// Camera configuration
-#[derive(Debug, Clone, Copy)]
-pub struct CameraConfig {
-	pub position: Vec3,
-	pub rotation: Vec3,
-	pub fovy: f32,
-	pub znear: f32,
-	pub zfar: f32,
-	pub speed: f32,
-	pub sensitivity: f32,
-	pub run_multiplier: f32,
-	pub smoothness: f32,
-	pub acceleration: f32,
-	pub deceleration: f32,
-	pub zoom_sensitivity: f32,
-	pub min_fov: f32,
-	pub max_fov: f32,
+/// Helper function to interpolate between two angles, handling wraparound
+#[inline] 
+const fn lerp_angle(from: f32, to: f32, t: f32) -> f32 {
+	let diff = ((to - from + std::f32::consts::PI) % (2.0 * std::f32::consts::PI)) - std::f32::consts::PI;
+	from + diff * t
 }
 
-impl CameraConfig {
-	#[inline] pub const fn new(position: Vec3) -> Self {
-		Self {
-			position,
-			rotation: Vec3::ZERO, // Looking along negative X axis
-			fovy: std::f32::consts::FRAC_PI_2, // 90 degrees in radians
-			znear: 0.01,
-			zfar: 500.0,
-			speed: 20.0,
-			sensitivity: 0.4,
-			run_multiplier: 2.5,
-			smoothness: 5.0,
-			acceleration: 10.0,
-			deceleration: 15.0,
-			zoom_sensitivity: 0.1,
-			min_fov: std::f32::consts::FRAC_PI_6 / 2f32, // 15 degrees
-			max_fov: std::f32::consts::FRAC_PI_2 * 1.8, // 162 degrees
-		}
-	}
-}
-
-impl CameraConfig {
-	#[inline] pub const fn default() -> Self {
-		Self::new(Vec3::ZERO)
-	}
+/// Helper function to linearly interpolate between two f32 values
+#[inline] 
+const fn lerp_f32(from: f32, to: f32, t: f32) -> f32 {
+	from + (to - from) * t
 }

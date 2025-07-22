@@ -125,7 +125,7 @@ impl Chunk {
 		if self.bind_group.is_some() { return; }
 		let state = ptr::get_state();
 		let device = state.device();
-		let chunk_bind_group_layout = &state.render_context.chunk_bind_group_layout;
+		let chunk_bind_group_layout = &state.render_context.layouts[2];
 
 		// Create position buffer
 		let position_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {

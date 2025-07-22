@@ -19,7 +19,7 @@ pub struct Pipeline {
 impl Pipeline {
 	/// Creates all render pipelines with proper configuration
 	#[inline]
-	pub fn new(device: &wgpu::Device, config: &wgpu::SurfaceConfiguration, layouts: &[&wgpu::BindGroupLayout]) -> Self {
+	pub fn new(device: &wgpu::Device, config: &wgpu::SurfaceConfiguration, layouts: &[wgpu::BindGroupLayout]) -> Self {
 	/*layouts = [
 		&texture_manager.bind_group_layout(),
 		&camera_system.bind_group_layout(),
@@ -32,17 +32,17 @@ impl Pipeline {
 
 		let post_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
 			label: Some("Post Processing Pipeline Layout"),
-			bind_group_layouts: &[layouts[4]],
+			bind_group_layouts: &[&layouts[4]],
 			push_constant_ranges: &[],
 		});
 		let chunk_layout: wgpu::PipelineLayout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
 			label: Some("Chunk Render Pipeline Layout"),
-			bind_group_layouts: &[layouts[0],layouts[1],layouts[2]],
+			bind_group_layouts: &[&layouts[0],&layouts[1],&layouts[2]],
 			..Default::default()
 		});
 		let sky_layout: wgpu::PipelineLayout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
 			label: Some("Sky Render Pipeline Layout"),
-			bind_group_layouts: &[layouts[3],layouts[1]],
+			bind_group_layouts: &[&layouts[3],&layouts[1]],
 			..Default::default()
 		});
 
@@ -219,75 +219,78 @@ pub fn render_all(current_state: &mut State) -> Result<(), wgpu::SurfaceError> {
 				label: Some("Render Encoder"),
 			});
 
-	// Reusable render pass descriptors
-	let binding = current_state.texture_manager().depth_texture().create_view(&wgpu::TextureViewDescriptor::default());
-	{
-		let mut sky_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-			label: Some("Sky Render Pass"),
-			color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-				view: &view,
-				resolve_target: None,
-				ops: wgpu::Operations {
-					load: wgpu::LoadOp::Load,
-					store: wgpu::StoreOp::Store,
-				},
-			})],
-			depth_stencil_attachment: None,
-			occlusion_query_set: None,
-			timestamp_writes: None,
-		});
-		sky_pass.set_pipeline(&current_state.pipeline().sky_pipeline);
-		
-		sky_pass.set_bind_group(0, &current_state.skybox().bind_group, &[]);
-		
-		//sky_pass.set_bind_group(0, current_state.texture_manager().bind_group(), &[]);
-		sky_pass.set_bind_group(1, current_state.camera_system().bind_group(), &[]);
-		sky_pass.draw(0..36, 0..1);
-	}
 
 	// 3D pass
 	if current_state.is_world_running {
-		let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-			label: Some("3D Render Pass"),
-			color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-				view: &view,
-				resolve_target: None,
-				ops: wgpu::Operations {
-					load: wgpu::LoadOp::Load,
-					store: wgpu::StoreOp::Store,
-				},
-			})],
-			depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-				view: &binding,
-				depth_ops: Some(wgpu::Operations {
-					load: wgpu::LoadOp::Clear(1.0),
-					store: wgpu::StoreOp::Store,
-				}),
-				stencil_ops: None,
-			}),
-			occlusion_query_set: None,
-			timestamp_writes: None,
-		});
-
-		// Render chunks
-		rpass.set_pipeline(&current_state.pipeline().chunk_pipeline);
-		rpass.set_bind_group(0, current_state.texture_manager().bind_group(), &[]);
-		rpass.set_bind_group(1, current_state.camera_system().bind_group(), &[]);
+		// Reusable render pass descriptors
+		let game_state = ptr::get_gamestate();
+		let binding = current_state.texture_manager().depth_texture().create_view(&wgpu::TextureViewDescriptor::default());
 		{
-			// Create vertex buffer
-	        let vertex_buffer = current_state.device().create_buffer_init(&wgpu::util::BufferInitDescriptor {
-	            label: Some("Vertex Buffer"), contents: bytemuck::cast_slice(&VERTICES), usage: wgpu::BufferUsages::VERTEX });
-	        rpass.set_vertex_buffer(0, vertex_buffer.slice(..));
-
-			//let indices = vec![0, 1, 2, 2, 3, 0]; // Two triangles forming a quad
-			/*let index_buffer = current_state.device().create_buffer_init(&wgpu::util::BufferInitDescriptor {
-				label: Some("Index Buffer"),
-				contents: bytemuck::cast_slice(&indices),
-				usage: wgpu::BufferUsages::INDEX,
-			});*/
-			//rpass.set_index_buffer(index_buffer.slice(..), wgpu::IndexFormat::Uint16);
+			let mut sky_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+				label: Some("Sky Render Pass"),
+				color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+					view: &view,
+					resolve_target: None,
+					ops: wgpu::Operations {
+						load: wgpu::LoadOp::Load,
+						store: wgpu::StoreOp::Store,
+					},
+				})],
+				depth_stencil_attachment: None,
+				occlusion_query_set: None,
+				timestamp_writes: None,
+			});
+			sky_pass.set_pipeline(&current_state.pipeline().sky_pipeline);
+			
+			sky_pass.set_bind_group(0, &current_state.skybox().bind_group, &[]);
+			
+			//sky_pass.set_bind_group(0, current_state.texture_manager().bind_group(), &[]);
+			sky_pass.set_bind_group(1, game_state.player().camera_system().bind_group(), &[]);
+			sky_pass.draw(0..36, 0..1);
 		}
-		ptr::get_gamestate().world().render_chunks(&mut rpass);
+		{
+			let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+				label: Some("3D Render Pass"),
+				color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+					view: &view,
+					resolve_target: None,
+					ops: wgpu::Operations {
+						load: wgpu::LoadOp::Load,
+						store: wgpu::StoreOp::Store,
+					},
+				})],
+				depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+					view: &binding,
+					depth_ops: Some(wgpu::Operations {
+						load: wgpu::LoadOp::Clear(1.0),
+						store: wgpu::StoreOp::Store,
+					}),
+					stencil_ops: None,
+				}),
+				occlusion_query_set: None,
+				timestamp_writes: None,
+			});
+
+			// Render chunks
+			rpass.set_pipeline(&current_state.pipeline().chunk_pipeline);
+			rpass.set_bind_group(0, current_state.texture_manager().bind_group(), &[]);
+			rpass.set_bind_group(1, game_state.player().camera_system().bind_group(), &[]);
+			{
+				// Create vertex buffer
+				let vertex_buffer = current_state.device().create_buffer_init(&wgpu::util::BufferInitDescriptor {
+					label: Some("Vertex Buffer"), contents: bytemuck::cast_slice(&VERTICES), usage: wgpu::BufferUsages::VERTEX });
+				rpass.set_vertex_buffer(0, vertex_buffer.slice(..));
+
+				//let indices = vec![0, 1, 2, 2, 3, 0]; // Two triangles forming a quad
+				/*let index_buffer = current_state.device().create_buffer_init(&wgpu::util::BufferInitDescriptor {
+					label: Some("Index Buffer"),
+					contents: bytemuck::cast_slice(&indices),
+					usage: wgpu::BufferUsages::INDEX,
+				});*/
+				//rpass.set_index_buffer(index_buffer.slice(..), wgpu::IndexFormat::Uint16);
+			}
+			ptr::get_gamestate().world().render_chunks(&mut rpass);
+		}
 	}
 
 	// Post processing pass 
@@ -308,7 +311,7 @@ pub fn render_all(current_state: &mut State) -> Result<(), wgpu::SurfaceError> {
 		});
 
 		post_pass.set_pipeline(&current_state.pipeline().post_pipeline);
-		post_pass.set_bind_group(0,current_state.texture_manager().post_processing_bind_group(),&[],);
+		post_pass.set_bind_group(0,current_state.texture_manager().post_bind_group(),&[],);
 		post_pass.draw(0..3, 0..1);
 	}
 

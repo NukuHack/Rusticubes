@@ -17,10 +17,8 @@ fn vs_main(@builtin(vertex_index) vertex_index: u32) -> VertexOutput {
 }
 
 // Fragment shader optimizations
-@group(0) @binding(0)
-var screen_texture: texture_2d<f32>;
-@group(0) @binding(1)
-var screen_sampler: sampler;
+@group(0) @binding(0) var screen_texture: texture_2d<f32>;
+@group(0) @binding(1) var screen_sampler: sampler;
 
 // Tuned constants for better quality/performance balance
 const FXAA_REDUCE_MIN = 1.0/128.0;

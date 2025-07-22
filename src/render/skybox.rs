@@ -56,7 +56,7 @@ impl State<'_> {
 		self.render_context.skybox = Skybox::new(
 			self.device(),
 			self.queue(),
-			&self.render_context.skybox_bind_group_layout,
+			&self.render_context.layouts[3],
 			skybox_path,
 		).ok_or("Failed to create skybox")?;
 		

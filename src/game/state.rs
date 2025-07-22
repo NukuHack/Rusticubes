@@ -1,4 +1,5 @@
 
+use crate::ext::config::CameraConfig;
 use crate::world::manager::get_save_path;
 use crate::world::manager::ensure_save_dir;
 use std::path::PathBuf;
@@ -52,7 +53,8 @@ pub fn make_world(save_path: PathBuf) {
 impl GameState {
 	#[inline]
 	pub fn new(worldname: &str) -> Self {
-		let player = player::Player::new(player::CameraConfig::new(Vec3::new(0.5, 1.8, 2.0)));
+		let state = ptr::get_state();
+		let player = player::Player::new(CameraConfig::new(Vec3::new(0.5, 1.7, 0.5)),Vec3::ZERO, state.device(), *state.size(), &state.render_context.layouts[1]);
 		
 		// Create the save path
 		let save_path = get_save_path()

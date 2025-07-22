@@ -73,6 +73,7 @@ pub mod physic {
 }
 
 
+use crate::ext::ptr;
 use crate::game::player;
 use std::sync::atomic::Ordering;
 use glam::Vec3;
@@ -90,7 +91,6 @@ pub struct State<'a> {
 	pipeline: render::pipeline::Pipeline,
 	ui_manager: ui::manager::UIManager,
 	texture_manager: render::texture::TextureManager,
-	camera_system: player::CameraSystem,
 	is_world_running: bool,
 }
 
@@ -100,8 +100,7 @@ pub struct RenderContext<'a> {
 	queue: wgpu::Queue,
 	surface_config: wgpu::SurfaceConfiguration,
 	size: winit::dpi::PhysicalSize<u32>,
-	chunk_bind_group_layout:  wgpu::BindGroupLayout,
-	skybox_bind_group_layout:  wgpu::BindGroupLayout,
+	layouts: Box<[wgpu::BindGroupLayout]>,
 	skybox: render::skybox::Skybox,
 }
 
@@ -163,91 +162,25 @@ impl<'a> State<'a> {
 			desired_maximum_frame_latency: 2,
 		};
 
-		let cam_config = player::CameraConfig::new(Vec3::new(0f32, 80f32, 0f32));
-		// Create camera system with advanced controls
-		let camera_system: player::CameraSystem = player::CameraSystem::new(
-			&device,
-			size,
-			cam_config,
-		);
-
 		surface.configure(&device, &surface_config);
 
-		let post_bind_group_layout =  device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-			label: Some("Post Processing Bind Group Layout"),
-			entries: &[
-				// Texture
-				wgpu::BindGroupLayoutEntry {
-					binding: 0,
-					visibility: wgpu::ShaderStages::FRAGMENT,
-					ty: wgpu::BindingType::Texture {
-						sample_type: wgpu::TextureSampleType::Float { filterable: true },
-						view_dimension: wgpu::TextureViewDimension::D2,
-						multisampled: false,
-					},
-					count: None,
-				},
-				// Sampler
-				wgpu::BindGroupLayoutEntry {
-					binding: 1,
-					visibility: wgpu::ShaderStages::FRAGMENT,
-					ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-					count: None,
-				},
-			],
-		});
+		let layouts = make_layout(&device);
+		/*
+		&texture_bind_group_layout,
+		&camera_bind_group_layout,
+		&chunk_bind_group_layout,
+		&skybox_bind_group_layout,
+		&post_bind_group_layout,
+		*/
 
-		let texture_manager = render::texture::TextureManager::new(&device, &queue, &surface_config, &post_bind_group_layout);
-
-		let chunk_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-			entries: &[wgpu::BindGroupLayoutEntry {
-				binding: 0,
-				visibility: wgpu::ShaderStages::VERTEX,
-				ty: wgpu::BindingType::Buffer {
-					ty: wgpu::BufferBindingType::Uniform,
-					has_dynamic_offset: false,
-					min_binding_size: None, // used to be "wgpu::BufferSize::new(16)" -> // stupid gpu has to make it 16 at least ... 8 byte would be enough tho ..
-				},
-				count: None,
-			},],
-			label: Some("chunk_bind_group_layout"),
-		});
-		let skybox_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-			entries: &[
-				wgpu::BindGroupLayoutEntry {
-					binding: 0,
-					visibility: wgpu::ShaderStages::FRAGMENT,
-					ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-					count: None,
-				},
-				wgpu::BindGroupLayoutEntry {
-					binding: 1,
-					visibility: wgpu::ShaderStages::FRAGMENT,
-					ty: wgpu::BindingType::Texture {
-						sample_type: wgpu::TextureSampleType::Float { filterable: true },
-						view_dimension: wgpu::TextureViewDimension::D2,
-						multisampled: false,
-					},
-					count: None,
-				},
-			],
-			label: Some("skybox_bind_group_layout"),
-		});
-		//wgpu::BindGroupLayout
-		let layouts = [
-			&texture_manager.bind_group_layout(),
-			&camera_system.bind_group_layout(),
-			&chunk_bind_group_layout,
-			&skybox_bind_group_layout,
-			&post_bind_group_layout,
-		];
+		let texture_manager = render::texture::TextureManager::new(&device, &queue, &surface_config, &layouts[0], &layouts[4]);
 
 		let pipeline = render::pipeline::Pipeline::new(&device, &surface_config, &layouts);
 
 		let mut ui_manager = ui::manager::UIManager::new(&device, &surface_config, &queue);
 		ui_manager.setup_ui();
 
-		let skybox = render::skybox::Skybox::new(&device, &queue, &skybox_bind_group_layout,"basic_skybox.jpg").expect("basic skybox should work");
+		let skybox = render::skybox::Skybox::new(&device, &queue, &layouts[3],"basic_skybox.jpg").expect("basic skybox should work");
 		
 		let render_context: RenderContext = RenderContext{
 			surface,
@@ -255,8 +188,7 @@ impl<'a> State<'a> {
 			queue,
 			surface_config,
 			size,
-			chunk_bind_group_layout,
-			skybox_bind_group_layout,
+			layouts,
 			skybox,
 		};
 
@@ -264,7 +196,6 @@ impl<'a> State<'a> {
 			window,
 			render_context,
 			previous_frame_time: std::time::Instant::now(),
-			camera_system,
 			input_system: hs::input::InputSystem::default(),
 			pipeline,
 			texture_manager,
@@ -300,10 +231,6 @@ impl<'a> State<'a> {
 		&self.previous_frame_time
 	}
 	#[inline]
-	pub fn camera_system(&self) -> &player::CameraSystem {
-		&self.camera_system
-	}
-	#[inline]
 	pub fn pipeline(&self) -> &render::pipeline::Pipeline {
 		&self.pipeline
 	}
@@ -329,7 +256,9 @@ impl<'a> State<'a> {
 			self.render_context.size = new_size;
 			self.render_context.surface_config.width = new_size.width;
 			self.render_context.surface_config.height = new_size.height;
-			self.camera_system.projection_mut().resize(new_size);
+			if self.is_world_running {
+				ptr::get_gamestate().player_mut().camera_system_mut().projection_mut().resize(new_size);
+			}
 			// Clone the values to avoid holding borrows
 			self.render_context.surface.configure(self.device(), self.surface_config());
 			*self.texture_manager.depth_texture_mut() = render::texture::create_depth_texture(self.device(), self.surface_config(),"depth_texture");
@@ -349,17 +278,14 @@ impl<'a> State<'a> {
 		if self.is_world_running {
 			let movement_delta = {
 				let player = &mut ext::ptr::get_gamestate().player_mut();
-				player.update(&mut self.camera_system, delta_seconds)
+				player.update(delta_seconds, self.queue())
 			};
 
 			// Update both player and camera positions in one operation
 			{
 				let player = &mut ext::ptr::get_gamestate().player_mut();
-				let camera = self.camera_system.camera_mut();
-				player.append_position(movement_delta, camera);
+				player.append_position(movement_delta);
 			}
-
-			self.camera_system.update(&self.render_context.queue);
 		}
 		if self.ui_manager.visibility {
 			self.ui_manager.update_anim(delta_seconds);
@@ -447,3 +373,110 @@ pub async fn run() {
 }
 
 
+
+
+
+fn make_layout(device: &wgpu::Device) -> Box<[wgpu::BindGroupLayout]> {
+	let post_bind_group_layout =  device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+		label: Some("Post Processing Bind Group Layout"),
+		entries: &[
+			// Texture
+			wgpu::BindGroupLayoutEntry {
+				binding: 0,
+				visibility: wgpu::ShaderStages::FRAGMENT,
+				ty: wgpu::BindingType::Texture {
+					sample_type: wgpu::TextureSampleType::Float { filterable: true },
+					view_dimension: wgpu::TextureViewDimension::D2,
+					multisampled: false,
+				},
+				count: None,
+			},
+			// Sampler
+			wgpu::BindGroupLayoutEntry {
+				binding: 1,
+				visibility: wgpu::ShaderStages::FRAGMENT,
+				ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+				count: None,
+			},
+		],
+	});
+	let texture_bind_group_layout = 	device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+		label: Some("texture_array_bind_group_layout"),
+		entries: &[
+			wgpu::BindGroupLayoutEntry {
+				binding: 0,
+				visibility: wgpu::ShaderStages::FRAGMENT,
+				ty: wgpu::BindingType::Texture {
+					sample_type: wgpu::TextureSampleType::Float { filterable: true },
+					view_dimension: wgpu::TextureViewDimension::D2Array,
+					multisampled: false,
+				},
+				count: None,
+			},
+			wgpu::BindGroupLayoutEntry {
+				binding: 1,
+				visibility: wgpu::ShaderStages::FRAGMENT,
+				ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+				count: None,
+			},
+		],
+	});
+
+	let chunk_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+		label: Some("chunk_bind_group_layout"),
+		entries: &[wgpu::BindGroupLayoutEntry {
+			binding: 0,
+			visibility: wgpu::ShaderStages::VERTEX,
+			ty: wgpu::BindingType::Buffer {
+				ty: wgpu::BufferBindingType::Uniform,
+				has_dynamic_offset: false,
+				min_binding_size: None, // used to be "wgpu::BufferSize::new(16)" -> // stupid gpu has to make it 16 at least ... 8 byte would be enough tho ..
+			},
+			count: None,
+		},],
+	});
+	let skybox_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+		label: Some("skybox_bind_group_layout"),
+		entries: &[
+			wgpu::BindGroupLayoutEntry {
+				binding: 0,
+				visibility: wgpu::ShaderStages::FRAGMENT,
+				ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+				count: None,
+			},
+			wgpu::BindGroupLayoutEntry {
+				binding: 1,
+				visibility: wgpu::ShaderStages::FRAGMENT,
+				ty: wgpu::BindingType::Texture {
+					sample_type: wgpu::TextureSampleType::Float { filterable: true },
+					view_dimension: wgpu::TextureViewDimension::D2,
+					multisampled: false,
+				},
+				count: None,
+			},
+		],
+	});
+	let camera_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+		label: Some("camera_bind_group_layout"),
+		entries: &[wgpu::BindGroupLayoutEntry {
+			binding: 0,
+			visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
+			ty: wgpu::BindingType::Buffer {
+				ty: wgpu::BufferBindingType::Uniform,
+				has_dynamic_offset: false,
+				min_binding_size: None,
+			},
+			count: None,
+		}],
+	});
+	//wgpu::BindGroupLayout
+	let layouts = [
+		texture_bind_group_layout,
+		camera_bind_group_layout,
+		chunk_bind_group_layout,
+		skybox_bind_group_layout,
+		post_bind_group_layout,
+	];
+
+	Box::new(layouts)
+}

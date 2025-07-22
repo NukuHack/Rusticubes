@@ -1,4 +1,5 @@
 ﻿
+use crate::Vec3;
 use crate::ui::inventory::AreaType;
 use crate::ext::color::{Color, Border};
 
@@ -20,6 +21,43 @@ impl InvLayout {
 			inv: (0.,0.),
 		}
 	}
+}
+
+
+// Camera configuration
+#[derive(Debug, Clone, Copy)]
+pub struct CameraConfig {
+	pub offset: Vec3,
+	pub rotation: Vec3,
+	pub fovy: f32,
+	pub znear: f32,
+	pub zfar: f32,
+	pub speed: f32,
+	pub sensitivity: f32,
+	pub run_multiplier: f32,
+	pub smoothness: f32,
+	pub min_fov: f32,
+	pub max_fov: f32,
+}
+
+impl CameraConfig {
+	#[inline] pub const fn new(offset: Vec3) -> Self {
+		Self {
+			offset,
+			rotation: Vec3::ZERO, // Looking along negative X axis
+			fovy: std::f32::consts::FRAC_PI_2, // 90 degrees in radians
+			znear: 0.01,
+			zfar: 500.0,
+			speed: 20.0,
+			sensitivity: 0.4,
+			run_multiplier: 2.5,
+			smoothness: 5.0,
+			min_fov: std::f32::consts::FRAC_PI_6 / 2f32, // 15 degrees
+			max_fov: std::f32::consts::FRAC_PI_2 * 1.8, // 162 degrees
+		}
+	}
+
+	#[inline] pub const fn default() -> Self { Self::new(Vec3::ZERO) }
 }
 
 

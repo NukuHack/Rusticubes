@@ -35,10 +35,9 @@ pub fn create_depth_texture(
 pub struct TextureManager {
 	depth_texture: wgpu::Texture,
 	bind_group: wgpu::BindGroup,
-	bind_group_layout: wgpu::BindGroupLayout,
 	render_texture: wgpu::Texture,
 	render_texture_view: wgpu::TextureView,
-	post_processing_bind_group: wgpu::BindGroup,
+	post_bind_group: wgpu::BindGroup,
 }
 
 impl TextureManager {
@@ -47,15 +46,15 @@ impl TextureManager {
 		device: &wgpu::Device,
 		queue: &wgpu::Queue,
 		config: &wgpu::SurfaceConfiguration,
+		layout: &wgpu::BindGroupLayout,
 		post_layout: &wgpu::BindGroupLayout,
 	) -> Self {
 		let depth_texture = create_depth_texture(device, config, "Depth Texture");
 
 		let (render_texture, render_texture_view) = create_render_texture(device, config);
-		let post_processing_bind_group = create_post_processing_bind_group(device, &render_texture_view, post_layout);
+		let post_bind_group = create_post_processing_bind_group(device, &render_texture_view, post_layout);
 
 		// Create resources
-		let bind_group_layout = create_texture_array_bind_group_layout(&device);
 		let paths = rs::find_png_resources("blocks");
 		let (_array_texture, array_texture_view) = create_texture_array(&device, &queue, &paths).unwrap();
 		let array_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
@@ -67,15 +66,14 @@ impl TextureManager {
 			mipmap_filter: wgpu::FilterMode::Nearest,
 			..Default::default()
 		});
-		let bind_group = create_texture_array_bind_group(&device, &bind_group_layout, &array_texture_view, &array_sampler);
+		let bind_group = create_texture_array_bind_group(&device, layout, &array_texture_view, &array_sampler);
 
 		Self {
 			depth_texture,
 			bind_group,
-			bind_group_layout,
 			render_texture,
 			render_texture_view,
-			post_processing_bind_group,
+			post_bind_group,
 		}
 	}
 
@@ -88,45 +86,16 @@ impl TextureManager {
 	#[inline] pub const fn bind_group(&self) -> &wgpu::BindGroup {
 		&self.bind_group
 	}
-	#[inline] pub const fn bind_group_layout(&self) -> &wgpu::BindGroupLayout {
-		&self.bind_group_layout
-	}
 	#[inline] pub const fn render_texture(&self) -> &wgpu::Texture {
 		&self.render_texture
 	}
 	#[inline] pub const fn render_texture_view(&self) -> &wgpu::TextureView {
 		&self.render_texture_view
 	}
-	#[inline] pub const fn post_processing_bind_group(&self) -> &wgpu::BindGroup {
-		&self.post_processing_bind_group
+	#[inline] pub const fn post_bind_group(&self) -> &wgpu::BindGroup {
+		&self.post_bind_group
 	}
 }
-
-// Creates a bind group layout suitable for a 2D texture array
-fn create_texture_array_bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
-	device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-		label: Some("texture_array_bind_group_layout"),
-		entries: &[
-			wgpu::BindGroupLayoutEntry {
-				binding: 0,
-				visibility: wgpu::ShaderStages::FRAGMENT,
-				ty: wgpu::BindingType::Texture {
-					sample_type: wgpu::TextureSampleType::Float { filterable: true },
-					view_dimension: wgpu::TextureViewDimension::D2Array,
-					multisampled: false,
-				},
-				count: None,
-			},
-			wgpu::BindGroupLayoutEntry {
-				binding: 1,
-				visibility: wgpu::ShaderStages::FRAGMENT,
-				ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-				count: None,
-			},
-		],
-	})
-}
-
 
 /// Creates a texture array from a list of image paths.
 /// Only images with matching dimensions will be included in the array.
