@@ -1,7 +1,9 @@
 
+use crate::world::manager::get_save_path;
+use crate::world::manager::ensure_save_dir;
 use std::path::PathBuf;
 use crate::game::player;
-use crate::ext::{ptr, config};
+use crate::ext::ptr;
 use crate::world;
 use std::sync::atomic::Ordering;
 use glam::Vec3;
@@ -17,7 +19,7 @@ pub struct GameState {
 
 pub fn make_world(save_path: PathBuf) {
 	// has to make the error handling better , make the error quit from world
-	let _ = config::ensure_save_dir();
+	let _ = ensure_save_dir();
 	// Check and create directories if needed
 	match std::fs::metadata(&save_path) {
 		Ok(metadata) => {
@@ -53,7 +55,7 @@ impl GameState {
 		let player = player::Player::new(player::CameraConfig::new(Vec3::new(0.5, 1.8, 2.0)));
 		
 		// Create the save path
-		let save_path = config::get_save_path()
+		let save_path = get_save_path()
 			.join("saves")
 			.join(worldname);
 

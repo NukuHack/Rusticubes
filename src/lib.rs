@@ -30,6 +30,7 @@ pub mod debug { // debug, test related
 pub mod ext { // extra things that did not fit anywhere else
 	pub mod audio; // audio manager, in extra thread
 	pub mod config;
+	pub mod settings;
 	pub mod color;
 	pub mod ptr; // all the pointers and stuff
 	pub mod stopwatch;
@@ -97,7 +98,7 @@ pub struct RenderContext<'a> {
 	surface: wgpu::Surface<'a>,
 	device: wgpu::Device,
 	queue: wgpu::Queue,
-	config: wgpu::SurfaceConfiguration,
+	surface_config: wgpu::SurfaceConfiguration,
 	size: winit::dpi::PhysicalSize<u32>,
 	chunk_bind_group_layout:  wgpu::BindGroupLayout,
 	skybox_bind_group_layout:  wgpu::BindGroupLayout,
@@ -151,7 +152,7 @@ impl<'a> State<'a> {
 			.find(|mode| *mode == wgpu::PresentMode::Fifo)
 			.unwrap_or(surface_caps.present_modes[0]);
 
-		let config: wgpu::SurfaceConfiguration = wgpu::SurfaceConfiguration {
+		let surface_config = wgpu::SurfaceConfiguration {
 			usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
 			format: surface_format,
 			width: size.width,
@@ -170,7 +171,7 @@ impl<'a> State<'a> {
 			cam_config,
 		);
 
-		surface.configure(&device, &config);
+		surface.configure(&device, &surface_config);
 
 		let post_bind_group_layout =  device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
 			label: Some("Post Processing Bind Group Layout"),
@@ -196,7 +197,7 @@ impl<'a> State<'a> {
 			],
 		});
 
-		let texture_manager: render::texture::TextureManager = render::texture::TextureManager::new(&device, &queue, &config, &post_bind_group_layout);
+		let texture_manager = render::texture::TextureManager::new(&device, &queue, &surface_config, &post_bind_group_layout);
 
 		let chunk_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
 			entries: &[wgpu::BindGroupLayoutEntry {
@@ -241,9 +242,9 @@ impl<'a> State<'a> {
 			&post_bind_group_layout,
 		];
 
-		let pipeline: render::pipeline::Pipeline = render::pipeline::Pipeline::new(&device, &config, &layouts);
+		let pipeline = render::pipeline::Pipeline::new(&device, &surface_config, &layouts);
 
-		let mut ui_manager:ui::manager::UIManager = ui::manager::UIManager::new(&device, &config, &queue);
+		let mut ui_manager = ui::manager::UIManager::new(&device, &surface_config, &queue);
 		ui_manager.setup_ui();
 
 		let skybox = render::skybox::Skybox::new(&device, &queue, &skybox_bind_group_layout,"basic_skybox.jpg").expect("basic skybox should work");
@@ -252,7 +253,7 @@ impl<'a> State<'a> {
 			surface,
 			device,
 			queue,
-			config,
+			surface_config,
 			size,
 			chunk_bind_group_layout,
 			skybox_bind_group_layout,
@@ -288,8 +289,8 @@ impl<'a> State<'a> {
 		&self.render_context.queue
 	}
 	#[inline]
-	pub fn config(&self) -> &wgpu::SurfaceConfiguration {
-		&self.render_context.config
+	pub fn surface_config(&self) -> &wgpu::SurfaceConfiguration {
+		&self.render_context.surface_config
 	}
 	pub fn size(&self) -> &winit::dpi::PhysicalSize<u32> {
 		&self.render_context.size
@@ -326,12 +327,12 @@ impl<'a> State<'a> {
 	pub fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) -> bool {
 		if new_size.width > 0 && new_size.height > 0 {
 			self.render_context.size = new_size;
-			self.render_context.config.width = new_size.width;
-			self.render_context.config.height = new_size.height;
+			self.render_context.surface_config.width = new_size.width;
+			self.render_context.surface_config.height = new_size.height;
 			self.camera_system.projection_mut().resize(new_size);
 			// Clone the values to avoid holding borrows
-			self.render_context.surface.configure(self.device(), self.config());
-			*self.texture_manager.depth_texture_mut() = render::texture::create_depth_texture(self.device(), self.config(),"depth_texture");
+			self.render_context.surface.configure(self.device(), self.surface_config());
+			*self.texture_manager.depth_texture_mut() = render::texture::create_depth_texture(self.device(), self.surface_config(),"depth_texture");
 			
 			true
 		} else {
@@ -387,14 +388,14 @@ pub async fn run() {
 	// audio::clear_sound_queue();
 
 	
-	let config: ext::config::AppConfig = ext::config::AppConfig::new(monitor_size);
+	let config = ext::settings::WindowConfig::new(monitor_size);
 	let window_raw: Window = winit::window::WindowBuilder::new()
-		.with_title(&config.window_title)
-		.with_inner_size(config.initial_window_size)
-		.with_min_inner_size(config.min_window_size)
-		.with_position(config.initial_window_position)
+		.with_title(&*config.window_title())
+		.with_inner_size(*config.window_size())
+		.with_min_inner_size(*config.min_window_size())
+		.with_position(*config.window_position())
 		.with_window_icon(fs::rs::load_main_icon())
-		.with_theme(config.theme)
+		.with_theme(*config.theme())
 		.with_active(true)
 		.build(&event_loop)
 		.unwrap();

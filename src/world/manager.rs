@@ -3,16 +3,41 @@ use crate::world::main::World;
 use crate::block::math::{BlockRotation, ChunkCoord};
 use crate::block::main::{Block, Chunk, BlockStorage};
 use crate::ext::ptr;
-use crate::ext::config;
 use crate::hs::time;
 use std::path::{Path, PathBuf};
 use std::io::{self, Read, Write, Result, Error, ErrorKind};
 use std::fs::{self, File};
 use std::mem;
 
+#[inline]
+pub fn get_save_path() -> PathBuf {
+	let mut path = if cfg!(windows) {
+		dirs::document_dir()
+			.unwrap_or_else(|| PathBuf::from("."))
+			.join("My Games")
+	} else if cfg!(target_os = "macos") {
+		dirs::home_dir()
+			.unwrap_or_else(|| PathBuf::from("."))
+			.join("Library/Application Support")
+	} else {
+		// Linux and others
+		dirs::data_local_dir()
+			.unwrap_or_else(|| PathBuf::from("."))
+			.join("Games")
+	};
+
+	path.push("Rusticubes");
+	path
+}
+#[inline]
+pub fn ensure_save_dir() -> std::io::Result<PathBuf> {
+	let path = get_save_path();
+	std::fs::create_dir_all(&path)?;
+	Ok(path)
+}
 
 pub fn get_world_names() -> Result<Vec<String>> {
-	let path = config::get_save_path().join("saves");
+	let path = get_save_path().join("saves");
 
 	let mut folders = Vec::new();
 
@@ -34,7 +59,7 @@ pub fn get_world_names() -> Result<Vec<String>> {
 
 pub fn del_world(world_name: &str) {
 	// Get the saves path
-	let saves_path = match config::get_save_path().join("saves").canonicalize() {
+	let saves_path = match get_save_path().join("saves").canonicalize() {
 		Ok(p) => p,
 		Err(e) => {
 			println!("Failed to access saves directory: {}", e);

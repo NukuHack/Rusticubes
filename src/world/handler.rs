@@ -1,7 +1,7 @@
 
+use crate::world::manager::get_save_path;
 use crate::ui::manager::UIState;
 use crate::game::state;
-use crate::ext::config;
 use crate::network::api;
 use crate::ext::ptr;
 
@@ -19,7 +19,7 @@ pub fn join_world(world_name: &str) {
 
 pub fn create_world(world_name: String) {
 	// Create the save path
-	let save_path = config::get_save_path()
+	let save_path = get_save_path()
 		.join("saves")
 		.join(world_name);
 	

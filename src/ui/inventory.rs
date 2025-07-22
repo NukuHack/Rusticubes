@@ -486,7 +486,7 @@ impl UIManager {
 		let panel = UIElement::panel(self.next_id())
 			.with_position(layout.panel_position.0, layout.panel_position.1)
 			.with_size(layout.panel_size.0, layout.panel_size.1)
-			.with_style(&self.theme.inv.panel_bg)
+			//.with_style(&self.theme.inv.panel_bg)
 			.with_z_index(3);
 		self.add_element(panel);
 	}
@@ -516,7 +516,7 @@ impl UIManager {
 				let slot = UIElement::panel(self.next_id())
 					.with_position(x, y)
 					.with_size(SLOT, SLOT)
-					.with_style(self.theme.inv.get_style(area.name))
+					//.with_style(self.theme.inv.get_style(area.name))
 					.with_z_index(5);
 				self.add_element(slot);
 			}

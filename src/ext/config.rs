@@ -1,71 +1,26 @@
 ﻿
 use crate::ui::inventory::AreaType;
-use std::path::PathBuf;
 use crate::ext::color::{Color, Border};
 
-pub struct AppConfig {
-	pub window_title: String,
-	pub initial_window_size: winit::dpi::PhysicalSize<f32>,
-	pub min_window_size: winit::dpi::PhysicalSize<f32>,
-	pub initial_window_position: winit::dpi::PhysicalPosition<f32>,
-	pub theme: Option<winit::window::Theme>
-}
 
-impl Default for AppConfig {
-	#[inline]
-	 fn default() -> Self {
+
+
+// note that these are currently offsets from real pos, might change them to actual pos later on
+// by defaukt everything refers to "in game" values and not in inventory ones
+pub struct InvLayout {
+	hotbar: (f32,f32),
+	armor: (f32,f32),
+	inv: (f32,f32),
+}
+impl InvLayout {
+	#[inline] pub const fn default() -> Self {
 		Self {
-			window_title: "Default App".into(),
-			initial_window_size: winit::dpi::PhysicalSize::new(1280.0, 720.0),
-			min_window_size: winit::dpi::PhysicalSize::new(600.0, 400.0),
-			initial_window_position: winit::dpi::PhysicalPosition::new(100.0,100.0),
-			theme: Some(winit::window::Theme::Dark),
+			hotbar: (0.,-0.8),
+			armor: (0.,0.),
+			inv: (0.,0.),
 		}
 	}
 }
-impl AppConfig {
-	#[inline]
-	pub fn new(size: winit::dpi::PhysicalSize<u32>) -> Self {
-		let width:f32 = 1280.0; let height:f32 = 720.0;
-		let x:f32 = (size.width as f32 - width) / 2.0;
-		let y:f32 = (size.height as f32 - height) / 2.0;
-		Self {
-			window_title: "WGPU App".into(),
-			initial_window_size: winit::dpi::PhysicalSize::new(width, height),
-			min_window_size: winit::dpi::PhysicalSize::new(width/3.0, height/3.0),
-			initial_window_position: winit::dpi::PhysicalPosition::new(x,y),
-			..Self::default()
-		}
-	}
-}
-#[inline]
-pub fn get_save_path() -> PathBuf {
-	let mut path = if cfg!(windows) {
-		dirs::document_dir()
-			.unwrap_or_else(|| PathBuf::from("."))
-			.join("My Games")
-	} else if cfg!(target_os = "macos") {
-		dirs::home_dir()
-			.unwrap_or_else(|| PathBuf::from("."))
-			.join("Library/Application Support")
-	} else {
-		// Linux and others
-		dirs::data_local_dir()
-			.unwrap_or_else(|| PathBuf::from("."))
-			.join("Games")
-	};
-
-	path.push("Rusticubes");
-	path
-}
-#[inline]
-pub fn ensure_save_dir() -> std::io::Result<PathBuf> {
-	let path = get_save_path();
-	std::fs::create_dir_all(&path)?;
-	Ok(path)
-}
-
-
 
 
 // the image color will be used for animations too because that is just a "changing image" so yeah
@@ -80,13 +35,7 @@ pub fn ensure_save_dir() -> std::io::Result<PathBuf> {
 // Extra is optional since not all elements need it
 // The text color is optional since it is only used like half of the cases
 
-#[derive(Debug, Clone, Copy)]
-pub enum ElementVariant {
-	Basic,
-	Nice,
-	Bad,
-	Extra, 
-}
+
 #[derive(Debug, Clone, Copy)]
 pub struct ElementStyle {
 	pub color: Color,
@@ -107,7 +56,7 @@ pub struct VariantStyles {
 	pub extra: Option<ElementStyle>, 
 }
 impl VariantStyles {
-	pub fn extra(&self) -> ElementStyle {
+	#[inline] pub fn extra(&self) -> ElementStyle {
 		self.extra.clone().unwrap_or(self.basic.clone())
 	}
 }
@@ -129,12 +78,10 @@ pub struct UITheme {
 	pub sliders: VariantStyles,
 	pub inputs: VariantStyles,
 	pub dividers: VariantStyles,
-
-	pub inv: InventoryConfig,
 }
 
 #[derive(Debug, Clone)]
-pub struct InventoryConfig {
+pub struct InvConfig {
 	pub slot_size: f32,
 	pub slot_padding: f32,
 	pub slot_border_width: f32,
@@ -149,7 +96,7 @@ pub struct InventoryConfig {
 	pub input: ElementStyle,
 	pub crafting: ElementStyle,
 }
-impl InventoryConfig {
+impl InvConfig {
 	#[inline] pub const fn get_style(&self, area_type : AreaType) -> &ElementStyle {
 		match area_type {
 			AreaType::Panel => &self.panel_bg,
@@ -402,7 +349,6 @@ impl UITheme {
 				},
 				extra: None,
 			},
-			inv: InventoryConfig::default(),
 		}
 	}
 }
