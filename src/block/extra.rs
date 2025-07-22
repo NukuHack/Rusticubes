@@ -31,9 +31,7 @@ fn update_chunk_mesh(world: &mut World, chunk_coord: ChunkCoord) {
 		chunk.make_mesh(
 			state.device(),
 			state.queue(),
-			neighbors,
-			true,
-		);
+			neighbors);
 
 		for coord in chunk_coord.get_adjacent().iter() {
 		    if let Some(neighbor_chunk) = world.get_chunk_mut(*coord) {

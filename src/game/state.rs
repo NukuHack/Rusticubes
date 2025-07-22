@@ -78,9 +78,6 @@ impl GameState {
 	#[inline] pub const fn player_mut(&mut self) -> &mut player::Player {
 		&mut self.player
 	}
-	#[inline] pub fn world_change(&mut self, world : world::main::World) {
-		self.world = world;
-	}
 	#[inline] pub const fn worldname(&self) -> &String {
 		&self.worldname
 	}

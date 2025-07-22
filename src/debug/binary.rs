@@ -56,7 +56,6 @@ fn block_serialization() {
 		Block::None,
 		Block::Simple(42, BlockRotation::XplusYplus),
 		Block::Simple(65535, BlockRotation::ZminusYminus),
-		Block::Marching(123, 456789),
 	];
 	
 	for block in test_blocks {
@@ -92,7 +91,6 @@ fn block_invalid_data() {
 fn block_binary_size() {
 	assert_eq!(Block::None.binary_size(), 1);
 	assert_eq!(Block::Simple(0, BlockRotation::XplusYplus).binary_size(), 4);
-	assert_eq!(Block::Marching(0, 0).binary_size(), 7);
 }
 
 #[test]
@@ -122,7 +120,6 @@ fn sparse_chunk_serialization() {
 	chunk.palette = vec![
 		Block::None,
 		Block::Simple(1, BlockRotation::XplusYplus),
-		Block::Marching(2, 12345),
 	];
 	
 	let mut indices = Box::new([0; 4096]);
@@ -197,7 +194,6 @@ fn world_with_chunks_serialization() {
 	world.chunks.insert(ChunkCoord::new(0, 0, 0).into(), chunk1);
 	
 	let mut chunk2 = Chunk::new(1u16);
-	chunk2.palette = vec![Block::None, Block::Marching(2, 12345)];
 	let mut indices = Box::new([0; 4096]);
 	indices[0] = 1;
 	chunk2.storage = BlockStorage::Sparse(indices);
@@ -428,7 +424,6 @@ pub fn create_dummy_world() -> World {
 	
 	// Add a sparse chunk
 	let mut sparse_chunk = Chunk::new(1u16);
-	sparse_chunk.palette = vec![Block::None, Block::Marching(2, 12345)];
 	let mut indices = Box::new([0; 4096]);
 	indices[0] = 1;
 	sparse_chunk.storage = BlockStorage::Sparse(indices);

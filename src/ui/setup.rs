@@ -41,6 +41,7 @@ impl UIManager {
 			},
 			UIState::InGame => {
 				self.setup_in_game_ui();
+				self.setup_inventory_ui();
 			},
 			UIState::Multiplayer => {
 				self.add_element(bg_panel);

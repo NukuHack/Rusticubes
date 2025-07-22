@@ -24,48 +24,34 @@ impl<'a> NeighboringChunks<'a> {
 	pub fn top(&self) -> Option<&'a Chunk> { self.chunks[4] }     // (0, 1, 0)
 	pub fn bottom(&self) -> Option<&'a Chunk> { self.chunks[5] }  // (0, -1, 0)
 
-    pub fn is_some(&self) -> bool {
-        self.chunks.iter().all(Option::is_some)
-    }
+	pub fn is_some(&self) -> bool {
+		self.chunks.iter().all(Option::is_some)
+	}
 
-    // Add an iter() method that returns an iterator over Option<&Chunk>
-    pub fn iter(&self) -> impl Iterator<Item = Option<&'a Chunk>> + '_ {
-        self.chunks.iter().copied()
-    }
+	// Add an iter() method that returns an iterator over Option<&Chunk>
+	pub fn iter(&self) -> impl Iterator<Item = Option<&'a Chunk>> + '_ {
+		self.chunks.iter().copied()
+	}
 }
 
 // =============================================
 // Extra Rendering related Implementations
 // =============================================
-/*
-#[derive(Clone, PartialEq)]
-pub struct Chunk {
-	pub palette: Vec<Block>, 
-	pub storage: BlockStorage, 
-	pub dirty: bool, 
-	pub mesh: Option<GeometryBuffer>, 
-	pub bind_group: Option<wgpu::BindGroup>, 
-}
-*/
+
 impl Chunk {
-	pub fn make_mesh(&mut self, device: &wgpu::Device, _queue: &wgpu::Queue, neighbors: NeighboringChunks, force: bool) {
-		if !force && !self.dirty && self.mesh.is_some() {
-			if self.final_mesh {
-				return;
-			} else {
-				if !neighbors.is_some() {
-					return;
-				}
-			}
+	pub fn make_mesh(&mut self, device: &wgpu::Device, _queue: &wgpu::Queue, neighbors: NeighboringChunks) {
+		if !self.dirty 
+			&& (self.mesh.is_some() ^ self.is_empty()) 
+			&& (self.final_mesh || !neighbors.is_some()) 
+		{
+			return;
 		}
 
 		// Early return if chunk is empty
-		if self.is_empty() {
-			if self.mesh.is_some() {
-				self.mesh = Some(GeometryBuffer::empty(device));
-				self.dirty = false;
-			}
-			return;
+		if self.is_empty() && self.mesh.is_some() {
+			self.mesh = Some(GeometryBuffer::empty(device));
+			self.dirty = false;
+			self.final_mesh = true;
 		}
 
 		let mut builder = ChunkMeshBuilder::new();
@@ -84,7 +70,7 @@ impl Chunk {
 			}
 		}
 
-		self.mesh = Some(GeometryBuffer::new(device, &builder.instances));
+		self.mesh = Some(builder.build(device));
 		self.dirty = false;
 		if neighbors.is_some() {
 			self.final_mesh = true;
@@ -115,7 +101,7 @@ impl World {
 				world_ref.get_neighboring_chunks(*chunk_coord)
 			};
 
-			chunk.make_mesh(device, queue, neighbors, false);
+			chunk.make_mesh(device, queue, neighbors);
 		}
 	}
 
@@ -136,6 +122,7 @@ impl World {
 impl Chunk {
 	/// Recreates chunk's bind group
 	pub fn create_bind_group(&mut self, chunk_coord: ChunkCoord) {
+		if self.bind_group.is_some() { return; }
 		let state = ptr::get_state();
 		let device = state.device();
 		let chunk_bind_group_layout = &state.render_context.chunk_bind_group_layout;

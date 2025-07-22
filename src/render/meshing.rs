@@ -71,11 +71,13 @@ pub struct ChunkMeshBuilder {
 
 impl ChunkMeshBuilder {
 	/// Creates a new mesh builder with optimized initial capacity
-	#[inline]
-	pub fn new() -> Self {
+	#[inline] pub fn new() -> Self {
 		Self { // set the starting capacity smaller because now with all the culling there is chance for a chunk to be invisible
 			instances: Vec::with_capacity(Chunk::SIZE),
 		}
+	}
+	#[inline] pub fn build(self, device: &wgpu::Device) -> GeometryBuffer {
+		GeometryBuffer::new(device, &self.instances)
 	}
 	// pos is allways 0-15
 	pub fn add_cube(&mut self, pos: IVec3, chunk: &Chunk, neighbors: &NeighboringChunks) {
@@ -170,7 +172,7 @@ pub struct GeometryBuffer {
 
 impl GeometryBuffer {
 	/// Creates a new geometry buffer with the given data
-	pub fn new(device: &wgpu::Device, instances: &[InstanceRaw]) -> Self {
+	#[inline] pub fn new(device: &wgpu::Device, instances: &[InstanceRaw]) -> Self {
 		if instances.is_empty() {
 			return Self::empty(device);
 		}
@@ -186,7 +188,7 @@ impl GeometryBuffer {
 	}
 
 	/// Creates an empty geometry buffer
-	pub fn empty(device: &wgpu::Device) -> Self {
+	#[inline] pub fn empty(device: &wgpu::Device) -> Self {
 		Self {
 			instance_buffer : device.create_buffer(&wgpu::BufferDescriptor {
 				label: Some("Empty Vertex Buffer"),

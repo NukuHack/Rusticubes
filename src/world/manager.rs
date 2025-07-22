@@ -358,7 +358,7 @@ impl Block {
 	}
 	
 	/// Deserializes the block from binary format
-	pub fn from_binary(bytes: &[u8]) -> Option<Self> {
+	pub fn from_binary(bytes: &[u8]) -> Option<Block> {
 		if bytes.len() == 0 { return None; }
 		let block_type = bytes.get(0)?;
 		
@@ -530,11 +530,15 @@ pub fn load_entire_world(path: &PathBuf) -> Result<()> {
 		return Err(Error::new(ErrorKind::InvalidData, "Invalid world data: too short"));
 	}
 	// Try to deserialize
-	let loaded_world = World::from_binary(&bytes).ok_or_else(|| {
+	let mut loaded_world = World::from_binary(&bytes).ok_or_else(|| {
 		Error::new(ErrorKind::InvalidData, "Failed to deserialize world")
 	})?;
 	// Apply the loaded world
-	ptr::get_gamestate().world_change(loaded_world);
+	for (chunk_coord, _chunk) in loaded_world.chunks.clone().iter() {
+		loaded_world.loaded_chunks.insert(*chunk_coord);
+		loaded_world.create_bind_group(*chunk_coord);
+	}
+	*ptr::get_gamestate().world_mut() = loaded_world;
 		
 	Ok(())
 }

@@ -336,7 +336,7 @@ impl UIManager {
 				if let Some(inv_lay) = ptr::get_gamestate().player().inventory().layout.clone() {
 					match inv_lay.handle_click(inv_state, norm_x, norm_y) {
 						ClickResult::SlotClicked{area_type, slot} => {
-							println!("clicked or area: {:?}, on slot {};{}", area_type, slot.0, slot.1);
+							println!("clicked or area: {:?}, on slot {:?}", area_type, slot);
 						}
 						ClickResult::SlotMissed{area_type} => {
 							println!("clicked or area: {:?}, not on slot", area_type);

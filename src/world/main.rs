@@ -94,9 +94,9 @@ impl World {
 			chunk.set_block(index, block);
 			if is_border_block {
 				for coord in chunk_coord.get_adjacent().iter() {
-				    if let Some(neighbor_chunk) = self.get_chunk_mut(*coord) {
+					if let Some(neighbor_chunk) = self.get_chunk_mut(*coord) {
 						neighbor_chunk.final_mesh = false;
-				    }
+					}
 				}
 			}
 		}
@@ -115,19 +115,21 @@ impl World {
 	#[inline]
 	/// Loads a chunk from storage
 	pub fn generate_chunk(&mut self, chunk_coord: ChunkCoord, seed: u32) {
-		let chunk = match Chunk::generate(chunk_coord, seed) {
+		let mut chunk = match Chunk::generate(chunk_coord, seed) {
 			Some(c) => c,
 			_ => Chunk::empty(),
 		};
 
 		self.loaded_chunks.insert(chunk_coord);
-		self.chunks.insert(
-			chunk_coord,
-			chunk
-		);
+		
+		if let Some(m_chunk) = self.get_chunk_mut(chunk_coord) {
+			// Move the bind_group from the old chunk to the new one
+			chunk.bind_group = std::mem::take(&mut m_chunk.bind_group);
+		}
+		
+		// This will replace the existing entry or insert a new one
+		self.chunks.insert(chunk_coord, chunk);
 	}
-
-
 	/// Updates loaded chunks based on player position
 	pub fn update_loaded_chunks(&mut self, center: Vec3, radius: f32, force: bool) {
 		let center_coord = ChunkCoord::from_world_posf(center);
