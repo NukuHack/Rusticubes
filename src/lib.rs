@@ -300,7 +300,7 @@ impl<'a> State<'a> {
 
 //#[cfg_attr(target_arch = "wasm32", wasm_bindgen(start))]
 #[inline]
-pub async fn run() {    
+pub async fn run() {
 	let event_loop: winit::event_loop::EventLoop<()> = winit::event_loop::EventLoop::new().unwrap();
 	let monitor: winit::monitor::MonitorHandle = event_loop.primary_monitor().expect("No primary monitor found!");
 	let monitor_size: winit::dpi::PhysicalSize<u32> = monitor.size(); // Monitor size in physical pixels
@@ -311,10 +311,7 @@ pub async fn run() {
 
 	// Initialize once at startup
 	ext::audio::init_audio().expect("Failed to initialize audio");
-	ext::audio::set_background(settings.music_settings.bg_music);
-	// Control audio
-	// audio::stop_all_sounds();
-	// audio::clear_sound_queue();
+	ext::audio::set_bg(settings.music_settings.bg_music);
 
 	
 	let config = &settings.window_config;

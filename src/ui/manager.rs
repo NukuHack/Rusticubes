@@ -357,14 +357,14 @@ impl UIManager {
 					UIElementData::Button{..} |
 					UIElementData::MultiStateButton{..} => {
 						self.focused_element = Some(idx);
-						audio::set_sound("click.ogg");
+						audio::set_fg("click.ogg");
 						return true;
 					},
 					UIElementData::Slider{..} => {
 						element.set_calc_value(norm_x, norm_y);
 						
 						self.focused_element = Some(idx);
-						audio::set_sound("click.ogg");
+						audio::set_fg("click.ogg");
 						return true;
 					},
 					_=> { },
