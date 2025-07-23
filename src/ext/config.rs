@@ -4,14 +4,12 @@ use crate::ui::inventory::AreaType;
 use crate::ext::color::{Color, Border};
 
 
-
-
 // note that these are currently offsets from real pos, might change them to actual pos later on
 // by defaukt everything refers to "in game" values and not in inventory ones
 pub struct InvLayout {
-	hotbar: (f32,f32),
-	armor: (f32,f32),
-	inv: (f32,f32),
+	pub hotbar: (f32,f32),
+	pub armor: (f32,f32),
+	pub inv: (f32,f32),
 }
 impl InvLayout {
 	#[inline] pub const fn default() -> Self {

@@ -46,7 +46,7 @@ fn update_chunk_mesh(world: &mut World, chunk_coord: ChunkCoord) {
 /// Optimized raycasting function using IVec3 for block positions
 #[inline]
 pub fn raycast_to_block(camera: &Camera, player: &Player, world: &World, max_distance: f32) -> Option<(IVec3, IVec3)> {
-	let ray_origin = player.position();
+	let ray_origin = player.cam_pos();
 	let ray_dir = camera.forward();
 	
 	// Initialize variables for DDA algorithm
@@ -154,7 +154,7 @@ pub fn add_full_chunk() {
 	if !state.is_world_running {
 		return;
 	}
-	let pos:Vec3 = ptr::get_gamestate().player().position();
+	let pos:Vec3 = ptr::get_gamestate().player().pos();
 	let chunk_coord = ChunkCoord::from_world_posf(pos);
 
 	let world = ptr::get_gamestate().world_mut();
@@ -171,7 +171,7 @@ pub fn update_full_world() {
 		return;
 	}
 	ptr::get_gamestate().world_mut().update_loaded_chunks(
-		ptr::get_gamestate().player().position(),
+		ptr::get_gamestate().player().pos(),
 		REACH * 2.0,
 		false,
 	);
@@ -190,7 +190,7 @@ pub fn add_full_world() {
 		return;
 	}
 	ptr::get_gamestate().world_mut().update_loaded_chunks(
-		ptr::get_gamestate().player().position(),
+		ptr::get_gamestate().player().pos(),
 		REACH * 2.0,
 		true,
 	);

@@ -257,7 +257,7 @@ impl<'a> State<'a> {
 			self.render_context.surface_config.width = new_size.width;
 			self.render_context.surface_config.height = new_size.height;
 			if self.is_world_running {
-				ptr::get_gamestate().player_mut().camera_system_mut().projection_mut().resize(new_size);
+				ptr::get_gamestate().player_mut().resize(new_size);
 			}
 			// Clone the values to avoid holding borrows
 			self.render_context.surface.configure(self.device(), self.surface_config());
@@ -305,16 +305,19 @@ pub async fn run() {
 	let monitor: winit::monitor::MonitorHandle = event_loop.primary_monitor().expect("No primary monitor found!");
 	let monitor_size: winit::dpi::PhysicalSize<u32> = monitor.size(); // Monitor size in physical pixels
 
+	ext::ptr::init_settings();
+	let settings = ext::ptr::get_settings();
+	settings.remake_window_config(monitor_size);
 
 	// Initialize once at startup
 	ext::audio::init_audio().expect("Failed to initialize audio");
-	ext::audio::set_background("background_music.ogg");
+	ext::audio::set_background(settings.music_settings.bg_music);
 	// Control audio
 	// audio::stop_all_sounds();
 	// audio::clear_sound_queue();
 
 	
-	let config = ext::settings::WindowConfig::new(monitor_size);
+	let config = &settings.window_config;
 	let window_raw: Window = winit::window::WindowBuilder::new()
 		.with_title(&*config.window_title())
 		.with_inner_size(*config.window_size())

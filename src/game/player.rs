@@ -30,7 +30,7 @@ pub enum CameraMode {
 
 /// Represents a player with integrated camera system and movement capabilities
 pub struct Player {
-	position: Vec3,
+	pos: Vec3,
 	config: CameraConfig,
 	controller: PlayerController,
 	movement_mode: MovementMode,
@@ -61,7 +61,7 @@ impl Player {
 		let camera_system = CameraSystem::new(device, size, config, bind_group_layout);
 		
 		Self {
-			position,
+			pos: position,
 			config,
 			controller: PlayerController::new(config),
 			movement_mode: MovementMode::Flat,
@@ -70,11 +70,6 @@ impl Player {
 			body: aabb::PhysicsBody::new(aabb),
 			camera_system,
 		}
-	}
-
-	/// Gets the player's current position
-	pub fn position(&self) -> Vec3 {
-		self.position
 	}
 
 	/// Updates player state and returns movement delta
@@ -86,48 +81,9 @@ impl Player {
 		let movement = self.calculate_movement(dt);
 		
 		// Update the camera system's GPU resources
-		self.camera_system.update(queue, self.position.clone());
+		self.camera_system.update(queue, self.cam_pos());
 		
 		movement
-	}
-
-	/// Appends position to both player and camera
-	pub fn append_position(&mut self, offset: Vec3) {
-		self.position += offset;
-	}
-
-	pub fn controller(&mut self) -> &mut PlayerController {
-		&mut self.controller
-	}
-
-	/// Sets the movement mode
-	pub fn set_movement_mode(&mut self, mode: MovementMode) {
-		self.movement_mode = mode;
-	}
-
-	/// Sets the camera mode
-	pub fn set_camera_mode(&mut self, mode: CameraMode) {
-		self.camera_mode = mode;
-	}
-
-	/// Resizes the camera projection
-	pub fn resize(&mut self, new_size: PhysicalSize<u32>) {
-		self.camera_system.resize(new_size);
-	}
-
-	/// Handles zooming via mouse scroll
-	pub fn camera(&self) -> &Camera {
-		&self.camera_system.camera
-	}
-
-	/// Gets the camera system for rendering
-	pub fn camera_system(&self) -> &CameraSystem {
-		&self.camera_system
-	}
-
-	/// Gets the camera system mutably
-	pub fn camera_system_mut(&mut self) -> &mut CameraSystem {
-		&mut self.camera_system
 	}
 
 	/// Updates camera rotation based on controller input
@@ -223,11 +179,49 @@ impl Player {
 		self.controller.velocity * dt
 	}
 
-	pub fn inventory(&self) -> &inventory::Inventory {
+	/// Gets the player's current position
+	#[inline] pub const fn pos(&self) -> Vec3 {
+		self.pos
+	}
+	#[inline] pub const fn cam_pos(&self) -> Vec3 {
+		let pos = self.pos(); let off = self.config.offset;
+		Vec3::new(pos.x + off.x, pos.y + off.y, pos.z + off.z)
+	}
+	/// Appends position to both player and camera
+	#[inline] pub fn append_position(&mut self, offset: Vec3) {
+		self.pos += offset;
+	}
+	#[inline] pub const fn controller(&mut self) -> &mut PlayerController {
+		&mut self.controller
+	}
+	/// Sets the movement mode
+	#[inline] pub const fn set_movement_mode(&mut self, mode: MovementMode) {
+		self.movement_mode = mode;
+	}
+	/// Sets the camera mode
+	#[inline] pub const fn set_camera_mode(&mut self, mode: CameraMode) {
+		self.camera_mode = mode;
+	}
+	/// Resizes the camera projection
+	#[inline] pub fn resize(&mut self, new_size: PhysicalSize<u32>) {
+		self.camera_system.resize(new_size);
+	}
+	/// Handles zooming via mouse scroll
+	#[inline] pub const fn camera(&self) -> &Camera {
+		&self.camera_system.camera
+	}
+	/// Gets the camera system for rendering
+	#[inline] pub const fn camera_system(&self) -> &CameraSystem {
+		&self.camera_system
+	}
+	/// Gets the camera system mutably
+	#[inline] pub const fn camera_system_mut(&mut self) -> &mut CameraSystem {
+		&mut self.camera_system
+	}
+	#[inline] pub const fn inventory(&self) -> &inventory::Inventory {
 		&self.inventory
 	}
-	
-	pub fn inventory_mut(&mut self) -> &mut inventory::Inventory {
+	#[inline] pub const fn inventory_mut(&mut self) -> &mut inventory::Inventory {
 		&mut self.inventory
 	}
 }

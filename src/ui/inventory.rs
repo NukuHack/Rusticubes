@@ -145,12 +145,13 @@ impl InventoryLayout {
 			
 			(inv_center, hotbar_center, armor_center)
 		}
+		let inv_layout = &ptr::get_settings().inv_layout;
 		let mut layout = Self::default();
 		let inv_lay = inv_lay.clone();
 		
 		// Special case for hotbar only
 		if inv_state == InvState::Hotbar {
-			layout.areas.push(AreaLayout::new(1, inv_lay.hotbar(), (0.0, -0.8), AreaType::Hotbar));
+			layout.areas.push(AreaLayout::new(1, inv_lay.hotbar(), inv_layout.hotbar, AreaType::Hotbar));
 			layout.finalize_layout(inv_state, &[]);
 			return layout;
 		}
@@ -434,20 +435,22 @@ impl UIManager {
 	}
 	
 	fn add_main_panel(&mut self, layout: &InventoryLayout) {
+		let inv_config = &ptr::get_settings().inv_config;
 		let panel = UIElement::panel(self.next_id())
 			.with_position(layout.panel_position.0, layout.panel_position.1)
 			.with_size(layout.panel_size.0, layout.panel_size.1)
-			//.with_style(&self.theme.inv.panel_bg)
+			.with_style(&inv_config.panel_bg)
 			.with_z_index(3);
 		self.add_element(panel);
 	}
 
-	fn add_player_buttons(&mut self, layout: &InventoryLayout) {        
+	fn add_player_buttons(&mut self, layout: &InventoryLayout) {
+		let theme = &ptr::get_settings().ui_theme;
 		let w = 0.12; let h = SLOT/2.;
 		let version = UIElement::label(self.next_id(), format!("v{}", env!("CARGO_PKG_VERSION")))
 			.with_position(layout.panel_position.0 + layout.panel_size.0 - w, layout.panel_position.1 - h - PADDING)
 			.with_size(w, h)
-			.with_style(&self.theme.labels.extra())
+			.with_style(&theme.labels.extra())
 			.with_z_index(8);
 		self.add_element(version);
 	}
@@ -460,6 +463,7 @@ impl UIManager {
 
 	fn create_area_slots(&mut self, area: &AreaLayout) {
 		if area.rows == 0 || area.columns == 0 { return; }
+		let inv_config = &ptr::get_settings().inv_config;
 		
 		for row in 0..area.rows {
 			for col in 0..area.columns {
@@ -467,7 +471,7 @@ impl UIManager {
 				let slot = UIElement::panel(self.next_id())
 					.with_position(x, y)
 					.with_size(SLOT, SLOT)
-					//.with_style(self.theme.inv.get_style(area.name))
+					.with_style(&inv_config.get_style(area.name))
 					.with_z_index(5);
 				self.add_element(slot);
 			}
