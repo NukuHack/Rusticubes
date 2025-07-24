@@ -1,18 +1,21 @@
-
 use crate::ui::manager::{UIState, UIStateID, UIManager};
 use crate::ext::ptr;
-use arc_swap::ArcSwap;
-use futures_lite::future;
 use std::{
 	cell::RefCell,
 	collections::HashMap,
-	fmt, sync::{
-	atomic::{AtomicU8, Ordering},
-	Arc, Mutex, }, time::Instant,
+	fmt,
+	future::Future,
+	pin::Pin,
+	sync::{
+		atomic::{AtomicU8, Ordering},
+		Arc, Mutex, RwLock,
+	},
+	task::{Context, Poll, Waker},
+	time::Instant,
 };
 
 // ============================================================================
-// DialogManager (With IDs - More complex but easier UI access)
+// DialogManager (Without futures-lite and arc-swap)
 // ============================================================================
 
 /// Dialog manager for handling multiple concurrent dialogs
@@ -22,7 +25,7 @@ pub struct DialogManager {
 }
 
 struct DialogManagerInner {
-	pending: ArcSwap<HashMap<u8, PendingDialog>>,
+	pending: RwLock<HashMap<u8, PendingDialog>>,
 	counter: AtomicU8,
 }
 
@@ -34,6 +37,7 @@ struct PendingDialog {
 	prompt: String,
 	created_at: Instant,
 	callback: Option<DialogCallback>,
+	waker: Arc<Mutex<Option<Waker>>>,
 }
 
 impl DialogManager {
@@ -41,7 +45,7 @@ impl DialogManager {
 	pub fn new() -> Self {
 		Self {
 			inner: Arc::new(DialogManagerInner {
-				pending: ArcSwap::new(Arc::new(HashMap::new())),
+				pending: RwLock::new(HashMap::new()),
 				counter: AtomicU8::new(0),
 			}),
 		}
@@ -52,32 +56,29 @@ impl DialogManager {
 		let prompt = prompt.into();
 		let id: u8 = self.inner.counter.fetch_add(1, Ordering::Relaxed);
 		let response_holder = Arc::new(Mutex::new(None));
+		let waker = Arc::new(Mutex::new(None));
 
 		// Add to pending dialogs
-		self.inner.pending.rcu(|pending| {
-			let mut new = HashMap::clone(pending);
-			new.insert(id, PendingDialog {
+		if let Ok(mut pending) = self.inner.pending.write() {
+			pending.insert(id, PendingDialog {
 				response_holder: response_holder.clone(),
 				prompt: prompt.clone(),
 				created_at: Instant::now(),
 				callback: None,
+				waker: waker.clone(),
 			});
-			Arc::new(new)
-		});
+		}
 
 		// Show dialog in UI
 		ptr::get_state().ui_manager.confirm(id, &prompt);
 
-		// Wait for response
-		loop {
-			if let Ok(guard) = response_holder.try_lock() {
-				if let Some(response) = *guard {
-					self.remove_pending(id);
-					return Ok(response);
-				}
-			}
-			future::yield_now().await;
-		}
+		// Create and await the future
+		DialogFuture {
+			response_holder,
+			waker,
+			dialog_manager: self.clone(),
+			id,
+		}.await
 	}
 
 	/// Shows a dialog with a callback (non-blocking)
@@ -85,21 +86,21 @@ impl DialogManager {
 		let prompt = prompt.into();
 		let id: u8 = self.inner.counter.fetch_add(1, Ordering::Relaxed);
 		let response_holder = Arc::new(Mutex::new(None));
+		let waker = Arc::new(Mutex::new(None));
 		
-		// Wrap the callback in Arc<RefCell> before moving it into the closure
+		// Wrap the callback in Arc<RefCell>
 		let callback = Arc::new(RefCell::new(callback));
 
 		// Add to pending dialogs with callback
-		self.inner.pending.rcu(|pending| {
-			let mut new = HashMap::clone(pending);
-			new.insert(id, PendingDialog {
+		if let Ok(mut pending) = self.inner.pending.write() {
+			pending.insert(id, PendingDialog {
 				response_holder: response_holder.clone(),
 				prompt: prompt.clone(),
 				created_at: Instant::now(),
-				callback: Some(callback.clone()), // Now we're cloning the Arc
+				callback: Some(callback.clone()),
+				waker,
 			});
-			Arc::new(new)
-		});
+		}
 
 		// Show dialog in UI
 		ptr::get_state().ui_manager.confirm(id, &prompt);
@@ -109,30 +110,42 @@ impl DialogManager {
 
 	/// Respond to a specific dialog by ID
 	pub fn respond(&self, id: u8, response: bool) -> bool {
-		if let Some(pending) = self.inner.pending.load().get(&id) {
-			// Execute callback if present
-			if let Some(ref callback) = pending.callback {
-				if let Ok(mut callback_mut) = callback.try_borrow_mut() {
-					callback_mut(response);
+		if let Ok(pending_lock) = self.inner.pending.read() {
+			if let Some(pending) = pending_lock.get(&id) {
+				// Execute callback if present
+				if let Some(ref callback) = pending.callback {
+					if let Ok(mut callback_mut) = callback.try_borrow_mut() {
+						callback_mut(response);
+					}
 				}
+				
+				// Set response for async waiters
+				if let Ok(mut guard) = pending.response_holder.lock() {
+					*guard = Some(response);
+				}
+				
+				// Wake up any waiting futures
+				if let Ok(mut waker_guard) = pending.waker.lock() {
+					if let Some(waker) = waker_guard.take() {
+						waker.wake();
+					}
+				}
+				
+				// Drop the read lock before removing
+				drop(pending_lock);
+				
+				// Remove from pending
+				self.remove_pending(id);
+				return true;
 			}
-			
-			// Set response for async waiters
-			if let Ok(mut guard) = pending.response_holder.lock() {
-				*guard = Some(response);
-			}
-			
-			// Remove from pending
-			self.remove_pending(id);
-			return true;
 		}
 		false
 	}
 
 	/// Get a pending dialog by ID
 	pub fn get_pending_dialog(&self, id: u8) -> Option<String> {
-		if let Some(pending) = self.inner.pending.load().get(&id) {
-			Some(pending.prompt.clone())
+		if let Ok(pending) = self.inner.pending.read() {
+			pending.get(&id).map(|dialog| dialog.prompt.clone())
 		} else {
 			None
 		}
@@ -140,68 +153,126 @@ impl DialogManager {
 
 	/// Get all pending dialog IDs and their prompts
 	pub fn get_pending_dialogs(&self) -> Vec<(u8, String, Instant)> {
-		self.inner
-			.pending
-			.load()
-			.iter()
-			.map(|(id, dialog)| (*id, dialog.prompt.clone(), dialog.created_at))
-			.collect()
+		if let Ok(pending) = self.inner.pending.read() {
+			pending
+				.iter()
+				.map(|(id, dialog)| (*id, dialog.prompt.clone(), dialog.created_at))
+				.collect()
+		} else {
+			Vec::new()
+		}
 	}
 
 	/// Cancel a specific dialog
 	pub fn cancel_dialog(&self, id: u8) -> bool {
-		if let Some(pending) = self.inner.pending.load().get(&id) {
-			// Execute callback with false if present
-			if let Some(ref callback) = pending.callback {
-				if let Ok(mut callback_mut) = callback.try_borrow_mut() {
-					callback_mut(false);
+		if let Ok(pending_lock) = self.inner.pending.read() {
+			if let Some(pending) = pending_lock.get(&id) {
+				// Execute callback with false if present
+				if let Some(ref callback) = pending.callback {
+					if let Ok(mut callback_mut) = callback.try_borrow_mut() {
+						callback_mut(false);
+					}
 				}
+				
+				if let Ok(mut guard) = pending.response_holder.lock() {
+					*guard = Some(false);
+				}
+				
+				// Wake up any waiting futures
+				if let Ok(mut waker_guard) = pending.waker.lock() {
+					if let Some(waker) = waker_guard.take() {
+						waker.wake();
+					}
+				}
+				
+				// Drop the read lock before removing
+				drop(pending_lock);
+				
+				self.remove_pending(id);
+				return true;
 			}
-			
-			if let Ok(mut guard) = pending.response_holder.lock() {
-				*guard = Some(false);
-			}
-			self.remove_pending(id);
-			return true;
 		}
 		false
 	}
 
 	/// Cancel all pending dialogs
 	pub fn cancel_all(&self) {
-		let pending = self.inner.pending.load();
-		for (_id, dialog) in pending.iter() {
-			// Execute callbacks with false
-			if let Some(ref callback) = dialog.callback {
-				if let Ok(mut callback_mut) = callback.try_borrow_mut() {
-					callback_mut(false);
+		if let Ok(mut pending) = self.inner.pending.write() {
+			for (_id, dialog) in pending.iter() {
+				// Execute callbacks with false
+				if let Some(ref callback) = dialog.callback {
+					if let Ok(mut callback_mut) = callback.try_borrow_mut() {
+						callback_mut(false);
+					}
+				}
+				
+				if let Ok(mut guard) = dialog.response_holder.lock() {
+					*guard = Some(false);
+				}
+				
+				// Wake up any waiting futures
+				if let Ok(mut waker_guard) = dialog.waker.lock() {
+					if let Some(waker) = waker_guard.take() {
+						waker.wake();
+					}
 				}
 			}
-			
-			if let Ok(mut guard) = dialog.response_holder.lock() {
-				*guard = Some(false);
-			}
+			pending.clear();
 		}
-		self.inner.pending.store(Arc::new(HashMap::new()));
 	}
 
 	/// Get count of pending dialogs
 	pub fn pending_count(&self) -> usize {
-		self.inner.pending.load().len()
+		if let Ok(pending) = self.inner.pending.read() {
+			pending.len()
+		} else {
+			0
+		}
 	}
 
 	fn remove_pending(&self, id: u8) {
-		self.inner.pending.rcu(|pending| {
-			let mut new = HashMap::clone(pending);
-			new.remove(&id);
-			Arc::new(new)
-		});
+		if let Ok(mut pending) = self.inner.pending.write() {
+			pending.remove(&id);
+		}
 	}
 }
 
 impl Default for DialogManager {
 	fn default() -> Self {
 		Self::new()
+	}
+}
+
+// ============================================================================
+// Custom Future Implementation (replaces futures-lite::future::yield_now)
+// ============================================================================
+
+struct DialogFuture {
+	response_holder: Arc<Mutex<Option<bool>>>,
+	waker: Arc<Mutex<Option<Waker>>>,
+	dialog_manager: DialogManager,
+	id: u8,
+}
+
+impl Future for DialogFuture {
+	type Output = Result<bool, DialogError>;
+
+	fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+		// Check if we have a response
+		if let Ok(guard) = self.response_holder.try_lock() {
+			if let Some(response) = *guard {
+				// Clean up
+				self.dialog_manager.remove_pending(self.id);
+				return Poll::Ready(Ok(response));
+			}
+		}
+
+		// Store the waker for later use
+		if let Ok(mut waker_guard) = self.waker.lock() {
+			*waker_guard = Some(cx.waker().clone());
+		}
+
+		Poll::Pending
 	}
 }
 

@@ -1,13 +1,13 @@
 
 use ggrs::{Config, SessionBuilder, UdpNonBlockingSocket, PlayerType};
 use serde::{Deserialize, Serialize};
-use std::net::{IpAddr, Ipv4Addr, SocketAddr, UdpSocket};
-use std::process::Command;
-use std::time::Instant;
-use std::collections::VecDeque;
-use std::sync::{Arc, Mutex};
-use std::thread;
-use std::io;
+use std::{
+	process::Command, io,
+	time::Instant, thread,
+	collections::VecDeque,
+	sync::{Arc, Mutex},
+	net::{IpAddr, Ipv4Addr, SocketAddr, UdpSocket},
+};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum NetworkMessage {

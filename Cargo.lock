@@ -3662,12 +3662,10 @@ name = "rusticubes"
 version = "0.4.8"
 dependencies = [
  "ahash",
- "arc-swap",
  "bytemuck",
  "dirs",
  "embed-resource 3.0.5",
  "filetime",
- "futures-lite",
  "ggrs",
  "glam",
  "image",
