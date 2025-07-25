@@ -63,6 +63,7 @@ pub mod ui { // ui related
 	pub mod element;
 	pub mod render;
 	pub mod manager;
+	pub mod settings;
 	pub mod setup;
 	pub mod inventory;
 	pub mod dialog;

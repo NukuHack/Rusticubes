@@ -3,7 +3,7 @@ use crate::network::api;
 use crate::block;
 use crate::ext::{ptr, memory, color::Solor};
 use crate::world::{handler, manager};
-use crate::ui::manager::{UIState, close_pressed, UIManager, UIStateID, get_element_data_dy_id};
+use crate::ui::manager::{UIState, close_pressed, UIManager, UIStateID, get_element_str_by_id};
 use crate::ui::element::UIElement;
 
 impl UIManager {
@@ -268,69 +268,6 @@ impl UIManager {
 	}
 
 	#[inline]
-	fn setup_settings_ui(&mut self) {
-		let theme = &ptr::get_settings().ui_theme;
-		// Title
-		let title = UIElement::label(self.next_id(), "Settings ... yah")
-			.with_position(-0.4, 0.6)
-			.with_size(0.8, 0.15)
-			.with_style(&theme.title_label)
-			.with_z_index(10);
-		self.add_element(title);
-
-		// Settings panel
-		let list_panel = UIElement::panel(self.next_id())
-			.with_position(-0.6, -0.4)
-			.with_size(1.2, 0.9)
-			.with_style(&theme.panels.basic)
-			.with_z_index(1);
-		self.add_element(list_panel);
-
-		let setting_button_1 = UIElement::button(self.next_id(), "setting")
-			.with_position(-0.4, 0.1)
-			.with_size(0.8, 0.1)
-			.with_style(&theme.buttons.basic)
-			.with_z_index(5)
-			.with_callback(|| println!("clicked setting_button_1"));
-		self.add_element(setting_button_1);
-
-		let setting_checkbox_1 = UIElement::checkbox(self.next_id(), Some("checkbox"))
-			.with_position(-0.4, -0.02)
-			.with_size(0.08, 0.1)
-			.with_style(&theme.checkboxs.basic)
-			.with_z_index(5)
-			.with_callback(|| println!("clicked setting_checkbox_1"));
-		self.add_element(setting_checkbox_1);
-
-		let setting_slider_1 = UIElement::slider(self.next_id(), 0., 100.)
-			.with_position(-0.4, -0.15)
-			.with_size(0.8, 0.1)
-			.with_style(&theme.sliders.basic)
-			.with_z_index(5)
-			.with_step(0.5)
-			.with_value(10.)
-			.with_callback(|| println!("clicked setting_slider_1"));
-		self.add_element(setting_slider_1);
-
-		let setting_multi_button_1 = UIElement::multi_state_button(self.next_id(), vec!("On", "Off"))
-			.with_position(-0.4, -0.3)
-			.with_size(0.8, 0.1)
-			.with_style(&theme.buttons.basic)
-			.with_z_index(5)
-			.with_callback(|| println!("clicked setting_multi_button_1"));
-		self.add_element(setting_multi_button_1);
-
-		// Back button
-		let back_button = UIElement::button(self.next_id(), "Back")
-			.with_position(-0.1, -0.8)
-			.with_size(0.2, 0.08)
-			.with_style(&theme.buttons.extra())
-			.with_z_index(8)
-			.with_callback(|| close_pressed());
-		self.add_element(back_button);
-	}
-
-	#[inline]
 	fn setup_confirm_ui(&mut self) {
 		let theme = &ptr::get_settings().ui_theme;
 		let manager = &ptr::get_state().ui_manager;
@@ -551,7 +488,7 @@ impl UIManager {
 			.with_style(&theme.buttons.nice)
 			.with_z_index(6)
 			.with_callback(move || {
-				handler::create_world(get_element_data_dy_id(input_id));
+				handler::create_world(get_element_str_by_id(&input_id).to_string());
 				let ui_manager = &mut ptr::get_state().ui_manager;
 				ui_manager.state = UIState::WorldSelection;
 				ui_manager.setup_ui();
@@ -606,7 +543,7 @@ impl UIManager {
 			.with_style(&theme.buttons.nice)
 			.with_z_index(6)
 			.with_callback(move || {
-				if let Err(e) = api::connect_to_host(&get_element_data_dy_id(input_id)) {
+				if let Err(e) = api::connect_to_host(&get_element_str_by_id(&input_id)) {
 					println!("Error: {}", e);
 				}
 				let ui_manager = &mut ptr::get_state().ui_manager;

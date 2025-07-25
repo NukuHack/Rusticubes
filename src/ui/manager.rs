@@ -4,7 +4,7 @@ use crate::{
 	get_string,
 	ui::{
 		dialog, inventory::{self, ClickResult},
-		element::{self, UIElement, UIElementData},
+		element::{self, UIElement, UIElementData, ElementData},
 		render::{UIRenderer, Vertex},
 	},
 };
@@ -280,7 +280,7 @@ impl UIManager {
 	}
 
 	#[inline] pub fn visible_elements(&self) -> Vec<&UIElement> { self.elements.iter().filter(|e| e.visible).collect() }
-	#[inline] pub fn get_element(&self, id: usize) -> Option<&UIElement> { self.elements.iter().find(|e| e.id == id) }
+	#[inline] pub fn get_element(&self, id: &usize) -> Option<&UIElement> { self.elements.iter().find(|e| e.id == *id) }
 	#[inline] pub fn get_element_mut(&mut self, id: usize) -> Option<&mut UIElement> { self.elements.iter_mut().find(|e| e.id == id) }
 	 
 	#[inline] pub fn clear_elements(&mut self) { self.elements.clear(); self.clear_focused_element(); self.next_id = 1; }
@@ -420,6 +420,7 @@ impl UIManager {
 		if let Some(element) = self.get_focused_element_mut() {
 			if let UIElementData::Slider{..} = element.data {
 				element.set_calc_value(norm_x, norm_y);
+				element.trigger_callback();
 			}
 		}
 	}
@@ -455,19 +456,22 @@ impl UIManager {
 }
 
 #[inline]
-pub fn get_element_data_dy_id(id: usize) -> String {
+pub fn get_element_data_by_id(id: &usize) -> Option<ElementData<'static>> {
 	ptr::get_state()
 		.ui_manager()
 		.get_element(id)
-		.and_then(|element|
-			Some(element.get_str()
-			.map(|s| s.trim())
-			.filter(|s| !s.is_empty())
-			.unwrap_or("Null")
-			.to_string())
-			).expect("Bruh")
+		.map(|element| element.get_element_data())
+}#[inline]
+pub fn get_element_str_by_id(id: &usize) -> &str {
+	get_element_data_by_id(id)
+		.and_then(|data| data.text())
+		.unwrap_or("Null")
+}#[inline]
+pub fn get_element_num_by_id(id: &usize) -> f32 {
+	get_element_data_by_id(id)
+		.and_then(|data| data.num())
+		.unwrap_or(0.)
 }
-
 #[inline]
 pub const fn convert_mouse_position(window_size: (u32, u32), mouse_pos: &winit::dpi::PhysicalPosition<f64>) -> (f32, f32) {
 	let (x, y) = (mouse_pos.x as f32, mouse_pos.y as f32);

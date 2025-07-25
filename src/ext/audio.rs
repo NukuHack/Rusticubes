@@ -36,8 +36,8 @@ pub fn init_audio() -> Result<(), Box<dyn std::error::Error>> {
 	let fg_sink = Sink::try_new(&stream_handle)?;
 	
 	// Set different volume levels for each sink
-	bg_sink.set_volume(music_settings.bg_volume * music_settings.main_volume); 
-	fg_sink.set_volume(music_settings.fg_volume * music_settings.main_volume); 
+	bg_sink.set_volume(music_settings.bg_volume.val * music_settings.main_volume.val); 
+	fg_sink.set_volume(music_settings.fg_volume.val * music_settings.main_volume.val); 
 	
 	let system = Box::new(AudioSystem {
 		bg_sink,
@@ -118,7 +118,7 @@ fn try_play_bg_sound(
 
 	let music_settings = &get_settings().music_settings;
 	let speed = calculate_playback_speed(
-		music_settings.bg_speed * music_settings.main_speed,
+		music_settings.bg_speed.val * music_settings.main_speed.val,
 		music_settings.use_random,
 		music_settings.random_value
 	);
@@ -150,7 +150,7 @@ fn try_play_fg_sound(
 
 	let music_settings = &get_settings().music_settings;
 	let speed = calculate_playback_speed(
-		music_settings.fg_speed * music_settings.main_speed,
+		music_settings.fg_speed.val * music_settings.main_speed.val,
 		music_settings.use_random,
 		music_settings.random_value
 	);

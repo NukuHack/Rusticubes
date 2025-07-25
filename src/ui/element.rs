@@ -259,19 +259,6 @@ impl UIElement {
 		}
 	}
 	#[inline]
-	pub fn get_str(&self) -> Option<&str> {
-		match &self.data {
-			UIElementData::Label { text, .. } |
-			UIElementData::Button { text, .. } |
-			UIElementData::InputField { text, .. } => Some(text),
-			UIElementData::Checkbox { label, .. } => label.as_deref(),
-			UIElementData::MultiStateButton { states, current_state, .. } => Some(&states[*current_state]),
-			UIElementData::Animation { frames, current_frame, .. } => Some(&frames[*current_frame as usize]),
-			//UIElementData::Slider { current_value, .. } => Some(&current_value.to_string()),
-			_ => None,
-		}
-	}
-	#[inline]
 	pub const fn get_text_mut(&mut self) -> Option<&mut String> {
 		match &mut self.data {
 			UIElementData::Label { text, .. } |
@@ -294,7 +281,56 @@ impl UIElement {
 			cb.borrow_mut()();
 		}
 	}
+
+
+    #[inline]
+    pub fn get_element_data(&self) -> ElementData<'_> {
+        match &self.data {
+            UIElementData::Label { text, .. } |
+            UIElementData::Button { text, .. } |
+            UIElementData::InputField { text, .. } => {
+                ElementData::Text(text.trim())
+            },
+            UIElementData::Checkbox { label, .. } => {
+                label.as_deref().map(ElementData::Text).unwrap_or(ElementData::None)
+            },
+            UIElementData::MultiStateButton { states, current_state, .. } => {
+                ElementData::Text(&states[*current_state])
+            },
+            UIElementData::Animation { frames, current_frame, .. } => {
+                ElementData::Text(&frames[*current_frame as usize])
+            },
+            UIElementData::Slider { current_value, .. } => {
+                ElementData::Number(*current_value)
+            },
+            _ => ElementData::None,
+        }
+    }
+    #[inline]
+    pub fn get_str(&self) -> Option<&str> {
+        self.get_element_data().text()
+    }
 	
+}
+#[derive(Debug)]
+pub enum ElementData<'a> {
+    Text(&'a str),
+    Number(f32),
+    None,
+}
+impl<'a> ElementData<'a> {
+    pub fn text(&self) -> Option<&'a str> {
+        match self {
+            ElementData::Text(s) if !s.is_empty() => Some(s),
+            _ => None,
+        }
+    }
+    pub fn num(&self) -> Option<f32> {
+        match self {
+            ElementData::Number(s) => Some(*s),
+            _ => None,
+        }
+    }
 }
 
 

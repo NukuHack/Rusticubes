@@ -28,18 +28,30 @@ impl Settings {
 	}
 }
 
+pub struct RangeConfig {
+	pub min: f32,
+	pub val: f32,
+	pub max: f32,
+} impl RangeConfig {
+	pub const fn new(a:f32,b:f32,c:f32) -> Self {
+		Self { min: a, val: b, max: c }
+	}
+	pub fn set(&mut self, a:f32) {
+		self.val = a;
+	}
+}
 /// mainly everything goes from 1 = normal and more is more, less is less
 pub struct MusiConfig {
-	pub bg_speed: f32,
-	pub fg_speed: f32,
-	pub main_speed: f32,
+	pub bg_speed: RangeConfig,
+	pub fg_speed: RangeConfig,
+	pub main_speed: RangeConfig,
 	pub use_random: bool, // sometimes i heard that randomizing pitch and speed from 0.9 to 1.1 is nicer to the ear than playing the same sound repeatedly
 	// so this is the config for that (setting the random_value to 0.1 will give the mentioned results)
 	pub random_value: f32,
 
-	pub bg_volume: f32,
-	pub fg_volume: f32,
-	pub main_volume: f32,
+	pub bg_volume: RangeConfig,
+	pub fg_volume: RangeConfig,
+	pub main_volume: RangeConfig,
 
 	pub bg_music: &'static str,
 }
@@ -47,15 +59,15 @@ pub struct MusiConfig {
 impl MusiConfig {
 	#[inline] pub const fn default() -> Self {
 		Self {
-			bg_speed: 1.,
-			fg_speed: 1.,
-			main_speed: 1.,
+			bg_speed: RangeConfig::new(0.3, 1., 2.),
+			fg_speed: RangeConfig::new(0.3, 1., 2.),
+			main_speed: RangeConfig::new(0.3, 1., 2.),
 			use_random: true,
 			random_value: 0.1,
 
-			bg_volume: 0.5, // Lower volume for background music
-			fg_volume: 0.7, // Higher volume for UI sounds
-			main_volume: 0.8,
+			bg_volume: RangeConfig::new(0., 0.5, 2.), // Lower volume for background music
+			fg_volume: RangeConfig::new(0., 0.7, 2.), // Higher volume for UI sounds
+			main_volume: RangeConfig::new(0., 0.8, 2.),
 
 			bg_music: "background_music.ogg",
 		}
