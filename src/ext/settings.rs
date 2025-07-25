@@ -23,7 +23,7 @@ impl Settings {
 			music_settings: MusiConfig::default(),
 		}
 	}
-	pub fn remake_window_config(&mut self, size: winit::dpi::PhysicalSize<u32>) {
+	#[inline] pub fn remake_window_config(&mut self, size: winit::dpi::PhysicalSize<u32>) {
 		self.window_config = WindowConfig::new(size);
 	}
 }
@@ -33,12 +33,11 @@ pub struct RangeConfig {
 	pub val: f32,
 	pub max: f32,
 } impl RangeConfig {
-	pub const fn new(a:f32,b:f32,c:f32) -> Self {
-		Self { min: a, val: b, max: c }
-	}
-	pub fn set(&mut self, a:f32) {
-		self.val = a;
-	}
+	#[inline] pub const fn new(a:f32, b:f32, c:f32) -> Self { Self { min: a, val: b, max: c } }
+	#[inline] pub const fn rang(a:f32, b:f32) -> Self { Self::new(a,a,b) }
+	#[inline] pub fn set(&mut self, a:f32) { self.val = a; }
+	#[inline] pub fn set_min(&mut self, a:f32) { self.min = a; }
+	#[inline] pub fn set_max(&mut self, a:f32) { self.max = a; }
 }
 /// mainly everything goes from 1 = normal and more is more, less is less
 pub struct MusiConfig {

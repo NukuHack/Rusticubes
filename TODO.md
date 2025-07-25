@@ -8,13 +8,14 @@
 - [x] fov and general camera rework (also drag nice-ify)  
 - [x] making the save-load work  
 - [x] world gen from noise  
-- [x] settings for sound volume font and stuff  
+- [x] settings for sound volume and stuff  
 - [x] refine inventory and item and block things  
 - [ ] item and block things correctly  
 - [x] chunk meshing correction - neighbors  
 - [ ] making the save-load auto trigger (actually load the world on startup)  
 - [ ] correcting the save to be world wise not just player pos relative 
 - [ ] Ambient oc. and other lighting  
+- [ ] making an extra optional label attach-able to most UI elements  
 
 ## Low Priority  
 - [x] 2d texture array and load in some other textures -> more blocks  

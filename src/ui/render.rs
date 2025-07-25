@@ -12,6 +12,7 @@ pub struct Vertex {
 	pub position: [f32; 2],
 	pub packed_data: u32,
 }
+pub struct MeshData { pub v: Vec<Vertex>, pub i: Vec<u32>, pub c: u32}
 
 impl Vertex {
 	#[inline] pub const fn new(position: [f32; 2], color: [u8; 4]) -> Self {
@@ -158,39 +159,41 @@ impl UIRenderer {
 	pub fn process_elements(&mut self, elements: &[UIElement]) -> (Vec<Vertex>, Vec<u32>) {
 		let mut sorted_elements: Vec<_> = elements.iter().filter(|e| e.visible).collect();
 		sorted_elements.sort_by_key(|e| e.z_index);
-		let mut vertices = Vec::with_capacity(sorted_elements.len() * 8);
-		let mut indices = Vec::with_capacity(sorted_elements.len() * 12);
-		let mut current_index = 0u32;
+		let mut mesh_data = MeshData {
+			v: Vec::with_capacity(sorted_elements.len() * 8),
+			i: Vec::with_capacity(sorted_elements.len() * 12),
+			c: 0u32
+		};
 
 		for element in sorted_elements {
 			if element.border.width > 0.0 {
-				self.process_border(element, &mut vertices, &mut indices, &mut current_index);
+				self.process_border(element, &mut mesh_data);
 			}
 			match &element.data {
-				UIElementData::Image { .. } => self.process_image_element(element, &mut vertices, &mut indices, &mut current_index),
-				UIElementData::Animation { .. } => self.process_animation_element(element, &mut vertices, &mut indices, &mut current_index),
-				UIElementData::Checkbox { .. } => self.process_checkbox(element, &mut vertices, &mut indices, &mut current_index),
-				UIElementData::Slider { .. } => self.process_slider(element, &mut vertices, &mut indices, &mut current_index),
+				UIElementData::Image { .. } => self.process_image_element(element, &mut mesh_data),
+				UIElementData::Animation { .. } => self.process_animation_element(element, &mut mesh_data),
+				UIElementData::Checkbox { .. } => self.process_checkbox(element, &mut mesh_data),
+				UIElementData::Slider { .. } => self.process_slider(element, &mut mesh_data),
 				UIElementData::InputField { .. } | UIElementData::Button { .. } => {
-					self.process_rect_element(element, &mut vertices, &mut indices, &mut current_index);
-					self.process_text_element(element, element.get_str(), &mut vertices, &mut indices, &mut current_index);
+					self.process_rect_element(element, &mut mesh_data);
+					self.process_text_element(element, element.get_str(), &mut mesh_data);
 				}
 				UIElementData::Label { .. } => {
-					self.process_text_element(element, element.get_str(), &mut vertices, &mut indices, &mut current_index);
+					self.process_text_element(element, element.get_str(), &mut mesh_data);
 				}
 				UIElementData::MultiStateButton { .. } => {
-					self.process_rect_element(element, &mut vertices, &mut indices, &mut current_index);
-					self.process_text_element(element, element.get_str(), &mut vertices, &mut indices, &mut current_index);
+					self.process_rect_element(element, &mut mesh_data);
+					self.process_text_element(element, element.get_str(), &mut mesh_data);
 				}
-				_ => self.process_rect_element(element, &mut vertices, &mut indices, &mut current_index),
+				_ => self.process_rect_element(element, &mut mesh_data),
 			}
 		}
-		(vertices, indices)
+		(mesh_data.v, mesh_data.i)
 	}
 
 
 	#[inline] 
-	fn process_text_element(&mut self, element: &UIElement, text: Option<&str>, vertices: &mut Vec<Vertex>, indices: &mut Vec<u32>, current_index: &mut u32) {
+	fn process_text_element(&mut self, element: &UIElement, text: Option<&str>, mesh: &mut MeshData) {
 		let state = ptr::get_state();
 		
 		if let Some(text) = text {
@@ -218,13 +221,13 @@ impl UIRenderer {
 				let tex_h = texture.height() as f32 * pixel_to_unit;
 				let real_x = x + (w - tex_w) / 2.0;
 				let real_y = y + (h - tex_h) / 2.0;
-				self.proc_rect_element((real_x, real_y), (tex_w, tex_h), element.get_text_color().to_arr(), vertices, indices, current_index);
+				self.proc_rect_element((real_x, real_y), (tex_w, tex_h), element.get_text_color().to_arr(), mesh);
 			}
 		}
 	}
 
 	#[inline] 
-	fn process_slider(&mut self, element: &UIElement, vertices: &mut Vec<Vertex>, indices: &mut Vec<u32>, current_index: &mut u32) {
+	fn process_slider(&mut self, element: &UIElement, mesh: &mut MeshData) {
 		if let UIElementData::Slider { min_value, max_value, current_value, .. } = &element.data {
 			let (x, y) = element.position;
 			let (w, h) = element.size;
@@ -232,7 +235,7 @@ impl UIRenderer {
 			// Draw slider track
 			let track_height = h * 0.3;
 			let track_y = y + (h - track_height) / 2.0;
-			self.proc_rect_element((x, track_y), (w, track_height), element.color.to_arr(), vertices, indices, current_index);
+			self.proc_rect_element((x, track_y), (w, track_height), element.color.to_arr(), mesh);
 			
 			// Draw slider handle
 			let normalized_value = (current_value - min_value) / (max_value - min_value);
@@ -240,7 +243,7 @@ impl UIRenderer {
 			let handle_x = x + (w - handle_w) * normalized_value;
 			let handle_y = y + (h - handle_w) / 2.0;
 			let handle_color = element.get_text_color().to_arr();
-			self.proc_rect_element((handle_x, handle_y), (handle_w, handle_w), handle_color, vertices, indices, current_index);
+			self.proc_rect_element((handle_x, handle_y), (handle_w, handle_w), handle_color, mesh);
 		}
 	}
 
@@ -330,7 +333,7 @@ impl UIRenderer {
 		result
 	}
 
-	#[inline] fn process_image_element(&mut self, element: &UIElement, vertices: &mut Vec<Vertex>, indices: &mut Vec<u32>, current_index: &mut u32) {
+	#[inline] fn process_image_element(&mut self, element: &UIElement, mesh: &mut MeshData) {
 		if let UIElementData::Image { path } = &element.data {
 			let state = ptr::get_state();			
 			if !self.image_textures.contains_key(path) {
@@ -348,7 +351,7 @@ impl UIRenderer {
 				self.image_textures.insert(path.to_string(), (texture, bind_group));
 			}
 
-			self.process_rect_element(element, vertices, indices, current_index);
+			self.process_rect_element(element, mesh);
 		}
 	}
 
@@ -373,23 +376,22 @@ impl UIRenderer {
 		texture
 	}
 
-	#[inline] fn process_animation_element(&mut self, element: &UIElement, vertices: &mut Vec<Vertex>, indices: &mut Vec<u32>, current_index: &mut u32) {
+	#[inline] fn process_animation_element(&mut self, element: &UIElement, mesh: &mut MeshData) {
 		if let UIElementData::Animation { frames,..} = &element.data {
 			let state = ptr::get_state();
 			let animation_key = frames.join("|");
-			
 			if !self.animation_textures.contains_key(&animation_key) {
 				if let Some((texture, bind_group)) = self.create_animation_texture_array(state.device(), state.queue(), frames) {
 					self.animation_textures.insert(animation_key.clone(), (texture, bind_group));
 				}
 			}
 
-			self.process_rect_element(element, vertices, indices, current_index);
+			self.process_rect_element(element, mesh);
 		}
 	}
 
-	#[inline] fn process_checkbox(&mut self, element: &UIElement, vertices: &mut Vec<Vertex>, indices: &mut Vec<u32>, current_index: &mut u32) {
-		self.process_rect_element(element, vertices, indices, current_index);
+	#[inline] fn process_checkbox(&mut self, element: &UIElement, mesh: &mut MeshData) {
+		self.process_rect_element(element, mesh);
 		if let UIElementData::Checkbox { checked, .. } = &element.data {
 			if *checked {
 				let (x, y) = element.position;
@@ -399,7 +401,7 @@ impl UIRenderer {
 				let check_y = y + h * padding;
 				let check_w = w * (1.0 - 2.0 * padding);
 				let check_h = h * (1.0 - 2.0 * padding);
-				self.proc_rect_element((check_x, check_y), (check_w, check_h), (element.color.with_g(255)).to_arr(), vertices, indices, current_index);
+				self.proc_rect_element((check_x, check_y), (check_w, check_h), (element.color.with_g(255)).to_arr(), mesh);
 			}
 		}
 		if let Some(text) = element.get_str() {
@@ -410,7 +412,7 @@ impl UIRenderer {
 				color: element.get_text_color(),
 				..UIElement::default()
 			};
-			self.process_text_element(&label_element, label_element.get_str(), vertices, indices, current_index);
+			self.process_text_element(&label_element, label_element.get_str(), mesh);
 		}
 	}
 
@@ -452,7 +454,7 @@ impl UIRenderer {
 		Some((texture, bind_group))
 	}
 
-	#[inline] fn process_border(&self, element: &UIElement, vertices: &mut Vec<Vertex>, indices: &mut Vec<u32>, current_index: &mut u32) {
+	#[inline] fn process_border(&self, element: &UIElement, mesh: &mut MeshData) {
 		let (x, y) = element.position;
 		let (w, h) = element.size;
 		let border_width = element.border.width;
@@ -460,16 +462,16 @@ impl UIRenderer {
 		let border_y = y - border_width;
 		let border_w = w + 2.0 * border_width;
 		let border_h = h + 2.0 * border_width;
-		self.proc_rect_element((border_x, border_y), (border_w, border_h), element.border.color.to_arr(), vertices, indices, current_index);
+		self.proc_rect_element((border_x, border_y), (border_w, border_h), element.border.color.to_arr(), mesh);
 	}
 
-	#[inline] fn process_rect_element(&self, element: &UIElement, vertices: &mut Vec<Vertex>, indices: &mut Vec<u32>, current_index: &mut u32) {
-		self.proc_rect_element(element.position, element.size, element.color.to_arr(), vertices, indices, current_index);
+	#[inline] fn process_rect_element(&self, element: &UIElement, mesh: &mut MeshData) {
+		self.proc_rect_element(element.position, element.size, element.color.to_arr(), mesh);
 	}
-	#[inline] fn proc_rect_element(&self, pos: (f32, f32), size: (f32, f32), color: [u8; 4], vertices: &mut Vec<Vertex>, indices: &mut Vec<u32>, current_index: &mut u32) {
-		self.add_rectangle(vertices, pos, size, color);
-		indices.extend(self.rectangle_indices(*current_index));
-		*current_index += 4;
+	#[inline] fn proc_rect_element(&self, pos: (f32, f32), size: (f32, f32), color: [u8; 4], mesh: &mut MeshData) {
+		self.add_rectangle(&mut mesh.v, pos, size, color);
+		mesh.i.extend(self.rectangle_indices(mesh.c));
+		mesh.c += 4;
 	}
 
 	#[inline] fn add_rectangle(&self, vertices: &mut Vec<Vertex>, (x, y): (f32, f32), (w, h): (f32, f32), color: [u8; 4]) {
@@ -489,8 +491,7 @@ impl UIRenderer {
 		[base, base + 1, base + 2, base + 1, base + 3, base + 2]
 	}
 
-	#[inline] pub fn render<'a>(&'a self, ui_manager: &crate::ui::manager::UIManager, 
-		r_pass: &mut wgpu::RenderPass<'a>) {
+	#[inline] pub fn render<'a>(&'a self, ui_manager: &crate::ui::manager::UIManager, r_pass: &mut wgpu::RenderPass<'a>) {
 		r_pass.set_pipeline(&ui_manager.pipeline);
 		r_pass.set_vertex_buffer(0, ui_manager.vertex_buffer.slice(..));
 		r_pass.set_index_buffer(ui_manager.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
