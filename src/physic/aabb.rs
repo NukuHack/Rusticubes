@@ -17,6 +17,14 @@ impl AABB {
     pub const fn new(min: Vec3, max: Vec3) -> Self {
         Self { min, max }
     }
+
+    /// Creates a new AABB from position and size coordinates
+    #[inline]
+    pub const fn from_pos(pos: Vec3, size: Vec3) -> Self {
+        let min = Vec3::new(pos.x-size.x,pos.y,pos.z-size.z);
+        let max = Vec3::new(pos.x+size.x,pos.y+size.y,pos.z+size.z);
+        Self { min, max }
+    }
     
     /// Creates an AABB from center position and half-extents
     #[inline]

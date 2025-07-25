@@ -53,10 +53,7 @@ impl Player {
 		size: PhysicalSize<u32>,
 		bind_group_layout: &wgpu::BindGroupLayout,
 	) -> Self {
-		let aabb = aabb::AABB::new(
-			Vec3::new(position.x - 0.4, position.y, position.z - 0.4),
-			Vec3::new(position.x + 0.4, position.y + 1.8, position.z + 0.4)
-		);
+		let aabb = aabb::AABB::from_pos(position, Vec3::new(0.8,1.8,0.8));
 		
 		let camera_system = CameraSystem::new(device, size, config, bind_group_layout);
 		

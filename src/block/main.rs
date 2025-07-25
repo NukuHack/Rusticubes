@@ -1,6 +1,6 @@
 
 use crate::block::math::{self, ChunkCoord, BlockPosition, BlockRotation};
-use crate::hs::math::{Noise, smooth_interpolate};
+use crate::hs::math::{Noise};
 use crate::render::meshing::GeometryBuffer;
 #[allow(unused_imports)]
 use crate::ext::stopwatch;
@@ -284,7 +284,6 @@ impl Chunk {
 				
 				// Get noise value and scale it to a reasonable height range
 				let noise:f32 = noise_gen.terrain_noise_2d(pos_x, pos_z);
-				let noise = smooth_interpolate(noise);
 				//stopwatch.add(noise as f64);
 				let final_noise = noise * (8 * Chunk::SIZE) as f32;
 				

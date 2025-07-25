@@ -54,7 +54,8 @@ impl GameState {
 	#[inline]
 	pub fn new(worldname: &str) -> Self {
 		let state = ptr::get_state();
-		let player = player::Player::new(CameraConfig::new(Vec3::new(0.5, 1.7, 0.5)),Vec3::ZERO, state.device(), *state.size(), &state.render_context.layouts[1]);
+		let offset = Vec3::new(0., 1.7, 0.); let pos = Vec3::new(0.5,0.5,0.5);
+		let player = player::Player::new(CameraConfig::new(offset), pos, state.device(), *state.size(), &state.render_context.layouts[1]);
 		
 		// Create the save path
 		let save_path = get_save_path()

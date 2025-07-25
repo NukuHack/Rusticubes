@@ -116,18 +116,6 @@ pub fn random_bool() -> bool {
 	Rand::from_time().next_u32() % 2 == 0
 }
 
-// Sigmoid-like interpolation (recommended)
-pub const fn smooth_interpolate(noise: f32) -> f32 {
-	// Uses a sigmoid-like curve that doesn't flatten at 0
-	let scaled = noise * 2.0; // increase sensitivity
-	let sigmoid = scaled / (1.0 + scaled.abs()); // smooth sigmoid
-	if sigmoid > 0.0 {
-		sigmoid * 0.85
-	} else {
-		sigmoid * 0.25
-	}
-}
-
 // Inspiration from https://github.com/Auburn/FastNoiseLite/blob/master/Rust/src/lib.rs
 
 pub struct Noise {
@@ -261,12 +249,12 @@ impl Noise {
 		(n0 + n1 + n2) * 35.0
 	}
 
-	// Significantly improved fractal noise with proper octave handling
+	// Smoother fractal noise with lower frequency and gentler octaves
 	pub fn fractal_noise_2d(&self, x: i32, y: i32) -> f32 {
-		const BASE_FREQ: f32 = 0.004;       // Better base frequency
-		const LACUNARITY: f32 = 2.;         // Frequency multiplier per octave
-		const PERSISTENCE: f32 = 0.5;       // Amplitude multiplier per octave
-		const OCTAVES: u32 = 6;             // More octaves for detail
+		const BASE_FREQ: f32 = 0.0017;       // Reduced for larger features
+		const LACUNARITY: f32 = 1.8;        // Reduced for less aggressive frequency scaling
+		const PERSISTENCE: f32 = 0.6;       // Reduced for gentler detail layers
+		const OCTAVES: u32 = 7;             // Reduced for less complexity
 		
 		let x = x as f32 * BASE_FREQ;
 		let y = y as f32 * BASE_FREQ;
@@ -288,19 +276,20 @@ impl Noise {
 		noise_sum / max_value
 	}
 
-	// Additional terrain-specific noise functions
+	// Gentler ridged noise
 	#[inline(always)]
 	pub fn ridged_noise_2d(&self, x: i32, y: i32) -> f32 {
 		let noise = self.fractal_noise_2d(x, y);
-		1.0 - (noise * 2.0).abs() // Create ridges
+		1.0 - (noise * 1.5).abs() // Reduced multiplier from 2.0 to 1.5 for softer ridges
 	}
 
+	// Smoother turbulence
 	#[inline(always)]
 	pub fn turbulence_2d(&self, x: i32, y: i32) -> f32 {
-		const BASE_FREQ: f32 = 0.004;       // Better base frequency
-		const LACUNARITY: f32 = 2.;         // Frequency multiplier per octave
-		const PERSISTENCE: f32 = 0.5;       // Amplitude multiplier per octave
-		const OCTAVES: u32 = 4;             // Less octaves for smoother terrain
+		const BASE_FREQ: f32 = 0.0017;       // Reduced frequency for larger features
+		const LACUNARITY: f32 = 1.8;        // Gentler frequency scaling
+		const PERSISTENCE: f32 = 0.35;      // Reduced for smoother result
+		const OCTAVES: u32 = 4;             // Fewer octaves for less detail
 		
 		let x = x as f32 * BASE_FREQ;
 		let y = y as f32 * BASE_FREQ;
@@ -318,35 +307,51 @@ impl Noise {
 		noise_sum
 	}
 
-	// Warped domain noise for more organic terrain
+	// Gentler warped domain noise
 	#[inline(always)]
 	pub fn warped_noise_2d(&self, x: i32, y: i32) -> f32 {
-		const WARP_STRENGTH: f32 = 0.1;
+		const WARP_STRENGTH: f32 = 0.07;    // Reduced from 0.1 for subtler warping
 		
 		let x_f = x as f32;
 		let y_f = y as f32;
 		
-		// Generate domain warp offsets
-		let warp_x = self.fractal_noise_2d((x as f32 * 1.3) as i32, (y as f32 * 1.7) as i32) * WARP_STRENGTH;
-		let warp_y = self.fractal_noise_2d((x as f32 * 1.7) as i32, (y as f32 * 1.3) as i32) * WARP_STRENGTH;
+		// Generate domain warp offsets with lower frequencies
+		let warp_x = self.fractal_noise_2d((x as f32 * 0.8) as i32, (y as f32 * 1.2) as i32) * WARP_STRENGTH;
+		let warp_y = self.fractal_noise_2d((x as f32 * 1.2) as i32, (y as f32 * 0.8) as i32) * WARP_STRENGTH;
 		
-		// Sample noise at warped coordinates
-		let warped_x = (x_f + warp_x * 50.0) as i32;
-		let warped_y = (y_f + warp_y * 50.0) as i32;
+		// Sample noise at warped coordinates with reduced warp distance
+		let warped_x = (x_f + warp_x * 30.0) as i32; // Reduced from 50.0
+		let warped_y = (y_f + warp_y * 30.0) as i32;
 		
 		self.fractal_noise_2d(warped_x, warped_y)
 	}
 
-	// Combine multiple noise types for complex terrain
+	// Smoother terrain combination with reduced weights
 	#[inline(always)]
 	pub fn terrain_noise_2d(&self, x: i32, y: i32) -> f32 {
-		let base = self.fractal_noise_2d(x, y);
-		let ridged = self.ridged_noise_2d(x, y) * 0.3;
-		let turbulence = self.turbulence_2d(x, y) * 0.2;
-		let warped = self.warped_noise_2d(x, y) * 0.4;
+		let base = self.fractal_noise_2d(x, y); // normal
+		let ridged = self.ridged_noise_2d(x, y); // insain hills
+		//let turbulence = self.turbulence_2d(x, y); // moon terrain
+		let warped = self.warped_noise_2d(x, y); // nice hills
 		
-		// Combine with different weights
-		(base + ridged + turbulence + warped) * 0.5
+		// Combine with different weights, emphasizing the base layer more
+		Self::smooth_interpolate((base * 0.7 + ridged * 0.2 + warped * 0.3) * 0.6) // Reduced overall multiplier
+	}
+
+	// Enhanced smooth interpolation with gentler curves
+	pub const fn smooth_interpolate(noise: f32) -> f32 {
+	    // Hyperbolic tangent approximation that's smooth everywhere
+	    let x = noise * 2.;
+	    let x_sq = x * x;
+	    
+	    // Smooth polynomial approximation of a sigmoid-like function
+	    // This is a modified version of the "smoothtanh" function
+	    let f = 1.0 + x_sq * (0.25 + x_sq * 0.015625);
+	    let smooth_tanh = x / (f * f);
+	    
+	    // Asymmetric scaling using a smooth transition
+	    let scale = 0.375 + 0.225 * smooth_tanh.signum();
+	    smooth_tanh * scale
 	}
 }
 
