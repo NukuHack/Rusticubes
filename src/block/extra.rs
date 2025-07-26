@@ -122,12 +122,17 @@ pub fn place_looked_block() {
 	if !state.is_world_running {
 		return;
 	}
-	let camera = &ptr::get_gamestate().player().camera();
+	let player = &ptr::get_gamestate().player();
 	let world = &mut ptr::get_gamestate().world_mut();
 
-	if let Some((block_pos, normal)) = raycast_to_block(camera,ptr::get_gamestate().player(), world, REACH) {
+	if let Some((block_pos, normal)) = raycast_to_block(player.camera(), player, world, REACH) {
 		let placement_pos = block_pos + normal;
-		world.set_block(placement_pos, Block::new(1));
+		let block_id = player.inventory()
+		    .selected_item()
+		    .and_then(|item| item.get_block_id())
+		    .map_or(1, |block_id| block_id);
+
+		world.set_block(placement_pos, Block::new(block_id));
 		update_chunk_mesh(world, ChunkCoord::from_world_pos(placement_pos));
 	}
 }

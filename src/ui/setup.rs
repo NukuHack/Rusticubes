@@ -164,7 +164,7 @@ impl UIManager {
 		let tree_animation = UIElement::animation(self.next_id(), vec!["happy-tree.png", "cube.jpg"])
 			.with_position(-0.8, 0.5)
 			.with_size(0.27, 0.45)
-			.with_style(&theme.images.basic)
+			.with_style(&theme.images.nice)
 			.with_z_index(6)
 			.with_smooth_transition(true)
 			.with_animation_duration(2.5);

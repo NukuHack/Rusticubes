@@ -1,24 +1,33 @@
 
+use crate::get_nth_file;
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ItemStack {
 	pub item: Item,
-	pub quantity: u32,  // Typically 1-64 like Minecraft
+	pub quantity: u8,  // Typically 1-64 like Minecraft
 	pub data: Option<Box<ItemData>>,  // Boxed to reduce size when None
 }
 
+const EXTRA_BLOCK_DATA_OFFSET:usize = 1usize; // currently only a single one : air 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Item {
-	Block(BlockId),
-	Item(ItemId),
+	Block(u16),
+	Item(u16),
+}
+impl Item {
+	pub fn to_icon(&self) -> String {
+		let file_path = match self {
+			Self::Block(id) => {
+				get_nth_file!(*id as usize - EXTRA_BLOCK_DATA_OFFSET, "blocks")
+			}
+			Self::Item(id) => {
+				get_nth_file!(*id as usize - EXTRA_BLOCK_DATA_OFFSET, "items") // currently crashes ... allwaysS
+			}
+		};
+		return file_path.to_string_lossy().into_owned();
+	}
 }
 
-
-// Use newtype pattern for better type safety and documentation
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct BlockId(pub u32);
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct ItemId(pub u32);
 
 // Use bitflags for extensible tool types
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -43,20 +52,16 @@ pub struct ItemData {
 	pub effects: Option<Vec<u32>>, // might be reworked later but the stuff what in minecraft gives + health and stuff
 }
 
-// Implement Default where it makes sense
 impl ItemStack {
 	#[inline] pub const fn default() -> Self {
 		Self {
-			item: Item::Item(ItemId(0)),
-			quantity: 1,
+			item: Item::Item(0u16),
+			quantity: 1u8,
 			data: None,
 		}
 	}
-}
 
-// Add convenience methods
-impl ItemStack {
-	#[inline] pub const fn new_block(block: BlockId, quantity: u32) -> Self {
+	#[inline] pub const fn new_block(block: u16, quantity: u8) -> Self {
 		Self {
 			item: Item::Block(block),
 			quantity,
@@ -64,7 +69,7 @@ impl ItemStack {
 		}
 	}
 	
-	#[inline] pub const fn new_item(item: ItemId, quantity: u32) -> Self {
+	#[inline] pub const fn new_item(item: u16, quantity: u8) -> Self {
 		Self {
 			item: Item::Item(item),
 			quantity,
@@ -74,6 +79,12 @@ impl ItemStack {
 	
 	#[inline] pub const fn is_block(&self) -> bool {
 		matches!(self.item, Item::Block(_))
+	}
+
+	#[inline] pub const fn get_block_id(&self) -> Option<u16> {
+		if let Item::Block(idx) = self.item {
+			return Some(idx);
+		} None
 	}
 	
 	#[inline] pub const fn is_item(&self) -> bool {

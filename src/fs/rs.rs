@@ -43,6 +43,30 @@ macro_rules! get_string {
 	}};
 }
 
+#[macro_export]
+macro_rules! get_nth_file {
+	($index:expr, $subdir:expr) => {{
+		use crate::fs::rs::RESOURCE_DIR;
+		let subdir_path = std::path::Path::new($subdir);
+		let dir = RESOURCE_DIR.get_dir(subdir_path)
+			.unwrap_or_else(|| panic!("Subdirectory '{}' not found in embedded resources", $subdir));
+			
+		let mut entries: Vec<_> = dir.files().collect();
+		entries.sort_by(|a, b| a.path().cmp(b.path()));
+		
+		entries.get($index)
+			.map(|file| {
+				let mut path = file.path().to_path_buf();
+				// Remove the .lz4 extension if present
+				if path.extension().and_then(|e| e.to_str()) == Some("lz4") {
+					path.set_extension("");
+				}
+				path
+			})
+			.unwrap_or_else(|| panic!("Index {} out of bounds for files in '{}'", $index, $subdir))
+	}};
+}
+
 use image::ImageReader;
 use std::io::Cursor;
 use winit::window::Icon;

@@ -298,7 +298,7 @@ impl UITheme {
 			images: VariantStyles {
 				basic: ElementStyle {
 					color: Color::rgb(255, 255, 255), // White for no color modification
-					border: Border::rgbf(80, 120, 180, 0.008),
+					border: Border::NONE,
 					text_color: None,
 				},
 				nice: ElementStyle {

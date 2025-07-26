@@ -4,7 +4,7 @@ use crate::block::extra;
 use crate::ui::{manager, inventory};
 use std::iter::Iterator;
 use winit::{
-	event::{ElementState, MouseButton, WindowEvent},
+	event::{ElementState, MouseButton, WindowEvent, MouseScrollDelta},
 	keyboard::KeyCode as Key,
 };
 
@@ -292,7 +292,12 @@ impl<'a> crate::State<'a> {
 			}
 			WindowEvent::MouseWheel { delta, .. } => {
 				if self.is_world_running && ptr::get_gamestate().is_running() {
-					ptr::get_gamestate().player_mut().controller().process_scroll(delta);
+					let delta = match delta {
+						MouseScrollDelta::LineDelta(_, y) => y * -0.5,
+						MouseScrollDelta::PixelDelta(pos) => pos.y as f32 * -0.01,
+					}; // delta is reversed for some reason ... might need to look into it more (maybe it's different for platforms so yeah)
+					ptr::get_gamestate().player_mut().inventory_mut().step_select_slot(delta);
+					ptr::get_state().ui_manager.setup_ui();
 				}
 				true
 			}

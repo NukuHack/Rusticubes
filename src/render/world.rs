@@ -64,7 +64,7 @@ impl Chunk {
 			let local_pos:IVec3 = BlockPosition::from(pos).into();
 			match block {
 				Block::Simple(..) => {
-					builder.add_cube(local_pos, self, &neighbors);
+					builder.add_cube(local_pos, block.material(), &self, &neighbors);
 				},
 				_ => {},
 			}

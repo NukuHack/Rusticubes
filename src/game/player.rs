@@ -1,6 +1,5 @@
 use crate::ext::config::CameraConfig;
 use glam::{Vec3, Mat4, Quat};
-use winit::event::*;
 use winit::keyboard::KeyCode as Key;
 use winit::dpi::PhysicalSize;
 use wgpu::util::DeviceExt;
@@ -227,7 +226,6 @@ impl Player {
 pub struct PlayerController {
 	movement: MovementInputs,
 	mouse_delta: Vec3,     // Raw mouse input for this frame
-	scroll: f32,
 	velocity: Vec3,
 	target_yaw: f32,       // Target yaw angle
 	target_pitch: f32,     // Target pitch angle
@@ -310,7 +308,6 @@ impl PlayerController {
 		Self {
 			movement: MovementInputs::default(),
 			mouse_delta: Vec3::ZERO,
-			scroll: 0.0,
 			velocity: Vec3::ZERO,
 			target_yaw: config.rotation.y,
 			target_pitch: config.rotation.x,
@@ -342,14 +339,6 @@ impl PlayerController {
 	/// Processes mouse movement input
 	#[inline] pub fn process_mouse(&mut self, delta_x: f32, delta_y: f32) {
 		self.mouse_delta = Vec3::new(delta_x, delta_y, 0.0);
-	}
-
-	/// Processes mouse scroll input
-	#[inline] pub fn process_scroll(&mut self, delta: &MouseScrollDelta) {
-		self.scroll = match delta {
-			MouseScrollDelta::LineDelta(_, y) => y * 0.5,
-			MouseScrollDelta::PixelDelta(pos) => pos.y as f32 * 0.01,
-		};
 	}
 }
 

@@ -68,7 +68,7 @@ impl InstanceRaw {
 pub struct ChunkMeshBuilder {
 	pub instances: Vec<InstanceRaw>,
 }
-
+const EXTRA_BLOCK_DATA_OFFSET:u32 = 1u32; // currently only a single one : air 
 impl ChunkMeshBuilder {
 	/// Creates a new mesh builder with optimized initial capacity
 	#[inline] pub fn new() -> Self {
@@ -80,12 +80,15 @@ impl ChunkMeshBuilder {
 		GeometryBuffer::new(device, &self.instances)
 	}
 	// pos is allways 0-15
-	pub fn add_cube(&mut self, pos: IVec3, chunk: &Chunk, neighbors: &NeighboringChunks) {
+	pub fn add_cube(&mut self, pos: IVec3, id: u16, chunk: &Chunk, neighbors: &NeighboringChunks) {
 		for (idx, normal) in CUBE_FACES.iter().enumerate() {
 			let neighbor_pos: IVec3 = pos + *normal;
 			
 			if !self.should_cull_face(neighbor_pos, chunk, &neighbors) {
-				self.add_quad(pos, idx);
+				let pos = u16::from(BlockPosition::from(pos)) as u32;
+				self.instances.push(InstanceRaw {
+					packed_data: (pos | (idx as u32) << 12 | (id as u32 - EXTRA_BLOCK_DATA_OFFSET) << 16)
+				});
 			}
 		}
 	}
@@ -127,14 +130,6 @@ impl ChunkMeshBuilder {
 		if neighbor_pos.y == LEFT_EDGE { return neighbors.bottom(); }   // -Y (Bottom)
 		
 		unreachable!("Position should be outside current chunk");  // Position is inside current chunk
-	}
-	#[inline] fn add_quad(&mut self, position: IVec3, idx: usize) {		
-		// Add instances without any UV data - shader will calculate everything
-
-		let position:u16 = BlockPosition::from(position).into();
-		self.instances.push(InstanceRaw {
-			packed_data: (position as u32 | (idx as u32) << 12)
-		});
 	}
 }
 

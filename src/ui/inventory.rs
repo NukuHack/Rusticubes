@@ -1,4 +1,5 @@
 
+use crate::ext::color::Solor;
 use crate::ext::ptr;
 use crate::ui::{manager::{UIManager, UIState}, element::UIElement};
 use crate::game::inventory as inv;
@@ -151,7 +152,7 @@ impl InventoryLayout {
 		
 		// Special case for hotbar only
 		if inv_state == InvState::Hotbar {
-			layout.areas.push(AreaLayout::new(1, inv_lay.hotbar(), inv_layout.hotbar, AreaType::Hotbar));
+			layout.areas.push(AreaLayout::new(1, inv_lay.hotbar_capacity() as u8, inv_layout.hotbar, AreaType::Hotbar));
 			layout.finalize_layout(inv_state, &[]);
 			return layout;
 		}
@@ -250,8 +251,8 @@ impl InventoryLayout {
 	fn create_player_areas(inv_lay: &inv::Inventory) -> ((u8, u8), (u8, u8), (u8, u8)) {
 		(
 			(inv_lay.inv_row(), inv_lay.inv_col()),
-			(1, inv_lay.hotbar()),
-			(inv_lay.armor(), 1),
+			(1, inv_lay.hotbar_capacity() as u8),
+			(inv_lay.armor_capacity() as u8, 1),
 		)
 	}
 	
@@ -463,7 +464,9 @@ impl UIManager {
 
 	fn create_area_slots(&mut self, area: &AreaLayout) {
 		if area.rows == 0 || area.columns == 0 { return; }
-		let inv_config = &ptr::get_settings().inv_config;
+		let config = &ptr::get_settings();
+		let inventory = &ptr::get_gamestate().player().inventory();
+		let items = inventory.get_items_by_area(&area.name);
 		
 		for row in 0..area.rows {
 			for col in 0..area.columns {
@@ -471,9 +474,29 @@ impl UIManager {
 				let slot = UIElement::panel(self.next_id())
 					.with_position(x, y)
 					.with_size(SLOT, SLOT)
-					.with_style(&inv_config.get_style(area.name))
+					.with_style(&config.inv_config.get_style(area.name))
 					.with_z_index(5);
 				self.add_element(slot);
+				if let Some(item) = items.get(row as usize * area.columns as usize + col as usize) {
+					let text = item.item.to_icon();
+					let item_display = UIElement::image(self.next_id(), text)
+						.with_position(x, y)
+						.with_size(SLOT, SLOT)
+						.with_style(&config.ui_theme.images.basic)
+						.with_z_index(7);
+					self.add_element(item_display);
+				}
+				if inventory.selected_slot_idx() == row as usize * area.columns as usize + col as usize &&
+					area.name == AreaType::Hotbar {
+					let mut slot = UIElement::panel(self.next_id())
+						.with_position(x, y)
+						.with_size(SLOT, SLOT)
+						.with_style(&config.inv_config.get_style(area.name))
+						.with_z_index(4);
+					slot.border.color = Solor::Red.i();
+					slot.border.width *= 2.5;
+					self.add_element(slot);
+				}
 			}
 		}
 	}
