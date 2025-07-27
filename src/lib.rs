@@ -45,6 +45,8 @@ pub mod render { // rendering related
 }
 pub mod game { // game related, instance related
 	pub mod items; // the items and item stack impl.
+	pub mod item_lut; // item related things what will not change at runtime
+	pub mod material; // item related basic stuff
 	pub mod inventory; // basic inventory impl.
 	pub mod player; // main camera and player impl.
 	pub mod state; // game-state with seed and stuff

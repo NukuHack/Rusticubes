@@ -117,13 +117,13 @@ impl AreaLayout {
 	}
 	
 	#[inline] pub const fn get_slot_position(&self, row: u8, col: u8) -> (f32, f32) {
-	    if row >= self.rows || col >= self.columns { 
-	        return (self.position.0, self.position.1); // Return area origin as fallback
-	    }
-	    (
-	        self.position.0 + (col as f32 * (SLOT + PADDING)),
-	        self.position.1 + ((self.rows - 1 - row) as f32 * (SLOT + PADDING))
-	    )
+		if row >= self.rows || col >= self.columns { 
+			return (self.position.0, self.position.1); // Return area origin as fallback
+		}
+		(
+			self.position.0 + (col as f32 * (SLOT + PADDING)),
+			self.position.1 + ((self.rows - 1 - row) as f32 * (SLOT + PADDING))
+		)
 	}
 	
 	#[inline] pub const fn slot_contains_point(&self, row: u8, col: u8, x: f32, y: f32) -> bool {
@@ -297,11 +297,11 @@ impl InventoryLayout {
 	}
 	
 	fn calculate_panel_bounds(&mut self, areas: &[AreaLayout]) {
-	    if areas.is_empty() {
-	        self.panel_size = (0.0, 0.0);
-	        self.panel_position = (0.0, 0.0);
-	        return;
-	    }
+		if areas.is_empty() {
+			self.panel_size = (0.0, 0.0);
+			self.panel_position = (0.0, 0.0);
+			return;
+		}
 		
 		let mut min_x = f32::MAX;
 		let mut min_y = f32::MAX;
@@ -467,20 +467,20 @@ impl UIManager {
 		for area in layout.get_areas_for_inv_state(inv_state) {
 			let items = inventory.get_items_by_area(&area.name);
 			self.create_area_slots(&area, items);
-	        // make highlight for selected item 
-	        if area.name == AreaType::Hotbar {
-	            let col = inventory.ssi() as u8 % area.columns;
-	            let row = inventory.ssi() as u8 / area.columns;
-	            let (x, y) = area.get_slot_position(row, col);
-	            let panel_cfg = &ptr::get_settings().ui_theme.panels;
-	            let mut slot = UIElement::panel(self.next_id())
-	                .with_position(x, y)
-	                .with_size(SLOT, SLOT)
-	                .with_style(&panel_cfg.nice)
-	                .with_z_index(4);
-	            slot.border.width *= 1.5;
-	            self.add_element(slot);
-	        }
+			// make highlight for selected item 
+			if area.name == AreaType::Hotbar {
+				let col = inventory.ssi() as u8 % area.columns;
+				let row = inventory.ssi() as u8 / area.columns;
+				let (x, y) = area.get_slot_position(row, col);
+				let panel_cfg = &ptr::get_settings().ui_theme.panels;
+				let mut slot = UIElement::panel(self.next_id())
+					.with_position(x, y)
+					.with_size(SLOT, SLOT)
+					.with_style(&panel_cfg.nice)
+					.with_z_index(4);
+				slot.border.width *= 1.5;
+				self.add_element(slot);
+			}
 		}
 	}
 
@@ -498,7 +498,7 @@ impl UIManager {
 					.with_z_index(5);
 				self.add_element(slot);
 				if let Some(item) = items.get(row as usize * area.columns as usize + col as usize) {
-					let text = item.item.to_icon();
+					let text = item.to_icon();
 					let item_display = UIElement::image(self.next_id(), text)
 						.with_position(x, y)
 						.with_size(SLOT, SLOT)

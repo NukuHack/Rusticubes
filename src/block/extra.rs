@@ -130,7 +130,7 @@ pub fn place_looked_block() {
 		let block_id = player.inventory()
 		    .selected_item()
 		    .and_then(|item| item.get_block_id())
-		    .map_or(1, |block_id| block_id);
+		    .map_or(1, |block_id| block_id.inner());
 
 		world.set_block(placement_pos, Block::new(block_id));
 		update_chunk_mesh(world, ChunkCoord::from_world_pos(placement_pos));

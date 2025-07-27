@@ -43,44 +43,18 @@ macro_rules! get_string {
 	}};
 }
 
-#[macro_export]
-macro_rules! get_nth_file {
-	($index:expr, $subdir:expr) => {{
-		use crate::fs::rs::RESOURCE_DIR;
-		let subdir_path = std::path::Path::new($subdir);
-		let dir = RESOURCE_DIR.get_dir(subdir_path)
-			.unwrap_or_else(|| panic!("Subdirectory '{}' not found in embedded resources", $subdir));
-			
-		let mut entries: Vec<_> = dir.files().collect();
-		entries.sort_by(|a, b| a.path().cmp(b.path()));
-		
-		entries.get($index)
-			.map(|file| {
-				let mut path = file.path().to_path_buf();
-				// Remove the .lz4 extension if present
-				if path.extension().and_then(|e| e.to_str()) == Some("lz4") {
-					path.set_extension("");
-				}
-				path
-			})
-			.unwrap_or_else(|| panic!("Index {} out of bounds for files in '{}'", $index, $subdir))
-	}};
-}
-
 use image::ImageReader;
 use std::io::Cursor;
 use winit::window::Icon;
 #[inline]
 pub fn load_main_icon() -> Option<Icon> {
-	let Some((rgba,w,h)) = load_image_asset_from_path("rusticubes.png".to_string()) else { panic!() };
-
-	match Icon::from_rgba(rgba, w, h) {
-		Ok(icon) => Some(icon),
-		Err(e) => {
-			println!("Failed to create icon from RGBA data: {}", e);
-			None
+	if let Some((rgba, w, h)) = load_image_asset_from_path("rusticubes.png".to_string()) {
+		match Icon::from_rgba(rgba, w, h) {
+			Ok(icon) => return Some(icon),
+			Err(e) => println!("Failed to create icon from RGBA data: {}", e),
 		}
 	}
+	return None;
 }
 
 
@@ -117,21 +91,16 @@ pub fn find_png_resources(subdir: &str) -> Vec<String> {
 				.unwrap_or("")
 				.to_lowercase();
 
-			// Check for either:
-			// 1. Direct .png files (full_ext == "png")
-			// 2. .png.lz4 files (full_ext == "lz4" and stem ends with ".png")
-			let is_png = full_ext == "png" || 
-				(full_ext == "lz4" && stem.ends_with(".png"));
+			// Check for:
+			// .png.lz4 files (full_ext == "lz4" and stem ends with ".png")
+			let is_png = full_ext == "lz4" && stem.ends_with(".png");
 
 			if is_png {
 				// Convert to relative path string
 				if let Some(path_str) = path.to_str() {
-					// Remove .lz4 suffix if present to get the base path
-					let clean_path = if full_ext == "lz4" {
-						path_str.trim_end_matches(".lz4")
-					} else {
-						path_str
-					};
+					// Remove .lz4 suffix
+					let clean_path = path_str.trim_end_matches(".lz4");
+
 					png_paths.push(clean_path.to_string());
 				}
 			}

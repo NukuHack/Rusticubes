@@ -55,7 +55,7 @@ impl TextureManager {
 		let post_bind_group = create_post_processing_bind_group(device, &render_texture_view, post_layout);
 
 		// Create resources
-		let paths = rs::find_png_resources("blocks");
+		let paths = rs::find_png_resources("block");
 		let (_array_texture, array_texture_view) = create_texture_array(&device, &queue, &paths).unwrap();
 		let array_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
 			address_mode_u: wgpu::AddressMode::ClampToEdge,
