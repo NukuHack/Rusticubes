@@ -1,5 +1,4 @@
 
-use crate::ext::color::Solor;
 use crate::ext::ptr;
 use crate::ui::{manager::{UIManager, UIState}, element::UIElement};
 use crate::game::inventory as inv;
@@ -118,10 +117,13 @@ impl AreaLayout {
 	}
 	
 	#[inline] pub const fn get_slot_position(&self, row: u8, col: u8) -> (f32, f32) {
-		(
-			self.position.0 + (col as f32 * (SLOT + PADDING)),
-			self.position.1 + ((self.rows - 1 - row) as f32 * (SLOT + PADDING))
-		)
+	    if row >= self.rows || col >= self.columns { 
+	        return (self.position.0, self.position.1); // Return area origin as fallback
+	    }
+	    (
+	        self.position.0 + (col as f32 * (SLOT + PADDING)),
+	        self.position.1 + ((self.rows - 1 - row) as f32 * (SLOT + PADDING))
+	    )
 	}
 	
 	#[inline] pub const fn slot_contains_point(&self, row: u8, col: u8, x: f32, y: f32) -> bool {
@@ -284,7 +286,7 @@ impl InventoryLayout {
 		Self {
 			section_spacing: 0.12, panel_padding: 0.05,
 			panel_position: (0.0, 0.0), panel_size: (0.0, 0.0),
-			areas: vec![],
+			areas: Vec::new(),
 		}
 	}
 
@@ -295,9 +297,11 @@ impl InventoryLayout {
 	}
 	
 	fn calculate_panel_bounds(&mut self, areas: &[AreaLayout]) {
-		if areas.is_empty() {
-			return;
-		}
+	    if areas.is_empty() {
+	        self.panel_size = (0.0, 0.0);
+	        self.panel_position = (0.0, 0.0);
+	        return;
+	    }
 		
 		let mut min_x = f32::MAX;
 		let mut min_y = f32::MAX;
@@ -419,12 +423,14 @@ impl UIManager {
 					self.create_inventory_slots(inv, &layout);
 				}
 				InventoryUIState::Storage { inv, .. } => {
-					self.create_area_slots(&layout.areas.iter().find(|a| a.name == AreaType::Storage).unwrap());
+					let storage = layout.areas.iter().find(|a| a.name == AreaType::Storage).unwrap();
+					self.create_area_slots(&storage, &inv::ItemContainer::new(storage.rows, storage.columns));
 					self.create_inventory_slots(inv, &layout);
 				}
 				InventoryUIState::Crafting { inv, .. } => {
 					for area_type in [AreaType::Input, AreaType::Output] {
-						self.create_area_slots(&layout.areas.iter().find(|a| a.name == area_type).unwrap());
+						let area = layout.areas.iter().find(|a| a.name == area_type).unwrap();
+						self.create_area_slots(&area, &inv::ItemContainer::new(area.rows, area.columns));
 					}
 					self.create_inventory_slots(inv, &layout);
 				}
@@ -457,16 +463,30 @@ impl UIManager {
 	}
 
 	fn create_inventory_slots(&mut self, inv_state: InvState, layout: &InventoryLayout) {
+		let inventory = &ptr::get_gamestate().player().inventory();
 		for area in layout.get_areas_for_inv_state(inv_state) {
-			self.create_area_slots(&area);
+			let items = inventory.get_items_by_area(&area.name);
+			self.create_area_slots(&area, items);
+	        // make highlight for selected item 
+	        if area.name == AreaType::Hotbar {
+	            let col = inventory.ssi() as u8 % area.columns;
+	            let row = inventory.ssi() as u8 / area.columns;
+	            let (x, y) = area.get_slot_position(row, col);
+	            let panel_cfg = &ptr::get_settings().ui_theme.panels;
+	            let mut slot = UIElement::panel(self.next_id())
+	                .with_position(x, y)
+	                .with_size(SLOT, SLOT)
+	                .with_style(&panel_cfg.nice)
+	                .with_z_index(4);
+	            slot.border.width *= 1.5;
+	            self.add_element(slot);
+	        }
 		}
 	}
 
-	fn create_area_slots(&mut self, area: &AreaLayout) {
+	fn create_area_slots(&mut self, area: &AreaLayout, items: &inv::ItemContainer) {
 		if area.rows == 0 || area.columns == 0 { return; }
 		let config = &ptr::get_settings();
-		let inventory = &ptr::get_gamestate().player().inventory();
-		let items = inventory.get_items_by_area(&area.name);
 		
 		for row in 0..area.rows {
 			for col in 0..area.columns {
@@ -485,17 +505,6 @@ impl UIManager {
 						.with_style(&config.ui_theme.images.basic)
 						.with_z_index(7);
 					self.add_element(item_display);
-				}
-				if inventory.selected_slot_idx() == row as usize * area.columns as usize + col as usize &&
-					area.name == AreaType::Hotbar {
-					let mut slot = UIElement::panel(self.next_id())
-						.with_position(x, y)
-						.with_size(SLOT, SLOT)
-						.with_style(&config.inv_config.get_style(area.name))
-						.with_z_index(4);
-					slot.border.color = Solor::Red.i();
-					slot.border.width *= 2.5;
-					self.add_element(slot);
 				}
 			}
 		}

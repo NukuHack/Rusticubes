@@ -16,11 +16,6 @@ pub struct ItemContainer {
 }
 
 impl ItemContainer {
-	/// Create a new 1D container (like hotbar or armor slots)
-	pub fn new_linear(capacity: u8) -> Self {
-		Self::new(1, capacity)
-	}
-
 	/// Create a new 2D grid container (like main inventory)
 	pub fn new(rows: u8, cols: u8) -> Self {
 		let mut container = Self {
@@ -33,22 +28,17 @@ impl ItemContainer {
 	}
 
 	/// Resize the container to match its capacity
-	fn resize_to_capacity(&mut self) {
+	#[inline] fn resize_to_capacity(&mut self) {
 		self.items.resize(self.capacity(), None);
 	}
 
 	/// Get dimensions
-	pub const fn rows(&self) -> u8 { self.rows }
-	pub const fn cols(&self) -> u8 { self.cols }
-	pub const fn capacity(&self) -> usize { self.rows as usize * self.cols as usize }
-
-	/// Check if this is a linear (1D) container
-	pub const fn is_linear(&self) -> bool {
-		self.rows() == 1 || self.cols() == 1
-	}
+	#[inline] pub const fn rows(&self) -> u8 { self.rows }
+	#[inline] pub const fn cols(&self) -> u8 { self.cols }
+	#[inline] pub const fn capacity(&self) -> usize { self.rows() as usize * self.cols() as usize }
 
 	/// Get an item by linear index
-	pub fn get(&self, index: usize) -> Option<&ItemStack> {
+	#[inline] pub fn get(&self, index: usize) -> Option<&ItemStack> {
 		if index >= self.capacity() {
 			return None;
 		}
@@ -56,7 +46,7 @@ impl ItemContainer {
 	}
 
 	/// Get a mutable reference to an item by linear index
-	pub fn get_mut(&mut self, index: usize) -> Option<&mut ItemStack> {
+	#[inline] pub fn get_mut(&mut self, index: usize) -> Option<&mut ItemStack> {
 		if index >= self.capacity() {
 			return None;
 		}
@@ -64,7 +54,7 @@ impl ItemContainer {
 	}
 
 	/// Get item at grid position (row, col) - works for both 1D and 2D
-	pub fn get_at(&self, row: u8, col: u8) -> Option<&ItemStack> {
+	#[inline] pub fn get_at(&self, row: u8, col: u8) -> Option<&ItemStack> {
 		if row >= self.rows() || col >= self.cols() {
 			return None;
 		}
@@ -73,7 +63,7 @@ impl ItemContainer {
 	}
 
 	/// Get mutable item at grid position (row, col)
-	pub fn get_at_mut(&mut self, row: u8, col: u8) -> Option<&mut ItemStack> {
+	#[inline] pub fn get_at_mut(&mut self, row: u8, col: u8) -> Option<&mut ItemStack> {
 		if row >= self.rows() || col >= self.cols() {
 			return None;
 		}
@@ -82,7 +72,7 @@ impl ItemContainer {
 	}
 
 	/// Set an item by linear index
-	pub fn set(&mut self, index: usize, item: Option<ItemStack>) -> bool {
+	#[inline] pub fn set(&mut self, index: usize, item: Option<ItemStack>) -> bool {
 		if index >= self.capacity() {
 			return false;
 		}
@@ -106,7 +96,7 @@ impl ItemContainer {
 	}
 
 	/// Set item at grid position (row, col)
-	pub fn set_at(&mut self, row: u8, col: u8, item: Option<ItemStack>) -> bool {
+	#[inline] pub fn set_at(&mut self, row: u8, col: u8, item: Option<ItemStack>) -> bool {
 		if row >= self.rows() || col >= self.cols() {
 			return false;
 		}
@@ -115,22 +105,22 @@ impl ItemContainer {
 	}
 
 	/// Find the first empty slot
-	pub fn find_empty_slot(&self) -> Option<usize> {
+	#[inline] pub fn find_empty_slot(&self) -> Option<usize> {
 		self.items.iter().position(|slot| slot.is_none())
 	}
 
 	/// Count non-empty slots
-	pub fn count_items(&self) -> usize {
+	#[inline] pub fn count_items(&self) -> usize {
 		self.items.iter().filter(|slot| slot.is_some()).count()
 	}
 
 	/// Check if the container is full
-	pub fn is_full(&self) -> bool {
+	#[inline] pub fn is_full(&self) -> bool {
 		self.find_empty_slot().is_none()
 	}
 
 	/// Add an item to the first available slot
-	pub fn add_item(&mut self, item: ItemStack) -> bool {
+	#[inline] pub fn add_item(&mut self, item: ItemStack) -> bool {
 		if let Some(index) = self.find_empty_slot() {
 			self.set(index, Some(item));
 			true
@@ -140,7 +130,7 @@ impl ItemContainer {
 	}
 
 	/// Remove an item at the specified linear index
-	pub fn remove_item(&mut self, index: usize) -> Option<ItemStack> {
+	#[inline] pub fn remove_item(&mut self, index: usize) -> Option<ItemStack> {
 		if index >= self.capacity() {
 			return None;
 		}
@@ -148,7 +138,7 @@ impl ItemContainer {
 	}
 
 	/// Remove an item at grid position (row, col)
-	pub fn remove_item_at(&mut self, row: u8, col: u8) -> Option<ItemStack> {
+	#[inline] pub fn remove_item_at(&mut self, row: u8, col: u8) -> Option<ItemStack> {
 		if row >= self.rows || col >= self.cols {
 			return None;
 		}
@@ -176,21 +166,21 @@ impl ItemContainer {
 	}
 
 	/// Upgrade the dimensions of this container
-	pub fn upgrade_dimensions(&mut self, new_rows: u8, new_cols: u8) {
+	#[inline] pub fn upgrade_dimensions(&mut self, new_rows: u8, new_cols: u8) {
 		self.rows = new_rows;
 		self.cols = new_cols;
 		self.resize_to_capacity();
 	}
 
 	/// Upgrade capacity by finding appropriate dimensions (works for both linear and 2D containers)
-	pub fn upgrade_capacity(&mut self, new_capacity: u8) {
+	#[inline] pub fn upgrade_capacity(&mut self, new_capacity: u8) {
 		if new_capacity == 0 {
 			self.upgrade_dimensions(0, 0);
 			return;
 		}
 
 		// For linear containers, keep them linear
-		if self.is_linear() {
+		if self.rows() == 1 || self.cols() == 1 {
 			self.upgrade_dimensions(1, new_capacity);
 			return;
 		}
@@ -231,24 +221,24 @@ impl ItemContainer {
 	}
 
 	/// Get all items as a vector (for compatibility)
-	pub fn get_all_items(&self) -> Vec<Option<ItemStack>> {
+	#[inline] pub fn get_all_items(&self) -> Vec<Option<ItemStack>> {
 		self.items.clone()
 	}
 
 	/// Clear all items from the container
-	pub fn clear(&mut self) {
+	#[inline] pub fn clear(&mut self) {
 		for slot in &mut self.items {
 			*slot = None;
 		}
 	}
 
 	/// Iterator over all items
-	pub fn iter(&self) -> impl Iterator<Item = &Option<ItemStack>> {
+	#[inline] pub fn iter(&self) -> impl Iterator<Item = &Option<ItemStack>> {
 		self.items.iter()
 	}
 
 	/// Mutable iterator over all items
-	pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut Option<ItemStack>> {
+	#[inline] pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut Option<ItemStack>> {
 		self.items.iter_mut()
 	}
 }
@@ -256,16 +246,12 @@ impl ItemContainer {
 #[derive(Clone, PartialEq)]
 pub struct Inventory {
 	selected_slot_idx: usize,
-	
 	// Armor slots (helmet, chestplate, leggings, boots, etc.) 
 	armor: ItemContainer,
-	
 	// Main inventory grid - 2D grid
 	items: ItemContainer,
-	
 	// Quick access hotbar 
 	hotbar: ItemContainer,
-	
 	pub layout: Option<inventory::InventoryLayout>,
 }
 
@@ -280,88 +266,88 @@ impl Inventory {
 	}
 
 	/// Create a new inventory with custom dimensions
-	pub fn new(armor_slots: u8, rows: u8, cols: u8, hotbar_slots: u8) -> Self {
+	#[inline] pub fn new(armor_slots: u8, rows: u8, cols: u8, hotbar_slots: u8) -> Self {
 		Self {
 			selected_slot_idx: 0,
-			armor: ItemContainer::new_linear(armor_slots),
+			armor: ItemContainer::new(1, armor_slots),
 			items: ItemContainer::new(rows, cols),
-			hotbar: ItemContainer::new_linear(hotbar_slots),
+			hotbar: ItemContainer::new(1, hotbar_slots),
 			layout: None,
 		}
 	}
 	
 	// Getters for compatibility
-	pub const fn armor_capacity(&self) -> usize { self.armor.capacity() }
-	pub const fn hotbar_capacity(&self) -> usize { self.hotbar.capacity() }
-	pub const fn inv_row(&self) -> u8 { self.items.rows() }
-	pub const fn inv_col(&self) -> u8 { self.items.cols() }
-	pub const fn inv_capacity(&self) -> usize { self.items.capacity() }
-	pub const fn selected_slot_idx(&self) -> usize { self.selected_slot_idx }
+	#[inline] pub const fn armor_capacity(&self) -> usize { self.armor.capacity() }
+	#[inline] pub const fn hotbar_capacity(&self) -> usize { self.hotbar.capacity() }
+	#[inline] pub const fn inv_row(&self) -> u8 { self.items.rows() }
+	#[inline] pub const fn inv_col(&self) -> u8 { self.items.cols() }
+	#[inline] pub const fn inv_capacity(&self) -> usize { self.items.capacity() }
+	#[inline] pub const fn ssi(&self) -> usize { self.selected_slot_idx }
 	
 	/// Get the currently selected hotbar item
-	pub fn selected_item(&self) -> Option<&ItemStack> {
-		self.hotbar.get(self.selected_slot_idx as usize)
+	#[inline] pub fn selected_item(&self) -> Option<&ItemStack> {
+		self.hotbar.get(self.ssi() as usize)
 	}
 	
 	/// Get a mutable reference to the currently selected hotbar item
-	pub fn selected_item_mut(&mut self) -> Option<&mut ItemStack> {
-		self.hotbar.get_mut(self.selected_slot_idx)
+	#[inline] pub fn selected_item_mut(&mut self) -> Option<&mut ItemStack> {
+		self.hotbar.get_mut(self.ssi())
 	}
 	
 	/// Select a different hotbar slot
-	pub fn select_slot(&mut self, idx: isize) {
-		if idx >= self.hotbar_capacity() as isize {
-			self.selected_slot_idx = 0;
+	#[inline] pub fn select_slot(&mut self, idx: isize) {
+		self.selected_slot_idx = if idx >= self.hotbar_capacity() as isize {
+			0 // first item
 		} else if idx < 0 {
-			self.selected_slot_idx = self.hotbar_capacity() - 1;
+			self.hotbar_capacity() - 1 // last item
 		} else {
-			self.selected_slot_idx = idx as usize;
-		}
+			idx as usize // just the input index
+		};
 	}
-	pub fn step_select_slot(&mut self, delta: f32) {
+	#[inline] pub fn step_select_slot(&mut self, delta: f32) {
 		let way:isize = if delta > 0. { 1 } else if delta < 0. { -1 } else { 0 };
-		self.select_slot(self.selected_slot_idx as isize + way);
+		self.select_slot(self.ssi() as isize + way);
 	}
 	
 	/// Get item at specific inventory position
-	pub fn get_item(&self, row: u8, col: u8) -> Option<&ItemStack> {
+	#[inline] pub fn get_item(&self, row: u8, col: u8) -> Option<&ItemStack> {
 		self.items.get_at(row, col)
 	}
-	pub fn get_item_mut(&mut self, row: u8, col: u8) -> Option<&mut ItemStack> {
+	#[inline] pub fn get_item_mut(&mut self, row: u8, col: u8) -> Option<&mut ItemStack> {
 		self.items.get_at_mut(row, col)
 	}
-	pub const fn items(&self) -> &ItemContainer {
+	#[inline] pub const fn items(&self) -> &ItemContainer {
 		&self.items
 	}
-	pub const fn items_mut(&mut self) -> &mut ItemContainer {
+	#[inline] pub const fn items_mut(&mut self) -> &mut ItemContainer {
 		&mut self.items
 	}
 	
 	/// Get armor item at specific slot
-	pub fn get_armor(&self, slot: u8) -> Option<&ItemStack> {
+	#[inline] pub fn get_armor(&self, slot: u8) -> Option<&ItemStack> {
 		self.armor.get(slot as usize)
 	}
-	pub fn get_armor_mut(&mut self, slot: u8) -> Option<&mut ItemStack> {
+	#[inline] pub fn get_armor_mut(&mut self, slot: u8) -> Option<&mut ItemStack> {
 		self.armor.get_mut(slot as usize)
 	}
-	pub const fn armor(&self) -> &ItemContainer {
+	#[inline] pub const fn armor(&self) -> &ItemContainer {
 		&self.armor
 	}
-	pub const fn armor_mut(&mut self) -> &mut ItemContainer {
+	#[inline] pub const fn armor_mut(&mut self) -> &mut ItemContainer {
 		&mut self.armor
 	}
 	
 	/// Get hotbar item at specific slot
-	pub fn get_hotbar(&self, slot: u8) -> Option<&ItemStack> {
+	#[inline] pub fn get_hotbar(&self, slot: u8) -> Option<&ItemStack> {
 		self.hotbar.get(slot as usize)
 	}	
-	pub fn get_hotbar_mut(&mut self, slot: u8) -> Option<&mut ItemStack> {
+	#[inline] pub fn get_hotbar_mut(&mut self, slot: u8) -> Option<&mut ItemStack> {
 		self.hotbar.get_mut(slot as usize)
 	}
-	pub const fn hotbar(&self) -> &ItemContainer {
+	#[inline] pub const fn hotbar(&self) -> &ItemContainer {
 		&self.hotbar
 	}
-	pub const fn hotbar_mut(&mut self) -> &mut ItemContainer {
+	#[inline] pub const fn hotbar_mut(&mut self) -> &mut ItemContainer {
 		&mut self.hotbar
 	}
 	
@@ -372,20 +358,20 @@ impl Inventory {
 		self.armor.upgrade_capacity(new_armor);
 		
 		// Clamp selected slot if it's now out of bounds
-		self.select_slot(self.selected_slot_idx as isize);
+		self.select_slot(self.ssi() as isize);
 	}
 	
 	/// Set the UI layout
-	pub fn set_layout(&mut self, layout: &inventory::InventoryLayout) {
+	#[inline] pub fn set_layout(&mut self, layout: &inventory::InventoryLayout) {
 		self.layout = Some(layout.clone());
 	}
 	
 	/// Get total item capacity
-	pub fn total_capacity(&self) -> usize {
+	#[inline] pub fn total_capacity(&self) -> usize {
 		self.armor.capacity() + self.hotbar.capacity() + self.items.capacity()
 	}
 
-	pub fn get_items_by_area(&self, area: &AreaType) -> &ItemContainer {
+	#[inline] pub fn get_items_by_area(&self, area: &AreaType) -> &ItemContainer {
 		match area {
 			AreaType::Inventory => &self.items,
 			AreaType::Hotbar => &self.hotbar,
@@ -395,19 +381,19 @@ impl Inventory {
 	}
 
 	/// Add item to any available slot (tries hotbar first, then inventory, then armor)
-	pub fn add_item_anywhere(&mut self, item: ItemStack) -> bool {
+	#[inline] pub fn add_item_anywhere(&mut self, item: ItemStack) -> bool {
 		self.hotbar.add_item(item.clone()) ||
 		self.items.add_item(item.clone()) ||
 		self.armor.add_item(item)
 	}
 
 	/// Count total items across all containers
-	pub fn count_all_items(&self) -> usize {
+	#[inline] pub fn count_all_items(&self) -> usize {
 		self.armor.count_items() + self.hotbar.count_items() + self.items.count_items()
 	}
 
 	/// Check if entire inventory is full
-	pub fn is_completely_full(&self) -> bool {
+	#[inline] pub fn is_completely_full(&self) -> bool {
 		self.armor.is_full() && self.hotbar.is_full() && self.items.is_full()
 	}
 }
