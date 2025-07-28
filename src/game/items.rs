@@ -22,13 +22,13 @@ pub struct CustomData {
 	pub name: Option<&'static str>,
 	pub durability: Option<u16>,
 	//pub effects -  // should be reworked later but the stuff what in minecraft gives + health and stuff
+	//pub cosmetics - // stuff that would like make the color change or make the sword be double edged ...
 }
 impl CustomData {
 	#[inline] pub const fn default() -> Self {
 		Self {
 			name: None,
 			durability: None,
-			//effects: None,
 		}
 	}
 }
@@ -37,7 +37,7 @@ const EXTRA_BLOCK_DATA_OFFSET:usize = 1usize; // currently only a single one : a
 
 impl ItemStack {
 	pub fn to_icon(&self) -> String {
-		let resources = if self.lut().is_block {
+		let resources = if self.lut().is_block() {
 			rs::find_png_resources("block")
 		} else {
 			rs::find_png_resources("item")
@@ -76,11 +76,11 @@ impl ItemStack {
 	}
 	
 	#[inline] pub fn is_block(&self) -> bool {
-		matches!(self.lut().is_block, true)
+		matches!(self.lut().is_block(), true)
 	}
 
 	#[inline] pub fn get_block_id(&self) -> Option<ItemId> {
-		if self.lut().is_block {
+		if self.lut().is_block() {
 			return Some(self.id);
 		} None
 	}

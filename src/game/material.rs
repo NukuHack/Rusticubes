@@ -2,7 +2,7 @@
 
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-#[repr(u8)] // Ensure each variant has a u8 representation
+#[repr(u8)] // Ensure each variant has a u8 representation, so up to 255 type
 pub enum Material {
 	Iron,
 	Gold,
@@ -12,7 +12,7 @@ pub enum Material {
 
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-#[repr(u8)] // Ensure each variant has a u8 representation
+#[repr(u8)] // Ensure each variant has a u8 representation, so up to 255 type
 pub enum MaterialLevel {
 	Hay,          // Weakest material, crumbles under pressure
 	Wax,          // Soft, deforms at room temperature

@@ -1,291 +1,657 @@
-
 use crate::game::material::MaterialLevel;
 use crate::game::items::ItemId;
-
 use ahash::AHasher;
 use std::{
-    collections::HashMap,
-    hash::BuildHasherDefault,
+	collections::HashMap,
+	hash::BuildHasherDefault,
+	num::NonZeroU32,
+	cmp::PartialEq,
 };
 
-// Type aliases for better readability
 type FastMap<K, V> = HashMap<K, V, BuildHasherDefault<AHasher>>;
 
 // Global registry that's initialized at program start
-struct ItemRegistry {
-    components: FastMap<ItemId, &'static ItemComp>,
+pub struct ItemRegistry {
+	components: FastMap<ItemId, ItemComp>,
 }
 
 impl ItemRegistry {
-    pub fn new() -> Self {
-        Self {
-           components: FastMap::with_capacity_and_hasher(100, BuildHasherDefault::<AHasher>::default())
-        }
-    }
-    // Called during initialization
-    pub fn register(&mut self, id: ItemId, component: &'static ItemComp) {
-        self.components.insert(id, component);
-    }
-    
-    // Runtime access
-    pub fn get_component(&self, id: ItemId) -> Option<&'static ItemComp> {
-        self.components.get(&id).copied()
-    }
+	pub fn new() -> Self {
+		Self {
+			components: FastMap::with_capacity_and_hasher(100, BuildHasherDefault::<AHasher>::default())
+		}
+	}
+	
+	#[inline] pub fn register(&mut self, component: ItemComp) {
+		if self.contains(component.id) { return; }
+		self.components.insert(component.id, component);
+	}
+	#[inline] pub fn contains(&self, id: ItemId) -> bool {
+		self.components.contains_key(&id)
+	}
+	#[inline] pub fn get_component(&self, id: ItemId) -> Option<&ItemComp> {
+		self.components.get(&id)
+	}
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct ItemFlags(u32);
+impl ItemFlags {
+	pub const IS_BLOCK: u32 = 1 << 0;
+	pub const IS_TOOL: u32 = 1 << 1;
+	pub const IS_ARMOR: u32 = 1 << 2;
+	pub const IS_CONSUMABLE: u32 = 1 << 3;
+	// Room for many more flags
+	
+	#[inline] pub const fn empty() -> Self { Self(0) }
+	#[inline] pub const fn new(flags: u32) -> Self { Self(flags) }
+	#[inline] pub const fn inner(&self) -> u32 { self.0 }
+	#[inline] pub const fn contains(&self, flag: u32) -> bool { (self.0 & flag) != 0 }
+	#[inline] pub const fn with_flag(self, flag: u32) -> Self { Self(self.0 | flag) }
+	#[inline] pub const fn without_flag(self, flag: u32) -> Self { Self(self.0 & !flag) }
+	#[inline] pub const fn combine(self, other: Self) -> Self { Self(self.0 | other.0) }
+}
+
+#[repr(C)] // Ensure predictable layout for better cache performance
 pub struct ItemComp {
 	pub id: ItemId,
 	pub name: &'static str,
 	pub max_stack: u32,
-	pub is_block: bool,
-	pub data: Option<Box<ItemData>>,
+	pub flags: ItemFlags,
+	// Optional data stored separately to avoid memory overhead when not needed
+	pub data: Option<Box<ItemExtendedData>>,
+}
+
+impl ItemComp {
+	pub const fn new(id: ItemId, name: &'static str, max_stack: u32) -> Self {
+		Self {
+			id,
+			name,
+			max_stack,
+			flags: ItemFlags::empty(),
+			data: None,
+		}
+	}
+	#[inline] pub const fn with_flag(mut self, flag: ItemFlags) -> Self {
+		self.flags = self.flags.combine(flag);
+		self
+	}
+	#[inline] pub fn as_block(self) -> Self { 
+		Self {
+			flags: self.flags.with_flag(ItemFlags::IS_BLOCK),
+			..self
+		}
+	}
+	#[inline] pub fn as_tool(self, tool_data: ToolData) -> Self {
+		Self { 
+			flags: self.flags.with_flag(ItemFlags::IS_TOOL),
+			data: Some(Box::new(ItemExtendedData::new().with_tool_data(tool_data))),
+			..self 
+		}
+	}
+	#[inline] pub fn as_armor(self, armor_data: ArmorData) -> Self {
+		Self { 
+			flags: self.flags.with_flag(ItemFlags::IS_ARMOR),
+			data: Some(Box::new(ItemExtendedData::new().with_armor_data(armor_data))),
+			..self 
+		}
+	}
+	#[inline] pub fn with_data(mut self, data: ItemExtendedData) -> Self {
+		self.data = Some(Box::new(data));
+		self
+	}
+	
+	#[inline] pub const fn is_block(&self) -> bool { 
+		self.flags.contains(ItemFlags::IS_BLOCK) 
+	}
+	#[inline] pub const fn has_durability(&self) -> bool { 
+		self.flags.contains(ItemFlags::IS_TOOL) || self.flags.contains(ItemFlags::IS_ARMOR) 
+	}
+	#[inline] pub const fn is_tool(&self) -> bool { 
+		self.flags.contains(ItemFlags::IS_TOOL) 
+	}
+	#[inline] pub fn is_weapon(&self) -> bool { 
+		if let Some(data) = &self.data {
+			data.get_damage().is_some()
+		} else {
+			false
+		}
+	}
+	#[inline] pub const fn is_armor(&self) -> bool { 
+		self.flags.contains(ItemFlags::IS_ARMOR) 
+	}
 }
 
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct ItemData {
-	pub max_durability: Option<std::num::NonZeroU32>,
-	pub tool: ToolData,
-	pub equipent: ArmorData,
-	pub hunger: Option<i32>, // -hunger is actually food, that is what decreases hunger
-	pub armor: Option<i32>, // -armor is weakening? not sure if that would be used too much tho
-	pub damage: Option<i32>, // -damage would heal? might make this u32
-	pub speed: Option<i32>, // -speed would be slowdown, that makes the weapon harder (slower) to swing
+/// All possible property types an item can have
+#[derive(Debug, Clone)]
+pub enum PropertyValue {
+	Durability(NonZeroU32),
+	ToolData(ToolData),
+	ArmorData(ArmorData),
+	Hunger(i16),
+	ArmorValue(i16),
+	Damage(i16),
+	Speed(i16),
+}
+
+// Constants for configuration
+const DEFAULT_MAX_PROPERTIES: usize = 4;
+
+/// Ultra-compact storage using a fixed array of N properties
+#[derive(Debug, Clone)]
+pub struct ItemExtendedData<const N: usize = DEFAULT_MAX_PROPERTIES> {
+	data: [Option<PropertyValue>; N],
+	len: u8, // Tracks how many properties are actually set
+}
+/*
+// Default size (4)
+let default_item = ItemExtendedData::new();
+
+// Custom size
+let small_item = ItemExtendedData::<2>::new();
+let large_item = ItemExtendedData::<8>::new();
+*/
+impl<const N: usize> ItemExtendedData<N> {
+	/// Creates a new empty ItemExtendedData with custom size N
+	pub const fn new() -> Self {
+		Self {
+			data: [const { None }; N],
+			len: 0,
+		}
+	}
+
+	// Property setters
+	#[inline] 
+	pub fn with_durability(self, value: NonZeroU32) -> Self {
+		self.set_property(PropertyValue::Durability(value))
+	}
+	
+	#[inline] 
+	pub fn with_tool_data(self, value: ToolData) -> Self {
+		self.set_property(PropertyValue::ToolData(value))
+	}
+	
+	#[inline] 
+	pub fn with_armor_data(self, value: ArmorData) -> Self {
+		self.set_property(PropertyValue::ArmorData(value))
+	}
+	
+	#[inline] 
+	pub fn with_hunger(self, value: i16) -> Self {
+		self.set_property(PropertyValue::Hunger(value))
+	}
+	
+	#[inline] 
+	pub fn with_armor(self, value: i16) -> Self {
+		self.set_property(PropertyValue::ArmorValue(value))
+	}
+	
+	#[inline] 
+	pub fn with_damage(self, value: i16) -> Self {
+		self.set_property(PropertyValue::Damage(value))
+	}
+	
+	#[inline] 
+	pub fn with_speed(self, value: i16) -> Self {
+		self.set_property(PropertyValue::Speed(value))
+	}
+
+	/// Internal method to set or update a property
+	fn set_property(mut self, new_value: PropertyValue) -> Self {
+		let property_type = std::mem::discriminant(&new_value);
+
+		// Check for existing property of same type
+		if self.has_property(property_type) {
+			return self;
+		}
+
+		// Add new property if we have space
+		if (self.len()) < self.data.len() {
+			self.data[self.len()] = Some(new_value);
+			self.len += 1;
+		}
+		
+		self
+	}
+
+	pub fn has_property(&self, discriminant: std::mem::Discriminant<PropertyValue>) -> bool {
+		self.data.iter()
+			.take(self.len())
+			.any(|slot| slot.as_ref().map_or(false, |p| std::mem::discriminant(p) == discriminant))
+	}
+
+	// Property getters
+	#[inline]
+	pub fn get_durability(&self) -> Option<NonZeroU32> {
+		self.find_property(|v| match v {
+			PropertyValue::Durability(d) => Some(*d),
+			_ => None,
+		})
+	}
+
+	#[inline]
+	pub fn get_tool_data(&self) -> Option<&ToolData> {
+		self.find_property_ref(|v| match v {
+			PropertyValue::ToolData(t) => Some(t),
+			_ => None,
+		})
+	}
+
+	#[inline]
+	pub fn get_armor_data(&self) -> Option<&ArmorData> {
+		self.find_property_ref(|v| match v {
+			PropertyValue::ArmorData(a) => Some(a),
+			_ => None,
+		})
+	}
+
+	#[inline]
+	pub fn get_hunger(&self) -> Option<i16> {
+		self.find_property(|v| match v {
+			PropertyValue::Hunger(h) => Some(*h),
+			_ => None,
+		})
+	}
+
+	#[inline]
+	pub fn get_armor_value(&self) -> Option<i16> {
+		self.find_property(|v| match v {
+			PropertyValue::ArmorValue(a) => Some(*a),
+			_ => None,
+		})
+	}
+
+	#[inline]
+	pub fn get_damage(&self) -> Option<i16> {
+		self.find_property(|v| match v {
+			PropertyValue::Damage(d) => Some(*d),
+			_ => None,
+		})
+	}
+
+	#[inline]
+	pub fn get_speed(&self) -> Option<i16> {
+		self.find_property(|v| match v {
+			PropertyValue::Speed(s) => Some(*s),
+			_ => None,
+		})
+	}
+
+	/// Helper method to find and transform a property
+	#[inline]
+	fn find_property<T, F>(&self, mut f: F) -> Option<T>
+	where
+		F: FnMut(&PropertyValue) -> Option<T>,
+	{
+		self.data.iter()
+			.take(self.len())
+			.filter_map(|slot| slot.as_ref())
+			.find_map(|prop| f(prop))
+	}
+
+	/// Helper method to find and return a reference to a property
+	#[inline]
+	fn find_property_ref<T, F>(&self, mut f: F) -> Option<&T>
+	where
+		F: FnMut(&PropertyValue) -> Option<&T>,
+	{
+		self.data.iter()
+			.take(self.len())
+			.filter_map(|slot| slot.as_ref())
+			.find_map(|prop| f(prop))
+	}
+
+	/// Returns the current number of properties
+	#[inline]
+	pub const fn len(&self) -> usize {
+		self.len as usize
+	}
+
+	/// Returns the maximum capacity of properties
+	#[inline]
+	pub const fn capacity(&self) -> usize {
+		N
+	}
 }
 
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum ToolData {
-    None,
-    Single(ToolType, MaterialLevel),
-    Multiple(ToolSet),
+
+
+
+
+
+pub trait EquipmentType: Copy + Clone {
+	const MAX_VARIANTS: u8;
+	const TO_U8: fn(Self) -> u8;
 }
 
-impl ToolData {
-    #[inline] pub fn is_tool(&self) -> bool {
-        !matches!(self, Self::None)
-    }
-    
-    #[inline] pub fn get_tier(&self, tool_type: ToolType) -> Option<MaterialLevel> {
-        match self {
-            Self::None => None,
-            Self::Single(t, tier) if *t == tool_type => Some(*tier),
-            Self::Single(_, _) => None,
-            Self::Multiple(set) => set.get_tier(tool_type),
-        }
-    }
-    
-    #[inline] pub fn as_single(&self) -> Option<(ToolType, MaterialLevel)> {
-        if let Self::Single(t, tier) = self {
-            Some((*t, *tier))
-        } else {
-            None
-        }
-    }
+impl EquipmentType for ToolType {
+	const MAX_VARIANTS: u8 = 8;
+	const TO_U8: fn(Self) -> u8 = |x| x as u8;
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum ArmorData {
-    None,
-    Single(ArmorType, MaterialLevel),
-    Multiple(ArmorSet),
+impl EquipmentType for ArmorType {
+	const MAX_VARIANTS: u8 = 16;
+	const TO_U8: fn(Self) -> u8 = |x| x as u8;
 }
 
-impl ArmorData {
-    #[inline] pub fn is_armor(&self) -> bool {
-        !matches!(self, Self::None)
-    }
-    
-    #[inline] pub fn get_tier(&self, armor_type: ArmorType) -> Option<MaterialLevel> {
-        match self {
-            Self::None => None,
-            Self::Single(t, tier) if *t == armor_type => Some(*tier),
-            Self::Single(_, _) => None,
-            Self::Multiple(set) => set.get_tier(armor_type),
-        }
-    }
-    
-    #[inline] pub fn as_single(&self) -> Option<(ArmorType, MaterialLevel)> {
-        if let Self::Single(t, tier) = self {
-            Some((*t, *tier))
-        } else {
-            None
-        }
-    }
+// Generic equipment data struct
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct EquipmentTypeSet<T: EquipmentType, S> {
+	slots: S,
+	_phantom: std::marker::PhantomData<T>,
+}
+
+// Type aliases for convenience
+pub type ToolTypeSet = EquipmentTypeSet<ToolType, u8>;
+pub type ArmorTypeSet = EquipmentTypeSet<ArmorType, u16>;
+
+// Trait to handle bit operations for different storage types
+pub trait BitStorage: Copy + Clone + PartialEq + Eq {
+	const ZERO: Self;
+	fn set_bit(&mut self, bit: u8);
+	fn clear_bit(&mut self, bit: u8);
+	fn get_bit(&self, bit: u8) -> bool;
+}
+
+impl BitStorage for u8 {
+	const ZERO: Self = 0;
+	fn set_bit(&mut self, bit: u8) { *self |= 1 << bit; }
+	fn clear_bit(&mut self, bit: u8) { *self &= !(1 << bit); }
+	fn get_bit(&self, bit: u8) -> bool { (*self & (1 << bit)) != 0 }
+}
+
+impl BitStorage for u16 {
+	const ZERO: Self = 0;
+	fn set_bit(&mut self, bit: u8) { *self |= 1 << bit; }
+	fn clear_bit(&mut self, bit: u8) { *self &= !(1 << bit); }
+	fn get_bit(&self, bit: u8) -> bool { (*self & (1 << bit)) != 0 }
+}
+
+impl<T: EquipmentType, S: BitStorage> EquipmentTypeSet<T, S> {
+	pub const fn new() -> Self { 
+		Self { 
+			slots: S::ZERO,
+			_phantom: std::marker::PhantomData,
+		}
+	}
+	
+	pub fn on_u(&mut self, slot: u8) { 
+		self.slots.set_bit(slot);
+	}
+	
+	pub fn off_u(&mut self, slot: u8) { 
+		self.slots.clear_bit(slot);
+	}
+	
+	pub fn is_u(&self, slot: u8) -> bool { 
+		self.slots.get_bit(slot)
+	}
+	
+	pub fn is_empty(&self) -> bool { 
+		self.slots == S::ZERO
+	}
+
+	pub fn on(&mut self, slot: T) { 
+		self.slots.set_bit(T::TO_U8(slot));
+	}
+	
+	pub fn off(&mut self, slot: T) { 
+		self.slots.clear_bit(T::TO_U8(slot));
+	}
+	
+	pub fn is(&self, slot: T) -> bool { 
+		self.slots.get_bit(T::TO_U8(slot))
+	}
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-#[repr(u8)] // Ensure each tool has a u8 (0-255) representation 
+#[repr(u8)]
 pub enum ToolType {
-    Stone,  // pickaxe related thing
-    Wood,   // axe related thing
-    Dirt,   // shovel related thing
-    Crop,   // hoe related thing
-    String, // sword and scissors related thing
-    Metal,  // strong pickaxe related thing
-    // Add up to 2 more tool types as needed (max 8 total)
+	Stone = 0,  // pickaxe related thing
+	Wood = 1,   // axe related thing
+	Dirt = 2,   // shovel related thing
+	Crop = 3,   // hoe related thing
+	String = 4, // sword and scissors related thing
+	Metal = 5,  // strong pickaxe related thing
+	// Add up to 2 more tool types as needed (max 8 total)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct ToolSet {
-    // Bits 0-7: tool types (8 possible types)
-    types: u8,
-    // Packed tiers for each possible tool type
-    // Each tool type gets 8 bits (0-255) in the u64
-    tiers: u64,
+	// Bits 0-7: tool types (8 possible types)
+	types: ToolTypeSet,
+	// Packed tiers for each possible tool type
+	// Each tool type gets 8 bits (0-255) in the u64
+	tiers: u64,
 }
 
 impl ToolSet {
-    #[inline] pub fn new() -> Self {
-        ToolSet {
-            types: 0,
-            tiers: 0,
-        }
-    }
-    #[inline] pub fn add_tool(&mut self, tool_type: ToolType, tier: MaterialLevel) {
-        if self.has_tool(tool_type) {
-            panic!("has that tool type already");
-        }
-        let index = tool_type as u8;
-        self.types |= 1 << index;
-        self.set_tier(index, tier as u8);
-    }
-    #[inline] pub fn remove_tool(&mut self, tool_type: ToolType) {
-        if !self.has_tool(tool_type) {
-            return;
-        }
-        let index = tool_type as u8;
-        self.types &= !(1 << index);
-        self.set_tier(index, 0);
-    }
-    #[inline] pub fn has_tool(&self, tool_type: ToolType) -> bool {
-        let index = tool_type as u8;
-        (self.types & (1 << index)) != 0
-    }
+	#[inline] 
+	pub const fn new() -> Self {
+		ToolSet {
+			types: ToolTypeSet::new(),
+			tiers: 0,
+		}
+	}
+	
+	#[inline] 
+	pub fn add_tool(&mut self, tool_type: ToolType, tier: MaterialLevel) {
+		if self.has_tool(tool_type) {
+			panic!("Tool type already exists");
+		}
+		let index = tool_type as u8;
+		self.types.on_u(index);
+		self.set_tier(index, tier as u8);
+	}
+	
+	#[inline] 
+	pub fn remove_tool(&mut self, tool_type: ToolType) {
+		if !self.has_tool(tool_type) {
+			return;
+		}
+		let index = tool_type as u8;
+		self.types.off_u(index);
+		self.set_tier(index, 0);
+	}
+	
+	#[inline] 
+	pub fn has_tool(&self, tool_type: ToolType) -> bool {
+		self.types.is(tool_type)
+	}
 
-    #[inline] pub fn get_tier(&self, tool_type: ToolType) -> Option<MaterialLevel> {
-        if self.has_tool(tool_type) {
-            let index = tool_type as u8;
-            let tier_byte = ((self.tiers >> (index * 8)) & 0xFF) as u8;
-            Some(unsafe { std::mem::transmute(tier_byte) })
-        } else {
-            None
-        }
-    }
+	#[inline] 
+	pub fn get_tier(&self, tool_type: ToolType) -> Option<MaterialLevel> {
+		if self.has_tool(tool_type) {
+			let index = tool_type as u8;
+			let tier_byte = ((self.tiers >> (index * 8)) & 0xFF) as u8;
+			Some(unsafe { std::mem::transmute(tier_byte) })
+		} else {
+			None
+		}
+	}
 
-    #[inline] pub fn iter(&self) -> impl Iterator<Item = (ToolType, MaterialLevel)> + '_ {
-        (0..8).filter_map(move |i| {
-            if (self.types & (1 << i)) != 0 {
-                let tier_byte = ((self.tiers >> (i * 8)) & 0xFF) as u8;
-                Some((
-                    unsafe { std::mem::transmute(i as u8) },
-                    unsafe { std::mem::transmute(tier_byte) },
-                ))
-            } else {
-                None
-            }
-        })
-    }
+	#[inline] 
+	pub fn iter(&self) -> impl Iterator<Item = (ToolType, MaterialLevel)> + '_ {
+		(0..8).filter_map(move |i| {
+			if self.types.is_u(i) {
+				let tier_byte = ((self.tiers >> (i * 8)) & 0xFF) as u8;
+				Some((
+					unsafe { std::mem::transmute(i as u8) },
+					unsafe { std::mem::transmute(tier_byte) },
+				))
+			} else {
+				None
+			}
+		})
+	}
 
-    #[inline] fn set_tier(&mut self, index: u8, tier: u8) {
-        let shift = index * 8;
-        self.tiers &= !(0xFF << shift); // Clear the existing tier
-        self.tiers |= (tier as u64) << shift; // Set the new tier
-    }
+	#[inline] 
+	fn set_tier(&mut self, index: u8, tier: u8) {
+		let shift = index * 8;
+		self.tiers &= !(0xFF << shift); // Clear the existing tier
+		self.tiers |= (tier as u64) << shift; // Set the new tier
+	}
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-#[repr(u8)] // Ensure each armor has a u8 (0-255) representation 
+#[repr(u8)]
 pub enum ArmorType {
-    //Core Armor Slots (Typically Fixed Slots) 
-    Head, // – Helmets, Hats, Crowns, Masks
-    Torso, // – Chestplates, Robes, Tunics, Breastplates
-    Legs, // – Greaves, Leggings, Pants, Skirts
-    Feet, // – Boots, Sandals, Sabatons
-    Arms, // – Pauldrons, Spaulders, Arm Guards
-    Hands, // – Gauntlets, Gloves, Bracers
-    Back, // – Cloaks, Capes, Wings, Backpacks
-    Neck, // – Amulets, Necklaces, Pendants
-    Finger, // – Rings (often allows 1-2 equipped)
-    //Additional/Expanded Slots 
-    Shoulders, // – Separate from Arms (common in games like WoW)
-    Waist, // – Belts, Sashes, Girdles
-    Eyes, // – Goggles, Glasses, Blindfolds
-    Face, // – Masks, Veils (sometimes separate from Head)
-    Aura, // – Cosmetic or buff-granting effects (e.g., "Holy Aura")
-    Pocket, // – Utility items (e.g., Thieves' Tools, Quivers)
-    // Add up to 1 more armor types as needed (max 16 total)
+	//Core Armor Slots (Typically Fixed Slots) 
+	Head = 0, // – Helmets, Hats, Crowns, Masks
+	Torso = 1, // – Chestplates, Robes, Tunics, Breastplates
+	Legs = 2, // – Greaves, Leggings, Pants, Skirts
+	Feet = 3, // – Boots, Sandals, Sabatons
+	Arms = 4, // – Pauldrons, Spaulders, Arm Guards
+	Hands = 5, // – Gauntlets, Gloves, Bracers
+	Back = 6, // – Cloaks, Capes, Wings, Backpacks
+	Neck = 7, // – Amulets, Necklaces, Pendants
+	Finger = 8, // – Rings (often allows 1-2 equipped)
+	//Additional/Expanded Slots 
+	Shoulders = 9, // – Separate from Arms (common in games like WoW)
+	Waist = 10, // – Belts, Sashes, Girdles
+	Eyes = 11, // – Goggles, Glasses, Blindfolds
+	Face = 12, // – Masks, Veils (sometimes separate from Head)
+	Pocket = 13, // – Utility items (e.g., Thieves' Tools, Quivers)
+	Aura = 14, // – Cosmetic or buff-granting effects (e.g., "Holy Aura")
+	// Add up to 1 more armor types as needed (max 16 total)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct ArmorSet {
-    // Bits 0-15: armor types (16 possible types)
-    types: u16,
-    // Packed tiers for each possible armor type
-    // Each armor type gets 8 bits (0-255) in the u128
-    tiers: u128,
+	// Bits 0-15: armor types (16 possible types)
+	types: ArmorTypeSet,
+	// Packed tiers for each possible armor type
+	// Each armor type gets 8 bits (0-255) in the u128
+	tiers: u128,
 }
 
 impl ArmorSet {
-    #[inline] pub fn new() -> Self {
-        ArmorSet {
-            types: 0,
-            tiers: 0,
-        }
-    }
-    
-    #[inline] pub fn add_armor(&mut self, armor_type: ArmorType, tier: MaterialLevel) {
-        if self.has_armor(armor_type) {
-            panic!("has that armor type already");
-        }
-        let index = armor_type as u8;
-        self.types |= 1 << index;
-        self.set_tier(index, tier as u8);
-    }
-    
-    #[inline] pub fn remove_armor(&mut self, armor_type: ArmorType) {
-        if !self.has_armor(armor_type) {
-            return;
-        }
-        let index = armor_type as u8;
-        self.types &= !(1 << index);
-        self.set_tier(index, 0);
-    }
-    
-    #[inline] pub fn has_armor(&self, armor_type: ArmorType) -> bool {
-        let index = armor_type as u8;
-        (self.types & (1 << index)) != 0
-    }
+	#[inline] 
+	pub const fn new() -> Self {
+		ArmorSet {
+			types: ArmorTypeSet::new(),
+			tiers: 0,
+		}
+	}
+	
+	#[inline] 
+	pub fn add_armor(&mut self, armor_type: ArmorType, tier: MaterialLevel) {
+		if self.has_armor(armor_type) {
+			panic!("Armor type already exists");
+		}
+		let index = armor_type as u8;
+		self.types.on_u(index);
+		self.set_tier(index, tier as u8);
+	}
+	
+	#[inline] 
+	pub fn remove_armor(&mut self, armor_type: ArmorType) {
+		if !self.has_armor(armor_type) {
+			return;
+		}
+		let index = armor_type as u8;
+		self.types.off_u(index);
+		self.set_tier(index, 0);
+	}
+	
+	#[inline] 
+	pub fn has_armor(&self, armor_type: ArmorType) -> bool {
+		self.types.is(armor_type)
+	}
 
-    #[inline] pub fn get_tier(&self, armor_type: ArmorType) -> Option<MaterialLevel> {
-        if self.has_armor(armor_type) {
-            let index = armor_type as u8;
-            let tier_byte = ((self.tiers >> (index * 8)) & 0xFF) as u8;
-            Some(unsafe { std::mem::transmute(tier_byte) })
-        } else {
-            None
-        }
-    }
+	#[inline] 
+	pub fn get_tier(&self, armor_type: ArmorType) -> Option<MaterialLevel> {
+		if self.has_armor(armor_type) {
+			let index = armor_type as u8;
+			let tier_byte = ((self.tiers >> (index * 8)) & 0xFF) as u8;
+			Some(unsafe { std::mem::transmute(tier_byte) })
+		} else {
+			None
+		}
+	}
 
-    #[inline] pub fn iter(&self) -> impl Iterator<Item = (ArmorType, MaterialLevel)> + '_ {
-        (0..16).filter_map(move |i| {
-            if (self.types & (1 << i)) != 0 {
-                let tier_byte = ((self.tiers >> (i * 8)) & 0xFF) as u8;
-                Some((
-                    unsafe { std::mem::transmute(i as u8) },
-                    unsafe { std::mem::transmute(tier_byte) },
-                ))
-            } else {
-                None
-            }
-        })
-    }
+	#[inline] 
+	pub fn iter(&self) -> impl Iterator<Item = (ArmorType, MaterialLevel)> + '_ {
+		(0..16).filter_map(move |i| {
+			if self.types.is_u(i) {
+				let tier_byte = ((self.tiers >> (i * 8)) & 0xFF) as u128;
+				Some((
+					unsafe { std::mem::transmute(i as u8) },
+					unsafe { std::mem::transmute(tier_byte as u8) },
+				))
+			} else {
+				None
+			}
+		})
+	}
 
-    #[inline] fn set_tier(&mut self, index: u8, tier: u8) {
-        let shift = index * 8;
-        self.tiers &= !(0xFF << shift); // Clear the existing tier
-        self.tiers |= (tier as u128) << shift; // Set the new tier
-    }
+	#[inline] 
+	fn set_tier(&mut self, index: u8, tier: u8) {
+		let shift = index * 8;
+		self.tiers &= !(0xFF << shift); // Clear the existing tier
+		self.tiers |= (tier as u128) << shift; // Set the new tier
+	}
 }
 
+// Generic equipment data enum
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum EquipmentData<T: EquipmentType, S> {
+	None,
+	Single { equip_type: T, tier: MaterialLevel },
+	Multiple(S),
+}
 
+// Type aliases for convenience
+pub type ToolData = EquipmentData<ToolType, ToolSet>;
+pub type ArmorData = EquipmentData<ArmorType, ArmorSet>;
+
+// Trait for equipment sets to provide get_tier method
+pub trait EquipmentSet<T: EquipmentType> {
+	fn get_tier(&self, equip_type: T) -> Option<MaterialLevel>;
+}
+
+impl EquipmentSet<ToolType> for ToolSet {
+	fn get_tier(&self, equip_type: ToolType) -> Option<MaterialLevel> {
+		self.get_tier(equip_type)
+	}
+}
+
+impl EquipmentSet<ArmorType> for ArmorSet {
+	fn get_tier(&self, equip_type: ArmorType) -> Option<MaterialLevel> {
+		self.get_tier(equip_type)
+	}
+}
+
+impl<T: EquipmentType + PartialEq, S: EquipmentSet<T>> EquipmentData<T, S> {
+	pub const fn none() -> Self {
+		Self::None
+	}
+	
+	pub const fn single(equip_type: T, tier: MaterialLevel) -> Self {
+		Self::Single { equip_type, tier }
+	}
+	
+	#[inline]
+	pub const fn is_equipment(&self) -> bool {
+		!matches!(self, Self::None)
+	}
+	
+	pub fn get_tier(&self, equip_type: T) -> Option<MaterialLevel> {
+		match self {
+			Self::None => None,
+			Self::Single { equip_type: t, tier } if *t == equip_type => Some(*tier),
+			Self::Single { .. } => None,
+			Self::Multiple(set) => set.get_tier(equip_type),
+		}
+	}
+	
+	#[inline]
+	pub const fn as_single(&self) -> Option<(T, MaterialLevel)> {
+		match self {
+			Self::Single { equip_type, tier } => Some((*equip_type, *tier)),
+			_ => None,
+		}
+	}
+}
