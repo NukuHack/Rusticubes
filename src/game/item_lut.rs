@@ -1,39 +1,10 @@
 use crate::game::material::MaterialLevel;
 use crate::game::items::ItemId;
-use ahash::AHasher;
 use std::{
-	collections::HashMap,
-	hash::BuildHasherDefault,
 	num::NonZeroU32,
 	cmp::PartialEq,
 	marker::PhantomData,
 };
-
-type FastMap<K, V> = HashMap<K, V, BuildHasherDefault<AHasher>>;
-
-// Global registry that's initialized at program start
-pub struct ItemRegistry {
-	components: FastMap<ItemId, ItemComp>,
-}
-
-impl ItemRegistry {
-	pub fn new() -> Self {
-		Self {
-			components: FastMap::with_capacity_and_hasher(100, BuildHasherDefault::<AHasher>::default())
-		}
-	}
-	
-	#[inline] pub fn register(&mut self, component: ItemComp) {
-		if self.contains(component.id) { return; }
-		self.components.insert(component.id, component);
-	}
-	#[inline] pub fn contains(&self, id: ItemId) -> bool {
-		self.components.contains_key(&id)
-	}
-	#[inline] pub fn get_component(&self, id: ItemId) -> Option<&ItemComp> {
-		self.components.get(&id)
-	}
-}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct ItemFlags(u32);
@@ -61,7 +32,7 @@ pub struct ItemComp {
 	pub max_stack: u32,
 	pub flags: ItemFlags,
 	// Optional data stored separately to avoid memory overhead when not needed
-	pub data: Option<Box<ItemExtendedData>>,
+	pub data: Option<ItemExtendedData>,
 }
 
 impl ItemComp {
@@ -74,7 +45,13 @@ impl ItemComp {
 			data: None,
 		}
 	}
-	pub const fn new(id: ItemId, name: &'static str) -> Self {
+	pub const fn new(id: u16, name: &'static str) -> Self {
+		Self::new_i(ItemId(id), name)
+	}
+	pub const fn error() -> Self {
+		Self::new_i(ItemId(0), "0")
+	}
+	pub const fn new_i(id: ItemId, name: &'static str) -> Self {
 		Self {
 			id,
 			name,
@@ -95,27 +72,27 @@ impl ItemComp {
 		// Note: This can't be const if Box::new isn't const
 		// If you need it to be const, you'll need to adjust ItemExtendedData
 		Self {
-			data: Some(Box::new(data)),
+			data: Some(data),
 			..self
 		}
 	}
-	#[inline] pub fn as_block(self) -> Self { 
+	#[inline] pub const fn as_block(self) -> Self { 
 		Self {
 			flags: self.flags.with_flag(ItemFlags::IS_BLOCK),
 			..self
 		}
 	}
-	#[inline] pub fn as_tool(self, tool_data: ToolData) -> Self {
+	#[inline] pub const fn as_tool(self, tool_data: ToolData) -> Self {
 		Self { 
 			flags: self.flags.with_flag(ItemFlags::IS_TOOL),
-			data: Some(Box::new(ItemExtendedData::new().with_tool_data(tool_data))),
+			data: Some(ItemExtendedData::new().with_tool_data(tool_data)),
 			..self 
 		}
 	}
-	#[inline] pub fn as_armor(self, armor_data: ArmorData) -> Self {
+	#[inline] pub const fn as_armor(self, armor_data: ArmorData) -> Self {
 		Self { 
 			flags: self.flags.with_flag(ItemFlags::IS_ARMOR),
-			data: Some(Box::new(ItemExtendedData::new().with_armor_data(armor_data))),
+			data: Some(ItemExtendedData::new().with_armor_data(armor_data)),
 			..self 
 		}
 	}
@@ -151,7 +128,45 @@ pub enum PropertyValue {
 	Damage(i16),
 	Speed(i16),
 }
-
+impl PropertyValue {
+	/// Returns the variant tag for this property (const-compatible)
+	#[inline] pub const fn variant_tag(&self) -> PropertyVariantTag {
+		match self {
+			PropertyValue::Durability(_) => PropertyVariantTag::Durability,
+			PropertyValue::ToolData(_) => PropertyVariantTag::ToolData,
+			PropertyValue::ArmorData(_) => PropertyVariantTag::ArmorData,
+			PropertyValue::Hunger(_) => PropertyVariantTag::Hunger,
+			PropertyValue::ArmorValue(_) => PropertyVariantTag::ArmorValue,
+			PropertyValue::Damage(_) => PropertyVariantTag::Damage,
+			PropertyValue::Speed(_) => PropertyVariantTag::Speed,
+		}
+	}
+}
+#[derive(Debug, Clone, Copy, Eq, Hash, PartialEq)]
+pub enum PropertyVariantTag {
+	Durability,
+	ToolData,
+	ArmorData,
+	Hunger,
+	ArmorValue,
+	Damage,
+	Speed,
+}
+// Manually implement PartialEq with const fn
+impl PropertyVariantTag {
+	#[inline] pub const fn eq(&self, other: &Self) -> bool {
+		matches!(
+			(self, other),
+			(PropertyVariantTag::Durability, PropertyVariantTag::Durability)
+			| (PropertyVariantTag::ToolData, PropertyVariantTag::ToolData)
+			| (PropertyVariantTag::ArmorData, PropertyVariantTag::ArmorData)
+			| (PropertyVariantTag::Hunger, PropertyVariantTag::Hunger)
+			| (PropertyVariantTag::ArmorValue, PropertyVariantTag::ArmorValue)
+			| (PropertyVariantTag::Damage, PropertyVariantTag::Damage)
+			| (PropertyVariantTag::Speed, PropertyVariantTag::Speed)
+		)
+	}
+}
 // Constants for configuration
 const DEFAULT_MAX_PROPERTIES: usize = 4;
 
@@ -179,34 +194,32 @@ impl<const N: usize> ItemExtendedData<N> {
 	}
 
 	// Property setters
-	#[inline] pub fn with_durability(self, value: NonZeroU32) -> Self {
+	#[inline] pub const fn with_durability(self, value: NonZeroU32) -> Self {
 		self.set_property(PropertyValue::Durability(value))
 	}
-	#[inline] pub fn with_tool_data(self, value: ToolData) -> Self {
+	#[inline] pub const fn with_tool_data(self, value: ToolData) -> Self {
 		self.set_property(PropertyValue::ToolData(value))
 	}
-	#[inline] pub fn with_armor_data(self, value: ArmorData) -> Self {
+	#[inline] pub const fn with_armor_data(self, value: ArmorData) -> Self {
 		self.set_property(PropertyValue::ArmorData(value))
 	}
-	#[inline] pub fn with_hunger(self, value: i16) -> Self {
+	#[inline] pub const fn with_hunger(self, value: i16) -> Self {
 		self.set_property(PropertyValue::Hunger(value))
 	}
-	#[inline] pub fn with_armor(self, value: i16) -> Self {
+	#[inline] pub const fn with_armor(self, value: i16) -> Self {
 		self.set_property(PropertyValue::ArmorValue(value))
 	}
-	#[inline] pub fn with_damage(self, value: i16) -> Self {
+	#[inline] pub const fn with_damage(self, value: i16) -> Self {
 		self.set_property(PropertyValue::Damage(value))
 	}
-	#[inline] pub fn with_speed(self, value: i16) -> Self {
+	#[inline] pub const fn with_speed(self, value: i16) -> Self {
 		self.set_property(PropertyValue::Speed(value))
 	}
 
 	/// Internal method to set or update a property
-	#[inline] pub fn set_property(mut self, new_value: PropertyValue) -> Self {
-		let property_type = std::mem::discriminant(&new_value);
-
+	#[inline] pub const fn set_property(mut self, new_value: PropertyValue) -> Self {
 		// Check for existing property of same type
-		if self.has_property(property_type) {
+		if self.has_property(new_value.variant_tag()) {
 			return self;
 		}
 
@@ -219,10 +232,18 @@ impl<const N: usize> ItemExtendedData<N> {
 		self
 	}
 
-	#[inline] pub fn has_property(&self, discriminant: std::mem::Discriminant<PropertyValue>) -> bool {
-		self.data.iter()
-			.take(self.len())
-			.any(|slot| slot.as_ref().map_or(false, |p| std::mem::discriminant(p) == discriminant))
+	#[inline] pub const fn has_property(&self, expected_variant: PropertyVariantTag) -> bool {
+		let mut i = 0;
+		while i < self.len as usize {
+			if let Some(prop) = &self.data[i] {
+				// Compare the discriminant directly in const context
+				if prop.variant_tag().eq(&expected_variant) {
+					return true;
+				}
+			}
+			i += 1;
+		}
+		false
 	}
 
 	// Property getters

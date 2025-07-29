@@ -2,10 +2,11 @@
 use crate::ext::config::CameraConfig;
 use crate::world::manager::get_save_path;
 use crate::world::manager::ensure_save_dir;
-use std::path::PathBuf;
 use crate::game::player;
 use crate::ext::ptr;
 use crate::world;
+use crate::game::items::{ItemStack, ItemId};
+use std::path::PathBuf;
 use std::sync::atomic::Ordering;
 use glam::Vec3;
 
@@ -56,7 +57,7 @@ impl GameState {
 		let state = ptr::get_state();
 		let offset = Vec3::new(0., 1.7, 0.); let pos = Vec3::new(0.5,0.5,0.5);
 		let mut player = player::Player::new(CameraConfig::new(offset), pos, state.device(), *state.size(), &state.render_context.layouts[1]);
-		//player.inventory_mut().hotbar_mut().set_def(0);
+		player.inventory_mut().hotbar_mut().set(0, Some(ItemStack::new_i(ItemId::from_str("brick_grey")))); // idx, item
 		
 		// Create the save path
 		let save_path = get_save_path()
