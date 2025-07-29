@@ -732,13 +732,13 @@ impl UIManager {
 		let crosshair_v = UIElement::panel(self.next_id())
 			.with_position(0.0, -0.02)
 			.with_size(0.02, 0.06)
-			.with_style(&theme.panels.nice)
+			.with_style(&theme.panels.extra())
 			.with_z_index(20);
 		let crosshair_h = UIElement::panel(self.next_id())
 			.with_position(-0.02, 0.0)
 			.with_size(0.06, 0.02)
 			.with_vertical(true)
-			.with_style(&theme.panels.nice)
+			.with_style(&theme.panels.extra())
 			.with_z_index(20);
 
 		self.add_element(crosshair_v);

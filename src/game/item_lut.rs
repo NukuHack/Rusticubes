@@ -322,21 +322,19 @@ pub trait EquipmentType: Copy + Clone {
 	// Add a safe conversion from u8
 	fn from_u8(value: u8) -> Option<Self>;
 }
-
 impl EquipmentType for ToolType {
 	const MAX_VARIANTS: u8 = 8;
 	const TO_U8: fn(Self) -> u8 = |x| x as u8;
 	
-	fn from_u8(value: u8) -> Option<Self> {
+	#[inline] fn from_u8(value: u8) -> Option<Self> {
 		unsafe { std::mem::transmute(value) }
 	}
 }
-
 impl EquipmentType for ArmorType {
 	const MAX_VARIANTS: u8 = 16;
 	const TO_U8: fn(Self) -> u8 = |x| x as u8;
 	
-	fn from_u8(value: u8) -> Option<Self> {
+	#[inline] fn from_u8(value: u8) -> Option<Self> {
 		unsafe { std::mem::transmute(value) }
 	}
 }
@@ -355,54 +353,46 @@ pub trait BitStorage: Copy + Clone + PartialEq + Eq {
 	fn clear_bit(&mut self, bit: u8);
 	fn get_bit(&self, bit: u8) -> bool;
 }
-
 impl BitStorage for u8 {
 	const ZERO: Self = 0;
-	fn set_bit(&mut self, bit: u8) { *self |= 1 << bit; }
-	fn clear_bit(&mut self, bit: u8) { *self &= !(1 << bit); }
-	fn get_bit(&self, bit: u8) -> bool { (*self & (1 << bit)) != 0 }
+	#[inline] fn set_bit(&mut self, bit: u8) { *self |= 1 << bit; }
+	#[inline] fn clear_bit(&mut self, bit: u8) { *self &= !(1 << bit); }
+	#[inline] fn get_bit(&self, bit: u8) -> bool { (*self & (1 << bit)) != 0 }
 }
-
 impl BitStorage for u16 {
 	const ZERO: Self = 0;
-	fn set_bit(&mut self, bit: u8) { *self |= 1 << bit; }
-	fn clear_bit(&mut self, bit: u8) { *self &= !(1 << bit); }
-	fn get_bit(&self, bit: u8) -> bool { (*self & (1 << bit)) != 0 }
+	#[inline] fn set_bit(&mut self, bit: u8) { *self |= 1 << bit; }
+	#[inline] fn clear_bit(&mut self, bit: u8) { *self &= !(1 << bit); }
+	#[inline] fn get_bit(&self, bit: u8) -> bool { (*self & (1 << bit)) != 0 }
 }
 
 impl<T: EquipmentType, S: BitStorage> EquipmentTypeSet<T, S> {
-	pub const fn new() -> Self { 
+	#[inline] pub const fn new() -> Self { 
 		Self { 
 			slots: S::ZERO,
 			_phantom: PhantomData,
 		}
 	}
 	
-	pub fn on_u(&mut self, slot: u8) { 
+	#[inline] pub fn on_u(&mut self, slot: u8) { 
 		self.slots.set_bit(slot);
 	}
-	
-	pub fn off_u(&mut self, slot: u8) { 
+	#[inline] pub fn off_u(&mut self, slot: u8) { 
 		self.slots.clear_bit(slot);
 	}
-	
-	pub fn is_u(&self, slot: u8) -> bool { 
+	#[inline] pub fn is_u(&self, slot: u8) -> bool { 
 		self.slots.get_bit(slot)
 	}
-	
-	pub fn is_empty(&self) -> bool { 
+	#[inline] pub fn is_empty(&self) -> bool { 
 		self.slots == S::ZERO
 	}
-
-	pub fn on(&mut self, slot: T) { 
+	#[inline] pub fn on(&mut self, slot: T) { 
 		self.slots.set_bit(T::TO_U8(slot));
 	}
-	
-	pub fn off(&mut self, slot: T) { 
+	#[inline] pub fn off(&mut self, slot: T) { 
 		self.slots.clear_bit(T::TO_U8(slot));
 	}
-	
-	pub fn is(&self, slot: T) -> bool { 
+	#[inline] pub fn is(&self, slot: T) -> bool { 
 		self.slots.get_bit(T::TO_U8(slot))
 	}
 }
@@ -452,8 +442,7 @@ pub struct EquipmentSetStruct<T: EquipmentType, S: BitStorage, TierStorage> {
 }
 
 impl<T: EquipmentType, S: BitStorage, TS: TierStorage> EquipmentSetStruct<T, S, TS> {
-	#[inline] 
-	pub const fn new() -> Self {
+	#[inline] pub const fn new() -> Self {
 		EquipmentSetStruct {
 			types: EquipmentTypeSet::new(),
 			tiers: TS::ZERO,
@@ -468,31 +457,25 @@ pub trait TierStorage: Copy + Clone + PartialEq + Eq {
 	fn get_tier(&self, index: u8) -> u8;
 	fn max_types() -> u8;
 }
-
 impl TierStorage for u64 {
 	const ZERO: Self = 0;
-	fn set_tier(&mut self, index: u8, tier: u8) {
+	#[inline] fn set_tier(&mut self, index: u8, tier: u8) {
 		let shift = index * 8;
 		*self &= !(0xFF << shift); // Clear the existing tier
 		*self |= (tier as u64) << shift; // Set the new tier
 	}
-	fn get_tier(&self, index: u8) -> u8 {
-		((self >> (index * 8)) & 0xFF) as u8
-	}
-	fn max_types() -> u8 { 8 }
+	#[inline] fn get_tier(&self, index: u8) -> u8 { ((self >> (index * 8)) & 0xFF) as u8 }
+	#[inline] fn max_types() -> u8 { 8 }
 }
-
 impl TierStorage for u128 {
 	const ZERO: Self = 0;
-	fn set_tier(&mut self, index: u8, tier: u8) {
+	#[inline] fn set_tier(&mut self, index: u8, tier: u8) {
 		let shift = index * 8;
 		*self &= !(0xFF << shift); // Clear the existing tier
 		*self |= (tier as u128) << shift; // Set the new tier
 	}
-	fn get_tier(&self, index: u8) -> u8 {
-		((self >> (index * 8)) & 0xFF) as u8
-	}
-	fn max_types() -> u8 { 16 }
+	#[inline] fn get_tier(&self, index: u8) -> u8 { ((self >> (index * 8)) & 0xFF) as u8 }
+	#[inline] fn max_types() -> u8 { 16 }
 }
 
 impl<T: EquipmentType, S: BitStorage, TS: TierStorage> EquipmentSetStruct<T, S, TS> {
@@ -506,8 +489,7 @@ impl<T: EquipmentType, S: BitStorage, TS: TierStorage> EquipmentSetStruct<T, S, 
 		self.set_tier(index, tier as u8);
 	}
 	
-	#[inline] 
-	pub fn remove_equipment(&mut self, equip_type: T) {
+	#[inline] pub fn remove_equipment(&mut self, equip_type: T) {
 		if !self.has_equipment(equip_type) {
 			return;
 		}
@@ -516,8 +498,7 @@ impl<T: EquipmentType, S: BitStorage, TS: TierStorage> EquipmentSetStruct<T, S, 
 		self.set_tier(index, 0);
 	}
 	
-	#[inline] 
-	pub fn has_equipment(&self, equip_type: T) -> bool {
+	#[inline] pub fn has_equipment(&self, equip_type: T) -> bool {
 		self.types.is(equip_type)
 	}
 

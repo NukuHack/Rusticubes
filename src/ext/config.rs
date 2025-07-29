@@ -271,7 +271,7 @@ impl UITheme {
 					text_color: None,
 				},
 				extra: Some(ElementStyle {
-					color: Color::rgb(255, 100, 100),
+					color: Color::rgb(0x80, 0x80, 0x80),
 					border: Border::NONE,
 					text_color: None,
 				}),
