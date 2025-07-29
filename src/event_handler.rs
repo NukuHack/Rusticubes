@@ -120,6 +120,12 @@ impl<'a> crate::State<'a> {
 								return true
 							}
 						},
+						Key::KeyL => {
+							if is_pressed {
+								extra::add_full_chunk();
+								return true
+							}
+						},
 						Key::KeyI => {
 							if is_pressed {
 								let state = ptr::get_state();
@@ -163,12 +169,6 @@ impl<'a> crate::State<'a> {
 									_ => return false,
 								}
 								state.ui_manager.setup_ui();
-								return true
-							}
-						},
-						Key::KeyL => {
-							if is_pressed {
-								extra::add_full_chunk();
 								return true
 							}
 						},
@@ -296,8 +296,17 @@ impl<'a> crate::State<'a> {
 						MouseScrollDelta::LineDelta(_, y) => y * -0.5,
 						MouseScrollDelta::PixelDelta(pos) => pos.y as f32 * -0.01,
 					}; // delta is reversed for some reason ... might need to look into it more (maybe it's different for platforms so yeah)
-					ptr::get_gamestate().player_mut().inventory_mut().step_select_slot(delta);
-					ptr::get_state().ui_manager.setup_ui();
+					let state = ptr::get_state();
+					match state.ui_manager.state.clone() {
+						manager::UIState::Inventory(_) => {
+							// item interaction i guess
+						},
+						manager::UIState::InGame => {
+							ptr::get_gamestate().player_mut().inventory_mut().step_select_slot(delta);
+							ptr::get_state().ui_manager.setup_ui();
+						}
+						_ => return false,
+					}
 				}
 				true
 			}

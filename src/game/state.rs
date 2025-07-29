@@ -16,6 +16,7 @@ pub struct GameState {
 	player: player::Player,
 	world: world::main::World, // lol main data storage :)
 	save_path: std::path::PathBuf,
+	world_seed: u32,
 	is_running: bool,
 }
 
@@ -52,8 +53,7 @@ pub fn make_world(save_path: PathBuf) {
 
 #[allow(dead_code)]
 impl GameState {
-	#[inline]
-	pub fn new(worldname: &str) -> Self {
+	#[inline] pub fn new(worldname: &str) -> Self {
 		let state = ptr::get_state();
 		let offset = Vec3::new(0., 1.7, 0.); let pos = Vec3::new(0.5,0.5,0.5);
 		let mut player = player::Player::new(CameraConfig::new(offset), pos, state.device(), *state.size(), &state.render_context.layouts[1]);
@@ -66,16 +66,31 @@ impl GameState {
 
 		make_world(save_path.clone());
 
-		match world::manager::update_world_data(&save_path) {
-			Ok(_) => (), // Everything is fine, do nothing
-			Err(e) => println!("Error updating world data: {}", e),
-		}
-		
+		let creation_date:u64 = match world::manager::update_world_data(&save_path) {
+			Ok(time) => time.to_unix_timestamp(), // Everything is fine, do nothing
+			Err(e) => {
+				println!("Error updating world data: {}", e);
+				0
+			},
+		};
+		// Combine worldname and creation_date into a seed
+		let world_seed = {
+			// Simple but effective hash function
+			let mut hash: u32 = 0;
+			for (i, c) in worldname.chars().enumerate() {
+				hash = hash.wrapping_add(c as u32)
+						  .wrapping_mul(i as u32 + 1)
+						  .wrapping_add(creation_date as u32)
+						  .rotate_left(3);
+			}
+			hash.wrapping_add(creation_date as u32)
+		};
 		Self {
 			worldname: worldname.to_string(),
 			player,
 			world: world::main::World::empty(),
 			save_path,
+			world_seed,
 			is_running: false,
 		}
 	}
@@ -103,10 +118,8 @@ impl GameState {
 	#[inline] pub const fn running(&mut self) -> &mut bool {
 		&mut self.is_running
 	}
-
-
 	#[inline] pub const fn seed(&self) -> &u32 {
-		&0u32
+		&self.world_seed
 	}
 }
 
