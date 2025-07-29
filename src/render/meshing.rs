@@ -68,7 +68,6 @@ impl InstanceRaw {
 pub struct ChunkMeshBuilder {
 	pub instances: Vec<InstanceRaw>,
 }
-const EXTRA_BLOCK_DATA_OFFSET:u32 = 1u32; // currently only a single one : air 
 impl ChunkMeshBuilder {
 	/// Creates a new mesh builder with optimized initial capacity
 	#[inline] pub fn new() -> Self {
@@ -87,7 +86,7 @@ impl ChunkMeshBuilder {
 			if !self.should_cull_face(neighbor_pos, chunk, &neighbors) {
 				let pos = u16::from(BlockPosition::from(pos)) as u32;
 				self.instances.push(InstanceRaw {
-					packed_data: (pos | (idx as u32) << 12 | (id as u32 - EXTRA_BLOCK_DATA_OFFSET) << 16)
+					packed_data: (pos | (idx as u32) << 12 | (id as u32) << 16)
 				});
 			}
 		}

@@ -1,7 +1,7 @@
 
 use wgpu::util::DeviceExt;
 use glam::IVec3;
-use crate::block::main::{Block, Chunk};
+use crate::block::main::Chunk;
 use crate::block::math::{ChunkCoord, BlockPosition};
 use crate::render::meshing::{ChunkMeshBuilder, GeometryBuffer};
 use crate::ext::ptr;
@@ -62,12 +62,7 @@ impl Chunk {
 				continue;
 			}
 			let local_pos:IVec3 = BlockPosition::from(pos).into();
-			match block {
-				Block::Simple(..) => {
-					builder.add_cube(local_pos, block.material(), &self, &neighbors);
-				},
-				_ => {},
-			}
+			builder.add_cube(local_pos, block.material().inner(), &self, &neighbors);
 		}
 
 		self.mesh = Some(builder.build(device));

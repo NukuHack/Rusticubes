@@ -1,7 +1,7 @@
 
 use crate::world::main::World;
 use crate::block::math::{BlockRotation, ChunkCoord};
-use crate::block::main::{Block, Chunk, BlockStorage};
+use crate::block::main::{Block, Material, Chunk, BlockStorage};
 use crate::ext::ptr;
 use crate::hs::time;
 use std::path::{Path, PathBuf};
@@ -271,7 +271,7 @@ impl Chunk {
 			}
 			let block = Block::from_binary(&bytes[offset..])?;
 			let block_size = block.binary_size();
-			// Check if block_size would exceed bounds
+			// Check if offset would exceed bounds
 			if offset + block_size > bytes.len() {
 				return None;
 			}
@@ -371,40 +371,25 @@ impl BlockRotation {
 impl Block {
 	/// Serializes the block to a binary format
 	pub fn to_binary(&self) -> Vec<u8> {
-		match self {
-			Block::None => vec![0],
-			Block::Simple(material, rotation) => {
-				let mut data = vec![1];
-				data.extend_from_slice(&material.to_le_bytes());
-				data.push(rotation.to_byte());
-				data
-			}
-		}
+		let mut data = vec![];
+		data.extend_from_slice(&self.material.inner().to_le_bytes());
+		data.push(self.rotation.to_byte());
+		data
 	}
 	
 	/// Deserializes the block from binary format
 	pub fn from_binary(bytes: &[u8]) -> Option<Block> {
 		if bytes.len() == 0 { return None; }
-		let block_type = bytes.get(0)?;
 		
-		match block_type {
-			0 => Some(Block::None),
-			1 => {
-				if bytes.len() < 4 { return None; }
-				let material = u16::from_le_bytes([bytes[1], bytes[2]]);
-				let rotation = BlockRotation::from_byte(bytes[3])?;
-				Some(Block::Simple(material, rotation))
-			}
-			_ => None,
-		}
+		if bytes.len() < 3 { return None; }
+		let material = u16::from_le_bytes([bytes[1], bytes[2]]);
+		let rotation = BlockRotation::from_byte(bytes[3])?;
+		Some(Block::from(Material::from(material), rotation))
 	}
 	
 	/// Returns the size of the binary representation
 	pub fn binary_size(&self) -> usize {
-		match self {
-			Block::None => 1,
-			Block::Simple(_, _) => 1 + mem::size_of::<u16>() + 1,
-		}
+		mem::size_of::<u16>() + mem::size_of::<BlockRotation>()
 	}
 }
 

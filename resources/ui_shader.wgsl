@@ -1,12 +1,12 @@
 struct VertexInput {
     @location(0) position: vec2<f32>,
-    @location(1) packed_data: u32, // This matches your Rust struct
+    @location(1) color: u32, // This matches your Rust struct
 };
 
 struct VertexOutput {
+    @builtin(position) position: vec4<f32>,
     @location(0) uv: vec2<f32>,
     @location(1) color: vec4<f32>,
-    @builtin(position) position: vec4<f32>,
 };
 
 // Your existing unpack_color function
@@ -32,7 +32,7 @@ fn vs_main(
         select(1.0, 0.0, (vert_idx & 2u) == 2u)   // V (vertical) coordinate
     );
     
-    out.color = unpack_color(in.packed_data);
+    out.color = unpack_color(in.color);
     out.position = vec4<f32>(in.position, 0.0, 1.0);
     return out;
 }

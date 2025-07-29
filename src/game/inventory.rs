@@ -83,17 +83,6 @@ impl ItemContainer {
 			false
 		}
 	}
-	pub fn set_def(&mut self, index: usize) -> bool {
-		if index >= self.capacity() {
-			return false;
-		}
-		if let Some(slot) = self.items.get_mut(index) {
-			*slot = Some(ItemStack::new_block(2, 2));
-			true
-		} else {
-			false
-		}
-	}
 
 	/// Set item at grid position (row, col)
 	#[inline] pub fn set_at(&mut self, row: u8, col: u8, item: Option<ItemStack>) -> bool {

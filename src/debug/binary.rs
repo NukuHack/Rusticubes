@@ -53,9 +53,9 @@ fn block_rotation_invalid() {
 #[test]
 fn block_serialization() {
 	let test_blocks = [
-		Block::None,
-		Block::Simple(42, BlockRotation::XplusYplus),
-		Block::Simple(65535, BlockRotation::ZminusYminus),
+		Block::default(),
+		Block::from(42, BlockRotation::XplusYplus),
+		Block::from(65535, BlockRotation::ZminusYminus),
 	];
 	
 	for block in test_blocks {
@@ -146,7 +146,7 @@ fn chunk_no_data() {
 fn chunk_invalid_data() {
 	// Invalid storage type
 	let mut data = vec![1]; // 1 palette entry
-	data.extend(Block::None.to_binary()); // Add the palette entry
+	data.extend(Block::default().to_binary()); // Add the palette entry
 	data.push(2); // Invalid storage type
 	assert!(Chunk::from_binary(&data).is_none());
 }
@@ -154,7 +154,7 @@ fn chunk_invalid_data() {
 fn chunk_missing_data() { 
 	// Sparse storage missing data
 	let mut data = vec![1]; // 1 palette entry
-	data.extend(Block::None.to_binary()); // Add the palette entry
+	data.extend(Block::default().to_binary()); // Add the palette entry
 	data.push(1); // Sparse storage type
 	assert!(Chunk::from_binary(&data).is_none()); // Missing indices
 }
@@ -164,13 +164,19 @@ fn chunk_binary_size() {
 	let mut chunk = Chunk::new(1u16);
 	assert_eq!(chunk.binary_size(), chunk.to_binary().len());
 	
-	chunk.palette = vec![Block::None];
+	chunk.palette = vec![
+		Block::default(),
+		Block::from(42, BlockRotation::XplusYplus),
+		Block::from(65535, BlockRotation::ZminusYminus),]];
 	assert_eq!(chunk.binary_size(), chunk.to_binary().len());
 	
 	chunk.storage = BlockStorage::Uniform(0);
 	assert_eq!(chunk.binary_size(), chunk.to_binary().len());
 	
-	chunk.palette = vec![Block::None, Block::Simple(1, BlockRotation::XplusYplus)];
+	chunk.palette = vec![
+		Block::default(),
+		Block::from(42, BlockRotation::XplusYplus),
+		Block::from(65535, BlockRotation::ZminusYminus),]];
 	chunk.storage = BlockStorage::Sparse(Box::new([0; 4096]));
 	assert_eq!(chunk.binary_size(), chunk.to_binary().len());
 }
@@ -189,7 +195,10 @@ fn world_with_chunks_serialization() {
 	
 	// Add some chunks
 	let mut chunk1 = Chunk::new(1u16);
-	chunk1.palette = vec![Block::Simple(1, BlockRotation::XplusYplus)];
+	chunk1.palette = vec![
+		Block::default(),
+		Block::from(42, BlockRotation::XplusYplus),
+		Block::from(65535, BlockRotation::ZminusYminus),];
 	chunk1.storage = BlockStorage::Uniform(0);
 	world.chunks.insert(ChunkCoord::new(0, 0, 0).into(), chunk1);
 	

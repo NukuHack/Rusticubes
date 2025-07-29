@@ -44,15 +44,15 @@ impl World {
 	}
 
 	#[inline]
-	pub fn get_block(&self, world_pos: IVec3) -> &Block {
+	pub fn get_block(&self, world_pos: IVec3) -> Block {
 		let chunk_coord = ChunkCoord::from_world_pos(world_pos);
 		let local_pos: BlockPosition = world_pos.into();
 		let index:usize = local_pos.into();
 
 		self.chunks
 			.get(&chunk_coord)
-			.map(|chunk| chunk.get_block(index))
-			.unwrap_or(&Block::None)
+			.map(|chunk| *chunk.get_block(index))
+			.unwrap_or(Block::default())
 	}
 
 	#[inline]

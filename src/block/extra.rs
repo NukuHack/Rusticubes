@@ -3,7 +3,7 @@ use crate::player::Player;
 use crate::ext::ptr;
 use crate::block::math::ChunkCoord;
 use crate::game::player::Camera;
-use crate::block::main::Block;
+use crate::block::main::{Block, Material};
 use crate::world::main::World;
 use glam::{Vec3, IVec3};
 
@@ -130,9 +130,9 @@ pub fn place_looked_block() {
 		let block_id = player.inventory()
 		    .selected_item()
 		    .and_then(|item| item.get_block_id())
-		    .map_or(1, |block_id| block_id.inner());
+		    .map_or(0, |block_id| block_id.inner());
 
-		world.set_block(placement_pos, Block::new(block_id));
+		world.set_block(placement_pos, Block::new(Material(block_id)));
 		update_chunk_mesh(world, ChunkCoord::from_world_pos(placement_pos));
 	}
 }
@@ -146,7 +146,7 @@ pub fn remove_targeted_block() {
 	let world = &mut ptr::get_gamestate().world_mut();
 
 	if let Some((block_pos, _)) = raycast_to_block(ptr::get_gamestate().player().camera(),ptr::get_gamestate().player(), world, REACH) {
-		world.set_block(block_pos, Block::None);
+		world.set_block(block_pos, Block::default());
 		update_chunk_mesh(world, ChunkCoord::from_world_pos(block_pos));
 	}
 }

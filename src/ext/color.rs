@@ -43,8 +43,9 @@ impl Color {
 	// Conversion methods
 	#[inline] pub const fn to_arr(&self) -> [u8;4] { [self.r,self.g,self.b,self.a] }
 	#[inline] pub const fn to_tupl(&self) -> (u8,u8,u8,u8) { (self.r,self.g,self.b,self.a) }
-	#[inline] pub fn to_vec(&self) -> Vec<u8> { vec![self.r,self.g,self.b,self.a] }
+	#[inline] pub const fn to_packed(&self) -> u32 { (self.r as u32) << 24 | (self.g as u32) << 16 | (self.b as u32) << 8 | self.a as u32 }
 	#[inline] pub const fn o(self) -> Option<Self> { Some(self) }
+	#[inline] pub fn to_vec(&self) -> Vec<u8> { vec![self.r,self.g,self.b,self.a] }
 
 	// Color operations
 	pub fn lerp(self, other: Self, t: f32) -> Self {

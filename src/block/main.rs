@@ -6,82 +6,61 @@ use crate::render::meshing::GeometryBuffer;
 use crate::ext::stopwatch;
 use glam::IVec3;
 
-type Material = u16;
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct Material(pub u16);
+impl Material {
+	pub const fn inner(&self) -> u16 {
+		self.0
+	}
+	pub const fn from(val:u16) -> Self {
+		Self(val)
+	}
+}
 
 /// Represents a block in the world with optimized storage
 #[derive(Clone, Copy, Debug, PartialEq)]
-#[repr(u8)]
-pub enum Block {
-	None = 0,
-	Simple(Material, BlockRotation), // material, rotation
+pub struct Block {
+	pub material: Material,
+	pub rotation: BlockRotation, // material, rotation
 }
 
 #[allow(dead_code)]
 impl Block {
-	// Rotation bit masks and shifts
-	const ROT_MASK_X: u8 = 0b0000_0011;
-	const ROT_MASK_Y: u8 = 0b0000_1100;
-	const ROT_MASK_Z: u8 = 0b0011_0000;
-	const ROT_SHIFT_X: u8 = 0;
-	const ROT_SHIFT_Y: u8 = 2;
-	const ROT_SHIFT_Z: u8 = 4;
-
 	/// Creates a default empty block
 	#[inline] pub const fn default() -> Self {
-		Self::Simple(0, BlockRotation::XplusYplus)
+		Self::new(Material(1))
 	}
-
 	/// Creates a new simple block with default material
 	#[inline] pub const fn new(material: Material) -> Self {
-		Self::Simple(material, BlockRotation::XplusYplus)
+		Self { material, rotation: BlockRotation::XplusYplus }
 	}
-
+	#[inline] pub const fn from(material: Material, rotation:BlockRotation) -> Self {
+		Self { material, rotation }
+	}
 	/// Extracts rotation
-	#[inline] pub const fn get_rotation(&self) -> Option<BlockRotation> {
-		match self {
-			Block::Simple(_, rot) => Some(*rot),
-			_ => None,
-		}
+	#[inline] pub const fn get_rotation(&self) -> BlockRotation {
+		self.rotation
 	}
-
 	/// Rotates the block around an axis by N 90° steps
 	#[inline]
 	pub fn rotate(&mut self, axis: math::AxisBasic, steps: u8) {
-		if let Block::Simple(_, rotation) = self {
-			*rotation = rotation.rotate(axis, steps);
-		}
+		self.set_rotation(self.rotation.rotate(axis, steps));
 	}
-
 	#[inline] pub const fn is_empty(&self) -> bool {
-		match self {
-			Block::Simple(material, _) => *material == 0,
-			Block::None => true,
-		}
+		self.material.inner() == 1u16 // this should be reworked as like "is not rendered?"
 	}
-
 	#[inline] pub const fn material(&self) -> Material {
-		match self {
-			Block::Simple(material, _) => *material,
-			Block::None => 0,
-		}
+		self.material
 	}
-
 	#[inline]
 	pub fn set_material(&mut self, material: Material) {
-		match self {
-			Block::Simple(mat, _) => *mat = material,
-			Block::None => {}
-		}
+		self.material = material;
 	}
-
 	/// Sets all rotation axes at once
 	#[inline]
-	pub fn set_rotation(&mut self, rotaio: BlockRotation) {
-		if let Block::Simple(_, rotation) = self {
-			*rotation = rotaio;
-		}
+	pub fn set_rotation(&mut self, rotation: BlockRotation) {
+		self.rotation = rotation;
 	}
-
 }
 
 /// Represents a chunk of blocks in the world
@@ -163,7 +142,7 @@ impl Chunk {
 	#[inline]
 	pub fn empty() -> Self {
 		Self {
-			palette: vec![Block::None],  // Index 0 is always air
+			palette: vec![Block::default()],  // Index 0 is always air
 			storage: BlockStorage::Uniform(0u8), // All blocks point to air
 			dirty: false,
 			final_mesh: false,
@@ -175,7 +154,7 @@ impl Chunk {
 	#[inline]
 	pub fn new(mat: u16) -> Self {
 		let mut chunk = Self::empty();
-		let new_block = Block::new(mat);
+		let new_block = Block::new(Material(mat));
 		let idx = chunk.palette_add(new_block);
 		chunk.storage = BlockStorage::Uniform(idx);
 		chunk.dirty = true;
@@ -220,11 +199,11 @@ impl Chunk {
 
 			if used_idx == 0 {
 				// Only air is used
-				self.palette = vec![Block::None];
+				self.palette = vec![Block::default()];
 			} else if used_idx < self.palette.len() as u8 {
 				// Compact to just air + the used block
 				let used_block = self.palette[used_idx as usize];
-				self.palette = vec![Block::None, used_block];
+				self.palette = vec![Block::default(), used_block];
 				self.storage = BlockStorage::Uniform(1);
 			}
 			return;
@@ -243,7 +222,7 @@ impl Chunk {
 		let mut index_mapping = std::collections::HashMap::new();
 
 		// Air always stays at index 0
-		new_palette.push(Block::None);
+		new_palette.push(Block::default());
 		index_mapping.insert(0u8, 0u8);
 
 		// Add used blocks in order
@@ -274,7 +253,7 @@ impl Chunk {
 		let noise_gen = Noise::new(seed);
 		let (world_x, world_y, world_z) = coord.unpack_to_worldpos();
 		let mut chunk = Self::empty();
-		let block = Block::new(1u16);
+		let block = Block::new(Material(2u16));
 		
 		// Pre-calculate all noise values for this chunk's XZ plane
 		for x in 0..Self::SIZE {
