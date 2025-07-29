@@ -1,4 +1,5 @@
 
+use crate::ext::color::Color;
 use crate::fs::rs;
 use crate::ext::ptr;
 use crate::ui::element::{UIElement, UIElementData};
@@ -10,13 +11,13 @@ use std::collections::HashMap;
 #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct Vertex {
 	pub position: [f32; 2],
-	pub packed_data: u32,
+	pub color: u32,
 }
 pub struct MeshData { pub v: Vec<Vertex>, pub i: Vec<u32>, pub c: u32}
 
 impl Vertex {
-	#[inline] pub const fn new(position: [f32; 2], color: [u8; 4]) -> Self {
-		Self { position, packed_data: pack_color_u8(color) }
+	#[inline] pub const fn new(position: [f32; 2], color: u32) -> Self {
+		Self { position, color }
 	}
 
 	pub const fn desc() -> wgpu::VertexBufferLayout<'static> {
@@ -29,10 +30,6 @@ impl Vertex {
 			],
 		}
 	}
-}
-
-#[inline] const fn pack_color_u8(color: [u8; 4]) -> u32 {
-	(color[0] as u32) << 24 | (color[1] as u32) << 16 | (color[2] as u32) << 8 | color[3] as u32
 }
 
 pub struct UIRenderer {
@@ -221,7 +218,7 @@ impl UIRenderer {
 				let tex_h = texture.height() as f32 * pixel_to_unit;
 				let real_x = x + (w - tex_w) / 2.0;
 				let real_y = y + (h - tex_h) / 2.0;
-				self.proc_rect_element((real_x, real_y), (tex_w, tex_h), element.get_text_color().to_arr(), mesh);
+				self.proc_rect_element((real_x, real_y), (tex_w, tex_h), element.get_text_color(), mesh);
 			}
 		}
 	}
@@ -235,15 +232,14 @@ impl UIRenderer {
 			// Draw slider track
 			let track_height = h * 0.3;
 			let track_y = y + (h - track_height) / 2.0;
-			self.proc_rect_element((x, track_y), (w, track_height), element.color.to_arr(), mesh);
+			self.proc_rect_element((x, track_y), (w, track_height), element.color, mesh);
 			
 			// Draw slider handle
 			let normalized_value = (current_value - min_value) / (max_value - min_value);
 			let handle_w = h * 0.8;
 			let handle_x = x + (w - handle_w) * normalized_value;
 			let handle_y = y + (h - handle_w) / 2.0;
-			let handle_color = element.get_text_color().to_arr();
-			self.proc_rect_element((handle_x, handle_y), (handle_w, handle_w), handle_color, mesh);
+			self.proc_rect_element((handle_x, handle_y), (handle_w, handle_w), element.get_text_color(), mesh);
 		}
 	}
 
@@ -401,7 +397,7 @@ impl UIRenderer {
 				let check_y = y + h * padding;
 				let check_w = w * (1.0 - 2.0 * padding);
 				let check_h = h * (1.0 - 2.0 * padding);
-				self.proc_rect_element((check_x, check_y), (check_w, check_h), (element.color.with_g(255)).to_arr(), mesh);
+				self.proc_rect_element((check_x, check_y), (check_w, check_h), element.color.with_g(255), mesh);
 			}
 		}
 		if let Some(text) = element.get_str() {
@@ -462,19 +458,19 @@ impl UIRenderer {
 		let border_y = y - border_width;
 		let border_w = w + 2.0 * border_width;
 		let border_h = h + 2.0 * border_width;
-		self.proc_rect_element((border_x, border_y), (border_w, border_h), element.border.color.to_arr(), mesh);
+		self.proc_rect_element((border_x, border_y), (border_w, border_h), element.border.color, mesh);
 	}
 
 	#[inline] fn process_rect_element(&self, element: &UIElement, mesh: &mut MeshData) {
-		self.proc_rect_element(element.position, element.size, element.color.to_arr(), mesh);
+		self.proc_rect_element(element.position, element.size, element.color, mesh);
 	}
-	#[inline] fn proc_rect_element(&self, pos: (f32, f32), size: (f32, f32), color: [u8; 4], mesh: &mut MeshData) {
+	#[inline] fn proc_rect_element(&self, pos: (f32, f32), size: (f32, f32), color: Color, mesh: &mut MeshData) {
 		self.add_rectangle(&mut mesh.v, pos, size, color);
 		mesh.i.extend(self.rectangle_indices(mesh.c));
 		mesh.c += 4;
 	}
 
-	#[inline] fn add_rectangle(&self, vertices: &mut Vec<Vertex>, (x, y): (f32, f32), (w, h): (f32, f32), color: [u8; 4]) {
+	#[inline] fn add_rectangle(&self, vertices: &mut Vec<Vertex>, (x, y): (f32, f32), (w, h): (f32, f32), color: Color) {
 		const P:f32 = 1.0; const N:f32 = 0.0;
 		let positions = [
 			[x - w*N, y - h*N],
@@ -483,7 +479,7 @@ impl UIRenderer {
 			[x + w*P, y + h*P]
 		];
 		for j in 0..4 {
-			vertices.push(Vertex::new(positions[j], color));
+			vertices.push(Vertex::new(positions[j], color.to_packed()));
 		}
 	}
 
