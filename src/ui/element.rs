@@ -11,32 +11,31 @@ impl<T> Textlike for T where T: Into<String> {}
 
 #[derive(Clone)]
 pub enum UIElementData {
-	Panel,
-	Divider,
-	Label { text: String, text_color: Color },
+	Panel { on_click: Option<Callback> },
+	Label { text: String, text_color: Color, on_click: Option<Callback> },
 	Button { text: String, text_color: Color, on_click: Option<Callback> },
-	MultiStateButton { states: Vec<String>, text_color: Color, current_state: usize, on_click: Option<Callback>, },
-	InputField { text: String, text_color: Color, placeholder: Option<String> },
+	MultiStateButton { states: Vec<String>, text_color: Color, current_state: usize, on_click: Option<Callback> },
+	InputField { text: String, text_color: Color, placeholder: Option<String>, on_click: Option<Callback> },
 	Checkbox { label: Option<String>, text_color: Color, checked: bool, on_click: Option<Callback> },
 	Image { path: String },
 	Animation {
 		frames: Vec<String>, current_frame: u32, frame_duration: f32, elapsed_time: f32,
-		looping: bool, playing: bool, smooth_transition: bool, blend_delay: u32,
+		looping: bool, playing: bool, blend_delay: Option<u32>, on_click: Option<Callback>
 	},
 	Slider {
 		min_value: f32, slider_color: Color, max_value: f32, current_value: f32,
-		step: Option<f32>, on_change: Option<Callback>, //vertical: bool,
+		step: Option<f32>, on_change: Option<Callback>,
 	},
 }
 
 impl UIElementData {
-	#[inline] pub const fn default() -> Self { UIElementData::Panel }
+	#[inline] pub const fn default() -> Self { UIElementData::Panel{ on_click: None } }
 }
 
 impl fmt::Debug for UIElementData {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		match self {
-			Self::Panel => write!(f, "Panel"),
+			Self::Panel {  .. } => f.debug_struct("Panel").finish(),
 			Self::Label { text, .. } => f.debug_struct("Label").field("text", text).finish(),
 			Self::Button { text, .. } => f.debug_struct("Button").field("text", text).finish(),
 			Self::InputField { text, placeholder, .. } => f
@@ -58,7 +57,6 @@ impl fmt::Debug for UIElementData {
 				.field("looping", looping)
 				.field("playing", playing)
 				.finish(),
-			Self::Divider => write!(f, "Divider"),
 			Self::MultiStateButton { states, current_state, .. } => f
 				.debug_struct("MultiStateButton")
 				.field("states: ", &states.join("|"))
@@ -86,25 +84,8 @@ pub struct UIElement {
 	pub visible: bool,
 	pub border: Border,
 	pub enabled: bool,
+	pub vertical: bool,
 }
-
-impl UIElement {
-	#[inline] pub const fn default() -> Self {
-		Self {
-			id: 0,
-			data: UIElementData::default(),
-			position: (0.0, 0.0),
-			size: (0.0, 0.0),
-			color: Color::DEF_COLOR,
-			hovered: false,
-			z_index: 0,
-			visible: true,
-			border: Border::NONE,
-			enabled: true,
-		}
-	}
-}
-
 impl fmt::Debug for UIElement {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		f.debug_struct("UIElement")
@@ -114,17 +95,21 @@ impl fmt::Debug for UIElement {
 			.field("size", &self.size)
 			.field("visible", &self.visible)
 			.field("enabled", &self.enabled)
+			.field("vertical", &self.vertical)
 			.finish()
 	}
 }
 
 impl UIElement {
+	#[inline] pub const fn default() -> Self {
+		Self::new(0, UIElementData::default())
+	}
 	// Element creation
 	#[inline]
-	pub const fn new(id: usize, element_data: UIElementData) -> Self {
+	pub const fn new(id: usize, data: UIElementData) -> Self {
 		Self {
 			id,
-			data: element_data,
+			data,
 			position: (0.0, 0.0),
 			size: (0.0, 0.0),
 			color: Color::DEF_COLOR,
@@ -133,13 +118,14 @@ impl UIElement {
 			visible: true,
 			border: Border::NONE,
 			enabled: true,
+			vertical: false,
 		}
 	}
 	#[inline]
-	pub const fn panel(id: usize) -> Self { Self::new(id, UIElementData::Panel) }
+	pub const fn panel(id: usize) -> Self { Self::new(id, UIElementData::default() ) }
 	#[inline]
 	pub fn label<T: Textlike>(id: usize, text: T) -> Self {
-		Self::new(id, UIElementData::Label { text: text.into(), text_color: Color::DEF_COLOR })
+		Self::new(id, UIElementData::Label { text: text.into(), text_color: Color::DEF_COLOR, on_click: None })
 	}
 	#[inline]
 	pub fn button<T: Textlike>(id: usize, text: T) -> Self {
@@ -147,7 +133,7 @@ impl UIElement {
 	}
 	#[inline]
 	pub const fn input(id: usize) -> Self {
-		Self::new(id, UIElementData::InputField { text: String::new(), text_color: Color::DEF_COLOR, placeholder: None })
+		Self::new(id, UIElementData::InputField { text: String::new(), text_color: Color::DEF_COLOR, placeholder: None, on_click: None })
 	}
 	#[inline]
 	pub fn checkbox<T: Textlike>(id: usize, label: Option<T>) -> Self {
@@ -165,11 +151,9 @@ impl UIElement {
 		Self::new(id, UIElementData::Animation {
 			frames : frames.into_iter().map(Into::into).collect(),
 			current_frame: 0, frame_duration: 1.0, elapsed_time: 0.0,
-			looping: true, playing: true, smooth_transition: false, blend_delay: 20,
+			looping: true, playing: true, blend_delay: Some(20), on_click: None
 		})
 	}
-	#[inline]
-	pub const fn divider(id: usize) -> Self { Self::new(id, UIElementData::Divider) }
 	#[inline]
 	pub fn multi_state_button<T: Textlike>(id: usize, states: Vec<T>) -> Self {
 		Self::new(id, UIElementData::MultiStateButton {
@@ -183,7 +167,7 @@ impl UIElement {
 		Self::new(id, UIElementData::Slider {
 			min_value, max_value, //vertical: false,
 			slider_color: Color::DEF_COLOR,
-			current_value: min_value, 
+			current_value: min_value,
 			step: None,on_change: None, 
 		})
 	}
@@ -200,10 +184,26 @@ impl UIElement {
 	#[inline] pub const fn with_border(mut self, border: Border) -> Self { self.border = border; self}
 
 	#[inline]
-	pub fn with_style(self, style: &ElementStyle) -> Self {
+	pub const fn with_style(self, style: &ElementStyle) -> Self {
 		self.with_color(style.color)
 			.with_border(style.border)
 			.with_text_color(style.text_color())
+	}
+	#[inline]
+	pub const fn with_vertical(mut self, vertical: bool) -> Self {
+		self.vertical = vertical;
+		self
+	}
+	#[inline]
+	pub fn with_data(self, data: UIElementData) -> Self {
+		let mut result = self;
+		result.data = data;
+		result
+	}
+	#[inline]
+	pub const fn with_id(mut self, id: usize) -> Self {
+		self.id = id;
+		self
 	}
 
 	#[inline]
@@ -283,59 +283,58 @@ impl UIElement {
 	}
 
 
-    #[inline]
-    pub fn get_element_data(&self) -> ElementData<'_> {
-        match &self.data {
-            UIElementData::Label { text, .. } |
-            UIElementData::Button { text, .. } |
-            UIElementData::InputField { text, .. } => {
-                ElementData::Text(text.trim())
-            },
-            UIElementData::Checkbox { label, .. } => {
-                label.as_deref().map(ElementData::Text).unwrap_or(ElementData::None)
-            },
-            UIElementData::MultiStateButton { states, current_state, .. } => {
-                ElementData::Text(&states[*current_state])
-            },
-            UIElementData::Animation { frames, current_frame, .. } => {
-                ElementData::Text(&frames[*current_frame as usize])
-            },
-            UIElementData::Slider { current_value, .. } => {
-                ElementData::Number(*current_value)
-            },
-            _ => ElementData::None,
-        }
-    }
-    #[inline]
-    pub fn get_str(&self) -> Option<&str> {
-        self.get_element_data().text()
-    }
+	#[inline]
+	pub fn get_element_data(&self) -> ElementData<'_> {
+		match &self.data {
+			UIElementData::Label { text, .. } |
+			UIElementData::Button { text, .. } |
+			UIElementData::InputField { text, .. } => {
+				ElementData::Text(text.trim())
+			},
+			UIElementData::Checkbox { label, .. } => {
+				label.as_deref().map(ElementData::Text).unwrap_or(ElementData::None)
+			},
+			UIElementData::MultiStateButton { states, current_state, .. } => {
+				ElementData::Text(&states[*current_state])
+			},
+			UIElementData::Animation { frames, current_frame, .. } => {
+				ElementData::Text(&frames[*current_frame as usize])
+			},
+			UIElementData::Slider { current_value, .. } => {
+				ElementData::Number(*current_value)
+			},
+			_ => ElementData::None,
+		}
+	}
+	#[inline]
+	pub fn get_str(&self) -> Option<&str> {
+		self.get_element_data().text()
+	}
 	
 }
 #[derive(Debug)]
 pub enum ElementData<'a> {
-    Text(&'a str),
-    Number(f32),
-    None,
+	Text(&'a str),
+	Number(f32),
+	None,
 }
 impl<'a> ElementData<'a> {
-    pub fn text(&self) -> Option<&'a str> {
-        match self {
-            ElementData::Text(s) if !s.is_empty() => Some(s),
-            _ => None,
-        }
-    }
-    pub fn num(&self) -> Option<f32> {
-        match self {
-            ElementData::Number(s) => Some(*s),
-            _ => None,
-        }
-    }
+	pub fn text(&self) -> Option<&'a str> {
+		match self {
+			ElementData::Text(s) if !s.is_empty() => Some(s),
+			_ => None,
+		}
+	}
+	pub fn num(&self) -> Option<f32> {
+		match self {
+			ElementData::Number(s) => Some(*s),
+			_ => None,
+		}
+	}
 }
 
 
 impl UIElement {
-
 	// Text-related methods
 	#[inline]
 	pub fn with_text<T: Textlike>(mut self, text: T) -> Self {
@@ -547,12 +546,20 @@ impl UIElement {
 	}
 	#[inline]
 	pub const fn with_smooth_transition(mut self, smooth: bool) -> Self {
-		if let UIElementData::Animation { smooth_transition, .. } = &mut self.data { *smooth_transition = smooth; }
+		if let UIElementData::Animation { blend_delay, .. } = &mut self.data {
+			if smooth {
+				if blend_delay.is_none() {
+					*blend_delay = Some(0);
+				}
+			} else {
+				*blend_delay = None;
+			}
+		}
 		self
 	}
 	#[inline]
 	pub const fn with_blend_delay(mut self, delay: u32) -> Self {
-		if let UIElementData::Animation { blend_delay, .. } = &mut self.data { *blend_delay = delay; }
+		if let UIElementData::Animation { blend_delay, .. } = &mut self.data { *blend_delay = Some(delay); }
 		self
 	}
 	#[inline]
@@ -600,13 +607,12 @@ impl UIElement {
 			current_frame,
 			frame_duration,
 			elapsed_time,
-			smooth_transition,
 			blend_delay,
 			..
 		} = &self.data
 		{
 			let frame_count = frames.len() as u32;
-			let next_frame = if *smooth_transition {
+			let next_frame = if blend_delay.is_some() {
 				(*current_frame + 1) % frame_count
 			} else {
 				*current_frame
@@ -623,8 +629,8 @@ impl UIElement {
 			} else {
 				0
 			};
-			
-			let packed_progress = (raw_progress & 0xFFFF) | ((*blend_delay & 0xFFFF) << 16);
+			let delay = if blend_delay.is_some() {blend_delay.unwrap()} else {0};
+			let packed_progress = (raw_progress & 0xFFFF) | ((delay & 0xFFFF) << 16);
 			return Some([packed_frames, packed_progress]);
 		}
 		None

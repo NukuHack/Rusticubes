@@ -408,7 +408,7 @@ impl UIRenderer {
 			let label_element = UIElement {
 				position: (element.position.0 + element.size.0 + 0.01, element.position.1),
 				size: (text.len() as f32 * 0.015, element.size.1),
-				data: UIElementData::Label { text: text.to_string(), text_color: element.get_text_color() },
+				data: UIElementData::Label { text: text.to_string(), text_color: element.get_text_color(), on_click: None },
 				color: element.get_text_color(),
 				..UIElement::default()
 			};
@@ -566,8 +566,7 @@ impl UIRenderer {
 						i_off += 6;
 					}
 				},
-				UIElementData::Panel { .. } |
-				UIElementData::Divider { .. } => {
+				UIElementData::Panel { .. } => {
 					r_pass.set_bind_group(0, &self.default_bind_group, &[]);
 					r_pass.draw_indexed(i_off..(i_off + 6), 0, 0..1);
 					i_off += 6;

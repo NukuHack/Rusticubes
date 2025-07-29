@@ -729,15 +729,16 @@ impl UIManager {
 	#[inline]
 	fn setup_in_game_ui(&mut self) {
 		let theme = &ptr::get_settings().ui_theme;
-		let crosshair_v = UIElement::divider(self.next_id())
+		let crosshair_v = UIElement::panel(self.next_id())
 			.with_position(0.0, -0.02)
 			.with_size(0.02, 0.06)
-			.with_style(&theme.dividers.basic)
+			.with_style(&theme.panels.nice)
 			.with_z_index(20);
-		let crosshair_h = UIElement::divider(self.next_id())
+		let crosshair_h = UIElement::panel(self.next_id())
 			.with_position(-0.02, 0.0)
 			.with_size(0.06, 0.02)
-			.with_style(&theme.dividers.basic)
+			.with_vertical(true)
+			.with_style(&theme.panels.nice)
 			.with_z_index(20);
 
 		self.add_element(crosshair_v);

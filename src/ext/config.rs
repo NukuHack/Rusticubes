@@ -113,7 +113,6 @@ pub struct UITheme {
 	pub checkboxs: VariantStyles, // i know it should be called checkboxes but this is ... okay
 	pub sliders: VariantStyles,
 	pub inputs: VariantStyles,
-	pub dividers: VariantStyles,
 }
 
 #[derive(Debug, Clone)]
@@ -271,7 +270,11 @@ impl UITheme {
 					border: Border::rgbf(60, 80, 120, 0.01),
 					text_color: None,
 				},
-				extra: None,
+				extra: Some(ElementStyle {
+					color: Color::rgb(255, 100, 100),
+					border: Border::NONE,
+					text_color: None,
+				}),
 			},
 			labels: VariantStyles {
 				basic: ElementStyle {
@@ -364,24 +367,6 @@ impl UITheme {
 					color: Color::rgb(60, 40, 40),
 					border: Border::rgbf(140, 80, 80, 0.005),
 					text_color: Color::rgb(255, 200, 200).o(),
-				},
-				extra: None,
-			},
-			dividers: VariantStyles {
-				basic: ElementStyle {
-					color: Color::rgb(220, 240, 255),
-					border: Border::NONE, // Dividers typically don't have borders
-					text_color: None,
-				},
-				nice: ElementStyle {
-					color: Color::rgb(220, 240, 255),
-					border: Border::NONE,
-					text_color: None,
-				},
-				bad: ElementStyle {
-					color: Color::rgb(255, 100, 100),
-					border: Border::NONE,
-					text_color: None,
 				},
 				extra: None,
 			},
