@@ -1,25 +1,21 @@
 
 use crate::ext::color::{Color, Border};
-use std::{cell::RefCell, fmt, sync::Arc };
+use std::{cell::RefCell, sync::Arc };
 use crate::ext::config::ElementStyle;
 
 type Callback = Arc<RefCell<dyn FnMut() + 'static>>;
 
-pub trait Textlike: Into<String> {}
-impl<T> Textlike for T where T: Into<String> {}
-
-
 #[derive(Clone)]
 pub enum UIElementData {
 	Panel { on_click: Option<Callback> },
-	Label { text: String, text_color: Color, on_click: Option<Callback> },
-	Button { text: String, text_color: Color, on_click: Option<Callback> },
-	MultiStateButton { states: Vec<String>, text_color: Color, current_state: usize, on_click: Option<Callback> },
-	InputField { text: String, text_color: Color, placeholder: Option<String>, on_click: Option<Callback> },
-	Checkbox { label: Option<String>, text_color: Color, checked: bool, on_click: Option<Callback> },
-	Image { path: String },
+	Label { text: &'static str, text_color: Color, on_click: Option<Callback> },
+	Button { text: &'static str, text_color: Color, on_click: Option<Callback> },
+	MultiStateButton { states: Vec<&'static str>, text_color: Color, current_state: usize, on_click: Option<Callback> },
+	InputField { text: &'static str, text_color: Color, placeholder: Option<&'static str>, on_click: Option<Callback> },
+	Checkbox { label: Option<&'static str>, text_color: Color, checked: bool, on_click: Option<Callback> },
+	Image { path: &'static str },
 	Animation {
-		frames: Vec<String>, current_frame: u32, frame_duration: f32, elapsed_time: f32,
+		frames: Vec<&'static str>, current_frame: u32, frame_duration: f32, elapsed_time: f32,
 		looping: bool, playing: bool, blend_delay: Option<u32>, on_click: Option<Callback>
 	},
 	Slider {
@@ -27,50 +23,10 @@ pub enum UIElementData {
 		step: Option<f32>, on_change: Option<Callback>,
 	},
 }
-
 impl UIElementData {
 	#[inline] pub const fn default() -> Self { UIElementData::Panel{ on_click: None } }
 }
 
-impl fmt::Debug for UIElementData {
-	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-		match self {
-			Self::Panel {  .. } => f.debug_struct("Panel").finish(),
-			Self::Label { text, .. } => f.debug_struct("Label").field("text", text).finish(),
-			Self::Button { text, .. } => f.debug_struct("Button").field("text", text).finish(),
-			Self::InputField { text, placeholder, .. } => f
-				.debug_struct("InputField")
-				.field("text", text)
-				.field("placeholder", placeholder)
-				.finish(),
-			Self::Checkbox { label, checked, .. } => f
-				.debug_struct("Checkbox")
-				.field("label", label)
-				.field("checked", checked)
-				.finish(),
-			Self::Image { path } => f.debug_struct("Image").field("path", path).finish(),
-			Self::Animation { frames, current_frame, frame_duration, looping, playing, .. } => f
-				.debug_struct("Animation")
-				.field("frames", frames)
-				.field("current_frame", current_frame)
-				.field("frame_duration", frame_duration)
-				.field("looping", looping)
-				.field("playing", playing)
-				.finish(),
-			Self::MultiStateButton { states, current_state, .. } => f
-				.debug_struct("MultiStateButton")
-				.field("states: ", &states.join("|"))
-				.field("current_state", current_state)
-				.finish(),
-			Self::Slider { min_value, max_value, current_value, .. } => f
-				.debug_struct("Slider")
-				.field("min_value", min_value)
-				.field("max_value", max_value)
-				.field("current_value", current_value)
-				.finish(),
-		}
-	}
-}
 
 #[derive(Clone)]
 pub struct UIElement {
@@ -85,19 +41,6 @@ pub struct UIElement {
 	pub border: Border,
 	pub enabled: bool,
 	pub vertical: bool,
-}
-impl fmt::Debug for UIElement {
-	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-		f.debug_struct("UIElement")
-			.field("id", &self.id)
-			.field("data", &self.data)
-			.field("position", &self.position)
-			.field("size", &self.size)
-			.field("visible", &self.visible)
-			.field("enabled", &self.enabled)
-			.field("vertical", &self.vertical)
-			.finish()
-	}
 }
 
 impl UIElement {
@@ -124,41 +67,36 @@ impl UIElement {
 	#[inline]
 	pub const fn panel(id: usize) -> Self { Self::new(id, UIElementData::default() ) }
 	#[inline]
-	pub fn label<T: Textlike>(id: usize, text: T) -> Self {
-		Self::new(id, UIElementData::Label { text: text.into(), text_color: Color::DEF_COLOR, on_click: None })
+	pub const fn label(id: usize, text: &'static str) -> Self {
+		Self::new(id, UIElementData::Label { text, text_color: Color::DEF_COLOR, on_click: None })
 	}
 	#[inline]
-	pub fn button<T: Textlike>(id: usize, text: T) -> Self {
-		Self::new(id, UIElementData::Button { text: text.into(), text_color: Color::DEF_COLOR, on_click: None })
+	pub const fn button(id: usize, text: &'static str) -> Self {
+		Self::new(id, UIElementData::Button { text, text_color: Color::DEF_COLOR, on_click: None })
 	}
 	#[inline]
 	pub const fn input(id: usize) -> Self {
-		Self::new(id, UIElementData::InputField { text: String::new(), text_color: Color::DEF_COLOR, placeholder: None, on_click: None })
+		Self::new(id, UIElementData::InputField { text: "", text_color: Color::DEF_COLOR, placeholder: None, on_click: None })
 	}
 	#[inline]
-	pub fn checkbox<T: Textlike>(id: usize, label: Option<T>) -> Self {
-		if let Some(text) = label {
-			return Self::new(id, UIElementData::Checkbox { label: Some(text.into()), text_color: Color::DEF_COLOR, checked: false, on_click: None });
-		}
-		Self::new(id, UIElementData::Checkbox { label: None, text_color: Color::DEF_COLOR, checked: false, on_click: None })
+	pub const fn checkbox(id: usize, label: Option<&'static str>) -> Self {
+		Self::new(id, UIElementData::Checkbox { label, text_color: Color::DEF_COLOR, checked: false, on_click: None })
 	}
 	#[inline]
-	pub fn image<T: Textlike>(id: usize, path: T) -> Self {
-		Self::new(id, UIElementData::Image { path: path.into() })
+	pub const fn image(id: usize, path: &'static str) -> Self {
+		Self::new(id, UIElementData::Image { path })
 	}
 	#[inline]
-	pub fn animation<T: Textlike>(id: usize, frames: Vec<T>) -> Self {
+	pub const fn animation(id: usize, frames: Vec<&'static str>) -> Self {
 		Self::new(id, UIElementData::Animation {
-			frames : frames.into_iter().map(Into::into).collect(),
-			current_frame: 0, frame_duration: 1.0, elapsed_time: 0.0,
+			frames, current_frame: 0, frame_duration: 1.0, elapsed_time: 0.0,
 			looping: true, playing: true, blend_delay: Some(20), on_click: None
 		})
 	}
 	#[inline]
-	pub fn multi_state_button<T: Textlike>(id: usize, states: Vec<T>) -> Self {
+	pub const fn multi_state_button(id: usize, states: Vec<&'static str>) -> Self {
 		Self::new(id, UIElementData::MultiStateButton {
-			states: states.into_iter().map(Into::into).collect(),
-			text_color: Color::DEF_COLOR,
+			states, text_color: Color::DEF_COLOR,
 			current_state: 0,on_click: None,
 		})
 	}
@@ -227,22 +165,18 @@ impl UIElement {
 	}
 			
 	// Utility methods
-	#[inline]
-	pub const fn get_bounds(&self) -> (f32, f32, f32, f32) {
+	#[inline] pub const fn get_bounds(&self) -> (f32, f32, f32, f32) {
 		let (x, y) = self.position;
 		let (w, h) = self.size;
 		(x, y, x + w, y + h)
 	}
-	#[inline]
-	pub const fn contains_point(&self, x: f32, y: f32) -> bool {
+	#[inline] pub const fn contains_point(&self, x: f32, y: f32) -> bool {
 		if !self.visible || !self.enabled { return false; }
 		let (min_x, min_y, max_x, max_y) = self.get_bounds();
 		x >= min_x && x <= max_x && y >= min_y && y <= max_y
 	}
-	#[inline]
-	pub const fn is_input(&self) -> bool { matches!(self.data, UIElementData::InputField { .. }) }
-	#[inline]
-	pub const fn update_hover_state(&mut self, is_hovered: bool) {
+	#[inline] pub const fn is_input(&self) -> bool { matches!(self.data, UIElementData::InputField { .. }) }
+	#[inline] pub const fn update_hover_state(&mut self, is_hovered: bool) {
 		self.hovered = is_hovered && self.enabled;
 		match self.data {
 			UIElementData::Button{ .. } | UIElementData::InputField{ .. } | UIElementData::Slider{ .. } | UIElementData::MultiStateButton{ .. } => {
@@ -259,7 +193,7 @@ impl UIElement {
 		}
 	}
 	#[inline]
-	pub const fn get_text_mut(&mut self) -> Option<&mut String> {
+	pub const fn get_text_mut(&mut self) -> Option<&mut &'static str> {
 		match &mut self.data {
 			UIElementData::Label { text, .. } |
 			UIElementData::Button { text, .. } |
@@ -284,7 +218,7 @@ impl UIElement {
 
 
 	#[inline]
-	pub fn get_element_data(&self) -> ElementData<'_> {
+	pub fn get_element_data(&self) -> ElementData {
 		match &self.data {
 			UIElementData::Label { text, .. } |
 			UIElementData::Button { text, .. } |
@@ -292,7 +226,7 @@ impl UIElement {
 				ElementData::Text(text.trim())
 			},
 			UIElementData::Checkbox { label, .. } => {
-				label.as_deref().map(ElementData::Text).unwrap_or(ElementData::None)
+				label.map(ElementData::Text).unwrap_or(ElementData::None)
 			},
 			UIElementData::MultiStateButton { states, current_state, .. } => {
 				ElementData::Text(&states[*current_state])
@@ -307,25 +241,25 @@ impl UIElement {
 		}
 	}
 	#[inline]
-	pub fn get_str(&self) -> Option<&str> {
+	pub fn get_str(&self) -> Option<&'static str> {
 		self.get_element_data().text()
 	}
 	
 }
 #[derive(Debug)]
-pub enum ElementData<'a> {
-	Text(&'a str),
+pub enum ElementData {
+	Text(&'static str),
 	Number(f32),
 	None,
 }
-impl<'a> ElementData<'a> {
-	pub fn text(&self) -> Option<&'a str> {
+impl ElementData {
+	pub const fn text(&self) -> Option<&'static str> {
 		match self {
 			ElementData::Text(s) if !s.is_empty() => Some(s),
 			_ => None,
 		}
 	}
-	pub fn num(&self) -> Option<f32> {
+	pub const fn num(&self) -> Option<f32> {
 		match self {
 			ElementData::Number(s) => Some(*s),
 			_ => None,
@@ -337,8 +271,8 @@ impl<'a> ElementData<'a> {
 impl UIElement {
 	// Text-related methods
 	#[inline]
-	pub fn with_text<T: Textlike>(mut self, text: T) -> Self {
-		if let Some(text_field) = self.get_text_mut() { *text_field = text.into(); }
+	pub const fn with_text(mut self, text: &'static str) -> Self {
+		if let Some(text_field) = self.get_text_mut() { *text_field = text; }
 		self
 	}
 	#[inline]
@@ -375,24 +309,24 @@ impl UIElement {
 		} else { self.color }
 	}
 	#[inline]
-	pub fn with_placeholder<T: Textlike>(mut self, placeholder: T) -> Self {
+	pub const fn with_placeholder(mut self, placeholder: Option<&'static str>) -> Self {
 		if let UIElementData::InputField { placeholder: p, .. } = &mut self.data {
-			*p = Some(placeholder.into());
+			*p = placeholder;
 		}
 		self
 	}
 
 	// MultiStateButton-related methods
 	#[inline]
-	pub fn next_state(&mut self) {
+	pub const fn next_state(&mut self) {
 		if let UIElementData::MultiStateButton { states, current_state, .. } = &mut self.data {
 			*current_state = (*current_state + 1) % states.len();
 		}
 	}
 	#[inline]
-	pub fn with_states<T: Textlike>(mut self, statesss: Vec<T>) -> Self {
-		if let UIElementData::MultiStateButton { states, .. } = &mut self.data {
-			*states = statesss.into_iter().map(Into::into).collect();
+	pub fn with_states(mut self, states: Vec<&'static str>) -> Self {
+		if let UIElementData::MultiStateButton { states: s, .. } = &mut self.data {
+			*s = states;
 		}
 		self
 	}
@@ -414,7 +348,7 @@ impl UIElement {
 	}
 	/*
 	#[inline]
-	pub fn with_vertical(mut self, vertical: bool) -> Self {
+	pub const fn with_vertical(mut self, vertical: bool) -> Self {
 		if let UIElementData::Slider { vertical: v, .. } = &mut self.data {
 			*v = vertical;
 		}
@@ -528,9 +462,9 @@ impl UIElement {
 
 	// Animation-related methods
 	#[inline]
-	pub fn with_animation_frames<T: Textlike>(mut self, frames_new: Vec<T>) -> Self {
-		if let UIElementData::Animation { frames, .. } = &mut self.data {
-			*frames = frames_new.into_iter().map(Into::into).collect();
+	pub fn with_animation_frames(mut self, frames: Vec<&'static str>) -> Self {
+		if let UIElementData::Animation { frames: f, .. } = &mut self.data {
+			*f = frames;
 		}
 		self
 	}
@@ -540,7 +474,7 @@ impl UIElement {
 		self
 	}
 	#[inline]
-	pub const fn with_looping(mut self, looping: bool) -> Self {
+	pub const fn with_animation_looping(mut self, looping: bool) -> Self {
 		if let UIElementData::Animation { looping: l, .. } = &mut self.data { *l = looping; }
 		self
 	}
@@ -563,15 +497,15 @@ impl UIElement {
 		self
 	}
 	#[inline]
-	pub const fn play(&mut self) {
+	pub const fn play_anim(&mut self) {
 		if let UIElementData::Animation { playing, .. } = &mut self.data { *playing = true; }
 	}
 	#[inline]
-	pub const fn pause(&mut self) {
+	pub const fn pause_anim(&mut self) {
 		if let UIElementData::Animation { playing, .. } = &mut self.data { *playing = false; }
 	}
 	#[inline]
-	pub const fn reset(&mut self) {
+	pub const fn reset_anim(&mut self) {
 		if let UIElementData::Animation { current_frame, elapsed_time, .. } = &mut self.data {
 			*current_frame = 0; *elapsed_time = 0.0;
 		}
@@ -638,19 +572,38 @@ impl UIElement {
 
 }
 
-// Input validation and processing (unchanged)
+// Input validation and processing
 #[inline]
-pub fn process_text_input(text: &mut String, c: char) -> bool {
+pub fn process_text_input(text: &mut &'static str, c: char) -> bool {
 	if text.len() >= 256 || c.is_control() {
 		return false;
 	}
-	text.push(c);
+	
+	// Create a new string with the added character
+	let mut new_string = String::with_capacity(text.len() + 1);
+	new_string.push_str(text);
+	new_string.push(c);
+	
+	// Convert to &'static str and update the reference
+	let boxed_str = new_string.into_boxed_str();
+	let leaked = Box::leak(boxed_str);
+	*text = leaked;
+	
 	true
 }
+
 #[inline]
-pub fn handle_backspace(text: &mut String) -> bool {
+pub fn handle_backspace(text: &mut &'static str) -> bool {
 	if !text.is_empty() {
-		text.pop();
+		// Create a new string without the last character
+		let mut new_string = String::with_capacity(text.len() - 1);
+		new_string.push_str(&text[..text.len()-1]);
+		
+		// Convert to &'static str and update the reference
+		let boxed_str = new_string.into_boxed_str();
+		let leaked = Box::leak(boxed_str);
+		*text = leaked;
+		
 		true
 	} else {
 		false

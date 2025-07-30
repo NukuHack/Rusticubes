@@ -137,6 +137,7 @@ pub struct UIManager {
 	//basic stuff
 	pub state: UIState,
 	pub visibility: bool,
+	pub dirty: bool,
 	//rendering stuff
 	pub vertex_buffer: wgpu::Buffer,
 	pub index_buffer: wgpu::Buffer,
@@ -225,6 +226,7 @@ impl UIManager {
 			elements: Vec::new(),
 			focused_element: None,
 			visibility: true,
+			dirty: true,
 			dialogs: dialog::DialogManager::new(),
 			renderer,
 			next_id: 1,
@@ -235,8 +237,20 @@ impl UIManager {
 	#[inline] pub const fn renderer_mut(&mut self) -> &mut UIRenderer { &mut self.renderer }
 	
 	#[inline]
-	pub fn update(&mut self, _device: &wgpu::Device, queue: &wgpu::Queue) {
-		let (vertices, indices) = self.renderer.process_elements(&self.elements);
+	pub fn update(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, delta: f32) {
+		self.update_anim(delta);
+
+		if self.dirty {
+			self.remake_mesh(device, queue);
+			self.dirty = false;
+		}
+	}
+	fn remake_mesh(&mut self, _device: &wgpu::Device, queue: &wgpu::Queue) {
+		let (vertices, indices) = {
+			// Isolate the renderer borrow in a smaller scope
+			let renderer = &mut self.renderer;
+			renderer.process_elements(&self.elements)
+		};
 		if !vertices.is_empty() {
 			queue.write_buffer(&self.vertex_buffer, 0, bytemuck::cast_slice(&vertices));
 		}
@@ -246,7 +260,7 @@ impl UIManager {
 	}
 	
 	#[inline]
-	pub fn update_anim(&mut self, delta: f32) {
+	fn update_anim(&mut self, delta: f32) {
 		self.elements.iter_mut()
 			.filter(|e| matches!(e.data, UIElementData::Animation{..}))
 			.for_each(|e| e.update_anim(delta));
@@ -254,6 +268,7 @@ impl UIManager {
 	
 	#[inline]
 	pub fn add_element(&mut self, mut element: UIElement) -> usize {
+		self.dirty = true;
 		if element.id == 0 {
 			element.id = self.next_id;
 			self.next_id += 1;
@@ -264,6 +279,7 @@ impl UIManager {
 	
 	#[inline]
 	pub fn remove_element(&mut self, id: usize) -> bool {
+		self.dirty = true;
 		if let Some(pos) = self.elements.iter().position(|e| e.id == id) {
 			if let Some(focused_pos) = self.focused_element {
 				match focused_pos.cmp(&pos) {
@@ -286,48 +302,42 @@ impl UIManager {
 	#[inline] pub fn clear_elements(&mut self) { self.elements.clear(); self.clear_focused_element(); self.next_id = 1; }
 	
 	#[inline]
-	pub fn handle_key_input(&mut self, key: Key, shift: bool) {
-		match key {
-			Key::Backspace => self.handle_backspace(),
-			Key::Enter => self.clear_focused_element(),
-			Key::Escape => self.clear_focused_element(),
-			_ => if let Some(c) = element::key_to_char(key, shift) {
-				self.process_text_input(c);
-			},
-		}
-	}
-	
-	#[inline]
-	pub fn handle_backspace(&mut self) {
-		if let Some(element) = self.get_focused_element_mut() {
-			if element.visible && element.enabled && element.is_input() {
-				if let Some(text_mut) = element.get_text_mut() {
-					element::handle_backspace(text_mut);
-				}
-			}
-		}
+	pub fn handle_key_input(&mut self, key: Key, shift: bool) -> bool {
+	    if let Some(element) = self.get_focused_element_mut() {
+	        if !(element.visible && element.enabled && element.is_input()) {
+	            return false;
+	        }
+	        match key {
+	            Key::Backspace => {
+					if let Some(text_mut) = element.get_text_mut() {
+						element::handle_backspace(text_mut);
+						self.dirty = true;
+					}
+	            },
+	            Key::Enter | Key::Escape => self.clear_focused_element(),
+	            _ => if let Some(c) = element::key_to_char(key, shift) {
+					if let Some(text_mut) = element.get_text_mut() {
+						element::process_text_input(text_mut, c);
+						self.dirty = true;
+					}
+	            },
+	        }
+	        true
+	    } else {
+	        false
+	    }
 	}
 	
 	#[inline] pub const fn clear_focused_element(&mut self) { self.focused_element = None; }
-	
-	#[inline]
-	pub fn process_text_input(&mut self, c: char) {
-		if let Some(element) = self.get_focused_element_mut() {
-			if element.visible && element.enabled && element.is_input() {
-				if let Some(text_mut) = element.get_text_mut() {
-					element::process_text_input(text_mut, c);
-				}
-			}
-		}
-	}
-	
+		
 	#[inline] pub const fn toggle_visibility(&mut self) { self.visibility = !self.visibility; }
+	#[inline] pub const fn focused_is_some(&self) -> bool { if self.focused_element.is_some() { true } else { false } }
 	#[inline] pub fn get_focused_element(&self) -> Option<&UIElement> { if let Some(idx) = self.focused_element { self.elements.get(idx) } else { None } }
 	#[inline] pub fn get_focused_element_mut(&mut self) -> Option<&mut UIElement> { if let Some(idx) = self.focused_element { self.elements.get_mut(idx) } else { None } }
 	#[inline] pub const fn next_id(&mut self) -> usize { let id = self.next_id; self.next_id += 1; id }
 		
 	#[inline]
-	pub fn handle_click_press(&mut self, norm_x: f32, norm_y: f32) -> bool {
+	fn handle_click_press(&mut self, norm_x: f32, norm_y: f32) -> bool {
 		match self.state.clone() {
 			UIState::Inventory(inv_state) => {
 				if let Some(inv_lay) = ptr::get_gamestate().player().inventory().layout.clone() {
@@ -374,7 +384,7 @@ impl UIManager {
 		false
 	}
 	#[inline]
-	pub fn handle_click_release(&mut self, norm_x: f32, norm_y: f32) -> bool {
+	fn handle_click_release(&mut self, norm_x: f32, norm_y: f32) -> bool {
 		let mut return_f = false;
 		if let Some(element) = self.get_focused_element_mut() {
 			if element.visible && element.enabled && element.contains_point(norm_x, norm_y) {
@@ -421,6 +431,7 @@ impl UIManager {
 			if let UIElementData::Slider{..} = element.data {
 				element.set_calc_value(norm_x, norm_y);
 				element.trigger_callback();
+				self.dirty = true;
 			}
 		}
 	}
@@ -429,16 +440,16 @@ impl UIManager {
 	pub fn handle_ui_hover(&mut self, window_size: (u32, u32), mouse_pos: &winit::dpi::PhysicalPosition<f64>) {
 		let (norm_x, norm_y) = convert_mouse_position(window_size, mouse_pos);
 
-		self.elements.iter_mut()
-			.for_each(|e| 
-				e.update_hover_state(
-					e.contains_point(norm_x, norm_y)
-					)
-				);
+		self.dirty = true;
+		// Update all elements
+		self.elements
+		    .iter_mut()
+		    .for_each(|e| e.update_hover_state(e.contains_point(norm_x, norm_y)));
 	}
 	
 	#[inline]
 	pub fn handle_ui_click(&mut self, window_size: (u32, u32), mouse_pos: &winit::dpi::PhysicalPosition<f64>, pressed: bool) -> bool {
+		//self.dirty = true;
 		let (x, y) = convert_mouse_position(window_size, mouse_pos);
 		if pressed {
 			self.handle_click_press(x, y)
@@ -456,7 +467,7 @@ impl UIManager {
 }
 
 #[inline]
-pub fn get_element_data_by_id(id: &usize) -> Option<ElementData<'static>> {
+pub fn get_element_data_by_id(id: &usize) -> Option<ElementData> {
 	ptr::get_state()
 		.ui_manager()
 		.get_element(id)

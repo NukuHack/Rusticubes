@@ -34,6 +34,10 @@ impl Color {
 	#[inline] pub const fn with_g(self, g: u8) -> Self { Self { g, ..self } }
 	#[inline] pub const fn with_b(self, b: u8) -> Self { Self { b, ..self } }
 	#[inline] pub const fn with_a(self, a: u8) -> Self { Self { a, ..self } }
+	#[inline] pub const fn with_ext_r(self, r: u8) -> Self { Self { r:r.wrapping_add(self.r), ..self } }
+	#[inline] pub const fn with_ext_g(self, g: u8) -> Self { Self { g:g.wrapping_add(self.g), ..self } }
+	#[inline] pub const fn with_ext_b(self, b: u8) -> Self { Self { b:b.wrapping_add(self.b), ..self } }
+	#[inline] pub const fn with_ext_a(self, a: u8) -> Self { Self { a:a.wrapping_add(self.a), ..self } }
 
 	#[inline] pub const fn rgba(r: u8, g: u8, b: u8, a: u8) -> Self { Self { r, g, b, a } }
 	#[inline] pub const fn rgb(r: u8, g: u8, b: u8) -> Self { Self { r, g, b, a: 255 } }

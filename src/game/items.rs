@@ -99,7 +99,7 @@ impl CustomData {
 
 
 const MAP_SIZE: usize = 100usize;
-pub static ITEM_REGISTRY_LUT: [ItemComp; MAP_SIZE] = generate_item_registry_lut();
+pub const ITEM_REGISTRY_LUT: [ItemComp; MAP_SIZE] = generate_item_registry_lut();
 ///Map size is bigger than needed, but this results a lot of unused space,
 ///Ofc you can not modify the array at runtime so you have to make it as big as it needs to be at compile-time for sure
 /// for this reason i implemented a purple-pink-black "0" block what would represent the "error" .. id 1 is air

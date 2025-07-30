@@ -82,6 +82,21 @@ impl ElementStyle {
 	#[inline] pub const fn text_color(&self) -> Color {
 		if let Some(color) = self.text_color { color } else { self.color }
 	}
+	#[inline] pub const fn with_color(mut self, color: Color) -> Self {
+		self.color = color; self
+	}
+	#[inline] pub const fn with_border(mut self, border: Border) -> Self {
+		self.border = border; self
+	}
+	#[inline] pub const fn with_border_color(mut self, color: Color) -> Self {
+		self.border.color = color; self
+	}
+	#[inline] pub const fn with_border_width(mut self, width: f32) -> Self {
+		self.border.width = width; self
+	}
+	#[inline] pub const fn with_textcolor(mut self, text_color: Option<Color>) -> Self {
+		self.text_color = text_color; self
+	}
 }
 
 #[derive(Debug, Clone)]

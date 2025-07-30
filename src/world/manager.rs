@@ -208,7 +208,7 @@ pub fn save_world_data(path: &Path, data: &WorldData) -> Result<()> {
 	Ok(())
 }
 
-pub fn update_world_data(path: &PathBuf) -> Result<time::Time> {
+pub fn update_world_data(path: &PathBuf) -> Result<WorldData> {
 	let mut world_data = load_world_data(path)?;
 	let current_version = std::env!("CARGO_PKG_VERSION");
 	
@@ -220,7 +220,7 @@ pub fn update_world_data(path: &PathBuf) -> Result<time::Time> {
 	save_world_data(path, &world_data)?;
 	println!("World data updated");
 	
-	Ok(world_data.creation_date)
+	Ok(world_data)
 }
 
 //

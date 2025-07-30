@@ -454,7 +454,7 @@ impl UIManager {
 	fn add_player_buttons(&mut self, layout: &InventoryLayout) {
 		let theme = &ptr::get_settings().ui_theme;
 		let w = 0.12; let h = SLOT/2.;
-		let version = UIElement::label(self.next_id(), format!("v{}", env!("CARGO_PKG_VERSION")))
+		let version = UIElement::label(self.next_id(), env!("CARGO_PKG_VERSION"))
 			.with_position(layout.panel_position.0 + layout.panel_size.0 - w, layout.panel_position.1 - h - PADDING)
 			.with_size(w, h)
 			.with_style(&theme.labels.extra())
@@ -472,13 +472,11 @@ impl UIManager {
 				let col = inventory.ssi() as u8 % area.columns;
 				let row = inventory.ssi() as u8 / area.columns;
 				let (x, y) = area.get_slot_position(row, col);
-				let panel_cfg = &ptr::get_settings().ui_theme.panels;
-				let mut slot = UIElement::panel(self.next_id())
+				let slot = UIElement::panel(self.next_id())
 					.with_position(x, y)
 					.with_size(SLOT, SLOT)
-					.with_style(&panel_cfg.nice)
+					.with_style(&ptr::get_settings().ui_theme.panels.nice.with_border_width(0.012))
 					.with_z_index(4);
-				slot.border.width *= 1.5;
 				self.add_element(slot);
 			}
 		}
@@ -498,8 +496,8 @@ impl UIManager {
 					.with_z_index(5);
 				self.add_element(slot);
 				if let Some(item) = items.get(row as usize * area.columns as usize + col as usize) {
-					let text = item.to_icon();
-					let item_display = UIElement::image(self.next_id(), text)
+					let static_name: &'static str = Box::leak(item.to_icon().into_boxed_str());
+					let item_display = UIElement::image(self.next_id(), static_name)
 						.with_position(x, y)
 						.with_size(SLOT, SLOT)
 						.with_style(&config.ui_theme.images.basic)

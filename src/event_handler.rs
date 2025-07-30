@@ -91,7 +91,7 @@ impl<'a> crate::State<'a> {
 					_ => false,
 				};
 				// Handle UI input first if there's a focused element
-				if self.ui_manager.visibility == true && self.ui_manager.get_focused_element().is_some() {
+				if self.ui_manager.visibility == true && self.ui_manager.focused_is_some() {
 					if self.is_world_running {
 						ptr::get_gamestate().player_mut().controller().reset_keyboard(); // Temporary workaround
 					}
@@ -279,7 +279,7 @@ impl<'a> crate::State<'a> {
 					return true;
 				} else {
 					// Handle normal mouse movement for UI
-					if self.ui_manager.visibility == true && self.ui_manager.get_focused_element().is_some() {
+					if self.ui_manager.visibility == true && self.ui_manager.focused_is_some() {
 						self.ui_manager.handle_mouse_move(self.render_context.size.into(), position);
 					}
 					

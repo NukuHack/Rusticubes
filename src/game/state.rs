@@ -67,7 +67,7 @@ impl GameState {
 		make_world(save_path.clone());
 
 		let creation_date:u64 = match world::manager::update_world_data(&save_path) {
-			Ok(time) => time.to_unix_timestamp(), // Everything is fine, do nothing
+			Ok(data) => data.creation_date.to_unix_timestamp(),
 			Err(e) => {
 				println!("Error updating world data: {}", e);
 				0
@@ -80,7 +80,7 @@ impl GameState {
 			for (i, c) in worldname.chars().enumerate() {
 				hash = hash.wrapping_add(c as u32)
 						  .wrapping_mul(i as u32 + 1)
-						  .wrapping_add(creation_date as u32)
+						  .wrapping_add((creation_date << 32 ) as u32)
 						  .rotate_left(3);
 			}
 			hash.wrapping_add(creation_date as u32)

@@ -291,8 +291,7 @@ impl<'a> State<'a> {
 			}
 		}
 		if self.ui_manager.visibility {
-			self.ui_manager.update_anim(delta_seconds);
-			self.ui_manager.update(&self.render_context.device,&self.render_context.queue);
+			self.ui_manager.update(&self.render_context.device, &self.render_context.queue, delta_seconds);
 		}
 	}
 	#[inline]

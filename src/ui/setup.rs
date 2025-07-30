@@ -171,7 +171,7 @@ impl UIManager {
 		self.add_element(tree_animation);
 
 		// Version label
-		let version = UIElement::label(self.next_id(), format!("v{}", env!("CARGO_PKG_VERSION")))
+		let version = UIElement::label(self.next_id(), env!("CARGO_PKG_VERSION"))
 			.with_position(0.7, -0.95)
 			.with_size(0.2, 0.05)
 			.with_style(&theme.labels.extra())
@@ -223,8 +223,9 @@ impl UIManager {
 		for (i, name) in worlds.iter().enumerate() {
 			let y_pos = 0.2 - (i as f32 * 0.12);
 			let name_clone = name.clone();
-
-			let world_button = UIElement::button(self.next_id(), name)
+		    let static_name: &'static str = Box::leak(name.clone().into_boxed_str());
+		    
+		    let world_button = UIElement::button(self.next_id(), static_name)
 				.with_position(-0.4, y_pos)
 				.with_size(0.8, 0.1)
 				.with_style(&theme.buttons.basic)
@@ -273,8 +274,9 @@ impl UIManager {
 		let manager = &ptr::get_state().ui_manager;
 		let dialog_id = manager.state.inner().unwrap_or(0);
 		let prompt: String = manager.dialogs.get_pending_dialog(dialog_id).unwrap_or("Yeah?".to_string());
+		let static_prompt: &'static str = Box::leak(prompt.clone().into_boxed_str());
 		
-		let title = UIElement::label(self.next_id(), prompt)
+		let title = UIElement::label(self.next_id(), static_prompt)
 			.with_position(-0.4, 0.6)
 			.with_size(0.8, 0.15)
 			.with_style(&theme.title_label)
@@ -329,8 +331,9 @@ impl UIManager {
 		let manager = &ptr::get_state().ui_manager;
 		let dialog_id = manager.state.inner().unwrap_or(0);
 		let prompt: String = manager.dialogs.get_pending_dialog(dialog_id).unwrap_or("ERROR!!".to_string());
+		let static_prompt: &'static str = Box::leak(prompt.clone().into_boxed_str());
 		
-		let title = UIElement::label(self.next_id(), prompt)
+		let title = UIElement::label(self.next_id(), static_prompt)
 			.with_position(-0.4, 0.6)
 			.with_size(0.8, 0.15)
 			.with_style(&theme.title_label)
@@ -404,8 +407,9 @@ impl UIManager {
 		for (i, name) in worlds.iter().enumerate() {
 			let y_pos = 0.2 - (i as f32 * 0.12);
 			let name_clone = name.clone();
+			let static_name: &'static str = Box::leak(name.clone().into_boxed_str());
 
-			let world_button = UIElement::button(self.next_id(), name)
+			let world_button = UIElement::button(self.next_id(), static_name)
 				.with_position(-0.4, y_pos)
 				.with_size(0.8, 0.1)
 				.with_style(&theme.buttons.basic)
@@ -478,7 +482,7 @@ impl UIManager {
 			.with_position(-0.35, -0.0)
 			.with_size(0.7, 0.1)
 			.with_style(&theme.inputs.basic)
-			.with_placeholder("New World")
+			.with_placeholder(Some("New World"))
 			.with_z_index(5);
 		self.add_element(world_name_input);
 
@@ -533,7 +537,7 @@ impl UIManager {
 			.with_position(-0.35, -0.0)
 			.with_size(0.7, 0.1)
 			.with_style(&theme.inputs.basic)
-			.with_placeholder("255.255.255.255")
+			.with_placeholder(Some("255.255.255.255"))
 			.with_z_index(5);
 		self.add_element(world_ip_input);
 

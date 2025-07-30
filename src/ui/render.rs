@@ -3,6 +3,7 @@ use crate::ext::color::Color;
 use crate::fs::rs;
 use crate::ext::ptr;
 use crate::ui::element::{UIElement, UIElementData};
+use crate::ui::manager::{UIManager};
 use rusttype::{Font, Scale, point};
 use image::{ImageBuffer, Rgba};
 use std::collections::HashMap;
@@ -154,15 +155,15 @@ impl UIRenderer {
 	
 	#[inline] 
 	pub fn process_elements(&mut self, elements: &[UIElement]) -> (Vec<Vertex>, Vec<u32>) {
-		let mut sorted_elements: Vec<_> = elements.iter().filter(|e| e.visible).collect();
-		sorted_elements.sort_by_key(|e| e.z_index);
+		let mut elements: Vec<_> = elements.iter().filter(|e| e.visible).collect();
+		elements.sort_by_key(|e| e.z_index);
 		let mut mesh_data = MeshData {
-			v: Vec::with_capacity(sorted_elements.len() * 8),
-			i: Vec::with_capacity(sorted_elements.len() * 12),
+			v: Vec::with_capacity(elements.len() * 8),
+			i: Vec::with_capacity(elements.len() * 12),
 			c: 0u32
 		};
 
-		for element in sorted_elements {
+		for element in elements {
 			if element.border.width > 0.0 {
 				self.process_border(element, &mut mesh_data);
 			}
@@ -196,7 +197,7 @@ impl UIRenderer {
 		if let Some(text) = text {
 			let texture_key = format!("{}_{:?}", text, element.get_text_color());
 			if !self.text_textures.contains_key(&texture_key) {
-				let texture = self.render_text_to_texture(state.device(), state.queue(), text, element.size, element.get_text_color().to_arr());
+				let texture = self.render_text_to_texture(state.device(), state.queue(), text, element.size, element.get_text_color());
 				let texture_view = texture.create_view(&wgpu::TextureViewDescriptor {
 					dimension: Some(wgpu::TextureViewDimension::D2Array), ..Default::default() });
 				let bind_group = state.device().create_bind_group(&wgpu::BindGroupDescriptor {
@@ -243,7 +244,7 @@ impl UIRenderer {
 		}
 	}
 
-	fn render_text_to_texture(&self, device: &wgpu::Device, queue: &wgpu::Queue, text: &str, element_size: (f32, f32), [r, g, b, a]: [u8; 4]) -> wgpu::Texture {
+	fn render_text_to_texture(&self, device: &wgpu::Device, queue: &wgpu::Queue, text: &str, element_size: (f32, f32), color: Color) -> wgpu::Texture {
 		let target_width_px = (element_size.0 * 100.0 * self.pixel_ratio) as u32;
 		let target_height_px = (element_size.1 * 100.0 * self.pixel_ratio) as u32;
 		let font_size = target_height_px as f32 * 0.8;
@@ -279,9 +280,7 @@ impl UIRenderer {
 					let x = x as i32 + bounding_box.min.x;
 					let y = y as i32 + bounding_box.min.y;
 					if x >= 0 && x < width as i32 && y >= 0 && y < height as i32 {
-						let alpha = (v * a as f32).round() as u8;
-						image.put_pixel(x as u32, y as u32, 
-							Rgba([r, g, b, alpha]));
+						image.put_pixel(x as u32, y as u32, Rgba(color.with_a((v * 200.) as u8).to_arr()));
 					}
 				});
 			}
@@ -332,8 +331,9 @@ impl UIRenderer {
 	#[inline] fn process_image_element(&mut self, element: &UIElement, mesh: &mut MeshData) {
 		if let UIElementData::Image { path } = &element.data {
 			let state = ptr::get_state();			
-			if !self.image_textures.contains_key(path) {
-				let texture = self.create_image_texture(state.device(), state.queue(), path.to_string());
+			let path = path.to_string();
+			if !self.image_textures.contains_key(&path) {
+				let texture = self.create_image_texture(state.device(), state.queue(), path.clone());
 				let texture_view = texture.create_view(&wgpu::TextureViewDescriptor {
 					dimension: Some(wgpu::TextureViewDimension::D2Array), ..Default::default() });
 				let bind_group = state.device().create_bind_group(&wgpu::BindGroupDescriptor {
@@ -344,7 +344,7 @@ impl UIRenderer {
 					],
 					label: Some("image_bind_group"),
 				});
-				self.image_textures.insert(path.to_string(), (texture, bind_group));
+				self.image_textures.insert(path, (texture, bind_group));
 			}
 
 			self.process_rect_element(element, mesh);
@@ -373,42 +373,19 @@ impl UIRenderer {
 	}
 
 	#[inline] fn process_animation_element(&mut self, element: &UIElement, mesh: &mut MeshData) {
-		if let UIElementData::Animation { frames,..} = &element.data {
+		if let UIElementData::Animation { frames, .. } = &element.data {
 			let state = ptr::get_state();
-			let animation_key = frames.join("|");
+			// Convert Vec<&str> to Vec<String>
+			let frames_str: Vec<String> = frames.iter().map(|s| s.to_string()).collect();
+			let animation_key = frames_str.join("|");
+			
 			if !self.animation_textures.contains_key(&animation_key) {
-				if let Some((texture, bind_group)) = self.create_animation_texture_array(state.device(), state.queue(), frames) {
+				if let Some((texture, bind_group)) = self.create_animation_texture_array(state.device(), state.queue(), &frames_str) {
 					self.animation_textures.insert(animation_key.clone(), (texture, bind_group));
 				}
 			}
 
 			self.process_rect_element(element, mesh);
-		}
-	}
-
-	#[inline] fn process_checkbox(&mut self, element: &UIElement, mesh: &mut MeshData) {
-		self.process_rect_element(element, mesh);
-		if let UIElementData::Checkbox { checked, .. } = &element.data {
-			if *checked {
-				let (x, y) = element.position;
-				let (w, h) = element.size;
-				let padding = 0.2;
-				let check_x = x + w * padding;
-				let check_y = y + h * padding;
-				let check_w = w * (1.0 - 2.0 * padding);
-				let check_h = h * (1.0 - 2.0 * padding);
-				self.proc_rect_element((check_x, check_y), (check_w, check_h), element.color.with_g(255), mesh);
-			}
-		}
-		if let Some(text) = element.get_str() {
-			let label_element = UIElement {
-				position: (element.position.0 + element.size.0 + 0.01, element.position.1),
-				size: (text.len() as f32 * 0.015, element.size.1),
-				data: UIElementData::Label { text: text.to_string(), text_color: element.get_text_color(), on_click: None },
-				color: element.get_text_color(),
-				..UIElement::default()
-			};
-			self.process_text_element(&label_element, label_element.get_str(), mesh);
 		}
 	}
 
@@ -450,6 +427,32 @@ impl UIRenderer {
 		Some((texture, bind_group))
 	}
 
+	#[inline] fn process_checkbox(&mut self, element: &UIElement, mesh: &mut MeshData) {
+		self.process_rect_element(element, mesh);
+		if let UIElementData::Checkbox { checked, .. } = &element.data {
+			if *checked {
+				let (x, y) = element.position;
+				let (w, h) = element.size;
+				let padding = 0.2;
+				let check_x = x + w * padding;
+				let check_y = y + h * padding;
+				let check_w = w * (1.0 - 2.0 * padding);
+				let check_h = h * (1.0 - 2.0 * padding);
+				self.proc_rect_element((check_x, check_y), (check_w, check_h), element.color.with_g(255), mesh);
+			}
+		}
+		if let Some(text) = element.get_str() {
+			let label_element = UIElement {
+				position: (element.position.0 + element.size.0 + 0.01, element.position.1),
+				size: (text.len() as f32 * 0.015, element.size.1),
+				data: UIElementData::Label { text, text_color: element.get_text_color(), on_click: None },
+				color: element.get_text_color(),
+				..UIElement::default()
+			};
+			self.process_text_element(&label_element, label_element.get_str(), mesh);
+		}
+	}
+
 	#[inline] fn process_border(&self, element: &UIElement, mesh: &mut MeshData) {
 		let (x, y) = element.position;
 		let (w, h) = element.size;
@@ -487,7 +490,7 @@ impl UIRenderer {
 		[base, base + 1, base + 2, base + 1, base + 3, base + 2]
 	}
 
-	#[inline] pub fn render<'a>(&'a self, ui_manager: &crate::ui::manager::UIManager, r_pass: &mut wgpu::RenderPass<'a>) {
+	#[inline] pub fn render<'a>(&'a self, ui_manager: &UIManager, r_pass: &mut wgpu::RenderPass<'a>) {
 		r_pass.set_pipeline(&ui_manager.pipeline);
 		r_pass.set_vertex_buffer(0, ui_manager.vertex_buffer.slice(..));
 		r_pass.set_index_buffer(ui_manager.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
@@ -502,17 +505,18 @@ impl UIRenderer {
 				r_pass.draw_indexed(i_off..(i_off + 6), 0, 0..1);
 				i_off += 6;
 			}
-			#[allow(unreachable_patterns)]
 			match &element.data {
 				UIElementData::Image { path } => {
-					if let Some((_, bind_group)) = self.image_textures.get(path) {
+					if let Some((_, bind_group)) = self.image_textures.get(&path.to_string()) {
 						r_pass.set_bind_group(0, bind_group, &[]);
 						r_pass.draw_indexed(i_off..(i_off + 6), 0, 0..1);
 					}
 					i_off += 6;
 				},
 				UIElementData::Animation { frames, .. } => {
-					if let Some((_, bind_group)) = self.animation_textures.get(&frames.join("|")) {
+					let frames_str: Vec<String> = frames.iter().map(|s| s.to_string()).collect();
+					let animation_key = frames_str.join("|");
+					if let Some((_, bind_group)) = self.animation_textures.get(&animation_key) {
 						if let Some(stuff) = element.get_packed_anim_data() {
 							ptr::get_state().queue().write_buffer(&self.uniform_buffer, 0, bytemuck::cast_slice(&stuff));
 							r_pass.set_bind_group(0, bind_group, &[]);
@@ -576,8 +580,7 @@ impl UIRenderer {
 						}
 						i_off += 6;
 					}
-				},
-				_ => todo!(),
+				}
 			}
 		}
 	}
