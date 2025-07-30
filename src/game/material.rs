@@ -69,4 +69,7 @@ impl MaterialLevel {
 			Self::Adamantium => "Adamantium",
 		}
 	}
+	#[inline] pub const fn from_u8(value: u8) -> Option<Self> {
+		unsafe { std::mem::transmute(value) }
+	}
 }

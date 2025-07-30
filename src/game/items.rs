@@ -105,12 +105,14 @@ pub const ITEM_REGISTRY_LUT: [ItemComp; MAP_SIZE] = generate_item_registry_lut()
 /// for this reason i implemented a purple-pink-black "0" block what would represent the "error" .. id 1 is air
 
 macro_rules! generate_item_registry {
-	($($id:literal => $name:literal),* $(,)?) => {
+    ($($id:literal => $name:literal - $block:expr),* $(,)?) => {
 		pub const fn generate_item_registry_lut() -> [ItemComp; MAP_SIZE] {
 			let mut map = [const { ItemComp::error().as_block() }; MAP_SIZE];
 			
 			$(
-				map[$id] = ItemComp::new($id, $name).as_block();
+				map[$id] = if $block {
+					ItemComp::new($id, $name).as_block()
+				} else { ItemComp::new($id, $name) };
 			)*
 			
 			map
@@ -150,9 +152,11 @@ macro_rules! generate_item_registry {
 
 // Usage:
 generate_item_registry! {
-	1 => "air",
-	2 => "brick_grey",
-	3 => "brick_red",
-	4 => "bush",
+	// 0 is the error, but used inside the macro so not mapped here but only inside -> directly
+	1 => "air" - true,
+	2 => "brick_grey" - true,
+	3 => "brick_red" - true,
+	4 => "bush" - true,
+	5 => "bread" - false,
 	// Add more items here...
 }

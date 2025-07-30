@@ -24,7 +24,7 @@ impl ItemFlags {
 	#[inline] pub const fn combine(self, other: Self) -> Self { Self(self.0 | other.0) }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 #[repr(C)] // Ensure predictable layout for better cache performance
 pub struct ItemComp {
 	pub id: ItemId,
@@ -118,7 +118,7 @@ impl ItemComp {
 
 
 /// All possible property types an item can have
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum PropertyValue {
 	Durability(NonZeroU32),
 	ToolData(ToolData),
@@ -130,19 +130,31 @@ pub enum PropertyValue {
 }
 impl PropertyValue {
 	/// Returns the variant tag for this property (const-compatible)
-	#[inline] pub const fn variant_tag(&self) -> PropertyVariantTag {
+	#[inline] pub const fn to_tag(&self) -> PropertyVariantTag {
 		match self {
-			PropertyValue::Durability(_) => PropertyVariantTag::Durability,
-			PropertyValue::ToolData(_) => PropertyVariantTag::ToolData,
-			PropertyValue::ArmorData(_) => PropertyVariantTag::ArmorData,
-			PropertyValue::Hunger(_) => PropertyVariantTag::Hunger,
-			PropertyValue::ArmorValue(_) => PropertyVariantTag::ArmorValue,
-			PropertyValue::Damage(_) => PropertyVariantTag::Damage,
-			PropertyValue::Speed(_) => PropertyVariantTag::Speed,
+			Self::Durability(_) => PropertyVariantTag::Durability,
+			Self::ToolData(_) => PropertyVariantTag::ToolData,
+			Self::ArmorData(_) => PropertyVariantTag::ArmorData,
+			Self::Hunger(_) => PropertyVariantTag::Hunger,
+			Self::ArmorValue(_) => PropertyVariantTag::ArmorValue,
+			Self::Damage(_) => PropertyVariantTag::Damage,
+			Self::Speed(_) => PropertyVariantTag::Speed,
 		}
 	}
+	/*#[inline] pub const fn from_tag(tag: PropertyVariantTag) -> Self {
+		match tag {
+			PropertyVariantTag::Durability => Self::Durability(_),
+			PropertyVariantTag::ToolData => Self::ToolData(_),
+			PropertyVariantTag::ArmorData => Self::ArmorData(_),
+			PropertyVariantTag::Hunger => Self::Hunger(_),
+			PropertyVariantTag::ArmorValue => Self::ArmorValue(_),
+			PropertyVariantTag::Damage => Self::Damage(_),
+			PropertyVariantTag::Speed => Self::Speed(_),
+		}
+	}*/
 }
 #[derive(Debug, Clone, Copy, Eq, Hash, PartialEq)]
+#[repr(u8)] // Ensure each variant has a u8 representation, so up to 255 type
 pub enum PropertyVariantTag {
 	Durability,
 	ToolData,
@@ -166,15 +178,18 @@ impl PropertyVariantTag {
 			| (PropertyVariantTag::Speed, PropertyVariantTag::Speed)
 		)
 	}
+	#[inline] pub const fn from_u8(value: u8) -> Option<Self> {
+		unsafe { std::mem::transmute(value) }
+	}
 }
 // Constants for configuration
 const DEFAULT_MAX_PROPERTIES: usize = 4;
 
 /// Ultra-compact storage using a fixed array of N properties
-#[derive(Debug, Clone)]
-pub struct ItemExtendedData<const N: usize = DEFAULT_MAX_PROPERTIES> {
-	data: [Option<PropertyValue>; N],
-	len: u8, // Tracks how many properties are actually set
+#[derive(Debug, Clone, PartialEq)]
+pub struct ItemExtendedData<const N: usize = DEFAULT_MAX_PROPERTIES> where PropertyValue: PartialEq {
+	pub data: [Option<PropertyValue>; N],
+	pub len: u8, // Tracks how many properties are actually set
 }
 /*
 // Default size (4)
@@ -219,7 +234,7 @@ impl<const N: usize> ItemExtendedData<N> {
 	/// Internal method to set or update a property
 	#[inline] pub const fn set_property(mut self, new_value: PropertyValue) -> Self {
 		// Check for existing property of same type
-		if self.has_property(new_value.variant_tag()) {
+		if self.has_property(new_value.to_tag()) {
 			return self;
 		}
 
@@ -237,7 +252,7 @@ impl<const N: usize> ItemExtendedData<N> {
 		while i < self.len as usize {
 			if let Some(prop) = &self.data[i] {
 				// Compare the discriminant directly in const context
-				if prop.variant_tag().eq(&expected_variant) {
+				if prop.to_tag().eq(&expected_variant) {
 					return true;
 				}
 			}
@@ -363,8 +378,8 @@ impl EquipmentType for ArmorType {
 // Generic equipment data struct
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct EquipmentTypeSet<T: EquipmentType, S> {
-	slots: S,
-	_phantom: PhantomData<T>,
+	pub slots: S,
+	pub _phantom: PhantomData<T>,
 }
 
 // Trait to handle bit operations for different storage types
@@ -457,9 +472,9 @@ pub enum ArmorType {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct EquipmentSetStruct<T: EquipmentType, S: BitStorage, TierStorage> {
 	// Bits for tracking which types are present
-	types: EquipmentTypeSet<T, S>,
+	pub types: EquipmentTypeSet<T, S>,
 	// Packed tiers for each possible type
-	tiers: TierStorage,
+	pub tiers: TierStorage,
 }
 
 impl<T: EquipmentType, S: BitStorage, TS: TierStorage> EquipmentSetStruct<T, S, TS> {
@@ -528,7 +543,7 @@ impl<T: EquipmentType, S: BitStorage, TS: TierStorage> EquipmentSetStruct<T, S, 
 		if self.has_equipment(equip_type) {
 			let index = T::TO_U8(equip_type);
 			let value = TS::get_tier(&self.tiers, index);
-			unsafe { std::mem::transmute(value) }
+			MaterialLevel::from_u8(value)
 		} else {
 			None
 		}
@@ -539,7 +554,7 @@ impl<T: EquipmentType, S: BitStorage, TS: TierStorage> EquipmentSetStruct<T, S, 
 		(0..TS::max_types()).filter_map(move |i| {
 			if self.types.is_u(i) {
 				let value = TS::get_tier(&self.tiers, i);
-				if let (Some(equip_type), Some(tier)) = (T::from_u8(i), unsafe { std::mem::transmute(value) }) {
+				if let (Some(equip_type), Some(tier)) = (T::from_u8(i), MaterialLevel::from_u8(value)) {
 					Some((equip_type, tier))
 				} else {
 					None

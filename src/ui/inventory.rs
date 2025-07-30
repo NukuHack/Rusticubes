@@ -1,6 +1,7 @@
 
 use crate::ext::ptr;
 use crate::ui::{manager::{UIManager, UIState}, element::UIElement};
+use crate::game::items::{ItemStack, ItemId};
 use crate::game::inventory as inv;
 
 #[derive(PartialEq, Clone, Copy, Debug)]
@@ -424,13 +425,21 @@ impl UIManager {
 				}
 				InventoryUIState::Storage { inv, .. } => {
 					let storage = layout.areas.iter().find(|a| a.name == AreaType::Storage).unwrap();
-					self.create_area_slots(&storage, &inv::ItemContainer::new(storage.rows, storage.columns));
+					let mut storage_items = inv::ItemContainer::new(storage.rows, storage.columns);
+					let _ = storage_items.set_items_with_iterator(|idx, _| 
+						if idx % 2 == 0 {  // Set only even slots
+							Some(ItemStack::new_i(ItemId::from_str("brick_grey")))  // Placeholder item creation
+						} else {
+							None
+						});
+					self.create_area_slots(&storage, &storage_items);
 					self.create_inventory_slots(inv, &layout);
 				}
 				InventoryUIState::Crafting { inv, .. } => {
 					for area_type in [AreaType::Input, AreaType::Output] {
 						let area = layout.areas.iter().find(|a| a.name == area_type).unwrap();
-						self.create_area_slots(&area, &inv::ItemContainer::new(area.rows, area.columns));
+						let area_items = inv::ItemContainer::new(area.rows, area.columns);
+						self.create_area_slots(&area, &area_items);
 					}
 					self.create_inventory_slots(inv, &layout);
 				}

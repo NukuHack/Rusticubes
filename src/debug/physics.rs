@@ -1,7 +1,5 @@
 #[cfg(test)]
-use crate::physic::aabb::{self, AABB};
-#[cfg(test)]
-use crate::physic::body::{self, PhysicsBody};
+use crate::physic::aabb::{AABB, PhysicsBody};
 
 #[cfg(test)]
 mod tests {
@@ -38,6 +36,11 @@ mod tests {
 			acceleration: vec3(0.0, -9.8, 0.0),
 			restitution: 0.5,
 			friction: 0.2,
+			mass: 1.111111,
+			is_grounded: false,
+			is_kinematic: false,
+			collision_softness: 0.5,
+
 		};
 		
 		body.update(1.0, vec3(0.0, -9.8, 0.0));

@@ -93,6 +93,38 @@ impl ItemContainer {
 		self.set(index, item)
 	}
 
+	/// Returns an iterator over all slots with their indices and items
+	#[inline] pub fn slot_iter(&self) -> impl Iterator<Item = (usize, &Option<ItemStack>)> {
+		self.items
+			.iter()
+			.enumerate()
+			.take(self.capacity())
+	}
+	/// Returns an iterator over all slots with their indices and items
+	#[inline] pub fn slot_iter_mut(&mut self) -> impl Iterator<Item = (usize, &mut Option<ItemStack>)> {
+		let cap = self.capacity();
+		self.items
+			.iter_mut()
+			.enumerate()
+			.take(cap)
+	}
+
+	/// Uses the slot iterator to set items based on a predicate
+	/// Returns the number of items set
+	pub fn set_items_with_iterator<F>(&mut self, mut predicate: F) -> usize
+	where
+		F: FnMut(usize, &Option<ItemStack>) -> Option<ItemStack>,
+	{
+		let mut count = 0;
+		for (index, slot) in self.slot_iter_mut() {
+			if let Some(new_item) = predicate(index, slot) {
+				*slot = Some(new_item);
+				count += 1;
+			}
+		}
+		count
+	}
+
 	/// Find the first empty slot
 	#[inline] pub fn find_empty_slot(&self) -> Option<usize> {
 		self.items.iter().position(|slot| slot.is_none())

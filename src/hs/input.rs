@@ -21,9 +21,13 @@ impl InputSystem {
 	#[inline] pub const fn set_mouse_captured(&mut self, is_captured:bool) {
 		self.mouse_captured = is_captured;
 	}
-
 	#[inline] pub const fn mouse_captured(&self) -> bool {
 		self.mouse_captured
+	}
+	#[inline] pub const fn clear(&mut self) {
+		let is_mouse_captured = self.mouse_captured();
+		*self = Self::default();
+		self.set_mouse_captured(is_mouse_captured);
 	}
 }
 

@@ -1,7 +1,4 @@
 
-
-#[cfg(test)]
-use crate::network::discovery;
 #[cfg(test)]
 use crate::network::api;
 #[cfg(test)]

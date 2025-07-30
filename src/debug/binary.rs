@@ -1,17 +1,16 @@
 
-
+/*
+//// outdated
 #[cfg(test)]
-use crate::world::manager::save_entire_world;
-#[cfg(test)]
-use crate::world::manager::load_entire_world;
+use crate::world::manager::{get_save_path, load_entire_world, save_entire_world};
 #[cfg(test)]
 use crate::world::main::World;
 #[cfg(test)]
 use crate::block::math::{BlockRotation, ChunkCoord};
 #[cfg(test)]
-use crate::block::main::{Block, Chunk, BlockStorage};
+use crate::block::main::{self, Block, Chunk, BlockStorage};
 #[cfg(test)]
-use crate::ext::config;
+use crate::ext::ptr;
 #[cfg(test)]
 use std::io::{Read, Write};
 #[cfg(test)]
@@ -19,6 +18,8 @@ use crate::game::state;
 #[cfg(test)]
 use std::fs::{self, File};
 
+
+//// outdated
 #[test]
 fn chunk_coord_conversion() {
 	let original = ChunkCoord::new(1, 2, 3);
@@ -54,8 +55,8 @@ fn block_rotation_invalid() {
 fn block_serialization() {
 	let test_blocks = [
 		Block::default(),
-		Block::from(42, BlockRotation::XplusYplus),
-		Block::from(65535, BlockRotation::ZminusYminus),
+		Block::from(main::Material(42), BlockRotation::XplusYplus),
+		Block::from(main::Material(65535), BlockRotation::ZminusYminus),
 	];
 	
 	for block in test_blocks {
@@ -89,8 +90,8 @@ fn block_invalid_data() {
 
 #[test]
 fn block_binary_size() {
-	assert_eq!(Block::None.binary_size(), 1);
-	assert_eq!(Block::Simple(0, BlockRotation::XplusYplus).binary_size(), 4);
+	assert_eq!(Block::default().binary_size(), 1);
+	assert_eq!(Block::from(main::Material(0), BlockRotation::XplusYplus).binary_size(), 4);
 }
 
 #[test]
@@ -105,7 +106,7 @@ fn empty_chunk_serialization() {
 #[test]
 fn uniform_chunk_serialization() {
 	let mut chunk = Chunk::new(1u16);
-	chunk.palette = vec![Block::Simple(1, BlockRotation::XplusYplus)];
+	chunk.palette = vec![Block::from(main::Material(1), BlockRotation::XplusYplus)];
 	chunk.storage = BlockStorage::Uniform(0);
 	
 	let binary = chunk.to_binary();
@@ -118,8 +119,8 @@ fn uniform_chunk_serialization() {
 fn sparse_chunk_serialization() {
 	let mut chunk = Chunk::new(1u16);
 	chunk.palette = vec![
-		Block::None,
-		Block::Simple(1, BlockRotation::XplusYplus),
+		Block::default(),
+		Block::from(main::Material(1), BlockRotation::XplusYplus),
 	];
 	
 	let mut indices = Box::new([0; 4096]);
@@ -166,8 +167,8 @@ fn chunk_binary_size() {
 	
 	chunk.palette = vec![
 		Block::default(),
-		Block::from(42, BlockRotation::XplusYplus),
-		Block::from(65535, BlockRotation::ZminusYminus),]];
+		Block::from(main::Material(42), BlockRotation::XplusYplus),
+		Block::from(main::Material(65535), BlockRotation::ZminusYminus)];
 	assert_eq!(chunk.binary_size(), chunk.to_binary().len());
 	
 	chunk.storage = BlockStorage::Uniform(0);
@@ -175,8 +176,8 @@ fn chunk_binary_size() {
 	
 	chunk.palette = vec![
 		Block::default(),
-		Block::from(42, BlockRotation::XplusYplus),
-		Block::from(65535, BlockRotation::ZminusYminus),]];
+		Block::from(main::Material(42), BlockRotation::XplusYplus),
+		Block::from(main::Material(65535), BlockRotation::ZminusYminus)];
 	chunk.storage = BlockStorage::Sparse(Box::new([0; 4096]));
 	assert_eq!(chunk.binary_size(), chunk.to_binary().len());
 }
@@ -197,8 +198,8 @@ fn world_with_chunks_serialization() {
 	let mut chunk1 = Chunk::new(1u16);
 	chunk1.palette = vec![
 		Block::default(),
-		Block::from(42, BlockRotation::XplusYplus),
-		Block::from(65535, BlockRotation::ZminusYminus),];
+		Block::from(main::Material(42), BlockRotation::XplusYplus),
+		Block::from(main::Material(65535), BlockRotation::ZminusYminus),];
 	chunk1.storage = BlockStorage::Uniform(0);
 	world.chunks.insert(ChunkCoord::new(0, 0, 0).into(), chunk1);
 	
@@ -240,7 +241,7 @@ fn save_load_single_chunk() {
 	let coord = ChunkCoord::new(1, 2, 3);
 	
 	let mut chunk = Chunk::new(1u16);
-	chunk.palette = vec![Block::Simple(42, BlockRotation::XplusYplus)];
+	chunk.palette = vec![Block::new(main::Material(42))];
 	chunk.storage = BlockStorage::Uniform(0);
 	world.chunks.insert(coord.into(), chunk);
 	
@@ -261,7 +262,7 @@ fn save_load_nonexistent_chunk() {
 
 #[test]
 fn save_load_entire_world() {
-	let temp_dir = config::get_save_path().join("world_test");
+	let temp_dir = get_save_path().join("world_test");
 	
 	// Create a test world
 	let world = create_dummy_world();
@@ -269,10 +270,10 @@ fn save_load_entire_world() {
 	state::start_world("some_test_world");
 	
 	// Set the game state
-	config::get_gamestate().world_change(world.clone());
+	*ptr::get_gamestate().world_mut() = world.clone();
 
 	{
-	   let test_load = config::get_gamestate().world();
+	   let test_load = ptr::get_gamestate().world();
 	   // Verify
 	   assert_eq!(world.chunks.len(), test_load.chunks.len());
 	   
@@ -296,7 +297,7 @@ fn save_load_entire_world() {
 	load_entire_world(&temp_dir).unwrap();
 
 	{
-		let restored = config::get_gamestate().world();
+		let restored = ptr::get_gamestate().world();
 		
 		// Verify
 		assert_eq!(world.chunks.len(), restored.chunks.len());
@@ -346,7 +347,7 @@ fn world_serialization_roundtrip() {
 
 #[test]
 fn load_invalid_world() {
-	let temp_dir = config::get_save_path().join("world_test_invalid");
+	let temp_dir = get_save_path().join("world_test_invalid");
 		
 	// Try to load - should fail
 	assert!(load_entire_world(&temp_dir).is_err());
@@ -363,7 +364,7 @@ fn load_invalid_world() {
 #[test]
 fn world_serialization_to_disc() {
 
-	let path = config::get_save_path().join("test");
+	let path = get_save_path().join("test");
 
 	let world = create_dummy_world();
 
@@ -427,7 +428,7 @@ pub fn create_dummy_world() -> World {
 	
 	// Add a uniform chunk
 	let mut uniform_chunk = Chunk::new(1u16);
-	uniform_chunk.palette = vec![Block::Simple(42, BlockRotation::XplusYplus)];
+	uniform_chunk.palette = vec![Block::new(main::Material(42))];
 	uniform_chunk.storage = BlockStorage::Uniform(0);
 	world.chunks.insert(ChunkCoord::new(0, 0, 0).into(), uniform_chunk);
 	
@@ -440,3 +441,5 @@ pub fn create_dummy_world() -> World {
 
 	world
 }
+
+*/

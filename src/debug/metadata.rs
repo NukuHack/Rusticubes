@@ -1,8 +1,6 @@
 
 #[cfg(test)]
-use crate::world::manager::{WorldData, load_world_data, save_world_data, update_world_data};
-#[cfg(test)]
-use crate::ext::config;
+use crate::world::manager::{WorldData, get_save_path, load_world_data, save_world_data, update_world_data};
 #[cfg(test)]
 use std::io::{self};
 #[cfg(test)]
@@ -28,7 +26,7 @@ fn roundtrip_serialization() {
 // Test 2: File operations with correct data
 #[test]
 fn file_operations() -> io::Result<()> {
-	let temp_dir = config::get_save_path().join("test");
+	let temp_dir = get_save_path().join("test");
 	let path = temp_dir.as_path();
 
 	// Test creating new data when file doesn't exist
@@ -49,7 +47,7 @@ fn file_operations() -> io::Result<()> {
 	assert_eq!(updated.version, std::env!("CARGO_PKG_VERSION"));
 	
 	Ok(())
-}
+} // works just does not save new version for now...
 
 // Test 3: Malformed data handling
 #[test]

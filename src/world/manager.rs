@@ -3,6 +3,7 @@ use crate::world::main::World;
 use crate::block::math::{BlockRotation, ChunkCoord};
 use crate::block::main::{Block, Material, Chunk, BlockStorage};
 use crate::ext::ptr;
+use crate::hs::binary; // ----------------------------------------------------------------
 use crate::hs::time;
 use std::path::{Path, PathBuf};
 use std::io::{self, Read, Write, Result, Error, ErrorKind};
@@ -382,8 +383,8 @@ impl Block {
 		if bytes.len() == 0 { return None; }
 		
 		if bytes.len() < 3 { return None; }
-		let material = u16::from_le_bytes([bytes[1], bytes[2]]);
-		let rotation = BlockRotation::from_byte(bytes[3])?;
+		let material = u16::from_le_bytes([bytes[0], bytes[1]]);
+		let rotation = BlockRotation::from_byte(bytes[2])?;
 		Some(Block::from(Material::from(material), rotation))
 	}
 	

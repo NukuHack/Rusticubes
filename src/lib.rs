@@ -9,6 +9,7 @@ pub mod hs { // helping structs
 	pub mod input;
 	pub mod math;
 	pub mod cursor;
+	pub mod binary; // serialize to bytes ofc
 	pub mod time; // a nicely formatted time, just a struct
 }
 pub mod mods { // modding related
@@ -25,6 +26,7 @@ pub mod debug { // debug, test related
 	pub mod network;
 	pub mod binary;
 	pub mod metadata;
+	pub mod serialize_item;
 	pub mod physics;
 }
 pub mod ext { // extra things that did not fit anywhere else
@@ -46,6 +48,7 @@ pub mod render { // rendering related
 pub mod game { // game related, instance related
 	pub mod items; // the items and item stack impl.
 	pub mod item_lut; // item related things what will not change at runtime
+	pub mod item_serialize; // it si what it sounds
 	pub mod material; // item related basic stuff
 	pub mod inventory; // basic inventory impl.
 	pub mod player; // main camera and player impl.

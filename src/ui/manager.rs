@@ -144,7 +144,7 @@ pub struct UIManager {
 	pub pipeline: wgpu::RenderPipeline,
 	// main data
 	elements: Vec<UIElement>,
-	focused_element: Option<usize>, // the index of the focused element, it's their index from the "elements" Vec<UIElement> so not their actual ID 
+	focused_element: Option<usize>,
 	renderer: UIRenderer,
 	// extra for double callbacks
 	pub dialogs: dialog::DialogManager,
@@ -280,15 +280,13 @@ impl UIManager {
 	#[inline]
 	pub fn remove_element(&mut self, id: usize) -> bool {
 		self.dirty = true;
-		if let Some(pos) = self.elements.iter().position(|e| e.id == id) {
-			if let Some(focused_pos) = self.focused_element {
-				match focused_pos.cmp(&pos) {
-					std::cmp::Ordering::Equal => self.clear_focused_element(),
-					std::cmp::Ordering::Greater => self.focused_element = Some(focused_pos - 1),
-					_ => (),
+		if let Some(element) = self.elements.iter().position(|e| e.id == id) {
+			if let Some(focused) = self.focused_element {
+				if focused == element {
+					self.clear_focused_element();
 				}
 			}
-			self.elements.remove(pos);
+			self.elements.remove(element);
 			true
 		} else {
 			false
@@ -296,44 +294,44 @@ impl UIManager {
 	}
 
 	#[inline] pub fn visible_elements(&self) -> Vec<&UIElement> { self.elements.iter().filter(|e| e.visible).collect() }
-	#[inline] pub fn get_element(&self, id: &usize) -> Option<&UIElement> { self.elements.iter().find(|e| e.id == *id) }
+	#[inline] pub fn get_element(&self, id: usize) -> Option<&UIElement> { self.elements.iter().find(|e| e.id == id) }
 	#[inline] pub fn get_element_mut(&mut self, id: usize) -> Option<&mut UIElement> { self.elements.iter_mut().find(|e| e.id == id) }
 	 
 	#[inline] pub fn clear_elements(&mut self) { self.elements.clear(); self.clear_focused_element(); self.next_id = 1; }
 	
 	#[inline]
 	pub fn handle_key_input(&mut self, key: Key, shift: bool) -> bool {
-	    if let Some(element) = self.get_focused_element_mut() {
-	        if !(element.visible && element.enabled && element.is_input()) {
-	            return false;
-	        }
-	        match key {
-	            Key::Backspace => {
+		if let Some(element) = self.get_focused_element_mut() {
+			if !(element.visible && element.enabled && element.is_input()) {
+				return false;
+			}
+			match key {
+				Key::Backspace => {
 					if let Some(text_mut) = element.get_text_mut() {
 						element::handle_backspace(text_mut);
 						self.dirty = true;
 					}
-	            },
-	            Key::Enter | Key::Escape => self.clear_focused_element(),
-	            _ => if let Some(c) = element::key_to_char(key, shift) {
+				},
+				Key::Enter | Key::Escape => self.clear_focused_element(),
+				_ => if let Some(c) = element::key_to_char(key, shift) {
 					if let Some(text_mut) = element.get_text_mut() {
 						element::process_text_input(text_mut, c);
 						self.dirty = true;
 					}
-	            },
-	        }
-	        true
-	    } else {
-	        false
-	    }
+				},
+			}
+			true
+		} else {
+			false
+		}
 	}
 	
 	#[inline] pub const fn clear_focused_element(&mut self) { self.focused_element = None; }
 		
 	#[inline] pub const fn toggle_visibility(&mut self) { self.visibility = !self.visibility; }
 	#[inline] pub const fn focused_is_some(&self) -> bool { if self.focused_element.is_some() { true } else { false } }
-	#[inline] pub fn get_focused_element(&self) -> Option<&UIElement> { if let Some(idx) = self.focused_element { self.elements.get(idx) } else { None } }
-	#[inline] pub fn get_focused_element_mut(&mut self) -> Option<&mut UIElement> { if let Some(idx) = self.focused_element { self.elements.get_mut(idx) } else { None } }
+	#[inline] pub fn get_focused_element(&self) -> Option<&UIElement> { if let Some(idx) = self.focused_element { self.get_element(idx) } else { None } }
+	#[inline] pub fn get_focused_element_mut(&mut self) -> Option<&mut UIElement> { if let Some(idx) = self.focused_element { self.get_element_mut(idx) } else { None } }
 	#[inline] pub const fn next_id(&mut self) -> usize { let id = self.next_id; self.next_id += 1; id }
 		
 	#[inline]
@@ -359,22 +357,21 @@ impl UIManager {
 			}
 		}
 		self.clear_focused_element();
-		for (idx, element) in self.elements.iter_mut().enumerate().rev() {
-			if element.visible && element.enabled && element.contains_point(norm_x, norm_y) {
+		let mut sorted_elements: Vec<&mut UIElement> = self.elements.iter_mut().filter(|e| e.visible && e.enabled).collect();
+		sorted_elements.sort_by_key(|e| e.z_index);
+		for (_, element) in sorted_elements.iter_mut().enumerate().rev() {
+			if element.contains_point(norm_x, norm_y) {
 				match element.data {
 					UIElementData::InputField{..} |
 					UIElementData::Checkbox{..} | 
 					UIElementData::Button{..} |
-					UIElementData::MultiStateButton{..} => {
-						self.focused_element = Some(idx);
-						audio::set_fg("click.ogg");
-						return true;
-					},
+					UIElementData::MultiStateButton{..} |
 					UIElementData::Slider{..} => {
-						element.set_calc_value(norm_x, norm_y);
-						
-						self.focused_element = Some(idx);
+						element.set_calc_value(norm_x, norm_y); // only runs for sliders
+
+						self.focused_element = Some(element.id);
 						audio::set_fg("click.ogg");
+
 						return true;
 					},
 					_=> { },
@@ -385,47 +382,35 @@ impl UIManager {
 	}
 	#[inline]
 	fn handle_click_release(&mut self, norm_x: f32, norm_y: f32) -> bool {
-		let mut return_f = false;
 		if let Some(element) = self.get_focused_element_mut() {
-			if element.visible && element.enabled && element.contains_point(norm_x, norm_y) {
+			if element.contains_point(norm_x, norm_y) {
 				match &element.data {
-					UIElementData::InputField{..} => {
-
-					},
-					UIElementData::Checkbox{..} => {
-						element.toggle_checked();
-					},
-					UIElementData::Button{..} => {
-
-					},
-					UIElementData::MultiStateButton{..} => {
-						element.next_state();
-					},
+					UIElementData::InputField{..} |
+					UIElementData::Checkbox{..} |
+					UIElementData::Button{..} |
+					UIElementData::MultiStateButton{..} |
 					UIElementData::Slider{..} => {
-						element.set_calc_value(norm_x, norm_y);
+
+						element.toggle_checked(); // only checkbox
+
+						element.next_state(); // only multi button
+
+						element.set_calc_value(norm_x, norm_y); // only slider
 					},
 					_ => {
-						return return_f;
+						return false;
 					},
 				}
 				element.trigger_callback();
-				return_f = true;
+				return true;
 			}
 		}
-		if let Some(element) = self.get_focused_element() {
-			match &element.data {
-				UIElementData::InputField{..} => {
-					//self.clear_focused_element(); // this is bad for text input
-				},
-				_ => {
-					self.clear_focused_element();
-				},
-			}
-		}
-		return return_f;
+		// clearing the focused element is bad for text input, because you can't input then
+		false
 	}
 	
-	pub fn handle_mouse_move(&mut self, window_size: (u32, u32), mouse_pos: &winit::dpi::PhysicalPosition<f64>) {
+	pub fn handle_mouse_move(&mut self, window_size: (u32, u32), mouse_pos: &winit::dpi::PhysicalPosition<f64>, is_pressed: bool) {
+		if !is_pressed {return}
 		let (norm_x, norm_y) = convert_mouse_position(window_size, mouse_pos);
 		if let Some(element) = self.get_focused_element_mut() {
 			if let UIElementData::Slider{..} = element.data {
@@ -443,8 +428,8 @@ impl UIManager {
 		self.dirty = true;
 		// Update all elements
 		self.elements
-		    .iter_mut()
-		    .for_each(|e| e.update_hover_state(e.contains_point(norm_x, norm_y)));
+			.iter_mut()
+			.for_each(|e| e.update_hover_state(e.contains_point(norm_x, norm_y)));
 	}
 	
 	#[inline]
@@ -470,7 +455,7 @@ impl UIManager {
 pub fn get_element_data_by_id(id: &usize) -> Option<ElementData> {
 	ptr::get_state()
 		.ui_manager()
-		.get_element(id)
+		.get_element(*id)
 		.map(|element| element.get_element_data())
 }#[inline]
 pub fn get_element_str_by_id(id: &usize) -> &str {

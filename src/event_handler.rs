@@ -45,10 +45,15 @@ impl<'a> crate::State<'a> {
 			},
 			WindowEvent::Focused(focused) => {
 				if !focused{
+					self.input_system.clear();
 					if self.is_world_running {
 						ptr::get_gamestate().player_mut().controller().reset_keyboard(); // Temporary workaround
 					}
 					self.ui_manager.clear_focused_element();
+				} else {
+					if self.is_world_running && ptr::get_gamestate().is_running() {
+						// idk some stuff on focus getting ?
+					}
 				}
 				true
 			},
@@ -280,7 +285,7 @@ impl<'a> crate::State<'a> {
 				} else {
 					// Handle normal mouse movement for UI
 					if self.ui_manager.visibility == true && self.ui_manager.focused_is_some() {
-						self.ui_manager.handle_mouse_move(self.render_context.size.into(), position);
+						self.ui_manager.handle_mouse_move(self.render_context.size.into(), position, self.input_system.mouse_button_state.left);
 					}
 					
 					// Handle UI hover
