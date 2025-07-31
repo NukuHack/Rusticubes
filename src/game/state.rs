@@ -55,13 +55,13 @@ pub fn make_world(save_path: PathBuf) {
 #[allow(dead_code)]
 impl GameState {
 	#[inline] pub fn new(worldname: &str) -> Self {
-    	#[cfg(test)]
+		#[cfg(test)]
 		let player = {
 			let offset = Vec3::new(0., 1.7, 0.);
 			let pos = Vec3::new(0.5, 0.5, 0.5);
 			player::Player::dummy(pos, CameraConfig::new(offset))
 		};
-    	#[cfg(not(test))]
+		#[cfg(not(test))]
 		let player = {
 			let state = ptr::get_state();
 			let offset = Vec3::new(0., 1.7, 0.);

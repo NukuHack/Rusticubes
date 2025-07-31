@@ -19,7 +19,7 @@ pub trait FixedBinarySerializable: BinarySerializable {
 
 
 
-// BitStorage implementations for u8 and u16
+// BitStorage implementations
 impl BinarySerializable for u8 {
 	fn to_binary(&self) -> Vec<u8> {
 		vec![*self]
@@ -247,11 +247,11 @@ impl BinarySerializable for Time {
 	fn to_binary(&self) -> Vec<u8> {
 		let mut data = Vec::with_capacity(Self::BINARY_SIZE);
 		data.extend_from_slice(&self.year.to_binary());
-		data.extend_from_slice(&self.month.to_binary());
-		data.extend_from_slice(&self.day.to_binary());
-		data.extend_from_slice(&self.hour.to_binary());
-		data.extend_from_slice(&self.minute.to_binary());
-		data.extend_from_slice(&self.second.to_binary());
+		data.push(self.month);
+		data.push(self.day);
+		data.push(self.hour);
+		data.push(self.minute);
+		data.push(self.second);
 		data
 	}
 	fn from_binary(bytes: &[u8]) -> Option<Self> {
@@ -259,17 +259,12 @@ impl BinarySerializable for Time {
 			return None;
 		}
 		let mut offset:usize = 0;
-		let year = u16::from_binary(&bytes[offset..offset+u16::BINARY_SIZE])?;
-		offset += u16::BINARY_SIZE;
-		let month = u8::from_binary(&bytes[offset..offset+u8::BINARY_SIZE])?;
-		offset += u8::BINARY_SIZE;
-		let day = u8::from_binary(&bytes[offset..offset+u8::BINARY_SIZE])?;
-		offset += u8::BINARY_SIZE;
-		let hour = u8::from_binary(&bytes[offset..offset+u8::BINARY_SIZE])?;
-		offset += u8::BINARY_SIZE;
-		let minute = u8::from_binary(&bytes[offset..offset+u8::BINARY_SIZE])?;
-		offset += u8::BINARY_SIZE;
-		let second = u8::from_binary(&bytes[offset..offset+u8::BINARY_SIZE])?;
+		let year = u16::from_binary(&bytes[offset..offset+u16::BINARY_SIZE])?; offset += u16::BINARY_SIZE;
+		let month = bytes[offset]; offset += 1;
+		let day = bytes[offset]; offset += 1;
+		let hour = bytes[offset]; offset += 1;
+		let minute = bytes[offset]; offset += 1;
+		let second = bytes[offset];
 		
 		Some(Self {
 			year,

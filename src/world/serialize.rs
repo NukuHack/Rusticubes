@@ -33,34 +33,27 @@ impl FixedBinarySerializable for ChunkCoord {
 
 
 // Implement BinarySerializable for BlockRotation
-impl BinarySerializable for BlockRotation {
-	fn to_binary(&self) -> Vec<u8> {
-		(*self as u8).to_binary()
+impl BlockRotation {
+	/// Maps `u8` values (0..23) back to `BlockRotation`.
+	const BYTE_TO_ROTATION: [BlockRotation; 24] = [
+		BlockRotation::XplusYplus, BlockRotation::XplusYminus, BlockRotation::XplusZplus, BlockRotation::XplusZminus,
+		BlockRotation::XminusYplus, BlockRotation::XminusYminus, BlockRotation::XminusZplus, BlockRotation::XminusZminus,
+		BlockRotation::YplusXplus, BlockRotation::YplusXminus, BlockRotation::YplusZplus, BlockRotation::YplusZminus,
+		BlockRotation::YminusXplus, BlockRotation::YminusXminus, BlockRotation::YminusZplus, BlockRotation::YminusZminus,
+		BlockRotation::ZplusXplus, BlockRotation::ZplusXminus, BlockRotation::ZplusYplus, BlockRotation::ZplusYminus,
+		BlockRotation::ZminusXplus, BlockRotation::ZminusXminus, BlockRotation::ZminusYplus, BlockRotation::ZminusYminus,
+	];
+	fn as_u8(&self) -> u8 {
+		*self as u8
 	}
-	fn from_binary(bytes: &[u8]) -> Option<Self> {
-		let byte = u8::from_binary(bytes)?;
-		if byte < BYTE_TO_ROTATION.len() as u8 {
-			Some(BYTE_TO_ROTATION[byte as usize])
+	fn from_u8(byte: u8) -> Option<Self> {
+		if byte < Self::BYTE_TO_ROTATION.len() as u8 {
+			Some(Self::BYTE_TO_ROTATION[byte as usize])
 		} else {
 			None
 		}
 	}
-	fn binary_size(&self) -> usize {
-		Self::BINARY_SIZE
-	}
 }
-impl FixedBinarySerializable for BlockRotation {
-	const BINARY_SIZE: usize = 1;
-}
-/// Maps `u8` values (0..23) back to `BlockRotation`.
-const BYTE_TO_ROTATION: [BlockRotation; 24] = [
-	BlockRotation::XplusYplus, BlockRotation::XplusYminus, BlockRotation::XplusZplus, BlockRotation::XplusZminus,
-	BlockRotation::XminusYplus, BlockRotation::XminusYminus, BlockRotation::XminusZplus, BlockRotation::XminusZminus,
-	BlockRotation::YplusXplus, BlockRotation::YplusXminus, BlockRotation::YplusZplus, BlockRotation::YplusZminus,
-	BlockRotation::YminusXplus, BlockRotation::YminusXminus, BlockRotation::YminusZplus, BlockRotation::YminusZminus,
-	BlockRotation::ZplusXplus, BlockRotation::ZplusXminus, BlockRotation::ZplusYplus, BlockRotation::ZplusYminus,
-	BlockRotation::ZminusXplus, BlockRotation::ZminusXminus, BlockRotation::ZminusYplus, BlockRotation::ZminusYminus,
-];
 
 
 
@@ -85,7 +78,7 @@ impl BinarySerializable for Block {
 	fn to_binary(&self) -> Vec<u8> {
 		let mut data = Vec::with_capacity(Self::binary_size(self));
 		data.extend_from_slice(&self.material.to_binary());
-		data.extend_from_slice(&self.rotation.to_binary());
+		data.push(self.rotation.as_u8());
 		data
 	}
 	fn from_binary(bytes: &[u8]) -> Option<Self> {
@@ -93,7 +86,7 @@ impl BinarySerializable for Block {
 			return None;
 		}
 		let material = Material::from_binary(&bytes[0..Material::BINARY_SIZE])?;
-		let rotation = BlockRotation::from_binary(&bytes[Material::BINARY_SIZE..])?;
+		let rotation = BlockRotation::from_u8(bytes[Material::BINARY_SIZE])?;
 		
 		Some(Block::from(material, rotation))
 	}
@@ -102,150 +95,195 @@ impl BinarySerializable for Block {
 	}
 }
 impl FixedBinarySerializable for Block {
-	const BINARY_SIZE: usize = Material::BINARY_SIZE + BlockRotation::BINARY_SIZE;
+	const BINARY_SIZE: usize = Material::BINARY_SIZE + 1; // Material + BLock Rotation
 }
 
-impl BinarySerializable for StorageType {
-	fn to_binary(&self) -> Vec<u8> {
-		self.as_u8().to_binary()
-	}
-	fn from_binary(bytes: &[u8]) -> Option<Self> {
-		let value = u8::from_binary(bytes)?;
-		Self::from_u8(value) // already returns an option 
-	}
-	fn binary_size(&self) -> usize {
-		Self::BINARY_SIZE
-	}
-}
-impl FixedBinarySerializable for StorageType {
-	const BINARY_SIZE: usize = 1;
-}
 
 impl BinarySerializable for BlockStorage {
-    fn to_binary(&self) -> Vec<u8> {
-        let mut data:Vec<u8> = Vec::new();
-        data.extend_from_slice(&self.to_type().to_binary());
-        match self {
-            BlockStorage::Uniform { block } => {
-                data.extend_from_slice(&block.to_binary());
-            }
-            BlockStorage::Compact { palette, indices } => {
-                // Write palette length
-                data.push(palette.len() as u8);
-                // Write palette
-                for block in palette {
-                    data.extend_from_slice(&block.to_binary());
-                }
-                // Write compact indices (2048 bytes)
-                data.extend_from_slice(&indices[..]);
-            }
-            BlockStorage::Sparse { palette, indices } => {
-                // Write palette length
-                data.push(palette.len() as u8);
-                // Write palette
-                for block in palette {
-                    data.extend_from_slice(&block.to_binary());
-                }
-                // Write sparse indices (4096 bytes)
-                data.extend_from_slice(&indices[..]);
-            }
-        }
-        data
-    }
+	fn to_binary(&self) -> Vec<u8> {
+		let mut data:Vec<u8> = Vec::new();
+		if let Some((palette, runs)) = self.to_rle() {
+			data.push(StorageType::RleCompressed.as_u8());
+			// Write palette length
+			data.push(palette.len() as u8);
+			// Write palette
+			for block in &palette {
+				data.extend_from_slice(&block.to_binary());
+			}
+			// Write run count (u16 for potentially more runs)
+			data.push(runs.len() as u8);
+			// Write each run (count: u8, index: u8)
+			for &(count, index) in &runs {
+				data.push(count);
+				data.push(index);
+			}
+			return data;
+		}
+		data.push(self.to_type().as_u8());
+		match self {
+			BlockStorage::Uniform { block } => {
+				data.extend_from_slice(&block.to_binary());
+			}
+			BlockStorage::Compact { palette, indices } => {
+				// Write palette length
+				data.push(palette.len() as u8);
+				// Write palette
+				for block in palette {
+					data.extend_from_slice(&block.to_binary());
+				}
+				// Write compact indices (2048 bytes)
+				data.extend_from_slice(&indices[..]);
+			}
+			BlockStorage::Sparse { palette, indices } => {
+				// Write palette length
+				data.push(palette.len() as u8);
+				// Write palette
+				for block in palette {
+					data.extend_from_slice(&block.to_binary());
+				}
+				// Write sparse indices (4096 bytes)
+				data.extend_from_slice(&indices[..]);
+			}
+		}
+		data
+	}
 
-    fn from_binary(bytes: &[u8]) -> Option<Self> {
-        if bytes.is_empty() {
-            return None;
-        }
-        
-        let mut offset = 0;
-        let storage_type = StorageType::from_binary(&[bytes[offset]])?;
-        offset += 1;
+	fn from_binary(bytes: &[u8]) -> Option<Self> {
+		if bytes.is_empty() {
+			return None;
+		}
+		
+		let mut offset = 0;
+		let storage_type = StorageType::from_u8(bytes[offset])?;
+		offset += 1;
 
-        match storage_type {
-            StorageType::Uniform => {
-                if offset + Block::BINARY_SIZE > bytes.len() {
-                    return None;
-                }
-                let block = Block::from_binary(&bytes[offset..offset + Block::BINARY_SIZE])?;
-                Some(BlockStorage::Uniform { block })
-            }
-            StorageType::Compact => {
-                if offset >= bytes.len() {
-                    return None;
-                }
-                let palette_len = bytes[offset] as usize;
-                offset += 1;
+		match storage_type {
+			StorageType::Uniform => {
+				if offset + Block::BINARY_SIZE > bytes.len() {
+					return None;
+				}
+				let block = Block::from_binary(&bytes[offset..offset + Block::BINARY_SIZE])?;
+				Some(BlockStorage::Uniform { block })
+			}
+			StorageType::Compact => {
+				if offset >= bytes.len() {
+					return None;
+				}
+				let palette_len = bytes[offset] as usize;
+				offset += 1;
 
-                // Read palette
-                let mut palette = Vec::with_capacity(palette_len);
-                for _ in 0..palette_len {
-                    if offset + Block::BINARY_SIZE > bytes.len() {
-                        return None;
-                    }
-                    let block = Block::from_binary(&bytes[offset..offset + Block::BINARY_SIZE])?;
-                    offset += Block::BINARY_SIZE;
-                    palette.push(block);
-                }
+				// Read palette
+				let mut palette = Vec::with_capacity(palette_len);
+				for _ in 0..palette_len {
+					if offset + Block::BINARY_SIZE > bytes.len() {
+						return None;
+					}
+					let block = Block::from_binary(&bytes[offset..offset + Block::BINARY_SIZE])?;
+					offset += Block::BINARY_SIZE;
+					palette.push(block);
+				}
 
-                // Read compact indices (2048 bytes)
-                if offset + Chunk::VOLUME/2 > bytes.len() {
-                    return None;
-                }
-                let mut indices = Box::new([0u8; Chunk::VOLUME/2]);
-                indices.copy_from_slice(&bytes[offset..offset + Chunk::VOLUME/2]);
+				// Read compact indices (2048 bytes)
+				if offset + Chunk::VOLUME/2 > bytes.len() {
+					return None;
+				}
+				let mut indices = Box::new([0u8; Chunk::VOLUME/2]);
+				indices.copy_from_slice(&bytes[offset..offset + Chunk::VOLUME/2]);
 
-                Some(BlockStorage::Compact { palette, indices })
-            }
-            StorageType::Sparse => {
-                if offset >= bytes.len() {
-                    return None;
-                }
-                let palette_len = bytes[offset] as usize;
-                offset += 1;
+				Some(BlockStorage::Compact { palette, indices })
+			}
+			StorageType::Sparse => {
+				if offset >= bytes.len() {
+					return None;
+				}
+				let palette_len = bytes[offset] as usize;
+				offset += 1;
 
-                // Read palette
-                let mut palette = Vec::with_capacity(palette_len);
-                for _ in 0..palette_len {
-                    if offset + Block::BINARY_SIZE > bytes.len() {
-                        return None;
-                    }
-                    let block = Block::from_binary(&bytes[offset..offset + Block::BINARY_SIZE])?;
-                    offset += Block::BINARY_SIZE;
-                    palette.push(block);
-                }
+				// Read palette
+				let mut palette = Vec::with_capacity(palette_len);
+				for _ in 0..palette_len {
+					if offset + Block::BINARY_SIZE > bytes.len() {
+						return None;
+					}
+					let block = Block::from_binary(&bytes[offset..offset + Block::BINARY_SIZE])?;
+					offset += Block::BINARY_SIZE;
+					palette.push(block);
+				}
 
-                // Read sparse indices (4096 bytes)
-                if offset + Chunk::VOLUME > bytes.len() {
-                    return None;
-                }
-                let mut indices = Box::new([0u8; Chunk::VOLUME]);
-                indices.copy_from_slice(&bytes[offset..offset + Chunk::VOLUME]);
+				// Read sparse indices (4096 bytes)
+				if offset + Chunk::VOLUME > bytes.len() {
+					return None;
+				}
+				let mut indices = Box::new([0u8; Chunk::VOLUME]);
+				indices.copy_from_slice(&bytes[offset..offset + Chunk::VOLUME]);
 
-                Some(BlockStorage::Sparse { palette, indices })
-            }
-        }
-    }
+				Some(BlockStorage::Sparse { palette, indices })
+			}
+			StorageType::RleCompressed => {
+				if offset >= bytes.len() {
+					return None;
+				}
+				
+				// Read palette length
+				let palette_len = bytes[offset] as usize;
+				offset += 1;
+				
+				// Read palette
+				let mut palette = Vec::with_capacity(palette_len);
+				for _ in 0..palette_len {
+					if offset + Block::BINARY_SIZE > bytes.len() {
+						return None;
+					}
+					let block = Block::from_binary(&bytes[offset..offset + Block::BINARY_SIZE])?;
+					offset += Block::BINARY_SIZE;
+					palette.push(block);
+				}
+				
+				// Read run count (u16)
+				if offset + 1 > bytes.len() {
+					return None;
+				}
+				let run_count = bytes[offset] as usize;
+				offset += 1;
+				
+				// Read runs
+				let mut runs = Vec::with_capacity(run_count);
+				for _ in 0..run_count {
+					if offset + 2 > bytes.len() {
+						return None;
+					}
+					let count = bytes[offset];
+					let index = bytes[offset+1];
+					runs.push((count, index));
+					offset += 2;
+				}
+				
+				// Convert RLE to Compact/Sparse storage
+				Self::from_rle(&palette, &runs)
+			}
+		}
+	}
 
-    fn binary_size(&self) -> usize {
-        match self {
-            BlockStorage::Uniform { block } => {
-                1 + block.binary_size() // type marker + block
-            }
-            BlockStorage::Compact { palette, .. } => {
-                1 + // type marker
-                1 + // palette length
-                palette.len() * Block::BINARY_SIZE + // palette entries
-                Chunk::VOLUME/2 // compact indices array
-            }
-            BlockStorage::Sparse { palette, .. } => {
-                1 + // type marker
-                1 + // palette length
-                palette.len() * Block::BINARY_SIZE + // palette entries
-                Chunk::VOLUME // sparse indices array
-            }
-        }
-    }
+	fn binary_size(&self) -> usize {
+		match self {
+			BlockStorage::Uniform { block } => {
+				1 + // type marker
+				block.binary_size() // block
+			}
+			BlockStorage::Compact { palette, .. } => {
+				1 + // type marker
+				1 + // palette length
+				palette.len() * Block::BINARY_SIZE + // palette entries
+				Chunk::VOLUME/2 // compact indices array
+			}
+			BlockStorage::Sparse { palette, .. } => {
+				1 + // type marker
+				1 + // palette length
+				palette.len() * Block::BINARY_SIZE + // palette entries
+				Chunk::VOLUME // sparse indices array
+			}
+		}
+	}
 }
 
 impl BinarySerializable for Chunk {

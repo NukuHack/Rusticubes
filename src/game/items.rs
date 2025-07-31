@@ -105,7 +105,7 @@ pub const ITEM_REGISTRY_LUT: [ItemComp; MAP_SIZE] = generate_item_registry_lut()
 /// for this reason i implemented a purple-pink-black "0" block what would represent the "error" .. id 1 is air
 
 macro_rules! generate_item_registry {
-    ($($id:literal => $name:literal - $block:expr),* $(,)?) => {
+	($($id:literal => $name:literal - $block:expr),* $(,)?) => {
 		pub const fn generate_item_registry_lut() -> [ItemComp; MAP_SIZE] {
 			let mut map = [const { ItemComp::error().as_block() }; MAP_SIZE];
 			
@@ -121,22 +121,22 @@ macro_rules! generate_item_registry {
 		impl ItemId {
 			pub const fn from_str(string: &'static str) -> Self {
 				const fn bytes_eq(a: &[u8], b: &[u8]) -> bool {
-                    if a.len() != b.len() {
-                        return false;
-                    }
-                    let mut i = 0;
-                    while i < a.len() {
-                        if a[i] != b[i] {
-                            return false;
-                        }
-                        i += 1;
-                    }
-                    true
-                }
-                let bytes = string.as_bytes();
-                if bytes_eq(bytes, "0".as_bytes()) {
-                	Self(0)
-                }
+					if a.len() != b.len() {
+						return false;
+					}
+					let mut i = 0;
+					while i < a.len() {
+						if a[i] != b[i] {
+							return false;
+						}
+						i += 1;
+					}
+					true
+				}
+				let bytes = string.as_bytes();
+				if bytes_eq(bytes, "0".as_bytes()) {
+					Self(0)
+				}
 				$(
 					else if bytes_eq(bytes, $name.as_bytes()) {
 						Self($id)

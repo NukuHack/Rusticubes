@@ -340,18 +340,18 @@ impl Noise {
 
 	// Enhanced smooth interpolation with gentler curves
 	pub const fn smooth_interpolate(noise: f32) -> f32 {
-	    // Hyperbolic tangent approximation that's smooth everywhere
-	    let x = noise * 2.;
-	    let x_sq = x * x;
-	    
-	    // Smooth polynomial approximation of a sigmoid-like function
-	    // This is a modified version of the "smoothtanh" function
-	    let f = 1.0 + x_sq * (0.25 + x_sq * 0.015625);
-	    let smooth_tanh = x / (f * f);
-	    
-	    // Asymmetric scaling using a smooth transition
-	    let scale = 0.375 + 0.225 * smooth_tanh.signum();
-	    smooth_tanh * scale
+		// Hyperbolic tangent approximation that's smooth everywhere
+		let x = noise * 2.;
+		let x_sq = x * x;
+		
+		// Smooth polynomial approximation of a sigmoid-like function
+		// This is a modified version of the "smoothtanh" function
+		let f = 1.0 + x_sq * (0.25 + x_sq * 0.015625);
+		let smooth_tanh = x / (f * f);
+		
+		// Asymmetric scaling using a smooth transition
+		let scale = 0.375 + 0.225 * smooth_tanh.signum();
+		smooth_tanh * scale
 	}
 }
 

@@ -223,9 +223,9 @@ impl UIManager {
 		for (i, name) in worlds.iter().enumerate() {
 			let y_pos = 0.2 - (i as f32 * 0.12);
 			let name_clone = name.clone();
-		    let static_name: &'static str = Box::leak(name.clone().into_boxed_str());
-		    
-		    let world_button = UIElement::button(self.next_id(), static_name)
+			let static_name: &'static str = Box::leak(name.clone().into_boxed_str());
+			
+			let world_button = UIElement::button(self.next_id(), static_name)
 				.with_position(-0.4, y_pos)
 				.with_size(0.8, 0.1)
 				.with_style(&theme.buttons.basic)

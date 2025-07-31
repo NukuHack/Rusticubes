@@ -264,7 +264,7 @@ impl BinarySerializable for PropertyValue {
 	
 	fn from_binary(bytes: &[u8]) -> Option<Self> {
 		if bytes.is_empty() { return None; }
-		let tag = PropertyVariantTag::from_u8(u8::from_binary(bytes)?)?;
+		let tag = PropertyVariantTag::from_u8(*bytes.first()?)?;
 		let rest_bytes = &bytes[PropertyVariantTag::BINARY_SIZE..]; // Fixed typo: rest_bites -> rest_bytes
 		#[allow(unreachable_patterns)]
 		match tag {

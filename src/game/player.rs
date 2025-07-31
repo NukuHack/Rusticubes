@@ -28,6 +28,7 @@ pub enum CameraMode {
 }
 
 /// Represents a player with integrated camera system and movement capabilities
+#[allow(dead_code)]
 pub struct Player {
 	pos: Vec3,
 	config: CameraConfig,
@@ -66,7 +67,7 @@ impl Player {
 		}
 	}
 
-    #[cfg(test)]
+	#[cfg(test)]
 	pub fn dummy(pos: Vec3, config: CameraConfig) -> Self {
 		let aabb = aabb::AABB::from_pos(pos, Vec3::new(0.8,1.8,0.8));
 		Self {
@@ -386,20 +387,20 @@ pub struct CameraSystem {
 	bind_group: wgpu::BindGroup,
 }
 impl CameraSystem {
-    /// Creates a "dummy" `CameraSystem` with no real functionality.
-    /// All fields are placeholders.
-    #[cfg(test)]
-    pub fn dummy() -> Self { unsafe {
+	/// Creates a "dummy" `CameraSystem` with no real functionality.
+	/// All fields are placeholders.
+	#[cfg(test)]
+	pub fn dummy() -> Self { unsafe {
 		use std::mem::MaybeUninit;
-        #[allow(invalid_value)] // i know it is invalid ... that's the reason for this entire function to make invalid quick non existing data
-        Self {
-            camera: Camera::default(),
-            projection: Projection::default(),
-            uniform: CameraUniform::default(),
-            buffer: MaybeUninit::uninit().assume_init(),
-            bind_group: MaybeUninit::uninit().assume_init(),
-        }
-    }}
+		#[allow(invalid_value)] // i know it is invalid ... that's the reason for this entire function to make invalid quick non existing data
+		Self {
+			camera: Camera::default(),
+			projection: Projection::default(),
+			uniform: CameraUniform::default(),
+			buffer: MaybeUninit::uninit().assume_init(),
+			bind_group: MaybeUninit::uninit().assume_init(),
+		}
+	}}
 
 	pub fn new(
 		device: &wgpu::Device,
