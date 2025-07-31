@@ -24,7 +24,7 @@ pub mod network { // network related
 #[cfg(test)]
 pub mod debug { // debug, test related
 	pub mod network;
-	pub mod binary;
+	pub mod world;
 	pub mod metadata;
 	pub mod serialize_item;
 	pub mod physics;

@@ -18,6 +18,7 @@ impl Into<ChunkCoord> for u64 {
 }
 #[allow(dead_code)]
 impl ChunkCoord {
+	pub const ZERO:Self = Self::new(0,0,0);
 	// Use bit shifts that are powers of 2 for better optimization
 	const Z_SHIFT: u8 = 0;
 	const Y_SHIFT: u8 = 26;
@@ -154,6 +155,9 @@ impl ChunkCoord {
 pub struct BlockPosition(u16);
 
 impl BlockPosition {
+	pub const ZERO:Self = Self::new(0,0,0);
+	pub const CORNER:Self = Self::new(15,15,15);
+
 	/// Creates a new BlockPosition from x,y,z coordinates (0-15)
 	#[inline] pub const fn new(x: u8, y: u8, z: u8) -> Self {
 		Self((x as u16) << 0 | ((y as u16) << 4) | ((z as u16) << 8))

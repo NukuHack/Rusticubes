@@ -91,132 +91,22 @@ pub enum BlockStorage {
 		palette: Vec<Block>, // Max 256 entries
 		indices: Box<[u8; Chunk::VOLUME]>, // Full index array
 	},
-}
-
-impl BlockStorage {
-	/// Convert to RLE format only if it would save memory
-	pub fn to_rle(&self) -> Option<(Vec<Block>, Vec<(u8, u8)>)> {
-		let rle = match self {
-			BlockStorage::Uniform { block } => {
-				let palette = vec![*block];
-				let runs = vec![(Chunk::VOLUME as u8, 0)];
-				( palette, runs )
-			}
-			BlockStorage::Compact { palette, indices } => {
-				let mut runs = Vec::new();
-				let mut current_block = indices[0] >> 4;
-				let mut count = 1;
-				
-				// Process first nibble
-				for i in 0..Chunk::VOLUME {
-					let index = if i % 2 == 0 {
-						indices[i/2] >> 4
-					} else {
-						indices[i/2] & 0x0F
-					};
-					
-					if index == current_block && count < u8::MAX {
-						count += 1;
-					} else {
-						runs.push((count, current_block));
-						current_block = index;
-						count = 1;
-					}
-				}
-				
-				// Push the last run
-				runs.push((count, current_block));
-				
-				( palette.clone(), runs )
-			}
-			BlockStorage::Sparse { palette, indices } => {
-				let mut runs = Vec::new();
-				let mut current_block = indices[0];
-				let mut count = 1;
-				
-				for &block in indices.iter().skip(1) {
-					if block == current_block && count < u8::MAX {
-						count += 1;
-					} else {
-						runs.push((count, current_block));
-						current_block = block;
-						count = 1;
-					}
-				}
-				
-				// Push the last run
-				runs.push((count, current_block));
-				
-				( palette.clone(), runs )
-			}
-		};
-
-		// Calculate memory sizes
-		let original_size = match self {
-			BlockStorage::Uniform { .. } => std::mem::size_of::<Block>(),
-			BlockStorage::Compact { palette, .. } => std::mem::size_of_val(palette) + std::mem::size_of::<[u8; Chunk::VOLUME/2]>(),
-			BlockStorage::Sparse { palette, .. } => std::mem::size_of_val(palette) + std::mem::size_of::<[u8; Chunk::VOLUME]>(),
-		};
-		let rle_size = std::mem::size_of_val(&*rle.0) + std::mem::size_of_val(&*rle.1);
-
-		// Only return RLE if it's smaller
-		if rle_size < original_size {
-			Some(rle)
-		} else {
-			None
-		}
-	}
-	
-	/// Convert from RLE format to Compact/Sparse storage
-	pub fn from_rle(palette: &[Block], runs: &[(u8, u8)]) -> Option<Self> {
-		// First determine if we should use Compact or Sparse storage
-		// Compact is more efficient when palette size <= 16
-		let use_compact = palette.len() <= 16;
-		
-		if use_compact {
-			let mut indices = Box::new([0u8; Chunk::VOLUME/2]);
-			let mut pos = 0;
-			
-			for &(count, index) in runs {
-				for _ in 0..count {
-					let nibble_pos = pos / 2;
-					if pos % 2 == 0 {
-						indices[nibble_pos] = (index << 4) | (indices[nibble_pos] & 0x0F);
-					} else {
-						indices[nibble_pos] = (indices[nibble_pos] & 0xF0) | (index & 0x0F);
-					}
-					pos += 1;
-					
-					if pos >= Chunk::VOLUME {
-						break;
-					}
-				}
-			}
-			
-			Some(BlockStorage::Compact {
-				palette: palette.to_vec(),
-				indices,
-			})
-		} else {
-			let mut indices = Box::new([0u8; Chunk::VOLUME]);
-			let mut pos = 0;
-			
-			for &(count, index) in runs {
-				for _ in 0..count {
-					if pos >= Chunk::VOLUME {
-						break;
-					}
-					indices[pos] = index;
-					pos += 1;
-				}
-			}
-			
-			Some(BlockStorage::Sparse {
-				palette: palette.to_vec(),
-				indices,
-			})
-		}
-	}
+/*	
+	/// 16-bit indices for larger palettes 
+	/// Uses 7KB for indices + larger palette
+	Giant {
+		palette: Vec<Block>, // Max 256^2 entries
+		indices: Box<[u12; Chunk::VOLUME]>, // Max u16::MAX entries aka 0xFFFF
+	},
+	/// Uses 12KB for Giant Vec
+	Zigzag {
+		blocks: Vec<Block>,
+	},
+*/
+	Rle {
+		palette: Vec<Block>, // Max 256 entries
+		runs: Vec<(u8, u8)>,
+	},
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -225,7 +115,7 @@ pub enum StorageType {
 	Uniform = 0,
 	Compact = 1,
 	Sparse = 2,
-	RleCompressed = 3,
+	Rle = 3,
 	// Add new types here as needed
 }
 impl StorageType {
@@ -238,7 +128,6 @@ impl StorageType {
 }
 
 impl BlockStorage {
-	const MAX_COMPACT_PALETTE_SIZE: usize = Chunk::SIZE;
 	const MAX_SPARSE_PALETTE_SIZE: usize = 256;
 
 	/// Creates empty storage (all air blocks)
@@ -258,6 +147,7 @@ impl BlockStorage {
 			Self::Uniform{ .. } => StorageType::Uniform,
 			Self::Compact{ .. } => StorageType::Compact,
 			Self::Sparse{ .. } => StorageType::Sparse,
+			Self::Rle { .. } => unreachable!(),
 		}
 	}
 
@@ -280,6 +170,7 @@ impl BlockStorage {
 				let palette_idx = indices[index];
 				palette[palette_idx as usize]
 			},
+			Self::Rle { .. } => unreachable!(),
 		}
 	}
 
@@ -290,18 +181,18 @@ impl BlockStorage {
 				if *current_block != block {
 					// Need to convert from uniform to either compact or sparse
 					let mut new_palette = vec![*current_block];
-					let new_block_idx = Self::add_to_palette(&mut new_palette, block, Self::MAX_COMPACT_PALETTE_SIZE);
+					let new_block_idx = Self::add_to_palette(&mut new_palette, block,  Self::MAX_SPARSE_PALETTE_SIZE);
 					
-					if new_palette.len() <= Self::MAX_COMPACT_PALETTE_SIZE {
+					if new_palette.len() <= Chunk::SIZE {
 						// Convert to compact storage
-						let mut indices = Box::new([0u8; 2048]);
+						let mut indices = Box::new([0u8; Chunk::VOLUME/2]);
 						// Set all positions to index 0 (the original uniform block)
 						// Then set the specific position to the new block's index
 						Self::set_compact_index(&mut indices, index, new_block_idx);
 						*self = Self::Compact { palette: new_palette, indices };
 					} else {
 						// Convert directly to sparse storage
-						let mut indices = Box::new([0u8; 4096]);
+						let mut indices = Box::new([0u8; Chunk::VOLUME]);
 						indices[index] = new_block_idx;
 						*self = Self::Sparse { palette: new_palette, indices };
 					}
@@ -309,12 +200,12 @@ impl BlockStorage {
 				// If block is the same as current uniform block, no change needed
 			}
 			Self::Compact { palette, indices } => {
-				let block_idx = Self::add_to_palette(palette, block, Self::MAX_COMPACT_PALETTE_SIZE);
+				let block_idx = Self::add_to_palette(palette, block,  Self::MAX_SPARSE_PALETTE_SIZE);
 				
-				if palette.len() > Self::MAX_COMPACT_PALETTE_SIZE {
+				if palette.len() > Chunk::SIZE {
 					// Convert to sparse storage
 					let new_palette = palette.clone();
-					let mut new_indices = Box::new([0u8; 4096]);
+					let mut new_indices = Box::new([0u8; Chunk::VOLUME]);
 					
 					// Convert all existing compact indices to sparse format
 					for i in 0..Chunk::VOLUME {
@@ -337,13 +228,136 @@ impl BlockStorage {
 			Self::Sparse { palette, indices } => {
 				let block_idx = Self::add_to_palette(palette, block, Self::MAX_SPARSE_PALETTE_SIZE);
 				indices[index] = block_idx;
-			}
+			},
+			Self::Rle { .. } => unreachable!(),
 		}
+	}
+
+	/// Convert to RLE format only if it would save memory
+	pub fn to_rle(&self) -> Option<BlockStorage> {
+		let rle:Self = match self {
+			BlockStorage::Compact { palette, indices } => {
+				let mut runs = Vec::with_capacity(32);
+				let mut current_block = indices[0] >> 4;
+				let mut count = 1;
+				
+				// Process first nibble
+				for i in 1..Chunk::VOLUME {
+					let index = if i % 2 == 0 {
+						indices[i/2] >> 4
+					} else {
+						indices[i/2] & 0x0F
+					};
+					
+					if index == current_block && count < u8::MAX {
+						count += 1;
+					} else {
+						runs.push((count, current_block));
+						current_block = index;
+						count = 1;
+					}
+				}
+				
+				// Push the last run
+				runs.push((count, current_block));
+				
+				Self::Rle{ palette: palette.clone(), runs }
+			}
+			BlockStorage::Sparse { palette, indices } => {
+				let mut runs = Vec::with_capacity(32);
+				let mut current_block = indices[0];
+				let mut count = 1;
+				
+				for &block in indices.iter().skip(1) {
+					if block == current_block && count < u8::MAX {
+						count += 1;
+					} else {
+						runs.push((count, current_block));
+						current_block = block;
+						count = 1;
+					}
+				}
+				
+				// Push the last run
+				runs.push((count, current_block));
+				
+				Self::Rle{ palette: palette.clone(), runs }
+			}
+			_ => {
+				return None;
+			}
+		};
+
+		// Calculate memory sizes
+		let original_size = self.memory_usage();
+		let rle_size = rle.memory_usage();
+
+		// Only return RLE if it's smaller
+		if rle_size < original_size {
+			return Some(rle);
+		}
+		None
+	}
+	
+	/// Convert from RLE format to Compact/Sparse storage
+	pub fn from_rle(&self) -> Option<Self> {
+		if let Self::Rle{ palette, runs } = self {
+			println!("Loading RLE with {} palette entries, {} runs", palette.len(), runs.len());
+			// First determine if we should use Compact or Sparse storage
+			// Compact is more efficient when palette size <= 16
+			if palette.len() <= 16 {
+				let mut indices = Box::new([0u8; Chunk::VOLUME/2]);
+				let mut pos:usize = 0;
+				
+				for &(count, index) in runs {
+					for _ in 0..count {
+						if pos >= Chunk::VOLUME { break; }
+						let nibble_pos = pos / 2;
+						if pos % 2 == 0 {
+							indices[nibble_pos] = ((index << 4) & 0xF0) | (indices[nibble_pos] & 0x0F);
+						} else {
+							indices[nibble_pos] = (indices[nibble_pos] & 0xF0) | (index & 0x0F);
+						}
+						pos += 1;
+					}
+				}
+				if pos != Chunk::VOLUME {
+					println!("not all blocks filled, only : {}", pos);
+					return None; // Didn't fill all positions
+				}
+				
+				return Some(BlockStorage::Compact {
+					palette: palette.to_vec(),
+					indices,
+				});
+			} else {
+				let mut indices = Box::new([0u8; Chunk::VOLUME]);
+				let mut pos = 0;
+				
+				for &(count, index) in runs {
+					for _ in 0..count {
+						if pos >= Chunk::VOLUME { break; }
+						indices[pos] = index;
+						pos += 1;
+					}
+				}
+				if pos != Chunk::VOLUME {
+					println!("not all blocks filled, only : {}", pos);
+					return None; // Didn't fill all positions
+				}
+				
+				return Some(BlockStorage::Sparse {
+					palette: palette.to_vec(),
+					indices,
+				});
+			};
+		}
+		None
 	}
 
 	/// Helper function to set a 4-bit index in compact storage
 	#[inline]
-	fn set_compact_index(indices: &mut [u8; 2048], position: usize, palette_idx: u8) {
+	fn set_compact_index(indices: &mut [u8; Chunk::VOLUME/2], position: usize, palette_idx: u8) {
 		let byte_idx = position / 2;
 		let is_high_nibble = position % 2 == 1;
 		
@@ -389,7 +403,7 @@ impl BlockStorage {
 					let block_idx = *used_indices.iter().next().unwrap();
 					let block = palette[block_idx as usize];
 					*self = Self::Uniform { block };
-				} else if used_indices.len() <= Self::MAX_COMPACT_PALETTE_SIZE {
+				} else if used_indices.len() <= Chunk::SIZE {
 					// Can fit in compact storage
 					let mut new_palette = Vec::new();
 					let mut index_mapping = std::collections::HashMap::new();
@@ -402,7 +416,7 @@ impl BlockStorage {
 					}
 
 					// Convert indices to compact format
-					let mut new_indices = Box::new([0u8; 2048]);
+					let mut new_indices = Box::new([0u8; Chunk::VOLUME/2]);
 					for i in 0..Chunk::VOLUME {
 						let old_palette_idx = indices[i];
 						let new_palette_idx = index_mapping[&old_palette_idx];
@@ -435,7 +449,10 @@ impl BlockStorage {
 			}
 			Self::Uniform { .. } => {
 				// Already optimal
-			}
+			},
+			Self::Rle { .. } => {
+				// Already optimal
+			},
 		}
 	}
 
@@ -445,22 +462,28 @@ impl BlockStorage {
 			Self::Uniform { block } => vec![*block],
 			Self::Compact { palette, .. } => palette.clone(),
 			Self::Sparse { palette, .. } => palette.clone(),
+			Self::Rle { palette, .. } => palette.clone(),
 		}
 	}
 
 	/// Returns memory usage statistics
-	pub fn memory_usage(&self) -> (usize, &'static str) {
+	pub const fn memory_usage(&self) -> (usize, &'static str) {
 		match self {
 			Self::Uniform { .. } => (std::mem::size_of::<Block>(), "Uniform"),
 			Self::Compact { palette, .. } => {
 				let palette_size = palette.len() * std::mem::size_of::<Block>();
-				let indices_size = 2048; // Box<[u8; 2048]>
+				let indices_size = Chunk::VOLUME/2; // Box<[u8; 2048]>
 				(palette_size + indices_size, "Compact")
 			}
 			Self::Sparse { palette, .. } => {
 				let palette_size = palette.len() * std::mem::size_of::<Block>();
-				let indices_size = 4096; // Box<[u8; 4096]>
+				let indices_size = Chunk::VOLUME; // Box<[u8; 4096]>
 				(palette_size + indices_size, "Sparse")
+			},
+			Self::Rle { palette, runs } => {
+				let palette_size = palette.len() * std::mem::size_of::<Block>();
+				let runsize = runs.len() * 2; // Vec<(u8, u8)>,
+				(palette_size + runsize, "Rle comp")
 			},
 		}
 	}
@@ -591,14 +614,12 @@ impl Chunk {
 		self.dirty = true;
 
 		// Periodically optimize storage to avoid bloat
-		if matches!(self.storage, BlockStorage::Sparse { .. }) {
-			// Only optimize sparse storage periodically to avoid performance hits
-			static mut OPTIMIZATION_COUNTER: usize = 0;
-			unsafe {
-				OPTIMIZATION_COUNTER += 1;
-				if OPTIMIZATION_COUNTER % 100 == 0 {
-					self.storage.optimize();
-				}
+		// Only optimize sparse storage periodically to avoid performance hits
+		static mut OPTIMIZATION_COUNTER: usize = 0;
+		unsafe {
+			OPTIMIZATION_COUNTER += 1;
+			if OPTIMIZATION_COUNTER % 100 == 0 {
+				self.storage.optimize();
 			}
 		}
 	}

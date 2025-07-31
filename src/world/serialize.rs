@@ -6,11 +6,13 @@ use crate::block::main::{Block, Material, StorageType, Chunk, BlockStorage};
 use crate::hs::binary::{BinarySerializable, FixedBinarySerializable};
 use crate::hs::time::Time;
 
+
 //
 //
 // binary conversions for all kinds of structs and enums just to make the world serialize-able
 //
 //
+
 
 impl BinarySerializable for ChunkCoord {
 	fn to_binary(&self) -> Vec<u8> {
@@ -28,8 +30,6 @@ impl BinarySerializable for ChunkCoord {
 impl FixedBinarySerializable for ChunkCoord {
 	const BINARY_SIZE: usize = 8;
 }
-
-
 
 
 // Implement BinarySerializable for BlockRotation
@@ -54,7 +54,6 @@ impl BlockRotation {
 		}
 	}
 }
-
 
 
 impl BinarySerializable for Material {
@@ -102,29 +101,13 @@ impl FixedBinarySerializable for Block {
 impl BinarySerializable for BlockStorage {
 	fn to_binary(&self) -> Vec<u8> {
 		let mut data:Vec<u8> = Vec::new();
-		if let Some((palette, runs)) = self.to_rle() {
-			data.push(StorageType::RleCompressed.as_u8());
-			// Write palette length
-			data.push(palette.len() as u8);
-			// Write palette
-			for block in &palette {
-				data.extend_from_slice(&block.to_binary());
-			}
-			// Write run count (u16 for potentially more runs)
-			data.push(runs.len() as u8);
-			// Write each run (count: u8, index: u8)
-			for &(count, index) in &runs {
-				data.push(count);
-				data.push(index);
-			}
-			return data;
-		}
-		data.push(self.to_type().as_u8());
 		match self {
-			BlockStorage::Uniform { block } => {
+			Self::Uniform { block } => {
+				data.push(self.to_type().as_u8());
 				data.extend_from_slice(&block.to_binary());
 			}
-			BlockStorage::Compact { palette, indices } => {
+			Self::Compact { palette, indices } => {
+				data.push(self.to_type().as_u8());
 				// Write palette length
 				data.push(palette.len() as u8);
 				// Write palette
@@ -134,7 +117,8 @@ impl BinarySerializable for BlockStorage {
 				// Write compact indices (2048 bytes)
 				data.extend_from_slice(&indices[..]);
 			}
-			BlockStorage::Sparse { palette, indices } => {
+			Self::Sparse { palette, indices } => {
+				data.push(self.to_type().as_u8());
 				// Write palette length
 				data.push(palette.len() as u8);
 				// Write palette
@@ -143,6 +127,22 @@ impl BinarySerializable for BlockStorage {
 				}
 				// Write sparse indices (4096 bytes)
 				data.extend_from_slice(&indices[..]);
+			},
+			Self::Rle { palette, runs } => {
+				data.push(StorageType::Rle.as_u8());
+				// Write palette length
+				data.push(palette.len() as u8);
+				// Write palette
+				for block in palette {
+					data.extend_from_slice(&block.to_binary());
+				}
+				// Write run count
+				data.extend_from_slice(&(runs.len() as u16).to_binary());
+				// Write each run (count: u8, index: u8)
+				for &(count, index) in runs {
+					data.push(count);
+					data.push(index);
+				}
 			}
 		}
 		data
@@ -152,148 +152,115 @@ impl BinarySerializable for BlockStorage {
 		if bytes.is_empty() {
 			return None;
 		}
+
+		fn read_palette(bytes: &[u8], offset: &mut usize) -> Option<Vec<Block>> {
+			let palette_len = bytes[*offset] as usize; *offset += 1;
+			// Read palette
+			let mut palette = Vec::with_capacity(palette_len);
+			for _ in 0..palette_len {
+				if *offset + Block::BINARY_SIZE > bytes.len() {
+					return None;
+				}
+				let block = Block::from_binary(&bytes[*offset..*offset + Block::BINARY_SIZE])?;
+				*offset += Block::BINARY_SIZE;
+				palette.push(block);
+			}
+			Some(palette)
+		}
 		
 		let mut offset = 0;
-		let storage_type = StorageType::from_u8(bytes[offset])?;
-		offset += 1;
+		let storage_type = StorageType::from_u8(bytes[offset])?; offset += 1;
 
+		if offset >= bytes.len() { return None; }
 		match storage_type {
 			StorageType::Uniform => {
-				if offset + Block::BINARY_SIZE > bytes.len() {
-					return None;
-				}
+				if offset + Block::BINARY_SIZE > bytes.len() { return None; }
 				let block = Block::from_binary(&bytes[offset..offset + Block::BINARY_SIZE])?;
-				Some(BlockStorage::Uniform { block })
+				Some(Self::Uniform { block })
 			}
 			StorageType::Compact => {
-				if offset >= bytes.len() {
-					return None;
-				}
-				let palette_len = bytes[offset] as usize;
-				offset += 1;
-
-				// Read palette
-				let mut palette = Vec::with_capacity(palette_len);
-				for _ in 0..palette_len {
-					if offset + Block::BINARY_SIZE > bytes.len() {
-						return None;
-					}
-					let block = Block::from_binary(&bytes[offset..offset + Block::BINARY_SIZE])?;
-					offset += Block::BINARY_SIZE;
-					palette.push(block);
-				}
+				let palette = read_palette(bytes, &mut offset)?;
 
 				// Read compact indices (2048 bytes)
-				if offset + Chunk::VOLUME/2 > bytes.len() {
-					return None;
-				}
+				if offset + Chunk::VOLUME/2 > bytes.len() { return None; }
 				let mut indices = Box::new([0u8; Chunk::VOLUME/2]);
 				indices.copy_from_slice(&bytes[offset..offset + Chunk::VOLUME/2]);
 
-				Some(BlockStorage::Compact { palette, indices })
+				Some(Self::Compact { palette, indices })
 			}
 			StorageType::Sparse => {
-				if offset >= bytes.len() {
-					return None;
-				}
-				let palette_len = bytes[offset] as usize;
-				offset += 1;
-
-				// Read palette
-				let mut palette = Vec::with_capacity(palette_len);
-				for _ in 0..palette_len {
-					if offset + Block::BINARY_SIZE > bytes.len() {
-						return None;
-					}
-					let block = Block::from_binary(&bytes[offset..offset + Block::BINARY_SIZE])?;
-					offset += Block::BINARY_SIZE;
-					palette.push(block);
-				}
+				let palette = read_palette(bytes, &mut offset)?;
 
 				// Read sparse indices (4096 bytes)
-				if offset + Chunk::VOLUME > bytes.len() {
-					return None;
-				}
+				if offset + Chunk::VOLUME > bytes.len() { return None; }
 				let mut indices = Box::new([0u8; Chunk::VOLUME]);
 				indices.copy_from_slice(&bytes[offset..offset + Chunk::VOLUME]);
 
-				Some(BlockStorage::Sparse { palette, indices })
+				Some(Self::Sparse { palette, indices })
 			}
-			StorageType::RleCompressed => {
-				if offset >= bytes.len() {
-					return None;
-				}
-				
-				// Read palette length
-				let palette_len = bytes[offset] as usize;
-				offset += 1;
-				
-				// Read palette
-				let mut palette = Vec::with_capacity(palette_len);
-				for _ in 0..palette_len {
-					if offset + Block::BINARY_SIZE > bytes.len() {
-						return None;
-					}
-					let block = Block::from_binary(&bytes[offset..offset + Block::BINARY_SIZE])?;
-					offset += Block::BINARY_SIZE;
-					palette.push(block);
-				}
-				
+			StorageType::Rle => {
+				let palette = read_palette(bytes, &mut offset)?;
+
 				// Read run count (u16)
-				if offset + 1 > bytes.len() {
-					return None;
-				}
-				let run_count = bytes[offset] as usize;
-				offset += 1;
+				if offset+2 > bytes.len() { return None; }
+				let run_count = u16::from_binary(&bytes[offset..offset+2])? as usize; offset += 2;
 				
 				// Read runs
 				let mut runs = Vec::with_capacity(run_count);
 				for _ in 0..run_count {
-					if offset + 2 > bytes.len() {
-						return None;
-					}
+					if offset + 2 > bytes.len() { return None; }
+
 					let count = bytes[offset];
 					let index = bytes[offset+1];
 					runs.push((count, index));
 					offset += 2;
 				}
-				
 				// Convert RLE to Compact/Sparse storage
-				Self::from_rle(&palette, &runs)
+				Some(Self::Rle { palette, runs })
 			}
 		}
 	}
 
 	fn binary_size(&self) -> usize {
+		// Fallback to other storage types if RLE isn't possible
 		match self {
-			BlockStorage::Uniform { block } => {
+			Self::Uniform { block } => {
 				1 + // type marker
 				block.binary_size() // block
 			}
-			BlockStorage::Compact { palette, .. } => {
+			Self::Compact { palette, .. } => {
 				1 + // type marker
 				1 + // palette length
 				palette.len() * Block::BINARY_SIZE + // palette entries
 				Chunk::VOLUME/2 // compact indices array
 			}
-			BlockStorage::Sparse { palette, .. } => {
+			Self::Sparse { palette, .. } => {
 				1 + // type marker
 				1 + // palette length
 				palette.len() * Block::BINARY_SIZE + // palette entries
 				Chunk::VOLUME // sparse indices array
 			}
+			// Add this case for RLE-compressed storage
+			Self::Rle { palette, runs } => {
+				1 + // type marker
+				1 + // palette length
+				palette.len() * Block::BINARY_SIZE + // palette entries
+				2 + // run count
+				runs.len() * 2 // runs (each run is 2 bytes: count + index)
+			}
 		}
 	}
 }
 
+
 impl BinarySerializable for Chunk {
 	fn to_binary(&self) -> Vec<u8> {
 		// Since storage now contains the palette, we just serialize the storage
-		self.storage.to_binary()
+		self.storage.to_rle().unwrap_or_else(|| self.storage.clone()).to_binary()
 	}
-
 	fn from_binary(bytes: &[u8]) -> Option<Self> {
 		let storage = BlockStorage::from_binary(bytes)?;
+		let storage = BlockStorage::from_rle(&storage).unwrap_or_else(|| storage);
 		
 		Some(Chunk {
 			storage,
@@ -303,13 +270,10 @@ impl BinarySerializable for Chunk {
 			bind_group: None,
 		})
 	}
-
 	fn binary_size(&self) -> usize {
 		self.storage.binary_size()
 	}
 }
-
-
 
 
 // Refine World serialization using the trait system
@@ -352,13 +316,10 @@ impl BinarySerializable for World {
 			// Read chunk
 			let chunk = Chunk::from_binary(&bytes[offset..])?;
 			let chunk_size = chunk.binary_size();
-			
-			if offset + chunk_size > bytes.len() {
-				return None;
-			}
+			if offset + chunk_size > bytes.len() { return None; }
+			offset += chunk_size;
 			
 			world.chunks.insert(coord, chunk);
-			offset += chunk_size;
 		}
 		
 		Some(world)
