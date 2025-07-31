@@ -57,6 +57,7 @@ pub mod game { // game related, instance related
 pub mod world { // world related, tiny bit rendering and game related
 	pub mod main;
 	pub mod manager;
+	pub mod serialize;
 	pub mod handler;
 }
 pub mod block { // block related, chunk related

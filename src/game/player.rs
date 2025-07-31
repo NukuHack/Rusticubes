@@ -47,24 +47,37 @@ impl Player {
 	/// Creates a new player with default position and given camera configuration
 	pub fn new(
 		config: CameraConfig, 
-		position: Vec3, 
+		pos: Vec3, 
 		device: &wgpu::Device, 
 		size: PhysicalSize<u32>,
 		bind_group_layout: &wgpu::BindGroupLayout,
 	) -> Self {
-		let aabb = aabb::AABB::from_pos(position, Vec3::new(0.8,1.8,0.8));
-		
-		let camera_system = CameraSystem::new(device, size, config, bind_group_layout);
+		let aabb = aabb::AABB::from_pos(pos, Vec3::new(0.8,1.8,0.8));
 		
 		Self {
-			pos: position,
+			pos,
 			config,
 			controller: PlayerController::new(config),
 			movement_mode: MovementMode::Flat,
 			camera_mode: CameraMode::Smooth,
 			inventory: inventory::Inventory::default(),
 			body: aabb::PhysicsBody::new(aabb),
-			camera_system,
+			camera_system: CameraSystem::new(device, size, config, bind_group_layout),
+		}
+	}
+
+    #[cfg(test)]
+	pub fn dummy(pos: Vec3, config: CameraConfig) -> Self {
+		let aabb = aabb::AABB::from_pos(pos, Vec3::new(0.8,1.8,0.8));
+		Self {
+			pos,
+			config,
+			controller: PlayerController::new(config),
+			movement_mode: MovementMode::Flat,
+			camera_mode: CameraMode::Smooth,
+			inventory: inventory::Inventory::default(),
+			body: aabb::PhysicsBody::new(aabb),
+			camera_system: CameraSystem::dummy(),
 		}
 	}
 
@@ -372,8 +385,22 @@ pub struct CameraSystem {
 	buffer: wgpu::Buffer,
 	bind_group: wgpu::BindGroup,
 }
-
 impl CameraSystem {
+    /// Creates a "dummy" `CameraSystem` with no real functionality.
+    /// All fields are placeholders.
+    #[cfg(test)]
+    pub fn dummy() -> Self { unsafe {
+		use std::mem::MaybeUninit;
+        #[allow(invalid_value)] // i know it is invalid ... that's the reason for this entire function to make invalid quick non existing data
+        Self {
+            camera: Camera::default(),
+            projection: Projection::default(),
+            uniform: CameraUniform::default(),
+            buffer: MaybeUninit::uninit().assume_init(),
+            bind_group: MaybeUninit::uninit().assume_init(),
+        }
+    }}
+
 	pub fn new(
 		device: &wgpu::Device,
 		size: PhysicalSize<u32>,
@@ -434,6 +461,9 @@ pub struct Camera {
 impl Camera {
 	#[inline] pub const fn new(rotation: Vec3) -> Self {
 		Self { rotation }
+	}
+	#[inline] pub const fn default() -> Self {
+		Self { rotation: Vec3::new(0.,0.,0.) }
 	}
 
 	pub fn view_matrix(&self, pos: Vec3) -> Mat4 {
@@ -498,6 +528,16 @@ impl Projection {
 			znear,
 			zfar,
 			matrix: Mat4::perspective_rh(fovy, aspect, znear, zfar),
+		}
+	}
+	#[cfg(test)]
+	pub fn default() -> Self {
+		Self {
+			aspect: 1.,
+			fovy: 30.,
+			znear: 1.,
+			zfar: 100.,
+			matrix: Mat4::perspective_rh(30., 1., 1., 100.),
 		}
 	}
 

@@ -14,7 +14,7 @@ use crate::hs::binary::BinarySerializable;
 
 	
 #[test]
-fn test_item_id_serialization() {
+fn item_id_serialization() {
 	let item_id = ItemId(1234);
 	let serialized = item_id.to_binary();
 	let deserialized = ItemId::from_binary(&serialized).unwrap();
@@ -22,7 +22,7 @@ fn test_item_id_serialization() {
 }
 
 #[test]
-fn test_item_flags_serialization() {
+fn item_flags_serialization() {
 	let flags = ItemFlags::new(ItemFlags::IS_BLOCK | ItemFlags::IS_TOOL);
 	let serialized = flags.to_binary();
 	let deserialized = ItemFlags::from_binary(&serialized).unwrap();
@@ -30,7 +30,7 @@ fn test_item_flags_serialization() {
 }
 
 #[test]
-fn test_extended_data_serialization() {
+fn extended_data_serialization() {
 	let extended_data = ItemExtendedData::<4>::new()
 		.with_durability(NonZeroU32::new(100).unwrap())
 		.with_damage(50);
@@ -44,7 +44,7 @@ fn test_extended_data_serialization() {
 }
 
 #[test]
-fn test_item_comp_data_serialization() {
+fn item_comp_data_serialization() {
 	let extended_data = ItemExtendedData::<4>::new()
 		.with_durability(NonZeroU32::new(100).unwrap())
 		.with_damage(50);
@@ -60,7 +60,7 @@ fn test_item_comp_data_serialization() {
 	assert_eq!(extended_data.get_damage(), data.get_damage());
 }
 #[test]
-fn test_item_comp_serialization() {
+fn item_comp_serialization() {
 	let apple_item_data = ItemComp::new(12345, "poopy_head");
 	let serialized = apple_item_data.copy().to_binary();
 	let deserialized = ItemComp::from_binary(&serialized).unwrap();
@@ -75,9 +75,9 @@ fn test_item_comp_serialization() {
 
 type StatString = &'static str;
 #[test]
-fn test_string_serialization() {
+fn string_serialization() {
 	let data ="poopy_head";
-	let serialized = "poopy_head".to_binary();
+	let serialized = &data.to_binary();
 	let deserialized = StatString::from_binary(&serialized).unwrap();
 	
 	assert_eq!(data, deserialized);

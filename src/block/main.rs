@@ -66,8 +66,7 @@ impl Block {
 /// Represents a chunk of blocks in the world
 #[derive(Clone, PartialEq)]
 pub struct Chunk {
-	pub palette: Vec<Block>, // Max 256 entries (index 0 = air, indices 1-255 = blocks)
-	pub storage: BlockStorage, // Palette indices for each block position
+	pub storage: BlockStorage,
 	pub dirty: bool,
 	pub final_mesh: bool,
 	pub mesh: Option<GeometryBuffer>,
@@ -76,44 +75,266 @@ pub struct Chunk {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum BlockStorage {
-	Uniform(u8),             // Single palette index for all blocks
-	Sparse(Box<[u8; 4096]>), // Full index array
+	/// Single block type for all positions (most memory efficient)
+	Uniform {
+		block: Block,
+	},
+	/// 4-bit indices (2 blocks per byte) for palettes with ≤16 blocks
+	/// Uses 2KB for indices + small palette
+	Compact {
+		palette: Vec<Block>, // Max 16 entries
+		indices: Box<[u8; 2048]>, // 4096 positions, 2 per byte
+	},
+	/// 8-bit indices for larger palettes (up to 256 blocks)
+	/// Uses 4KB for indices + larger palette
+	Sparse {
+		palette: Vec<Block>, // Max 256 entries
+		indices: Box<[u8; 4096]>, // Full index array
+	},
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+pub enum StorageType {
+	Uniform = 0,
+	Compact = 1,
+	Sparse = 2,
+	// Add new types here as needed
+}
+impl StorageType {
+	#[inline] pub const fn from_u8(value: u8) -> Option<Self> {
+		unsafe { std::mem::transmute(value) }
+	}
+	pub const fn as_u8(self) -> u8 {
+		self as u8
+	}
 }
 
 impl BlockStorage {
-	/// Gets the palette index at the given position
-	#[inline] pub const fn get(&self, index: usize) -> u8 {
-		match self {
-			BlockStorage::Uniform(palette_idx) => *palette_idx,
-			BlockStorage::Sparse(indices) => indices[index],
+	const MAX_COMPACT_PALETTE_SIZE: usize = 16;
+	const MAX_SPARSE_PALETTE_SIZE: usize = 256;
+	const CHUNK_VOLUME: usize = 4096;
+
+	/// Creates empty storage (all air blocks)
+	pub const fn empty() -> Self {
+		Self::Uniform {
+			block: Block::default(), // Air block
 		}
 	}
 
-	/// Sets the palette index at the given position, converting to sparse if needed
-	#[inline]
-	fn set(&mut self, index: usize, palette_idx: u8) {
+	/// Creates uniform storage with a single block type
+	pub fn uniform(block: Block) -> Self {
+		Self::Uniform { block }
+	}
+
+	pub const fn to_type(&self) -> StorageType {
 		match self {
-			BlockStorage::Uniform(current_idx) => {
-				if *current_idx != palette_idx {
+			Self::Uniform{ .. } => StorageType::Uniform,
+			Self::Compact{ .. } => StorageType::Compact,
+			Self::Sparse{ .. } => StorageType::Sparse,
+		}
+	}
+
+	/// Gets the block at the given position
+	#[inline]
+	pub fn get(&self, index: usize) -> Block {
+		match self {
+			Self::Uniform { block } => *block,
+			Self::Compact { palette, indices } => {
+				let byte_idx = index / 2;
+				let is_high_nibble = index % 2 == 1;
+				let palette_idx = if is_high_nibble {
+					(indices[byte_idx] >> 4) & 0x0F
+				} else {
+					indices[byte_idx] & 0x0F
+				};
+				palette[palette_idx as usize]
+			}
+			Self::Sparse { palette, indices } => {
+				let palette_idx = indices[index];
+				palette[palette_idx as usize]
+			}
+		}
+	}
+
+	/// Sets the block at the given position, automatically handling storage transitions
+	pub fn set(&mut self, index: usize, block: Block) {
+		match self {
+			Self::Uniform { block: current_block } => {
+				if *current_block != block {
+					// Need to convert from uniform to either compact or sparse
+					let mut new_palette = vec![*current_block];
+					let new_block_idx = Self::add_to_palette(&mut new_palette, block, Self::MAX_COMPACT_PALETTE_SIZE);
+					
+					if new_palette.len() <= Self::MAX_COMPACT_PALETTE_SIZE {
+						// Convert to compact storage
+						let mut indices = Box::new([0u8; 2048]);
+						// Set all positions to index 0 (the original uniform block)
+						// Then set the specific position to the new block's index
+						Self::set_compact_index(&mut indices, index, new_block_idx);
+						*self = Self::Compact { palette: new_palette, indices };
+					} else {
+						// Convert directly to sparse storage
+						let mut indices = Box::new([0u8; 4096]);
+						indices[index] = new_block_idx;
+						*self = Self::Sparse { palette: new_palette, indices };
+					}
+				}
+				// If block is the same as current uniform block, no change needed
+			}
+			Self::Compact { palette, indices } => {
+				let block_idx = Self::add_to_palette(palette, block, Self::MAX_COMPACT_PALETTE_SIZE);
+				
+				if palette.len() > Self::MAX_COMPACT_PALETTE_SIZE {
 					// Convert to sparse storage
-					let mut indices = Box::new([*current_idx; 4096]);
-					indices[index] = palette_idx;
-					*self = BlockStorage::Sparse(indices);
+					let new_palette = palette.clone();
+					let mut new_indices = Box::new([0u8; 4096]);
+					
+					// Convert all existing compact indices to sparse format
+					for i in 0..Self::CHUNK_VOLUME {
+						let byte_idx = i / 2;
+						let is_high_nibble = i % 2 == 1;
+						let palette_idx = if is_high_nibble {
+							(indices[byte_idx] >> 4) & 0x0F
+						} else {
+							indices[byte_idx] & 0x0F
+						};
+						new_indices[i] = palette_idx;
+					}
+					new_indices[index] = block_idx;
+					*self = Self::Sparse { palette: new_palette, indices: new_indices };
+				} else {
+					// Stay in compact format
+					Self::set_compact_index(indices, index, block_idx);
 				}
 			}
-			BlockStorage::Sparse(indices) => {
-				indices[index] = palette_idx;
+			Self::Sparse { palette, indices } => {
+				let block_idx = Self::add_to_palette(palette, block, Self::MAX_SPARSE_PALETTE_SIZE);
+				indices[index] = block_idx;
 			}
 		}
 	}
 
-	/// Attempts to optimize storage back to uniform if all indices are the same
+	/// Helper function to set a 4-bit index in compact storage
 	#[inline]
-	fn try_optimize(&mut self) {
-		if let BlockStorage::Sparse(indices) = self {
-			let first = indices[0];
-			if indices.iter().all(|&idx| idx == first) {
-				*self = BlockStorage::Uniform(first);
+	fn set_compact_index(indices: &mut [u8; 2048], position: usize, palette_idx: u8) {
+		let byte_idx = position / 2;
+		let is_high_nibble = position % 2 == 1;
+		
+		if is_high_nibble {
+			indices[byte_idx] = (indices[byte_idx] & 0x0F) | ((palette_idx & 0x0F) << 4);
+		} else {
+			indices[byte_idx] = (indices[byte_idx] & 0xF0) | (palette_idx & 0x0F);
+		}
+	}
+
+	/// Helper function to add a block to a palette, returning its index
+	fn add_to_palette(palette: &mut Vec<Block>, block: Block, max_size: usize) -> u8 {
+		// Check if block already exists in palette
+		if let Some(idx) = palette.iter().position(|&b| b == block) {
+			return idx as u8;
+		}
+
+		// Add new block to palette if there's space
+		if palette.len() < max_size {
+			let idx = palette.len();
+			palette.push(block);
+			idx as u8
+		} else {
+			// Palette is full, could implement LRU eviction here
+			// For now, just return index 0 (air/first block)
+			eprintln!("Warning: Palette is full, using fallback block");
+			0
+		}
+	}
+
+	/// Attempts to optimize storage to more efficient formats
+	pub fn optimize(&mut self) {
+		match self {
+			Self::Sparse { palette, indices } => {
+				// Try to optimize sparse to compact or uniform
+				let mut used_indices = std::collections::HashSet::new();
+				for &idx in indices.iter() {
+					used_indices.insert(idx);
+				}
+
+				if used_indices.len() == 1 {
+					// All blocks are the same - convert to uniform
+					let block_idx = *used_indices.iter().next().unwrap();
+					let block = palette[block_idx as usize];
+					*self = Self::Uniform { block };
+				} else if used_indices.len() <= Self::MAX_COMPACT_PALETTE_SIZE {
+					// Can fit in compact storage
+					let mut new_palette = Vec::new();
+					let mut index_mapping = std::collections::HashMap::new();
+
+					// Create new compact palette with only used blocks
+					for old_idx in used_indices.iter().copied() {
+						let new_idx = new_palette.len() as u8;
+						new_palette.push(palette[old_idx as usize]);
+						index_mapping.insert(old_idx, new_idx);
+					}
+
+					// Convert indices to compact format
+					let mut new_indices = Box::new([0u8; 2048]);
+					for i in 0..Self::CHUNK_VOLUME {
+						let old_palette_idx = indices[i];
+						let new_palette_idx = index_mapping[&old_palette_idx];
+						Self::set_compact_index(&mut new_indices, i, new_palette_idx);
+					}
+
+					*self = Self::Compact { palette: new_palette, indices: new_indices };
+				}
+			}
+			Self::Compact { palette, indices } => {
+				// Try to optimize compact to uniform
+				let mut used_indices = std::collections::HashSet::new();
+				for i in 0..Self::CHUNK_VOLUME {
+					let byte_idx = i / 2;
+					let is_high_nibble = i % 2 == 1;
+					let palette_idx = if is_high_nibble {
+						(indices[byte_idx] >> 4) & 0x0F
+					} else {
+						indices[byte_idx] & 0x0F
+					};
+					used_indices.insert(palette_idx);
+				}
+
+				if used_indices.len() == 1 {
+					// All blocks are the same - convert to uniform
+					let block_idx = *used_indices.iter().next().unwrap();
+					let block = palette[block_idx as usize];
+					*self = Self::Uniform { block };
+				}
+			}
+			Self::Uniform { .. } => {
+				// Already optimal
+			}
+		}
+	}
+
+	/// Returns the palette (for debugging/inspection)
+	pub fn palette(&self) -> Vec<Block> {
+		match self {
+			Self::Uniform { block } => vec![*block],
+			Self::Compact { palette, .. } => palette.clone(),
+			Self::Sparse { palette, .. } => palette.clone(),
+		}
+	}
+
+	/// Returns memory usage statistics
+	pub fn memory_usage(&self) -> (usize, &'static str) {
+		match self {
+			Self::Uniform { .. } => (std::mem::size_of::<Block>(), "Uniform"),
+			Self::Compact { palette, .. } => {
+				let palette_size = palette.len() * std::mem::size_of::<Block>();
+				let indices_size = 2048; // Box<[u8; 2048]>
+				(palette_size + indices_size, "Compact")
+			}
+			Self::Sparse { palette, .. } => {
+				let palette_size = palette.len() * std::mem::size_of::<Block>();
+				let indices_size = 4096; // Box<[u8; 4096]>
+				(palette_size + indices_size, "Sparse")
 			}
 		}
 	}
@@ -121,11 +342,14 @@ impl BlockStorage {
 
 impl std::fmt::Debug for Chunk {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		let (memory_usage, storage_type) = self.storage.memory_usage();
 		f.debug_struct("Chunk")
 			.field("dirty", &self.dirty)
 			.field("is_empty", &self.is_empty())
 			.field("has_bind_group", &self.bind_group.is_some())
 			.field("has_mesh", &self.mesh.is_some())
+			.field("storage_type", &storage_type)
+			.field("memory_bytes", &memory_usage)
 			.finish()
 	}
 }
@@ -135,120 +359,36 @@ impl Chunk {
 	pub const SIZE: usize = 16;
 	pub const SIZE_I: i32 = Self::SIZE as i32;
 	pub const SIZE_F: f32 = Self::SIZE as f32;
-	pub const VOLUME: usize = Self::SIZE.pow(3); // 4096
-	const MAX_PALETTE_SIZE: usize = 256; // Index 0 = air, indices 1-255 = blocks
+	pub const VOLUME: usize = Self::SIZE * Self::SIZE * Self::SIZE; // 4096
 
 	/// Creates an empty chunk (all blocks are air)
 	#[inline]
 	pub fn empty() -> Self {
 		Self {
-			palette: vec![Block::default()],  // Index 0 is always air
-			storage: BlockStorage::Uniform(0u8), // All blocks point to air
+			storage: BlockStorage::empty(),
 			dirty: false,
 			final_mesh: false,
 			mesh: None,
 			bind_group: None,
 		}
 	}
+
 	/// Creates a new filled chunk (all blocks initialized to `Block::new(<mat>)`)
 	#[inline]
 	pub fn new(mat: u16) -> Self {
-		let mut chunk = Self::empty();
-		let new_block = Block::new(Material(mat));
-		let idx = chunk.palette_add(new_block);
-		chunk.storage = BlockStorage::Uniform(idx);
-		chunk.dirty = true;
-		chunk
-	}
-
-	/// Adds a block to the palette, returning its index
-	/// Returns existing index if block already exists
-	#[inline]
-	fn palette_add(&mut self, block: Block) -> u8 {
-		// Air blocks always map to index 0
-		if block.is_empty() {
-			return 0;
+		let block = Block::new(Material(mat));
+		Self {
+			storage: BlockStorage::uniform(block),
+			dirty: true,
+			final_mesh: false,
+			mesh: None,
+			bind_group: None,
 		}
-
-		// Check if block already exists in palette
-		if let Some(idx) = self.palette.iter().position(|&b| b == block) {
-			return idx as u8;
-		}
-
-		// Add new block to palette if there's space
-		if self.palette.len() < Self::MAX_PALETTE_SIZE {
-			let idx = self.palette.len();
-			self.palette.push(block);
-			idx as u8
-		} else {
-			// Palette is full, could implement LRU eviction here
-			// For now, just return index 1 (first non-air block)
-			eprintln!("Warning: Chunk palette is full, using fallback block");
-			1
-		}
-	}
-
-	/// Removes unused blocks from the palette and updates indices
-	fn palette_compact(&mut self) {
-		if matches!(self.storage, BlockStorage::Uniform(_)) {
-			// For uniform storage, we only need the one block type
-			let used_idx = match self.storage {
-				BlockStorage::Uniform(idx) => idx,
-				_ => unreachable!(),
-			};
-
-			if used_idx == 0 {
-				// Only air is used
-				self.palette = vec![Block::default()];
-			} else if used_idx < self.palette.len() as u8 {
-				// Compact to just air + the used block
-				let used_block = self.palette[used_idx as usize];
-				self.palette = vec![Block::default(), used_block];
-				self.storage = BlockStorage::Uniform(1);
-			}
-			return;
-		}
-
-		// For sparse storage, find all used palette indices
-		let mut used_indices = std::collections::HashSet::new();
-		if let BlockStorage::Sparse(indices) = &self.storage {
-			for &idx in indices.iter() {
-				used_indices.insert(idx);
-			}
-		}
-
-		// Create new compact palette
-		let mut new_palette = Vec::new();
-		let mut index_mapping = std::collections::HashMap::new();
-
-		// Air always stays at index 0
-		new_palette.push(Block::default());
-		index_mapping.insert(0u8, 0u8);
-
-		// Add used blocks in order
-		for old_idx in 1..self.palette.len() as u8 {
-			if used_indices.contains(&old_idx) {
-				let new_idx = new_palette.len() as u8;
-				new_palette.push(self.palette[old_idx as usize]);
-				index_mapping.insert(old_idx, new_idx);
-			}
-		}
-
-		// Update storage with new indices
-		if let BlockStorage::Sparse(indices) = &mut self.storage {
-			for idx in indices.iter_mut() {
-				*idx = index_mapping[idx];
-			}
-		}
-
-		self.palette = new_palette;
-		self.storage.try_optimize();
 	}
 
 	pub fn generate(coord: ChunkCoord, seed: u32) -> Option<Self> {
 		if coord.y() > 8i32 { return Some(Self::empty()); }
 		if coord.y() <= -2i32 { return Some(Self::new(1u16)); }
-		//let mut stopwatch = stopwatch::RunningAverage::new();
 		
 		let noise_gen = Noise::new(seed);
 		let (world_x, world_y, world_z) = coord.unpack_to_worldpos();
@@ -258,12 +398,11 @@ impl Chunk {
 		// Pre-calculate all noise values for this chunk's XZ plane
 		for x in 0..Self::SIZE {
 			for z in 0..Self::SIZE {
-				let pos_x:i32 = world_x + x as i32;
-				let pos_z:i32 = world_z + z as i32;
+				let pos_x: i32 = world_x + x as i32;
+				let pos_z: i32 = world_z + z as i32;
 				
 				// Get noise value and scale it to a reasonable height range
-				let noise:f32 = noise_gen.terrain_noise_2d(pos_x, pos_z);
-				//stopwatch.add(noise as f64);
+				let noise: f32 = noise_gen.terrain_noise_2d(pos_x, pos_z);
 				let final_noise = noise * (8 * Chunk::SIZE) as f32;
 				
 				for y in 0..Self::SIZE {
@@ -271,67 +410,82 @@ impl Chunk {
 					// If this block is under or in terrain height, make it solid
 					if pos_y <= final_noise as i32 {
 						// Correct block indexing : BlockPosition
-						let idx: BlockPosition = (x,y,z).into();
+						let idx: BlockPosition = (x, y, z).into();
 						chunk.set_block(idx.into(), block); // Set to solid
 					}
 					// Else leave as air
 				}
 			}
 		}
-		//println!("stopwatch: {:?}", stopwatch);
 		Some(chunk)
 	}
 
 	#[inline]
-	pub fn get_block(&self, index: usize) -> &Block {
-		let palette_idx = self.storage.get(index);
-		&self.palette[palette_idx as usize]
-	}
-
-	#[inline]
-	pub fn get_block_mut(&mut self, index: usize) -> &mut Block {
-		let palette_idx = self.storage.get(index);
-		&mut self.palette[palette_idx as usize]
+	pub fn get_block(&self, index: usize) -> Block {
+		self.storage.get(index)
 	}
 
 	/// Checks if the chunk is completely empty (all blocks are air)
 	#[inline]
 	pub fn is_empty(&self) -> bool {
 		match &self.storage {
-			BlockStorage::Uniform(idx) => *idx == 0, // Index 0 is air
-			BlockStorage::Sparse(indices) => indices.iter().all(|&idx| idx == 0),
+			BlockStorage::Uniform { block } => block.is_empty(),
+			_ => {
+				// For compact/sparse storage, check if all blocks are air
+				for i in 0..Self::VOLUME {
+					if !self.storage.get(i).is_empty() {
+						return false;
+					}
+				}
+				true
+			}
 		}
 	}
+
 	/// Checks if the chunk is completely full (all blocks are not air)
 	#[inline]
 	pub fn is_full(&self) -> bool {
 		match &self.storage {
-			BlockStorage::Uniform(idx) => *idx != 0, // Index 0 is air
-			BlockStorage::Sparse(indices) => indices.iter().all(|&idx| idx != 0),
+			BlockStorage::Uniform { block } => !block.is_empty(),
+			_ => {
+				// For compact/sparse storage, check if all blocks are non-air
+				for i in 0..Self::VOLUME {
+					if self.storage.get(i).is_empty() {
+						return false;
+					}
+				}
+				true
+			}
 		}
 	}
 
 	/// Sets a block at the given index
 	pub fn set_block(&mut self, index: usize, block: Block) {
-		let palette_idx = self.palette_add(block);
-		self.storage.set(index, palette_idx);
+		self.storage.set(index, block);
 		self.dirty = true;
 
-		// Periodically compact the palette to avoid bloat
-		if self.palette.len() > 64 {
-			self.palette_compact();
+		// Periodically optimize storage to avoid bloat
+		if matches!(self.storage, BlockStorage::Sparse { .. }) {
+			// Only optimize sparse storage periodically to avoid performance hits
+			static mut OPTIMIZATION_COUNTER: usize = 0;
+			unsafe {
+				OPTIMIZATION_COUNTER += 1;
+				if OPTIMIZATION_COUNTER % 100 == 0 {
+					self.storage.optimize();
+				}
+			}
 		}
 	}
 
 	/// Checks if a block position is empty or outside the chunk
 	#[inline]
 	pub fn is_block_cull(&self, pos: IVec3) -> bool {
-		let idx:usize = BlockPosition::from(pos).into();
-		let block = *self.get_block(idx);
-		block.is_empty()
+		let idx: usize = BlockPosition::from(pos).into();
+		self.get_block(idx).is_empty()
 	}
 
-	#[inline] pub const fn contains_position(&self, pos: IVec3) -> bool {
+	#[inline]
+	pub const fn contains_position(&self, pos: IVec3) -> bool {
 		// Check if position is outside chunk bounds
 		if pos.x < 0
 			|| pos.y < 0
@@ -341,10 +495,13 @@ impl Chunk {
 			|| pos.z >= Self::SIZE_I
 		{
 			return false;
+		} else {
+			true
 		}
-		else { true }
 	}
-	#[inline] pub const fn is_border_block(&self, pos: IVec3) -> bool {
+
+	#[inline]
+	pub const fn is_border_block(&self, pos: IVec3) -> bool {
 		// Check if position barely inside the chunk
 		if pos.x == 0 || pos.x == 15
 			|| pos.y == 0 || pos.y == 15
@@ -356,12 +513,24 @@ impl Chunk {
 	}
 
 	/// Returns a reference to the mesh if it exists
-	#[inline] pub const fn mesh(&self) -> Option<&GeometryBuffer> {
+	#[inline]
+	pub const fn mesh(&self) -> Option<&GeometryBuffer> {
 		self.mesh.as_ref()
 	}
 
 	/// Returns a reference to the bind group if it exists
-	#[inline] pub const fn bind_group(&self) -> Option<&wgpu::BindGroup> {
+	#[inline]
+	pub const fn bind_group(&self) -> Option<&wgpu::BindGroup> {
 		self.bind_group.as_ref()
+	}
+
+	/// Forces storage optimization (useful for debugging or after bulk operations)
+	pub fn optimize_storage(&mut self) {
+		self.storage.optimize();
+	}
+
+	/// Returns storage type and memory usage for debugging
+	pub fn storage_info(&self) -> (usize, &'static str) {
+		self.storage.memory_usage()
 	}
 }

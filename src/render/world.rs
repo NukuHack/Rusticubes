@@ -57,7 +57,7 @@ impl Chunk {
 		let mut builder = ChunkMeshBuilder::new();
 
 		for pos in 0..Self::VOLUME {
-			let block = *self.get_block(pos);
+			let block = self.get_block(pos);
 			if block.is_empty() {
 				continue;
 			}

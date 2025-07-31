@@ -1,5 +1,7 @@
 
 #[cfg(test)]
+use crate::hs::binary::BinarySerializable;
+#[cfg(test)]
 use crate::world::manager::{WorldData, get_save_path, load_world_data, save_world_data, update_world_data};
 #[cfg(test)]
 use std::io::{self};
@@ -15,8 +17,8 @@ fn roundtrip_serialization() {
 		last_opened_date: Time::now(),
 	};
 
-	let bytes = original.to_bytes();
-	let deserialized = WorldData::from_bytes(&bytes).unwrap();
+	let bytes = original.to_binary();
+	let deserialized = WorldData::from_binary(&bytes).unwrap();
 
 	assert_eq!(original.version, deserialized.version);
 	assert_eq!(original.creation_date, deserialized.creation_date);
@@ -29,7 +31,8 @@ fn file_operations() -> io::Result<()> {
 	let temp_dir = get_save_path().join("test");
 	let path = temp_dir.as_path();
 
-	// Test creating new data when file doesn't exist
+	// Test data
+	save_world_data(path, &WorldData::new())?;
 	let loaded = load_world_data(path)?;
 	assert_eq!(loaded.version, std::env!("CARGO_PKG_VERSION"));
 	
@@ -53,19 +56,19 @@ fn file_operations() -> io::Result<()> {
 #[test]
 fn deserialization_errors() {
 	// Test empty input
-	assert!(WorldData::from_bytes(&[]).is_err());
+	assert!(WorldData::from_binary(&[]).is_none());
 	
 	// Test incomplete version length
-	assert!(WorldData::from_bytes(&[1, 0, 0]).is_err());
+	assert!(WorldData::from_binary(&[1, 0, 0]).is_none());
 	
 	// Test version length longer than actual data
 	let mut bad_data = vec![10, 0, 0, 0]; // Says version is 10 bytes long
 	bad_data.extend_from_slice(b"short"); // But only provide 5 bytes
-	assert!(WorldData::from_bytes(&bad_data).is_err());
+	assert!(WorldData::from_binary(&bad_data).is_none());
 	
 	// Test incomplete time data
 	let mut partial_time = vec![5, 0, 0, 0];
 	partial_time.extend_from_slice(b"12345"); // Version
 	partial_time.extend_from_slice(&[0; 5]); // Only half of first Time struct
-	assert!(WorldData::from_bytes(&partial_time).is_err());
+	assert!(WorldData::from_binary(&partial_time).is_none());
 }

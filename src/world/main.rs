@@ -51,23 +51,10 @@ impl World {
 
 		self.chunks
 			.get(&chunk_coord)
-			.map(|chunk| *chunk.get_block(index))
+			.map(|chunk| chunk.get_block(index))
 			.unwrap_or(Block::default())
 	}
 
-	#[inline]
-	pub fn get_block_mut(&mut self, world_pos: IVec3) -> Option<&mut Block> {
-		let chunk_coord = ChunkCoord::from_world_pos(world_pos);
-		let local_pos: BlockPosition = world_pos.into();
-		let index: usize = local_pos.into();
-
-		self.chunks
-			.get_mut(&chunk_coord)
-			.map(|chunk| {
-				let palette_idx = chunk.storage.get(index);
-				&mut chunk.palette[palette_idx as usize]
-			})
-	}
 	#[inline]
 	pub fn set_block(&mut self, world_pos: IVec3, block: Block) {
 		let chunk_coord = ChunkCoord::from_world_pos(world_pos);
@@ -90,7 +77,7 @@ impl World {
 		let index: usize = local_pos.into();
 		
 		// Only proceed if the block is actually different
-		if chunk.get_block(index) != &block {
+		if chunk.get_block(index) != block {
 			chunk.set_block(index, block);
 			if is_border_block {
 				for coord in chunk_coord.get_adjacent().iter() {

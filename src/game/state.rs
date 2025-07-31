@@ -5,6 +5,7 @@ use crate::world::manager::ensure_save_dir;
 use crate::game::player;
 use crate::ext::ptr;
 use crate::world;
+#[cfg(not(test))]
 use crate::game::items::{ItemStack, ItemId};
 use std::path::PathBuf;
 use std::sync::atomic::Ordering;
@@ -54,10 +55,28 @@ pub fn make_world(save_path: PathBuf) {
 #[allow(dead_code)]
 impl GameState {
 	#[inline] pub fn new(worldname: &str) -> Self {
-		let state = ptr::get_state();
-		let offset = Vec3::new(0., 1.7, 0.); let pos = Vec3::new(0.5,0.5,0.5);
-		let mut player = player::Player::new(CameraConfig::new(offset), pos, state.device(), *state.size(), &state.render_context.layouts[1]);
-		player.inventory_mut().hotbar_mut().set(0, Some(ItemStack::new_i(ItemId::from_str("brick_grey")))); // idx, item
+    	#[cfg(test)]
+		let player = {
+			let offset = Vec3::new(0., 1.7, 0.);
+			let pos = Vec3::new(0.5, 0.5, 0.5);
+			player::Player::dummy(pos, CameraConfig::new(offset))
+		};
+    	#[cfg(not(test))]
+		let player = {
+			let state = ptr::get_state();
+			let offset = Vec3::new(0., 1.7, 0.);
+			let pos = Vec3::new(0.5, 0.5, 0.5);
+			let mut player = player::Player::new(
+				CameraConfig::new(offset),
+				pos,
+				state.device(),
+				*state.size(),
+				&state.render_context.layouts[1],
+			);
+			player.inventory_mut().hotbar_mut().set(0, Some(ItemStack::new_i(ItemId::from_str("brick_grey"))),
+			);
+			player
+		};
 		
 		// Create the save path
 		let save_path = get_save_path()
