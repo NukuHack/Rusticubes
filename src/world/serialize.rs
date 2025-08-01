@@ -143,7 +143,9 @@ impl BinarySerializable for BlockStorage {
 					data.push(count);
 					data.push(index);
 				}
-			}
+			},
+			Self::Giant { .. } |
+			Self::Zigzag { .. } => todo!()
 		}
 		data
 	}
@@ -217,7 +219,9 @@ impl BinarySerializable for BlockStorage {
 				}
 				// Convert RLE to Compact/Sparse storage
 				Some(Self::Rle { palette, runs })
-			}
+			},
+			StorageType::Giant |
+			StorageType::Zigzag => todo!()
 		}
 	}
 
@@ -248,6 +252,8 @@ impl BinarySerializable for BlockStorage {
 				2 + // run count
 				runs.len() * 2 // runs (each run is 2 bytes: count + index)
 			}
+			Self::Giant { .. } |
+			Self::Zigzag { .. } => todo!()
 		}
 	}
 }

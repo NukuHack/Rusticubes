@@ -363,7 +363,7 @@ pub enum Axis {
 }
 
 /// All 24 possible block rotations (6 faces × 4 orientations each).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[repr(u8)] // Ensures `as u8` is safe
 pub enum BlockRotation {
 	XplusYplus, XplusYminus, XplusZplus, XplusZminus,
