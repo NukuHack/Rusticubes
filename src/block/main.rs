@@ -209,7 +209,7 @@ impl BlockStorage {
 			Self::Uniform { block: current_block } => {
 				if *current_block != block {
 					let mut new_palette = vec![*current_block];
-					let new_block_idx = Self::add_to_palette(&mut new_palette, block, Self::MAX_GIANT_PALETTE_SIZE) as u8;
+					let new_block_idx = Self::add_to_palette(&mut new_palette, block) as u8;
 					
 					if new_palette.len() <= 16 {
 						// Convert to compact storage
@@ -235,7 +235,7 @@ impl BlockStorage {
 				}
 			}
 			Self::Compact { palette, indices } => {
-				let block_idx = Self::add_to_palette(palette, block, Self::MAX_GIANT_PALETTE_SIZE);
+				let block_idx = Self::add_to_palette(palette, block);
 				
 				if palette.len() > 16 {
 					if palette.len() <= Self::MAX_SPARSE_PALETTE_SIZE {
@@ -294,7 +294,7 @@ impl BlockStorage {
 				}
 			}
 			Self::Sparse { palette, indices } => {
-				let block_idx = Self::add_to_palette(palette, block, Self::MAX_GIANT_PALETTE_SIZE);
+				let block_idx = Self::add_to_palette(palette, block);
 				
 				if palette.len() > Self::MAX_SPARSE_PALETTE_SIZE {
 					if palette.len() <= Self::MAX_GIANT_PALETTE_SIZE {
@@ -322,7 +322,7 @@ impl BlockStorage {
 				}
 			},
 			Self::Giant { palette, indices } => {
-				let block_idx = Self::add_to_palette(palette, block, Self::MAX_GIANT_PALETTE_SIZE);
+				let block_idx = Self::add_to_palette(palette, block);
 				
 				if palette.len() > Self::MAX_GIANT_PALETTE_SIZE {
 					// Convert to zigzag storage
@@ -362,7 +362,7 @@ impl BlockStorage {
 
 	/// Helper function to set a 4-bit index in compact storage
 	#[inline]
-	fn set_compact_index(indices: &mut [u8; Chunk::VOLUME/2], position: usize, palette_idx: u8) {
+	pub fn set_compact_index(indices: &mut [u8; Chunk::VOLUME/2], position: usize, palette_idx: u8) {
 		let byte_idx = position / 2;
 		let is_high_nibble = position % 2 == 1;
 		
@@ -373,7 +373,7 @@ impl BlockStorage {
 		}
 	}
 	#[inline]
-	fn get_compact_index(indices: &[u8], position: usize) -> u8 {
+	pub fn get_compact_index(indices: &[u8], position: usize) -> u8 {
 		let byte_idx = position / 2;
 		if position % 2 == 1 {
 			(indices[byte_idx] >> 4) & 0x0F
@@ -383,7 +383,7 @@ impl BlockStorage {
 	}
 	// Helper functions for Giant storage 12-bit packing
 	#[inline]
-	fn get_giant_index(indices: &[u8], position: usize) -> u16 {
+	pub fn get_giant_index(indices: &[u8], position: usize) -> u16 {
 		let bit_start = position * 12;
 		let byte_start = bit_start / 8;
 		let bit_offset = bit_start % 8;
@@ -405,7 +405,7 @@ impl BlockStorage {
 	}
 
 	#[inline]
-	fn set_giant_index(indices: &mut [u8], position: usize, value: u16) {
+	pub fn set_giant_index(indices: &mut [u8], position: usize, value: u16) {
 		let value = value & 0x0FFF; // Ensure 12-bit value
 		let bit_start = position * 12;
 		let byte_start = bit_start / 8;
@@ -432,23 +432,18 @@ impl BlockStorage {
 	}
 
 	/// Helper function to add a block to a palette, returning its index
-	fn add_to_palette(palette: &mut Vec<Block>, block: Block, max_size: usize) -> usize {
+	#[inline]
+	fn add_to_palette(palette: &mut Vec<Block>, block: Block) -> usize {
 		// Check if block already exists in palette
 		if let Some(idx) = palette.iter().position(|&b| b == block) {
 			return idx;
 		}
+		//Made it so the palette can not be "full" it will just transition to the next storage type if reached
+		//println!("Warning: Palette is full, using fallback block");
 
-		// Add new block to palette if there's space
-		if palette.len() < max_size {
-			let idx = palette.len();
-			palette.push(block);
-			idx
-		} else {
-			// Palette is full, could implement LRU eviction here
-			// For now, just return index 0 (air/first block)
-			eprintln!("Warning: Palette is full, using fallback block");
-			0
-		}
+		let idx = palette.len();
+		palette.push(block);
+		idx
 	}
 
 	/// Attempts to optimize storage to more efficient formats

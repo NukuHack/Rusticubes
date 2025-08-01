@@ -82,6 +82,29 @@ impl Rand {
 			.rotate_left(13)
 			.wrapping_mul(0xc2b2ae35)
 	}
+
+    /// Returns a random usize in the given range (start..end)
+    #[inline(always)]
+    pub fn range(&mut self, range: std::ops::Range<usize>) -> usize {
+        let start = range.start;
+        let end = range.end;
+        if start >= end {
+            panic!("range_usize: start must be less than end");
+        }
+        let range_size = end - start;
+        start + (self.next_u32() as usize % range_size)
+    }
+
+    /// Returns a random usize in the given range (start..=end)
+    #[inline(always)]
+    pub fn range_inc(&mut self, range: std::ops::RangeInclusive<usize>) -> usize {
+        let (start, end) = range.into_inner();
+        if start > end {
+            panic!("range_usize_inclusive: start must be less than or equal to end");
+        }
+        let range_size = end - start + 1;
+        start + (self.next_u32() as usize % range_size)
+    }
 }
 
 // ========== Convenience Functions ==========
