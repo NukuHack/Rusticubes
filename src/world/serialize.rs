@@ -1,10 +1,7 @@
 
-use crate::world::manager::WorldData;
-use crate::world::main::World;
 use crate::block::math::{BlockRotation, ChunkCoord};
 use crate::block::main::{Block, Material, StorageType, Chunk, BlockStorage};
 use crate::hs::binary::{BinarySerializable, FixedBinarySerializable};
-use crate::hs::time::Time;
 
 
 //
@@ -280,113 +277,4 @@ impl BinarySerializable for Chunk {
 	}
 }
 
-
-// Refine World serialization using the trait system
-impl BinarySerializable for World {
-	fn to_binary(&self) -> Vec<u8> {
-		let mut data = Vec::new();
-		
-		// Write chunk count
-		data.extend_from_slice(&self.chunks.len().to_binary());
-		
-		// Write each chunk with its coordinates
-		for (coord, chunk) in &self.chunks {
-			data.extend_from_slice(&coord.to_binary());
-			data.extend_from_slice(&chunk.to_binary());
-		}
-		
-		data
-	}
-	fn from_binary(bytes: &[u8]) -> Option<Self> {
-		let mut offset = 0;
-		
-		// Read chunk count
-		if bytes.len() < offset + usize::BINARY_SIZE {
-			return None;
-		}
-		let chunk_count = usize::from_binary(&bytes[offset..offset + usize::BINARY_SIZE])?;
-		offset += usize::BINARY_SIZE;
-		
-		let mut world = World::empty();
-		
-		// Read each chunk
-		for _i in 0..chunk_count {
-			// Read coordinate
-			if bytes.len() < offset + ChunkCoord::BINARY_SIZE {
-				return None;
-			}
-			let coord = ChunkCoord::from_binary(&bytes[offset..offset + ChunkCoord::BINARY_SIZE])?;
-			offset += ChunkCoord::BINARY_SIZE;
-			
-			// Read chunk
-			let mut chunk = Chunk::from_binary(&bytes[offset..])?;
-			let chunk_size = chunk.binary_size();
-
-			if let Some(storage) = BlockStorage::from_rle(&chunk.storage) {
-				chunk.storage = storage;
-			}
-
-			if offset + chunk_size > bytes.len() { return None; }
-			offset += chunk_size;
-			
-			world.chunks.insert(coord, chunk);
-		}
-		
-		Some(world)
-	}
-	fn binary_size(&self) -> usize {
-		let mut size = usize::BINARY_SIZE; // chunk count
-		
-		for (coord, chunk) in &self.chunks {
-			size += coord.binary_size() + chunk.binary_size();
-		}
-		
-		size
-	}
-}
-
-
-
-
-
-
-
-
-
-// Refine WorldData using the trait system
-impl BinarySerializable for WorldData {
-	fn to_binary(&self) -> Vec<u8> {
-		let mut data = Vec::new();
-		data.extend_from_slice(&self.version.to_binary());
-		data.extend_from_slice(&self.creation_date.to_binary());
-		data.extend_from_slice(&self.last_opened_date.to_binary());
-		data
-	}
-	fn from_binary(bytes: &[u8]) -> Option<Self> {
-		let mut offset = 0;
-		
-		// Read version string
-		let version = String::from_binary(&bytes[offset..])?;
-		offset += version.binary_size();
-		
-		if bytes.len() < offset + Time::BINARY_SIZE * 2 {
-			return None;
-		}
-		// Read creation_date
-		let creation_date = Time::from_binary(&bytes[offset..offset + Time::BINARY_SIZE])?;
-		offset += Time::BINARY_SIZE;
-		// Read last_opened_date
-		let last_opened_date = Time::from_binary(&bytes[offset..offset + Time::BINARY_SIZE])?;
-		
-		Some(WorldData {
-			version,
-			creation_date,
-			last_opened_date,
-		})
-	}
-	fn binary_size(&self) -> usize {
-		self.version.binary_size() + 
-		Time::BINARY_SIZE * 2
-	}
-}
 

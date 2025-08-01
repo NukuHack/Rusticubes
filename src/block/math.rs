@@ -149,6 +149,29 @@ impl ChunkCoord {
 		})
 	}
 }
+impl std::ops::Mul<i32> for ChunkCoord {
+	type Output = Self;
+	fn mul(self, rhs: i32) -> Self {
+		let (x,y,z) = self.unpack();
+		Self::new(
+			x * rhs,
+			y * rhs,
+			z * rhs
+		)
+	}
+}
+impl std::ops::Add for ChunkCoord {
+	type Output = Self;
+	fn add(self, rhs: Self) -> Self {
+		let (x,y,z) = self.unpack();
+		let (x2,y2,z2) = rhs.unpack();
+		Self::new(
+			x + x2,
+			y + y2,
+			z + z2
+		)
+	}
+}
 
 /// Compact position within a chunk (0-15 on each axis)
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
