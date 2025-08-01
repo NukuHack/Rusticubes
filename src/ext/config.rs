@@ -1,6 +1,6 @@
 ﻿
 use crate::Vec3;
-use crate::ui::inventory::AreaType;
+use crate::item::inventory::AreaType;
 use crate::ext::color::{Color, Border};
 
 

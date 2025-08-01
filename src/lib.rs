@@ -46,13 +46,16 @@ pub mod render { // rendering related
 	pub mod skybox;
 }
 pub mod game { // game related, instance related
+	pub mod player; // main camera and player impl.
+	pub mod state; // game-state with seed and stuff
+}
+pub mod item {
 	pub mod items; // the items and item stack impl.
 	pub mod item_lut; // item related things what will not change at runtime
 	pub mod item_serialize; // it si what it sounds
 	pub mod material; // item related basic stuff
 	pub mod inventory; // basic inventory impl.
-	pub mod player; // main camera and player impl.
-	pub mod state; // game-state with seed and stuff
+	pub mod ui_inventory;
 }
 pub mod world { // world related, tiny bit rendering and game related
 	pub mod main;
@@ -71,7 +74,6 @@ pub mod ui { // ui related
 	pub mod manager;
 	pub mod settings;
 	pub mod setup;
-	pub mod inventory;
 	pub mod dialog;
 }
 pub mod physic {

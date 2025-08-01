@@ -3,7 +3,7 @@ use glam::{Vec3, Mat4, Quat};
 use winit::keyboard::KeyCode as Key;
 use winit::dpi::PhysicalSize;
 use wgpu::util::DeviceExt;
-use crate::game::inventory;
+use crate::item::inventory;
 use crate::physic::aabb;
 
 /// Movement mode enum

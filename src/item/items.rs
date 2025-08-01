@@ -1,6 +1,6 @@
 
 use crate::fs::rs;
-use crate::game::item_lut::ItemComp;
+use crate::item::item_lut::ItemComp;
 
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -47,6 +47,9 @@ impl ItemStack {
 		// will get the data from a LUT so it should be fast ... i hope 
 		ITEM_REGISTRY_LUT[self.id.inner() as usize].copy()
 	}
+	pub fn max_stack_size(&self) -> u32 {
+		self.lut().max_stack
+	}
 
 	#[inline] pub const fn default() -> Self {
 		Self::new(1)
@@ -55,30 +58,38 @@ impl ItemStack {
 		Self::new_i(ItemId(id))
 	}
 	#[inline] pub const fn new_i(id: ItemId) -> Self {
-		Self {
-			id,
-			quantity: 1u32,
-			data: None
-		}
-	}
-	#[inline] pub const fn quantity(mut self, quantity: u32) -> Self {
-		self.quantity = quantity;
-		self
+		Self { id, quantity: 1u32, data: None }
 	}
 	
-	#[inline] pub fn is_block(&self) -> bool {
-		matches!(self.lut().is_block(), true)
-	}
+	#[inline] pub fn is_block(&self) -> bool { matches!(self.lut().is_block(), true) }
+	#[inline] pub fn is_item(&self) -> bool { !self.is_block() }
 
 	#[inline] pub fn get_block_id(&self) -> Option<ItemId> {
 		if self.lut().is_block() {
 			return Some(self.id);
 		} None
 	}
-	
-	#[inline] pub fn is_item(&self) -> bool {
-		!self.is_block()
-	}
+
+	#[inline] pub const fn with_quantity(mut self, quantity: u32) -> Self { self.quantity = quantity; self }
+	#[inline] pub const fn set_quantity(&mut self, quantity: u32) { self.quantity = quantity }
+
+
+
+    /// Checks if this item can be stacked with another
+    pub fn can_stack_with(&self, other: &Self) -> bool {
+        // Implement your stacking logic (same type, same metadata, etc.)
+        self.id == other.id && 
+        self.data == other.data &&
+        self.quantity < self.max_stack_size()
+    }
+
+    /// Adds quantity to this stack, returning any overflow
+    pub fn add_quantity(&mut self, amount: u32) -> u32 {
+        let max_add = self.max_stack_size() - self.quantity;
+        let to_add = amount.min(max_add);
+        self.set_quantity(self.quantity + to_add);
+        amount - to_add
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

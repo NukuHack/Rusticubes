@@ -1,8 +1,8 @@
 use std::mem;
 use std::num::NonZeroU32;
-use crate::game::material::MaterialLevel;
-use crate::game::items::ItemId;
-use crate::game::item_lut::{
+use crate::item::material::MaterialLevel;
+use crate::item::items::ItemId;
+use crate::item::item_lut::{
 	ItemComp, ItemFlags, ItemExtendedData, PropertyValue, PropertyVariantTag,
 	ToolData, ArmorData, ToolType, ArmorType, EquipmentData, EquipmentSetStruct,
 	EquipmentTypeSet, BitStorage, TierStorage, EquipmentType

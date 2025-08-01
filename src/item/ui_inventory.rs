@@ -1,14 +1,14 @@
 
+use crate::item::inventory::{Inventory, ItemContainer, AreaType, Slot};
 use crate::ext::ptr;
 use crate::ui::{manager::{UIManager, UIState}, element::UIElement};
-use crate::game::items::{ItemStack, ItemId};
-use crate::game::inventory as inv;
+use crate::item::items::{ItemStack, ItemId};
 
 #[derive(PartialEq, Clone, Copy, Debug)]
 pub enum InventoryUIState {
 	Player { inv: InvState },
-	Storage { inv: InvState, size: SlotCount },
-	Crafting { inv: InvState, size: SlotCount, result: SlotCount },
+	Storage { inv: InvState, size: Slot },
+	Crafting { inv: InvState, size: Slot, result: Slot },
 }
 
 impl InventoryUIState {
@@ -33,20 +33,20 @@ impl PlayerInvBuilder {
 	#[inline] pub const fn b(self) -> InventoryUIState { InventoryUIState::Player { inv: self.inv } }
 }
 
-builder!(StorageInvBuilder { inv: InvState = InvState::Items, size: SlotCount = SlotCount::MED });
+builder!(StorageInvBuilder { inv: InvState = InvState::Items, size: Slot = Slot::MED });
 impl StorageInvBuilder {
 	#[inline] pub const fn inv(mut self, inv: InvState) -> Self { self.inv = inv; self }
-	#[inline] pub const fn size(mut self, size: SlotCount) -> Self { self.size = size; self }
+	#[inline] pub const fn size(mut self, size: Slot) -> Self { self.size = size; self }
 	#[inline] pub const fn b(self) -> InventoryUIState {
 		InventoryUIState::Storage { inv: self.inv, size: self.size }
 	}
 }
 
-builder!(CraftingInvBuilder { inv: InvState = InvState::Items, size: SlotCount = SlotCount::custom(3, 3), result: SlotCount = SlotCount::custom(1, 1) });
+builder!(CraftingInvBuilder { inv: InvState = InvState::Items, size: Slot = Slot::custom(3, 3), result: Slot = Slot::custom(1, 1) });
 impl CraftingInvBuilder {
 	#[inline] pub const fn inv(mut self, inv: InvState) -> Self { self.inv = inv; self }
-	#[inline] pub const fn input(mut self, size: SlotCount) -> Self { self.size = size; self }
-	#[inline] pub const fn result(mut self, result: SlotCount) -> Self { self.result = result; self }
+	#[inline] pub const fn input(mut self, size: Slot) -> Self { self.size = size; self }
+	#[inline] pub const fn result(mut self, result: Slot) -> Self { self.result = result; self }
 	#[inline] pub const fn b(self) -> InventoryUIState {
 		InventoryUIState::Crafting { inv: self.inv, size: self.size, result: self.result }
 	}
@@ -54,25 +54,6 @@ impl CraftingInvBuilder {
 
 #[derive(PartialEq, Clone, Copy, Debug)]
 pub enum InvState { All, Items, Armor, Inventory, Hotbar, None }
-
-#[derive(PartialEq, Clone, Copy, Debug)]
-pub enum AreaType { Panel, Inventory, Hotbar, Armor, Storage, Input, Output }
-
-#[derive(PartialEq, Clone, Copy, Debug)]
-pub struct SlotCount { pub rows: u8, pub columns: u8 }
-
-impl SlotCount {
-	pub const NONE: Self = Self { rows: 0, columns: 0 };
-	pub const TINY: Self = Self { rows: 3, columns: 5 };
-	pub const SMALL: Self = Self { rows: 3, columns: 7 };
-	pub const MED: Self = Self { rows: 5, columns: 9 };
-	pub const BIG: Self = Self { rows: 6, columns: 12 };
-	pub const GIANT: Self = Self { rows: 7, columns: 13 };
-
-	#[inline] pub const fn default() -> Self { Self::SMALL }
-	#[inline] pub const fn total(&self) -> usize { self.rows as usize * self.columns as usize }
-	#[inline] pub const fn custom(rows: u8, columns: u8) -> Self { Self { rows, columns } }
-}
 
 const SLOT: f32 = 0.08;
 const PADDING: f32 = 0.02;
@@ -135,7 +116,7 @@ impl AreaLayout {
 
 impl InventoryLayout {
 	#[inline] 
-	pub fn calculate_for_player(inv_state: InvState, inv_lay: &mut inv::Inventory) -> Self {
+	pub fn calculate_for_player(inv_state: InvState, inv: &mut Inventory) -> Self {
 		fn calculate_player_positions(
 			inv_area: &(u8, u8), hotbar_area: &(u8, u8), armor_area: &(u8, u8), spacing: f32
 		) -> ((f32, f32), (f32, f32), (f32, f32)) {
@@ -151,16 +132,17 @@ impl InventoryLayout {
 		}
 		let inv_layout = &ptr::get_settings().inv_layout;
 		let mut layout = Self::default();
-		let inv_lay = inv_lay.clone();
+		let inv = inv.clone();
 		
 		// Special case for hotbar only
+		let hot_siz = inv.hotbar_size();
 		if inv_state == InvState::Hotbar {
-			layout.areas.push(AreaLayout::new(1, inv_lay.hotbar_capacity() as u8, inv_layout.hotbar, AreaType::Hotbar));
+			layout.areas.push(AreaLayout::new(hot_siz.0, hot_siz.1, inv_layout.hotbar, AreaType::Hotbar));
 			layout.finalize_layout(inv_state, &[]);
 			return layout;
 		}
 		
-		let (inv_area, hotbar_area, armor_area) = Self::create_player_areas(&inv_lay);
+		let (inv_area, hotbar_area, armor_area) = Self::create_player_areas(&inv);
 		let positions = calculate_player_positions(&inv_area, &hotbar_area, &armor_area, layout.section_spacing);
 		
 		layout.add_areas(&[
@@ -174,7 +156,7 @@ impl InventoryLayout {
 	}
 	
 	#[inline] 
-	pub fn calculate_for_storage(storage_size: SlotCount, inv_state: InvState, inv_lay: &mut inv::Inventory) -> Self {
+	pub fn calculate_for_storage(storage_size: Slot, inv_state: InvState, inv_lay: &mut Inventory) -> Self {
 		fn calculate_storage_positions(
 			storage_area: &(u8, u8), inv_area: &(u8, u8), hotbar_area: &(u8, u8), armor_area: &(u8, u8), spacing: f32
 		) -> ((f32, f32), (f32, f32), (f32, f32), (f32, f32)) {
@@ -193,7 +175,7 @@ impl InventoryLayout {
 		let mut layout = Self::default();
 		let inv_lay = inv_lay.clone();
 		
-		let storage_area = (storage_size.rows, storage_size.columns);
+		let storage_area = (storage_size.rows(), storage_size.cols());
 		let (inv_area, hotbar_area, armor_area) = Self::create_player_areas(&inv_lay);
 		let positions = calculate_storage_positions(&storage_area, &inv_area, &hotbar_area, &armor_area, layout.section_spacing);
 		
@@ -209,7 +191,7 @@ impl InventoryLayout {
 	}
 	
 	#[inline] 
-	pub fn calculate_for_crafting(crafting_size: SlotCount, result_size: SlotCount, inv_state: InvState, inv_lay: &mut inv::Inventory) -> Self {
+	pub fn calculate_for_crafting(crafting_size: Slot, result_size: Slot, inv_state: InvState, inv_lay: &mut Inventory) -> Self {
 		fn calculate_crafting_positions(
 			input_area: &(u8, u8), output_area: &(u8, u8), inv_area: &(u8, u8), hotbar_area: &(u8, u8), armor_area: &(u8, u8), spacing: f32
 		) -> ((f32, f32), (f32, f32), (f32, f32), (f32, f32), (f32, f32)) {
@@ -233,8 +215,8 @@ impl InventoryLayout {
 		let mut layout = Self::default();
 		let inv_lay = inv_lay.clone();
 		
-		let input_area = (crafting_size.rows, crafting_size.columns);
-		let output_area = (result_size.rows, result_size.columns);
+		let input_area = (crafting_size.rows(), crafting_size.cols());
+		let output_area = (result_size.rows(), result_size.cols());
 		let (inv_area, hotbar_area, armor_area) = Self::create_player_areas(&inv_lay);
 		let positions = calculate_crafting_positions(&input_area, &output_area, &inv_area, &hotbar_area, &armor_area, layout.section_spacing);
 		
@@ -251,11 +233,11 @@ impl InventoryLayout {
 	}
 	
 	// Helper functions
-	fn create_player_areas(inv_lay: &inv::Inventory) -> ((u8, u8), (u8, u8), (u8, u8)) {
+	fn create_player_areas(inv_lay: &Inventory) -> ((u8, u8), (u8, u8), (u8, u8)) {
 		(
-			(inv_lay.inv_row(), inv_lay.inv_col()),
-			(1, inv_lay.hotbar_capacity() as u8),
-			(inv_lay.armor_capacity() as u8, 1),
+			inv_lay.inv_size(),
+			inv_lay.hotbar_size(),
+			inv_lay.armor_size(),
 		)
 	}
 	
@@ -385,7 +367,7 @@ impl InventoryLayout {
 	}
 	
 	// Helper for getting inventory-specific areas
-	fn get_areas_for_inv_state(&self, inv_state: InvState) -> Vec<AreaLayout> {
+	pub fn get_areas_for_inv_state(&self, inv_state: InvState) -> Vec<AreaLayout> {
 		self.areas.iter().filter(|area| match (inv_state, area.name) {
 			(InvState::All, AreaType::Inventory | AreaType::Armor | AreaType::Hotbar) => true,
 			(InvState::Items, AreaType::Inventory | AreaType::Hotbar) => true,
@@ -424,29 +406,40 @@ impl UIManager {
 					self.create_inventory_slots(inv, &layout);
 				}
 				InventoryUIState::Storage { inv, .. } => {
-					let storage = layout.areas.iter().find(|a| a.name == AreaType::Storage).unwrap();
-					let mut storage_items = inv::ItemContainer::new(storage.rows, storage.columns);
-					let _ = storage_items.set_items_with_iterator(|idx, _| 
-						if idx % 2 == 0 {  // Set only even slots
-							Some(ItemStack::new_i(ItemId::from_str("brick_grey")))  // Placeholder item creation
-						} else {
-							None
-						});
-					self.create_area_slots(&storage, &storage_items);
+					// Create storage area with actual storage data
+					self.create_storage_area(&layout);
 					self.create_inventory_slots(inv, &layout);
 				}
 				InventoryUIState::Crafting { inv, .. } => {
-					for area_type in [AreaType::Input, AreaType::Output] {
-						let area = layout.areas.iter().find(|a| a.name == area_type).unwrap();
-						let area_items = inv::ItemContainer::new(area.rows, area.columns);
-						self.create_area_slots(&area, &area_items);
-					}
+					// Create crafting areas with actual crafting data
+					self.create_crafting_areas(&layout);
 					self.create_inventory_slots(inv, &layout);
 				}
 			}
 		} else if UIState::InGame == self.state.clone() {
 			let layout = InventoryLayout::calculate_for_player(InvState::Hotbar, inv_lay);
 			self.create_inventory_slots(InvState::Hotbar, &layout);
+		}
+	}
+
+	// New method to handle storage UI using actual storage container
+	fn create_storage_area(&mut self, layout: &InventoryLayout) {
+		if let Some(storage_area) = layout.areas.iter().find(|a| a.name == AreaType::Storage) {
+			// Get actual storage data from game state (you'll need to implement this)
+			let storage_items = self.get_storage_container(storage_area); // This should return &ItemContainer
+			self.create_area_slots(&storage_area, &storage_items);
+		}
+	}
+
+	// New method to handle crafting UI using actual crafting containers
+	fn create_crafting_areas(&mut self, layout: &InventoryLayout) {
+		for area_type in [AreaType::Input, AreaType::Output] {
+			if let Some(area) = layout.areas.iter().find(|a| a.name == area_type) {
+				// Get actual crafting data from game state
+				//let crafting_items = self.get_crafting_container(area_type); // This should return &ItemContainer
+				let crafting_items = ItemContainer::new(area.rows, area.columns);
+				self.create_area_slots(&area, &crafting_items);
+			}
 		}
 	}
 	
@@ -471,27 +464,78 @@ impl UIManager {
 		self.add_element(version);
 	}
 
+	// Add these placeholder methods that you'll need to implement based on your game's architecture:
+	
+	fn get_storage_container(&self, area: &AreaLayout) -> ItemContainer {
+		// Return reference to actual storage container from game state
+		// This is a placeholder - implement based on your storage system
+
+		let mut storage_items = ItemContainer::new(area.rows, area.columns);
+		let _ = storage_items.update_items(|idx, _| 
+			if idx % 2 == 0 {  // Set only even slots
+				Some(ItemStack::new_i(ItemId::from_str("brick_grey")))  // Placeholder item creation
+			} else {
+				None
+		});
+		storage_items
+	}
+
+	// Updated method to better utilize inventory data
 	fn create_inventory_slots(&mut self, inv_state: InvState, layout: &InventoryLayout) {
 		let inventory = &ptr::get_gamestate().player().inventory();
+		
 		for area in layout.get_areas_for_inv_state(inv_state) {
 			let items = inventory.get_area(&area.name);
 			self.create_area_slots(&area, items);
-			// make highlight for selected item 
+			
+			// Enhanced hotbar highlighting using actual inventory state
 			if area.name == AreaType::Hotbar {
-				let col = inventory.ssi() as u8 % area.columns;
-				let row = inventory.ssi() as u8 / area.columns;
-				let (x, y) = area.get_slot_position(row, col);
-				let slot = UIElement::panel(self.next_id())
-					.with_position(x, y)
-					.with_size(SLOT, SLOT)
-					.with_style(&ptr::get_settings().ui_theme.panels.nice.with_border_width(0.012))
-					.with_z_index(4);
-				self.add_element(slot);
+				self.create_hotbar_selection_highlight(&area, inventory);
 			}
+		}
+		
+		// Add cursor item display if player is holding something
+		if let Some(cursor_item) = inventory.get_cursor() {
+			self.create_cursor_item_display(cursor_item);
+		}
+	}
+	// New method for better hotbar selection highlighting
+	fn create_hotbar_selection_highlight(&mut self, area: &AreaLayout, inventory: &Inventory) {
+		let selected_index = inventory.selected_index();
+		let col = selected_index as u8 % area.columns;
+		let row = selected_index as u8 / area.columns;
+		
+		if row < area.rows && col < area.columns {
+			let (x, y) = area.get_slot_position(row, col);
+			let slot = UIElement::panel(self.next_id())
+				.with_position(x, y)
+				.with_size(SLOT, SLOT)
+				.with_style(&ptr::get_settings().ui_theme.panels.nice.with_border_width(0.012))
+				.with_z_index(4);
+			self.add_element(slot);
 		}
 	}
 
-	fn create_area_slots(&mut self, area: &AreaLayout, items: &inv::ItemContainer) {
+	// New method to display item being held by cursor
+	pub fn create_cursor_item_display(&mut self, cursor_item: &ItemStack) {
+		// You'll need to get mouse position from your input system
+		let (mouse_x, mouse_y) = ptr::get_state().converted_mouse_position();
+		
+		let config = &ptr::get_settings();
+		let static_name: &'static str = Box::leak(cursor_item.to_icon().into_boxed_str());
+		
+		let item_id = self.next_id();
+		let cursor_display = UIElement::image(item_id, static_name)
+			.with_position(mouse_x - SLOT/2.0, mouse_y - SLOT/2.0)
+			.with_size(SLOT, SLOT)
+			.with_style(&config.ui_theme.images.basic)
+			.with_z_index(15); // Higher z-index to appear above everything
+		self.add_element(cursor_display);
+
+		self.focused_element = Some((item_id, 3));
+	}
+
+	fn create_area_slots(&mut self, area: &AreaLayout, items: &ItemContainer) {
 		if area.rows == 0 || area.columns == 0 { return; }
 		let config = &ptr::get_settings();
 		
@@ -512,6 +556,17 @@ impl UIManager {
 						.with_style(&config.ui_theme.images.basic)
 						.with_z_index(7);
 					self.add_element(item_display);
+
+					// Add quantity display for stackable items
+					if item.quantity > 1 {
+						let static_count: &'static str = Box::leak(item.quantity.to_string().into_boxed_str());
+						let quantity_text = UIElement::label(self.next_id(), static_count)
+							.with_position(x + SLOT * 0.6, y)
+							.with_size(SLOT * 0.4, SLOT * 0.3)
+							.with_style(&config.ui_theme.labels.nice)
+							.with_z_index(8);
+						self.add_element(quantity_text);
+					}
 				}
 			}
 		}

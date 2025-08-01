@@ -3,11 +3,12 @@ use crate::{
 	ext::{audio, ptr},
 	get_string,
 	ui::{
-		dialog, inventory::{self, ClickResult},
+		dialog,
 		element::{self, UIElement, UIElementData, ElementData},
 		render::{UIRenderer, Vertex},
 	},
 };
+use crate::item::ui_inventory::{ClickResult, InventoryUIState};
 use winit::keyboard::KeyCode as Key;
 
 #[derive(PartialEq, Clone, Copy)]
@@ -58,7 +59,7 @@ pub enum UIState {
 	Confirm(UIStateID, u8),
 	Error(UIStateID, u8),
 
-	Inventory(inventory::InventoryUIState),
+	Inventory(InventoryUIState),
 }
 
 impl UIState {
@@ -77,7 +78,7 @@ impl UIState {
 			9 => UIState::Loading,
 			10 => UIState::Error(UIStateID::default(), 0),
 			11 => UIState::ConnectLocal,
-			12 => UIState::Inventory(inventory::InventoryUIState::default()),
+			12 => UIState::Inventory(InventoryUIState::default()),
 			_ => UIState::None,
 		}
 	}
@@ -143,7 +144,7 @@ pub struct UIManager {
 	pub pipeline: wgpu::RenderPipeline,
 	// main data
 	elements: Vec<UIElement>,
-	focused_element: Option<(usize, usize)>,
+	pub focused_element: Option<(usize, usize)>,
 	renderer: UIRenderer,
 	// extra for double callbacks
 	pub dialogs: dialog::DialogManager,
@@ -346,7 +347,6 @@ impl UIManager {
 							(Some(item), None) => {
 								inv.get_area_mut(&area_type).set_at(click_x, click_y, Some(item));
 								inv.set_cursor(None);
-								self.setup_ui();
 							},
 							
 							// Case 2: Trying to pick up an item with empty cursor
@@ -355,24 +355,11 @@ impl UIManager {
 								inv.set_cursor(Some(item.clone()));
 								inv.get_area_mut(&area_type).remove_at(click_x, click_y);
 								
-								self.setup_ui(); // clears focused so we have to setup and then add the image as extra
-								// Create a new UI element for the dragged item
-								let config = &ptr::get_settings();
-								let static_name: &'static str = Box::leak(item.to_icon().into_boxed_str());
-								let item_id = self.next_id();
-								let item_display = UIElement::image(item_id, static_name)
-									.with_position(x, y) // Position at mouse cursor
-									.with_size(0.08, 0.08)
-									.with_style(&config.ui_theme.images.basic)
-									.with_z_index(15);
-								self.add_element(item_display);
-								
-								// Store the dragged item info
-								self.focused_element = Some((item_id, 3));
 							},
 							
 							_ => {}
 						}
+						self.setup_ui();
 						return true;
 					}
 				}
@@ -436,7 +423,7 @@ impl UIManager {
 	pub fn handle_mouse_move(&mut self, x: f32, y: f32, is_pressed: bool) {
 		// First check the conditions that don't need the element
 		let inventory_condition = matches!(self.state, UIState::Inventory(_));
-		let focused_element_id = matches!(self.focused_element.unwrap_or((0,0)).1, 3);
+		let focused_condition = matches!(self.focused_element.unwrap_or((0,0)).1, 3);
 
 		// Then get the element
 		let Some(element) = self.get_focused_element_mut() else { return };
@@ -446,8 +433,9 @@ impl UIManager {
 			element.set_calc_value(x, y);
 			element.trigger_callback();
 		}
-		if inventory_condition && focused_element_id {
-			element.set_position(x, y);
+		if inventory_condition && focused_condition {
+			const SLOT: f32 = 0.08;
+			element.set_position(x - SLOT/2.0, y - SLOT/2.0);
 		}
 	}
 	

@@ -1,5 +1,5 @@
-use crate::game::material::MaterialLevel;
-use crate::game::items::ItemId;
+use crate::item::material::MaterialLevel;
+use crate::item::items::ItemId;
 use std::{
 	num::NonZeroU32,
 	cmp::PartialEq,

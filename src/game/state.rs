@@ -62,8 +62,8 @@ impl GameState {
 		};
 		#[cfg(not(test))]
 		let player = {
-			use crate::game::items::{ItemStack, ItemId};
-			use crate::ui::inventory::AreaType;
+			use crate::item::items::{ItemStack, ItemId};
+			use crate::item::inventory::AreaType;
 			let state = ptr::get_state();
 			let offset = Vec3::new(0., 1.7, 0.);
 			let pos = Vec3::new(0.5, 0.5, 0.5);
@@ -77,11 +77,7 @@ impl GameState {
 			player
 				.inventory_mut()
 				.get_area_mut(&AreaType::Hotbar)
-				.set(2, 
-					Some(ItemStack::new_i(
-						ItemId::from_str("brick_grey")
-						))
-					);
+				.add_item(ItemStack::new_i(ItemId::from_str("brick_grey")));
 			player
 		};
 		

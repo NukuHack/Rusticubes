@@ -1,7 +1,8 @@
 
 use crate::ext::ptr;
 use crate::block::extra;
-use crate::ui::{manager, inventory};
+use crate::ui::manager;
+use crate::item::ui_inventory::{InventoryUIState};
 use std::iter::Iterator;
 use winit::{
 	event::{ElementState, MouseButton, WindowEvent, MouseScrollDelta},
@@ -140,7 +141,7 @@ impl<'a> crate::State<'a> {
 										self.toggle_mouse_capture();
 									},
 									manager::UIState::InGame => {
-										state.ui_manager.state = manager::UIState::Inventory(inventory::InventoryUIState::default());
+										state.ui_manager.state = manager::UIState::Inventory(InventoryUIState::default());
 										if self.input_system.mouse_captured() { self.toggle_mouse_capture(); }
 									}
 									_ => return false,
@@ -154,7 +155,7 @@ impl<'a> crate::State<'a> {
 								let state = ptr::get_state();
 								match state.ui_manager.state.clone() {
 									manager::UIState::InGame => {
-										state.ui_manager.state = manager::UIState::Inventory(inventory::InventoryUIState::str().b());
+										state.ui_manager.state = manager::UIState::Inventory(InventoryUIState::str().b());
 										if self.input_system.mouse_captured() { self.toggle_mouse_capture(); }
 									}
 									_ => return false,
@@ -168,7 +169,7 @@ impl<'a> crate::State<'a> {
 								let state = ptr::get_state();
 								match state.ui_manager.state.clone() {
 									manager::UIState::InGame => {
-										state.ui_manager.state = manager::UIState::Inventory(inventory::InventoryUIState::craft().b());
+										state.ui_manager.state = manager::UIState::Inventory(InventoryUIState::craft().b());
 										if self.input_system.mouse_captured() { self.toggle_mouse_capture(); }
 									}
 									_ => return false,
