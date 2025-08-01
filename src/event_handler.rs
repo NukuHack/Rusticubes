@@ -96,7 +96,7 @@ impl<'a> crate::State<'a> {
 					_ => false,
 				};
 				// Handle UI input first if there's a focused element
-				if self.ui_manager.visibility == true && self.ui_manager.focused_is_some() {
+				if self.ui_manager.visibility == true && self.ui_manager.focused_is_some() { // if focused you can't press Esc, have to handle them in a custom way
 					if self.is_world_running {
 						ptr::get_gamestate().player_mut().controller().reset_keyboard(); // Temporary workaround
 					}
@@ -237,7 +237,8 @@ impl<'a> crate::State<'a> {
 						if self.ui_manager.visibility == true {
 							// Use the stored current mouse position
 							if let Some(current_position) = self.input_system.previous_mouse {
-								self.ui_manager.handle_ui_click(self.render_context.size.into(), &current_position, true);
+								let (x, y) = convert_mouse_position(self.render_context.size.into(), &current_position);
+								self.ui_manager.handle_ui_click(x, y, true);
 							}
 						}
 						true
@@ -247,7 +248,8 @@ impl<'a> crate::State<'a> {
 						if self.ui_manager.visibility == true {
 							// Use the stored current mouse position
 							if let Some(current_position) = self.input_system.previous_mouse {
-								self.ui_manager.handle_ui_click(self.render_context.size.into(), &current_position, false);
+								let (x, y) = convert_mouse_position(self.render_context.size.into(), &current_position);
+								self.ui_manager.handle_ui_click(x, y, false);
 							}
 						}
 						true
@@ -283,13 +285,14 @@ impl<'a> crate::State<'a> {
 					self.input_system.previous_mouse = Some(winit::dpi::PhysicalPosition::new(center_x, center_y));
 					return true;
 				} else {
+					let (x, y) = convert_mouse_position(self.render_context.size.into(), position);
 					// Handle normal mouse movement for UI
-					if self.ui_manager.visibility == true && self.ui_manager.focused_is_some() {
-						self.ui_manager.handle_mouse_move(self.render_context.size.into(), position, self.input_system.mouse_button_state.left);
+					if self.ui_manager.visibility == true {
+						self.ui_manager.handle_mouse_move(x, y, self.input_system.mouse_button_state.left);
 					}
 					
 					// Handle UI hover
-					self.ui_manager.handle_ui_hover(self.render_context.size.into(), position);
+					self.ui_manager.handle_ui_hover(x, y);
 					self.input_system.previous_mouse = Some(*position);
 					return true;
 				}
@@ -318,6 +321,16 @@ impl<'a> crate::State<'a> {
 			_ => false,
 		}
 	}
+	pub fn converted_mouse_position(&self) -> (f32, f32) {
+		convert_mouse_position(self.render_context.size.into(), &self.input_system.previous_mouse.unwrap_or(winit::dpi::PhysicalPosition::new(0.0, 0.0)))
+	}
+
+}
 
 
+#[inline]
+pub const fn convert_mouse_position(window_size: (u32, u32), mouse_pos: &winit::dpi::PhysicalPosition<f64>) -> (f32, f32) {
+	let (x, y) = (mouse_pos.x as f32, mouse_pos.y as f32);
+	let (width, height) = (window_size.0 as f32, window_size.1 as f32);
+	((2.0 * x / width) - 1.0, (2.0 * (height - y) / height) - 1.0)
 }

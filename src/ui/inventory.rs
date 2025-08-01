@@ -474,7 +474,7 @@ impl UIManager {
 	fn create_inventory_slots(&mut self, inv_state: InvState, layout: &InventoryLayout) {
 		let inventory = &ptr::get_gamestate().player().inventory();
 		for area in layout.get_areas_for_inv_state(inv_state) {
-			let items = inventory.get_items_by_area(&area.name);
+			let items = inventory.get_area(&area.name);
 			self.create_area_slots(&area, items);
 			// make highlight for selected item 
 			if area.name == AreaType::Hotbar {

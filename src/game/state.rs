@@ -6,7 +6,6 @@ use crate::game::player;
 use crate::ext::ptr;
 use crate::world;
 #[cfg(not(test))]
-use crate::game::items::{ItemStack, ItemId};
 use std::path::PathBuf;
 use std::sync::atomic::Ordering;
 use glam::Vec3;
@@ -63,6 +62,8 @@ impl GameState {
 		};
 		#[cfg(not(test))]
 		let player = {
+			use crate::game::items::{ItemStack, ItemId};
+			use crate::ui::inventory::AreaType;
 			let state = ptr::get_state();
 			let offset = Vec3::new(0., 1.7, 0.);
 			let pos = Vec3::new(0.5, 0.5, 0.5);
@@ -73,8 +74,14 @@ impl GameState {
 				*state.size(),
 				&state.render_context.layouts[1],
 			);
-			player.inventory_mut().hotbar_mut().set(0, Some(ItemStack::new_i(ItemId::from_str("brick_grey"))),
-			);
+			player
+				.inventory_mut()
+				.get_area_mut(&AreaType::Hotbar)
+				.set(2, 
+					Some(ItemStack::new_i(
+						ItemId::from_str("brick_grey")
+						))
+					);
 			player
 		};
 		

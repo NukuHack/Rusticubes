@@ -137,14 +137,13 @@ pub struct UIManager {
 	//basic stuff
 	pub state: UIState,
 	pub visibility: bool,
-	pub dirty: bool,
 	//rendering stuff
 	pub vertex_buffer: wgpu::Buffer,
 	pub index_buffer: wgpu::Buffer,
 	pub pipeline: wgpu::RenderPipeline,
 	// main data
 	elements: Vec<UIElement>,
-	focused_element: Option<usize>,
+	focused_element: Option<(usize, usize)>,
 	renderer: UIRenderer,
 	// extra for double callbacks
 	pub dialogs: dialog::DialogManager,
@@ -226,7 +225,6 @@ impl UIManager {
 			elements: Vec::new(),
 			focused_element: None,
 			visibility: true,
-			dirty: true,
 			dialogs: dialog::DialogManager::new(),
 			renderer,
 			next_id: 1,
@@ -240,9 +238,8 @@ impl UIManager {
 	pub fn update(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, delta: f32) {
 		self.update_anim(delta);
 
-		if self.dirty {
+		if true { // decided to remove the condition ...
 			self.remake_mesh(device, queue);
-			self.dirty = false;
 		}
 	}
 	fn remake_mesh(&mut self, _device: &wgpu::Device, queue: &wgpu::Queue) {
@@ -268,7 +265,6 @@ impl UIManager {
 	
 	#[inline]
 	pub fn add_element(&mut self, mut element: UIElement) -> usize {
-		self.dirty = true;
 		if element.id == 0 {
 			element.id = self.next_id;
 			self.next_id += 1;
@@ -279,10 +275,9 @@ impl UIManager {
 	
 	#[inline]
 	pub fn remove_element(&mut self, id: usize) -> bool {
-		self.dirty = true;
 		if let Some(element) = self.elements.iter().position(|e| e.id == id) {
 			if let Some(focused) = self.focused_element {
-				if focused == element {
+				if focused.0 == element {
 					self.clear_focused_element();
 				}
 			}
@@ -301,6 +296,7 @@ impl UIManager {
 	
 	#[inline]
 	pub fn handle_key_input(&mut self, key: Key, shift: bool) -> bool {
+		if!matches!(self.focused_element, Some((_, 0))) { return false; }
 		if let Some(element) = self.get_focused_element_mut() {
 			if !(element.visible && element.enabled && element.is_input()) {
 				return false;
@@ -309,14 +305,12 @@ impl UIManager {
 				Key::Backspace => {
 					if let Some(text_mut) = element.get_text_mut() {
 						element::handle_backspace(text_mut);
-						self.dirty = true;
 					}
 				},
 				Key::Enter | Key::Escape => self.clear_focused_element(),
 				_ => if let Some(c) = element::key_to_char(key, shift) {
 					if let Some(text_mut) = element.get_text_mut() {
 						element::process_text_input(text_mut, c);
-						self.dirty = true;
 					}
 				},
 			}
@@ -330,46 +324,76 @@ impl UIManager {
 		
 	#[inline] pub const fn toggle_visibility(&mut self) { self.visibility = !self.visibility; }
 	#[inline] pub const fn focused_is_some(&self) -> bool { if self.focused_element.is_some() { true } else { false } }
-	#[inline] pub fn get_focused_element(&self) -> Option<&UIElement> { if let Some(idx) = self.focused_element { self.get_element(idx) } else { None } }
-	#[inline] pub fn get_focused_element_mut(&mut self) -> Option<&mut UIElement> { if let Some(idx) = self.focused_element { self.get_element_mut(idx) } else { None } }
+	#[inline] pub fn get_focused_element(&self) -> Option<&UIElement> { if let Some(idx) = self.focused_element { self.get_element(idx.0) } else { None } }
+	#[inline] pub fn get_focused_element_mut(&mut self) -> Option<&mut UIElement> { if let Some(idx) = self.focused_element { self.get_element_mut(idx.0) } else { None } }
 	#[inline] pub const fn next_id(&mut self) -> usize { let id = self.next_id; self.next_id += 1; id }
 		
 	#[inline]
-	fn handle_click_press(&mut self, norm_x: f32, norm_y: f32) -> bool {
+	fn handle_click_press(&mut self, x: f32, y: f32) -> bool {
 		match self.state.clone() {
 			UIState::Inventory(inv_state) => {
-				if let Some(inv_lay) = ptr::get_gamestate().player().inventory().layout.clone() {
-					match inv_lay.handle_click(inv_state, norm_x, norm_y) {
-						ClickResult::SlotClicked{area_type, slot} => {
-							println!("clicked or area: {:?}, on slot {:?}", area_type, slot);
+				let inv = ptr::get_gamestate().player_mut().inventory_mut();
+				
+				if let Some(inv_lay) = inv.layout.clone() {
+					let click_result = inv_lay.handle_click(inv_state, x, y);
+					
+					if let ClickResult::SlotClicked { area_type, slot } = click_result {
+						let (click_x, click_y) = (slot.0, slot.1);
+						let area = inv.get_area(&area_type);
+						
+						match (inv.get_cursor().cloned(), area.get_at(click_x, click_y)) {
+							// Case 1: Trying to place an item from cursor
+							(Some(item), None) => {
+								inv.get_area_mut(&area_type).set_at(click_x, click_y, Some(item));
+								inv.set_cursor(None);
+								self.setup_ui();
+							},
+							
+							// Case 2: Trying to pick up an item with empty cursor
+							(None, Some(item)) => {
+								let item = item.clone();
+								inv.set_cursor(Some(item.clone()));
+								inv.get_area_mut(&area_type).remove_at(click_x, click_y);
+								
+								self.setup_ui(); // clears focused so we have to setup and then add the image as extra
+								// Create a new UI element for the dragged item
+								let config = &ptr::get_settings();
+								let static_name: &'static str = Box::leak(item.to_icon().into_boxed_str());
+								let item_id = self.next_id();
+								let item_display = UIElement::image(item_id, static_name)
+									.with_position(x, y) // Position at mouse cursor
+									.with_size(0.08, 0.08)
+									.with_style(&config.ui_theme.images.basic)
+									.with_z_index(15);
+								self.add_element(item_display);
+								
+								// Store the dragged item info
+								self.focused_element = Some((item_id, 3));
+							},
+							
+							_ => {}
 						}
-						ClickResult::SlotMissed{area_type} => {
-							println!("clicked or area: {:?}, not on slot", area_type);
-						}
-						_=> {println!("clicked outside area")}
+						return true;
 					}
-
-					return true;
 				}
-			},
+			}
 			_ => {
-
+				self.clear_focused_element();
 			}
 		}
-		self.clear_focused_element();
 		let mut sorted_elements: Vec<&mut UIElement> = self.elements.iter_mut().filter(|e| e.visible && e.enabled).collect();
 		sorted_elements.sort_by_key(|e| e.z_index);
 		for (_, element) in sorted_elements.iter_mut().enumerate().rev() {
-			if element.contains_point(norm_x, norm_y) {
+			if element.contains_point(x, y) {
 				match element.data {
 					UIElementData::InputField{..} |
 					UIElementData::Checkbox{..} | 
 					UIElementData::Button{..} |
 					UIElementData::MultiStateButton{..} |
 					UIElementData::Slider{..} => {
-						element.set_calc_value(norm_x, norm_y); // only runs for sliders
+						element.set_calc_value(x, y); // only runs for sliders
 
-						self.focused_element = Some(element.id);
+						self.focused_element = Some((element.id, 0));
 						audio::set_fg("click.ogg");
 
 						return true;
@@ -381,9 +405,9 @@ impl UIManager {
 		false
 	}
 	#[inline]
-	fn handle_click_release(&mut self, norm_x: f32, norm_y: f32) -> bool {
+	fn handle_click_release(&mut self, x: f32, y: f32) -> bool {
 		if let Some(element) = self.get_focused_element_mut() {
-			if element.contains_point(norm_x, norm_y) {
+			if element.contains_point(x, y) {
 				match &element.data {
 					UIElementData::InputField{..} |
 					UIElementData::Checkbox{..} |
@@ -395,7 +419,7 @@ impl UIManager {
 
 						element.next_state(); // only multi button
 
-						element.set_calc_value(norm_x, norm_y); // only slider
+						element.set_calc_value(x, y); // only slider
 					},
 					_ => {
 						return false;
@@ -409,33 +433,34 @@ impl UIManager {
 		false
 	}
 	
-	pub fn handle_mouse_move(&mut self, window_size: (u32, u32), mouse_pos: &winit::dpi::PhysicalPosition<f64>, is_pressed: bool) {
-		if !is_pressed {return}
-		let (norm_x, norm_y) = convert_mouse_position(window_size, mouse_pos);
-		if let Some(element) = self.get_focused_element_mut() {
-			if let UIElementData::Slider{..} = element.data {
-				element.set_calc_value(norm_x, norm_y);
-				element.trigger_callback();
-				self.dirty = true;
-			}
+	pub fn handle_mouse_move(&mut self, x: f32, y: f32, is_pressed: bool) {
+		// First check the conditions that don't need the element
+		let inventory_condition = matches!(self.state, UIState::Inventory(_));
+		let focused_element_id = matches!(self.focused_element.unwrap_or((0,0)).1, 3);
+
+		// Then get the element
+		let Some(element) = self.get_focused_element_mut() else { return };
+
+		if let UIElementData::Slider{..} = element.data {
+			if !is_pressed { return; } // slider only processes if the button is pressed
+			element.set_calc_value(x, y);
+			element.trigger_callback();
+		}
+		if inventory_condition && focused_element_id {
+			element.set_position(x, y);
 		}
 	}
 	
 	#[inline]
-	pub fn handle_ui_hover(&mut self, window_size: (u32, u32), mouse_pos: &winit::dpi::PhysicalPosition<f64>) {
-		let (norm_x, norm_y) = convert_mouse_position(window_size, mouse_pos);
-
-		self.dirty = true;
+	pub fn handle_ui_hover(&mut self, x: f32, y:f32) {
 		// Update all elements
 		self.elements
 			.iter_mut()
-			.for_each(|e| e.update_hover_state(e.contains_point(norm_x, norm_y)));
+			.for_each(|e| e.update_hover_state(e.contains_point(x, y)));
 	}
 	
 	#[inline]
-	pub fn handle_ui_click(&mut self, window_size: (u32, u32), mouse_pos: &winit::dpi::PhysicalPosition<f64>, pressed: bool) -> bool {
-		//self.dirty = true;
-		let (x, y) = convert_mouse_position(window_size, mouse_pos);
+	pub fn handle_ui_click(&mut self, x: f32, y:f32, pressed: bool) -> bool {
 		if pressed {
 			self.handle_click_press(x, y)
 		} else {
@@ -467,10 +492,4 @@ pub fn get_element_num_by_id(id: &usize) -> f32 {
 	get_element_data_by_id(id)
 		.and_then(|data| data.num())
 		.unwrap_or(0.)
-}
-#[inline]
-pub const fn convert_mouse_position(window_size: (u32, u32), mouse_pos: &winit::dpi::PhysicalPosition<f64>) -> (f32, f32) {
-	let (x, y) = (mouse_pos.x as f32, mouse_pos.y as f32);
-	let (width, height) = (window_size.0 as f32, window_size.1 as f32);
-	((2.0 * x / width) - 1.0, (2.0 * (height - y) / height) - 1.0)
 }

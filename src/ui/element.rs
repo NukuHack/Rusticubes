@@ -244,6 +244,18 @@ impl UIElement {
 	pub fn get_str(&self) -> Option<&'static str> {
 		self.get_element_data().text()
 	}
+
+
+
+	// setters
+	#[inline] pub const fn set_position(&mut self, x: f32, y: f32) { self.position = (x, y); }
+	#[inline] pub const fn set_size(&mut self, width: f32, height: f32) { self.size = (width, height); }
+	#[inline] pub const fn set_color(&mut self, color: Color) { self.color = color; }
+	#[inline] pub const fn set_alpha(&mut self, a: u8){ self.color = self.color.with_a(a); }
+	#[inline] pub const fn set_z_index(&mut self, z_index: i32){ self.z_index = z_index; }
+	#[inline] pub const fn set_visible(&mut self, visible: bool) { self.visible = visible; }
+	#[inline] pub const fn set_enabled(&mut self, enabled: bool) { self.enabled = enabled; }
+	#[inline] pub const fn set_border(&mut self, border: Border) { self.border = border; }
 	
 }
 #[derive(Debug)]
