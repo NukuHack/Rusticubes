@@ -260,7 +260,6 @@ impl BinarySerializable for Chunk {
 	}
 	fn from_binary(bytes: &[u8]) -> Option<Self> {
 		let storage = BlockStorage::from_binary(bytes)?;
-		let storage = BlockStorage::from_rle(&storage).unwrap_or_else(|| storage);
 		
 		Some(Chunk {
 			storage,
@@ -314,8 +313,13 @@ impl BinarySerializable for World {
 			offset += ChunkCoord::BINARY_SIZE;
 			
 			// Read chunk
-			let chunk = Chunk::from_binary(&bytes[offset..])?;
+			let mut chunk = Chunk::from_binary(&bytes[offset..])?;
 			let chunk_size = chunk.binary_size();
+
+			if let Some(storage) = BlockStorage::from_rle(&chunk.storage) {
+				chunk.storage = storage;
+			}
+
 			if offset + chunk_size > bytes.len() { return None; }
 			offset += chunk_size;
 			

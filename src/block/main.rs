@@ -235,11 +235,11 @@ impl BlockStorage {
 
 	/// Convert to RLE format only if it would save memory
 	pub fn to_rle(&self) -> Option<BlockStorage> {
-		let rle:Self = match self {
+		let rle: Self = match self {
 			BlockStorage::Compact { palette, indices } => {
 				let mut runs = Vec::with_capacity(32);
 				let mut current_block = indices[0] >> 4;
-				let mut count = 1;
+				let mut count = 0; // Start counting from 0 (stored count = actual - 1)
 				
 				// Process first nibble
 				for i in 1..Chunk::VOLUME {
@@ -249,43 +249,41 @@ impl BlockStorage {
 						indices[i/2] & 0x0F
 					};
 					
-					if index == current_block && count < u8::MAX {
+					if index == current_block && count < u8::MAX - 1 { // Leave room for +1
 						count += 1;
 					} else {
 						runs.push((count, current_block));
 						current_block = index;
-						count = 1;
+						count = 0;
 					}
 				}
 				
 				// Push the last run
 				runs.push((count, current_block));
 				
-				Self::Rle{ palette: palette.clone(), runs }
+				Self::Rle { palette: palette.clone(), runs }
 			}
 			BlockStorage::Sparse { palette, indices } => {
 				let mut runs = Vec::with_capacity(32);
 				let mut current_block = indices[0];
-				let mut count = 1;
+				let mut count = 0; // Start counting from 0 (stored count = actual - 1)
 				
 				for &block in indices.iter().skip(1) {
-					if block == current_block && count < u8::MAX {
+					if block == current_block && count < u8::MAX - 1 { // Leave room for +1
 						count += 1;
 					} else {
 						runs.push((count, current_block));
 						current_block = block;
-						count = 1;
+						count = 0;
 					}
 				}
 				
 				// Push the last run
 				runs.push((count, current_block));
 				
-				Self::Rle{ palette: palette.clone(), runs }
+				Self::Rle { palette: palette.clone(), runs }
 			}
-			_ => {
-				return None;
-			}
+			_ => return None,
 		};
 
 		// Calculate memory sizes
@@ -294,23 +292,23 @@ impl BlockStorage {
 
 		// Only return RLE if it's smaller
 		if rle_size < original_size {
-			return Some(rle);
+			Some(rle)
+		} else {
+			None
 		}
-		None
 	}
-	
+
 	/// Convert from RLE format to Compact/Sparse storage
 	pub fn from_rle(&self) -> Option<Self> {
-		if let Self::Rle{ palette, runs } = self {
-			println!("Loading RLE with {} palette entries, {} runs", palette.len(), runs.len());
+		if let Self::Rle { palette, runs } = self {
 			// First determine if we should use Compact or Sparse storage
 			// Compact is more efficient when palette size <= 16
 			if palette.len() <= 16 {
 				let mut indices = Box::new([0u8; Chunk::VOLUME/2]);
-				let mut pos:usize = 0;
+				let mut pos: usize = 0;
 				
 				for &(count, index) in runs {
-					for _ in 0..count {
+					for _ in 0..=count { // =count because stored count is actual-1
 						if pos >= Chunk::VOLUME { break; }
 						let nibble_pos = pos / 2;
 						if pos % 2 == 0 {
@@ -321,38 +319,41 @@ impl BlockStorage {
 						pos += 1;
 					}
 				}
+				
 				if pos != Chunk::VOLUME {
-					println!("not all blocks filled, only : {}", pos);
-					return None; // Didn't fill all positions
+					println!("not all blocks filled, only: {}", pos);
+					return None;
 				}
 				
-				return Some(BlockStorage::Compact {
+				Some(BlockStorage::Compact {
 					palette: palette.to_vec(),
 					indices,
-				});
+				})
 			} else {
 				let mut indices = Box::new([0u8; Chunk::VOLUME]);
 				let mut pos = 0;
 				
 				for &(count, index) in runs {
-					for _ in 0..count {
+					for _ in 0..=count { // =count because stored count is actual-1
 						if pos >= Chunk::VOLUME { break; }
 						indices[pos] = index;
 						pos += 1;
 					}
 				}
+				
 				if pos != Chunk::VOLUME {
-					println!("not all blocks filled, only : {}", pos);
-					return None; // Didn't fill all positions
+					println!("not all blocks filled, only: {}", pos);
+					return None;
 				}
 				
-				return Some(BlockStorage::Sparse {
+				Some(BlockStorage::Sparse {
 					palette: palette.to_vec(),
 					indices,
-				});
-			};
+				})
+			}
+		} else {
+			None
 		}
-		None
 	}
 
 	/// Helper function to set a 4-bit index in compact storage
