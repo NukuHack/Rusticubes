@@ -540,28 +540,23 @@ impl<T: EquipmentType, S: BitStorage, TS: TierStorage> EquipmentSetStruct<T, S, 
 
 	#[inline] 
 	pub fn get_tier(&self, equip_type: T) -> Option<MaterialLevel> {
-		if self.has_equipment(equip_type) {
-			let index = T::TO_U8(equip_type);
-			let value = TS::get_tier(&self.tiers, index);
-			MaterialLevel::from_u8(value)
-		} else {
-			None
-		}
+		if !self.has_equipment(equip_type) { return None; };
+		
+		let index = T::TO_U8(equip_type);
+		let value = TS::get_tier(&self.tiers, index);
+		MaterialLevel::from_u8(value)
 	}
 
 	#[inline] 
 	pub fn iter(&self) -> impl Iterator<Item = (T, MaterialLevel)> + '_ {
 		(0..TS::max_types()).filter_map(move |i| {
-			if self.types.is_u(i) {
-				let value = TS::get_tier(&self.tiers, i);
-				if let (Some(equip_type), Some(tier)) = (T::from_u8(i), MaterialLevel::from_u8(value)) {
-					Some((equip_type, tier))
-				} else {
-					None
-				}
-			} else {
-				None
-			}
+			if !self.types.is_u(i) { return None; }
+
+			let value = TS::get_tier(&self.tiers, i);
+			let (Some(equip_type), Some(tier)) = (T::from_u8(i), MaterialLevel::from_u8(value)) 
+				else { return None; };
+			
+			Some((equip_type, tier))
 		})
 	}
 

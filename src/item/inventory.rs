@@ -153,10 +153,10 @@ impl ItemContainer {
 	{
 		let mut count = 0;
 		for (index, slot) in self.slot_iter_mut() {
-			if let Some(new_item) = predicate(index, slot) {
-				*slot = Some(new_item);
-				count += 1;
-			}
+			let Some(new_item) = predicate(index, slot) else { continue; };
+
+			*slot = Some(new_item);
+			count += 1;
 		}
 		count
 	}
@@ -180,26 +180,22 @@ impl ItemContainer {
 	#[inline] pub fn add_item(&mut self, mut new_item: ItemStack) -> bool {
 		// First try to stack with existing items of the same type
 		for (_, slot) in self.slot_iter_mut() {
-			if let Some(existing_item) = slot {
-				if existing_item.can_stack_with(&new_item) {
-					let remaining = existing_item.add_stack(new_item.stack);
-					if remaining == 0 {
-						// Fully stacked the new item
-						return true;
-					}
-					// Partially stacked, continue with remaining stack
-					new_item.set_stack(remaining);
-				}
-			}
+			let Some(existing_item) = slot else { continue; };
+
+			if !existing_item.can_stack_with(&new_item) { continue; }
+
+			let remaining = existing_item.add_stack(new_item.stack);
+			if remaining == 0 { return true; }// Fully stacked the new item
+
+			// Partially stacked, continue with remaining stack
+			new_item.set_stack(remaining);
 		}
 
 		// If we still have items left, try to find an empty slot
-		if let Some(index) = self.find_empty_slot() {
-			self.set(index, Some(new_item));
-			true
-		} else {
-			false
-		}
+		let Some(index) = self.find_empty_slot() else { return false; };
+
+		self.set(index, Some(new_item));
+		return true;
 	}
 
 	/// Remove an item at the specified linear index
@@ -211,33 +207,7 @@ impl ItemContainer {
 		let index = self.calculate_index(row, col)?;
 		self.remove(index)
 	}
-/*
-	/// Swap items between two linear indices
-	#[inline] pub fn swap(&mut self, a: usize, b: usize) -> bool {
-		if a >= self.capacity() || b >= self.capacity() {
-			return false;
-		}
-		self.items.swap(a, b);
-		true
-	}
 
-	/// Swap items between two grid positions
-	#[inline] pub fn swap_at(&mut self, row_a: u8, col_a: u8, row_b: u8, col_b: u8) -> bool {
-		if self.is_1d() {
-			// For 1D containers, use whichever coordinate is non-zero
-			let index_a = (row_a+col_a) as usize;
-			let index_b = (row_b+col_b) as usize;
-			return self.swap(index_a as usize, index_b as usize);
-		}
-		
-		if row_a >= self.rows || col_a >= self.cols || row_b >= self.rows || col_b >= self.cols {
-			return false;
-		}
-		let index_a = (row_a as usize * self.cols() as usize) + col_a as usize;
-		let index_b = (row_b as usize * self.cols() as usize) + col_b as usize;
-		self.swap(index_a, index_b)
-	}
-*/
 	/// Upgrade the dimensions of this container
 	#[inline] pub fn resize(&mut self, rows: u8, cols: u8) {
 		self.resize_with_dimensions(Slot::custom(rows, cols));
@@ -276,13 +246,13 @@ impl ItemContainer {
 				let mut min_diff = capacity as i32 - 1;
 
 				for i in 1..=(capacity as f32).sqrt().ceil() as u8 {
-					if capacity % i == 0 {
-						let j = capacity / i;
-						let diff = (i as i32 - j as i32).abs();
-						if diff < min_diff {
-							min_diff = diff;
-							best = (i, j);
-						}
+					if capacity % i != 0 { continue; };
+
+					let j = capacity / i;
+					let diff = (i as i32 - j as i32).abs();
+					if diff < min_diff {
+						min_diff = diff;
+						best = (i, j);
 					}
 				}
 
@@ -476,16 +446,16 @@ impl Inventory {
 			},
 			// Case 3: Trying to place an item from cursor into an item
 			(Some(c_item), Some(item)) => {
-				if item.can_stack_with(&c_item) {
-					let mut item = self.get_area_mut(area_type).remove_at(click_x, click_y).unwrap();
-					let rem = item.add_stack(c_item.stack);
-					if rem != 0 {
-						self.get_area_mut(area_type).set_at(click_x, click_y, Some(item.clone()));
-						self.set_cursor(Some(item.with_stack(rem)));
-					} else {
-						self.get_area_mut(area_type).set_at(click_x, click_y, Some(item));
-						self.remove_cursor();
-					}
+				if !item.can_stack_with(&c_item) { return; }
+
+				let mut item = self.get_area_mut(area_type).remove_at(click_x, click_y).unwrap();
+				let rem = item.add_stack(c_item.stack);
+				if rem == 0 {
+					self.get_area_mut(area_type).set_at(click_x, click_y, Some(item));
+					self.remove_cursor();
+				} else {
+					self.get_area_mut(area_type).set_at(click_x, click_y, Some(item.clone()));
+					self.set_cursor(Some(item.with_stack(rem)));
 				}
 				
 			},
@@ -517,16 +487,16 @@ impl Inventory {
 			},
 			// Case 3: Trying to place an item from cursor into an item
 			(Some(c_item), Some(item)) => {
-				if item.can_stack_with(&c_item) {
-					let mut item = self.get_area_mut(area_type).remove_at(click_x, click_y).unwrap();
-					let rem = item.add_stack(c_item.stack);
-					if rem != 0 {
-						self.set_cursor(Some(item.clone()));
-						self.get_area_mut(area_type).set_at(click_x, click_y, Some(item.with_stack(rem)));
-					} else {
-						self.set_cursor(Some(item));
-						self.get_area_mut(area_type).remove_at(click_x, click_y);
-					}
+				if !item.can_stack_with(&c_item) { return; }
+
+				let mut item = self.get_area_mut(area_type).remove_at(click_x, click_y).unwrap();
+				let rem = item.add_stack(c_item.stack);
+				if rem == 0 {
+					self.set_cursor(Some(item));
+					self.get_area_mut(area_type).remove_at(click_x, click_y);
+				} else {
+					self.set_cursor(Some(item.clone()));
+					self.get_area_mut(area_type).set_at(click_x, click_y, Some(item.with_stack(rem)));
 				}
 			},
 			// Case 4: Both empty

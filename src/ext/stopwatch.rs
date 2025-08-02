@@ -10,8 +10,7 @@ pub struct RunningAverage {
 
 impl std::fmt::Debug for RunningAverage {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		write!(
-			f,
+		write!( f,
 			"Average {{ samples: {}, average: {}, min: {}, max: {}, total: {} }}",
 			format_number(self.count() as f64),
 			format_number(self.avg()),
@@ -24,8 +23,7 @@ impl std::fmt::Debug for RunningAverage {
 
 impl std::fmt::Display for RunningAverage {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		write!(
-			f,
+		write!( f,
 			"⏱️─Benchmark Results:\n\
 			├─ Samples: {}\n\
 			├─ Average: {}\n\

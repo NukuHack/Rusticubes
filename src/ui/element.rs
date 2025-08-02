@@ -389,64 +389,21 @@ impl UIElement {
 	}
 	#[inline]
 	pub const fn calc_value(&self, norm_x: f32, _norm_y: f32) -> Option<f32> {
-		if let UIElementData::Slider { min_value, max_value, step, .. } = &self.data {
-			// Calculate clicked position relative to slider
-			let (x, y) = self.position;
-			let (w, h) = self.size;
-			
-			// Get click position relative to slider track
-			let track_height = h * 0.5;
-			let _track_y = y + (h - track_height) / 2.0;
-			
-			{
-				let handle_width = h * 0.8;
-				let effective_width = w - handle_width;
-				let click_x = if norm_x - x - handle_width / 2.0 < 0.0 {
-					0.0
-				} else if norm_x - x - handle_width / 2.0 > effective_width {
-					effective_width
-				} else {
-					norm_x - x - handle_width / 2.0
-				};
-				
-				// Calculate normalized value (0-1)
-				let normalized_value = click_x / effective_width;
-				
-				// Convert to actual value range
-				let value = *min_value + normalized_value * (*max_value - *min_value);
-				
-				let clamped_value = if value < *min_value {
-					*min_value
-				} else if value > *max_value {
-					*max_value
-				} else {
-					value
-				};
+		let UIElementData::Slider { min_value, max_value, step, .. } = &self.data else { return None; };
+		let (x, _) = self.position;
+		let (w, h) = self.size;
 
-				if let Some(step) = step {
-					// Round to the nearest step using integer casting
-					let val = clamped_value / *step;
-					let rounded_val = if val >= 0.0 {
-						(val + 0.5) as i32 as f32
-					} else {
-						(val - 0.5) as i32 as f32
-					};
-					let stepped_value = rounded_val * *step;
-					
-					// Ensure we're still within bounds after rounding
-					if stepped_value < *min_value {
-						return Some(*min_value);
-					} else if stepped_value > *max_value {
-						return Some(*max_value);
-					} else {
-						return Some(stepped_value);
-					}
-				}
+		let handle_width = h * 0.8;
+		let effective_width = w - handle_width;
+		let click_x = (norm_x - x - handle_width / 2.0).clamp(0.0, effective_width);
+		let normalized_value = click_x / effective_width;
+		let value = (*min_value + normalized_value * (*max_value - *min_value)).clamp(*min_value, *max_value);
 
-				return Some(clamped_value);
-			}
-		}
-		None
+		let Some(step) = step else { return Some(value) };
+
+		let rounded_val = (value / *step + if value >= 0.0 { 0.5 } else { -0.5 }) as i32 as f32;
+		let stepped_value = (rounded_val * *step).clamp(*min_value, *max_value);
+		Some(stepped_value)
 	}
 	#[inline]
 	pub const fn get_value(&self) -> Option<f32> {
@@ -493,13 +450,13 @@ impl UIElement {
 	#[inline]
 	pub const fn with_smooth_transition(mut self, smooth: bool) -> Self {
 		if let UIElementData::Animation { blend_delay, .. } = &mut self.data {
-			if smooth {
-				if blend_delay.is_none() {
-					*blend_delay = Some(0);
-				}
-			} else {
+			if !smooth {
 				*blend_delay = None;
 			}
+
+			if blend_delay.is_some() { return self; }
+			
+			*blend_delay = Some(0);
 		}
 		self
 	}
@@ -524,62 +481,56 @@ impl UIElement {
 	}
 	#[inline]
 	pub const fn update_anim(&mut self, delta_time: f32) {
-		if let UIElementData::Animation {
+		let UIElementData::Animation {
 			frames, current_frame, frame_duration, elapsed_time, looping, playing, ..
-		} = &mut self.data {
-			if !*playing || frames.is_empty() { return; }
+		} = &mut self.data else { return; };
+
+		if !*playing || frames.is_empty() { return; }
+		
+		*elapsed_time += delta_time;
+		while *elapsed_time >= *frame_duration {
+			*elapsed_time -= *frame_duration;
+			*current_frame += 1;
 			
-			*elapsed_time += delta_time;
-			while *elapsed_time >= *frame_duration {
-				*elapsed_time -= *frame_duration;
-				*current_frame += 1;
-				
-				if *current_frame >= frames.len() as u32 {
-					if *looping {
-						*current_frame = 0;
-					} else {
-						*current_frame = frames.len() as u32 - 1;
-						*playing = false;
-						break;
-					}
-				}
+			if *current_frame < frames.len() as u32 { continue; }
+
+			if *looping {
+				*current_frame = 0;
+			} else {
+				*current_frame = frames.len() as u32 - 1;
+				*playing = false;
+				break;
 			}
 		}
 	}
 	#[inline]
 	pub const fn get_packed_anim_data(&self) -> Option<[u32; 2]> {
-		if let UIElementData::Animation {
-			frames,
-			current_frame,
-			frame_duration,
-			elapsed_time,
-			blend_delay,
-			..
-		} = &self.data
-		{
-			let frame_count = frames.len() as u32;
-			let next_frame = if blend_delay.is_some() {
-				(*current_frame + 1) % frame_count
-			} else {
-				*current_frame
-			};
-			let packed_frames = (*current_frame & 0xFFFF) | ((next_frame & 0xFFFF) << 16);
-			
-			// Convert to integer arithmetic by working in hundredths (like fixed-point)
-			let elapsed_hundredths = (*elapsed_time * 100.0) as u32;
-			let duration_hundredths = (*frame_duration * 100.0) as u32;
-			
-			// Calculate progress using integer division (0-100 range)
-			let raw_progress = if duration_hundredths > 0 {
-				(elapsed_hundredths * 100) / duration_hundredths
-			} else {
-				0
-			};
-			let delay = if blend_delay.is_some() {blend_delay.unwrap()} else {0};
-			let packed_progress = (raw_progress & 0xFFFF) | ((delay & 0xFFFF) << 16);
-			return Some([packed_frames, packed_progress]);
-		}
-		None
+		let UIElementData::Animation {
+			frames, current_frame, frame_duration, elapsed_time, blend_delay, ..
+		} = &self.data else { return None; };
+
+		let frame_count = frames.len() as u32;
+		let next_frame = if blend_delay.is_some() {
+			(*current_frame + 1) % frame_count
+		} else {
+			*current_frame
+		};
+		let packed_frames = (*current_frame & 0xFFFF) | ((next_frame & 0xFFFF) << 16);
+		
+		// Convert to integer arithmetic by working in hundredths (like fixed-point)
+		let elapsed_hundredths = (*elapsed_time * 100.0) as u32;
+		let duration_hundredths = (*frame_duration * 100.0) as u32;
+		
+		// Calculate progress using integer division (0-100 range)
+		let raw_progress = if duration_hundredths > 0 {
+			(elapsed_hundredths * 100) / duration_hundredths
+		} else {
+			0
+		};
+		let delay = if blend_delay.is_some() {blend_delay.unwrap()} else {0};
+		let packed_progress = (raw_progress & 0xFFFF) | ((delay & 0xFFFF) << 16);
+		return Some([packed_frames, packed_progress]);
+		
 	}
 
 }
@@ -587,9 +538,7 @@ impl UIElement {
 // Input validation and processing
 #[inline]
 pub fn process_text_input(text: &mut &'static str, c: char) -> bool {
-	if text.len() >= 256 || c.is_control() {
-		return false;
-	}
+	if text.len() >= 256 || c.is_control() { return false; }
 	
 	// Create a new string with the added character
 	let mut new_string = String::with_capacity(text.len() + 1);
@@ -606,20 +555,18 @@ pub fn process_text_input(text: &mut &'static str, c: char) -> bool {
 
 #[inline]
 pub fn handle_backspace(text: &mut &'static str) -> bool {
-	if !text.is_empty() {
-		// Create a new string without the last character
-		let mut new_string = String::with_capacity(text.len() - 1);
-		new_string.push_str(&text[..text.len()-1]);
-		
-		// Convert to &'static str and update the reference
-		let boxed_str = new_string.into_boxed_str();
-		let leaked = Box::leak(boxed_str);
-		*text = leaked;
-		
-		true
-	} else {
-		false
-	}
+	if text.is_empty() { return false; }
+
+	// Create a new string without the last character
+	let mut new_string = String::with_capacity(text.len() - 1);
+	new_string.push_str(&text[..text.len()-1]);
+	
+	// Convert to &'static str and update the reference
+	let boxed_str = new_string.into_boxed_str();
+	let leaked = Box::leak(boxed_str);
+	*text = leaked;
+	
+	true
 }
 
 

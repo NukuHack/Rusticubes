@@ -324,9 +324,9 @@ impl InventoryLayout {
 				let (l2, b2, r2, t2) = area2.get_bounds();
 				
 				// Check if rectangles overlap
-				if !(r1 <= l2 || r2 <= l1 || t1 <= b2 || t2 <= b1) {
-					overlaps.push(format!("Areas {} and {} overlap", i, j));
-				}
+				if r1 <= l2 || r2 <= l1 || t1 <= b2 || t2 <= b1 { continue; }
+				
+				overlaps.push(format!("Areas {} and {} overlap", i, j));
 			}
 		}
 		
@@ -336,31 +336,26 @@ impl InventoryLayout {
 	pub fn handle_click(&self, inv_state: InventoryUIState, x: f32, y: f32) -> ClickResult {
 		if !self.contains_point(x, y) { return ClickResult::OutsidePanel; }
 		
-		let (extra,inv) = match inv_state {
-			InventoryUIState::Storage { inv,.. } => (vec![AreaType::Storage], inv),
-			InventoryUIState::Crafting {inv, .. } => (vec![AreaType::Input, AreaType::Output], inv),
-			InventoryUIState::Player { inv } => (vec![], inv),
+		let inv:InvState = match inv_state {
+		    InventoryUIState::Storage { inv, .. } |
+		    InventoryUIState::Crafting { inv, .. } |
+		    InventoryUIState::Player { inv } => inv,
 		};
 
-		fn get_active_areas<'a>(areas: &'a [AreaLayout], extra: &'a [AreaType]) -> Vec<&'a AreaLayout> {
-			areas.iter().filter(|a| extra.contains(&a.name)).collect()
-		}
-		
-		let mut areas = get_active_areas(&self.areas, &extra);
-		let binding = self.get_areas_for_inv_state(inv);
-		areas.extend(&binding);
+		let mut areas = self.get_areas_for_ui_state(inv_state);
+		areas.extend(self.get_areas_for_inv_state(inv));
 
 		for area in areas {
-			if area.contains_point(x, y) {
-				for row in 0..area.rows {
-					for col in 0..area.columns {
-						if area.slot_contains_point(row, col, x, y) {
-							return ClickResult::SlotClicked { area_type: area.name, slot: (row, col) };
-						}
-					}
+			if !area.contains_point(x, y) { continue; }
+
+			for row in 0..area.rows {
+				for col in 0..area.columns {
+					if !area.slot_contains_point(row, col, x, y) { continue; }
+
+					return ClickResult::SlotClicked { area_type: area.name, slot: (row, col) };
 				}
-				return ClickResult::SlotMissed { area_type: area.name };
 			}
+			return ClickResult::SlotMissed { area_type: area.name };
 		}
 		
 		ClickResult::SlotMissed { area_type: AreaType::Panel }
@@ -374,6 +369,14 @@ impl InventoryLayout {
 			(InvState::Armor, AreaType::Armor) => true,
 			(InvState::Inventory, AreaType::Inventory) => true,
 			(InvState::Hotbar, AreaType::Hotbar) => true,
+			_ => false,
+		}).cloned().collect()  // Clone the areas
+	}
+	pub fn get_areas_for_ui_state(&self, inv_state: InventoryUIState) -> Vec<AreaLayout> {
+		self.areas.iter().filter(|area| match (inv_state, area.name) {
+			(InventoryUIState::Storage { inv: _, size: _ } , AreaType::Storage) => true,
+			(InventoryUIState::Crafting { inv: _, size: _, result: _ } , AreaType::Input | AreaType::Output) => true,
+			//(InventoryUIState::Player { inv: _ } , _) => true,
 			_ => false,
 		}).cloned().collect()  // Clone the areas
 	}
@@ -425,23 +428,35 @@ impl UIManager {
 
 	// New method to handle storage UI using actual storage container
 	fn create_storage_area(&mut self, layout: &InventoryLayout) {
-		if let Some(storage_area) = layout.areas.iter().find(|a| a.name == AreaType::Storage) {
-			// Get actual storage data from game state (you'll need to implement this)
-			let storage_items = self.get_storage_container(storage_area); // This should return &ItemContainer
-			self.create_area_slots(&storage_area, &storage_items);
-		}
+		let Some(storage_area) = layout.areas.iter().find(|a| a.name == AreaType::Storage) else { return; };
+
+		// Get actual storage data from game state (you'll need to implement this)
+		let storage_items = self.get_storage_container(storage_area); // This should return &ItemContainer
+		self.create_area_slots(&storage_area, &storage_items);
 	}
 
 	// New method to handle crafting UI using actual crafting containers
 	fn create_crafting_areas(&mut self, layout: &InventoryLayout) {
 		for area_type in [AreaType::Input, AreaType::Output] {
-			if let Some(area) = layout.areas.iter().find(|a| a.name == area_type) {
-				// Get actual crafting data from game state
-				//let crafting_items = self.get_crafting_container(area_type); // This should return &ItemContainer
-				let crafting_items = ItemContainer::new(area.rows, area.columns);
-				self.create_area_slots(&area, &crafting_items);
-			}
+			let Some(area) = layout.areas.iter().find(|a| a.name == area_type) else { continue; };
+
+			// Get actual crafting data from game state
+			//let crafting_items = self.get_crafting_container(area_type); // This should return &ItemContainer
+			let crafting_items = ItemContainer::new(area.rows, area.columns);
+			self.create_area_slots(&area, &crafting_items);
 		}
+	}
+	fn get_storage_container(&self, area: &AreaLayout) -> ItemContainer {
+		// Return reference to actual storage container from game state
+		// This is a placeholder - implement based on your storage system
+
+		let mut storage_items = ItemContainer::new(area.rows, area.columns);
+		let _ = storage_items.update_items(|idx, _| 
+			if idx % 2 == 0 {  // Set only even slots
+				Some(ItemStack::new_i(ItemId::from_str("brick_grey")))  // Placeholder item creation
+			} else { None
+		});
+		storage_items
 	}
 	
 	fn add_main_panel(&mut self, layout: &InventoryLayout) {
@@ -453,7 +468,6 @@ impl UIManager {
 			.with_z_index(3);
 		self.add_element(panel);
 	}
-
 	fn add_player_buttons(&mut self, layout: &InventoryLayout) {
 		let theme = &ptr::get_settings().ui_theme;
 		let w = 0.12; let h = SLOT/2.;
@@ -465,51 +479,38 @@ impl UIManager {
 		self.add_element(version);
 	}
 
-	// Add these placeholder methods that you'll need to implement based on your game's architecture:
-	
-	fn get_storage_container(&self, area: &AreaLayout) -> ItemContainer {
-		// Return reference to actual storage container from game state
-		// This is a placeholder - implement based on your storage system
-
-		let mut storage_items = ItemContainer::new(area.rows, area.columns);
-		let _ = storage_items.update_items(|idx, _| 
-			if idx % 2 == 0 {  // Set only even slots
-				Some(ItemStack::new_i(ItemId::from_str("brick_grey")))  // Placeholder item creation
-			} else {
-				None
-		});
-		storage_items
-	}
-
 	// Updated method to better utilize inventory data
 	fn create_inventory_slots(&mut self, inv_state: InvState, inventory: &Inventory) {
-		if let Some(layout) = inventory.get_layout().clone() {
-			for area in layout.get_areas_for_inv_state(inv_state) {
-				let items = inventory.get_area(&area.name);
-				self.create_area_slots(&area, items);
-				
-				// Enhanced hotbar highlighting using actual inventory state
-				if area.name == AreaType::Hotbar && UIState::InGame == self.state.clone() {
-					self.hotbar_selection_highlight(inventory);
-				}
-			}
+		let Some(layout) = inventory.get_layout().clone() else { return; };
+
+		for area in layout.get_areas_for_inv_state(inv_state) {
+			let items = inventory.get_area(&area.name);
+			self.create_area_slots(&area, items);
 			
-			// Add cursor item display if player is holding something
-			if let Some(cursor_item) = inventory.get_cursor() {
-				let (mouse_x, mouse_y) = ptr::get_state().converted_mouse_position();
-				self.cursor_item_display(mouse_x, mouse_y, cursor_item);
-			}
+			// Enhanced hotbar highlighting using actual inventory state
+			if area.name != AreaType::Hotbar || UIState::InGame != self.state.clone() { continue; }
+			
+			self.hotbar_selection_highlight(inventory);
+		}
+		
+		// Add cursor item display if player is holding something
+		if let Some(cursor_item) = inventory.get_cursor() {
+			let (mouse_x, mouse_y) = ptr::get_state().converted_mouse_position();
+			self.cursor_item_display(mouse_x, mouse_y, cursor_item);
 		}
 	}
 	// New method for better hotbar selection highlighting
 	pub fn hotbar_selection_highlight(&mut self, inventory: &Inventory) {
 		let selected_index = inventory.selected_index();
 		let Some(layout) = inventory.get_layout() else { return; };
+
 		let binding = layout.get_areas_for_inv_state(InvState::Hotbar);
 		let Some(area) = binding.first() else { return; };
+
 		let col = selected_index as u8 % area.columns;
 		let row = selected_index as u8 / area.columns;
 		if !(row < area.rows && col < area.columns) { return; };
+		
 		let (x, y) = area.get_slot_position(row, col);
 
 		// Check if we have the correct focused element
@@ -563,33 +564,35 @@ impl UIManager {
 		for row in 0..area.rows {
 			for col in 0..area.columns {
 				let (x, y) = area.get_slot_position(row, col);
+
 				let slot = UIElement::panel(self.next_id())
 					.with_position(x, y)
 					.with_size(SLOT, SLOT)
 					.with_style(&config.inv_config.get_style(area.name))
 					.with_z_index(5);
 				self.add_element(slot);
-				if let Some(item) = items.get(row as usize * area.columns as usize + col as usize) {
-					let static_name: &'static str = Box::leak(item.to_icon().into_boxed_str());
-					let item_display = UIElement::image(self.next_id(), static_name)
-						.with_position(x, y)
-						.with_size(SLOT, SLOT)
-						.with_style(&config.ui_theme.images.basic)
-						.with_z_index(7);
-					self.add_element(item_display);
 
-					// Add quantity display for stackable items
-					if item.stack() > 1 {
-						let static_count: &'static str = Box::leak(item.stack.to_string().into_boxed_str());
-						let quantity_text = UIElement::label(self.next_id(), static_count)
-							.with_position(x + SLOT * 0.3, y)
-							.with_size(SLOT * 0.7, SLOT * 0.6)
-							.with_text_color(Solor::Black.i())
-							//.with_border(Border::rgbf(80, 100, 140, 0.008))
-							.with_z_index(8);
-						self.add_element(quantity_text);
-					}
-				}
+				let Some(item) = items.get(row as usize * area.columns as usize + col as usize) else { continue; };
+
+				let static_name: &'static str = Box::leak(item.to_icon().into_boxed_str());
+				let item_display = UIElement::image(self.next_id(), static_name)
+					.with_position(x, y)
+					.with_size(SLOT, SLOT)
+					.with_style(&config.ui_theme.images.basic)
+					.with_z_index(7);
+				self.add_element(item_display);
+
+				// Add quantity display for stackable items
+				if item.stack() == 1 { continue; }
+
+				let static_count: &'static str = Box::leak(item.stack.to_string().into_boxed_str());
+				let quantity_text = UIElement::label(self.next_id(), static_count)
+					.with_position(x + SLOT * 0.3, y)
+					.with_size(SLOT * 0.7, SLOT * 0.6)
+					.with_text_color(Solor::Black.i())
+					//.with_border(Border::rgbf(80, 100, 140, 0.008))
+					.with_z_index(8);
+				self.add_element(quantity_text);
 			}
 		}
 	}

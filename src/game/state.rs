@@ -26,13 +26,10 @@ pub fn make_world(save_path: PathBuf) {
 	// Check and create directories if needed
 	match std::fs::metadata(&save_path) {
 		Ok(metadata) => {
-			if !metadata.is_dir() {
-				println!(
-					"Save path {:?} exists but is not a directory", 
-					save_path
-				);
-			}
+			if metadata.is_dir() { /*done*/ return; }
 			// Directory already exists, no need to create
+
+			println!("Save path {:?} exists but is not a directory", save_path);
 		}
 		Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
 			// Directory doesn't exist, try to create it
@@ -101,9 +98,9 @@ impl GameState {
 			let mut hash: u32 = 0;
 			for (i, c) in worldname.chars().enumerate() {
 				hash = hash.wrapping_add(c as u32)
-						  .wrapping_mul(i as u32 + 1)
-						  .wrapping_add((creation_date << 32 ) as u32)
-						  .rotate_left(3);
+					.wrapping_mul(i as u32 + 1)
+					.wrapping_add((creation_date << 32 ) as u32)
+					.rotate_left(3);
 			}
 			hash.wrapping_add(creation_date as u32)
 		};

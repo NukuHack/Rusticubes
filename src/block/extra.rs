@@ -17,28 +17,28 @@ fn update_chunk_mesh(world: &mut World, chunk_coord: ChunkCoord) {
 	let world_ptr = world as *mut World;
 	
 	// Get mutable reference to our chunk
-	if let Some(chunk) = world.get_chunk_mut(chunk_coord) {
-		let state = ptr::get_state();
-		
-		// SAFETY:
-		// 1. We only use the pointer to access different chunks than the one we're modifying
-		// 2. The references don't outlive this scope
-		// 3. We don't modify through these references
-		let neighbors = unsafe {
-			let world_ref = &*world_ptr;
-			world_ref.get_neighboring_chunks(chunk_coord)
-		};
+	let Some(chunk) = world.get_chunk_mut(chunk_coord) else { return; };
 
-		chunk.make_mesh(
-			state.device(),
-			state.queue(),
-			neighbors);
+	let state = ptr::get_state();
+	
+	// SAFETY:
+	// 1. We only use the pointer to access different chunks than the one we're modifying
+	// 2. The references don't outlive this scope
+	// 3. We don't modify through these references
+	let neighbors = unsafe {
+		let world_ref = &*world_ptr;
+		world_ref.get_neighboring_chunks(chunk_coord)
+	};
 
-		for coord in chunk_coord.get_adjacent().iter() {
-			if let Some(neighbor_chunk) = world.get_chunk_mut(*coord) {
-				neighbor_chunk.final_mesh = false;
-			}
-		}
+	chunk.make_mesh(
+		state.device(),
+		state.queue(),
+		neighbors);
+
+	for coord in chunk_coord.get_adjacent().iter() {
+		let Some(neighbor_chunk) = world.get_chunk_mut(*coord) else { continue; };
+
+		neighbor_chunk.final_mesh = false;
 	}
 }
 
@@ -125,16 +125,16 @@ pub fn place_looked_block() {
 	let player = &ptr::get_gamestate().player();
 	let world = &mut ptr::get_gamestate().world_mut();
 
-	if let Some((block_pos, normal)) = raycast_to_block(player.camera(), player, world, REACH) {
-		let placement_pos = block_pos + normal;
-		let block_id = player.inventory()
-			.selected_item()
-			.and_then(|item| item.get_block_id())
-			.map_or(0, |block_id| block_id.inner());
+	let Some((block_pos, normal)) = raycast_to_block(player.camera(), player, world, REACH) else { return; };
 
-		world.set_block(placement_pos, Block::new(Material(block_id)));
-		update_chunk_mesh(world, ChunkCoord::from_world_pos(placement_pos));
-	}
+	let placement_pos = block_pos + normal;
+	let block_id = player.inventory()
+		.selected_item()
+		.and_then(|item| item.get_block_id())
+		.map_or(0, |block_id| block_id.inner());
+
+	world.set_block(placement_pos, Block::new(Material(block_id)));
+	update_chunk_mesh(world, ChunkCoord::from_world_pos(placement_pos));
 }
 
 /// Removes the block the player is looking at
@@ -145,10 +145,12 @@ pub fn remove_targeted_block() {
 	}
 	let world = &mut ptr::get_gamestate().world_mut();
 
-	if let Some((block_pos, _)) = raycast_to_block(ptr::get_gamestate().player().camera(),ptr::get_gamestate().player(), world, REACH) {
-		world.set_block(block_pos, Block::default());
-		update_chunk_mesh(world, ChunkCoord::from_world_pos(block_pos));
-	}
+	let Some((block_pos, _)) = raycast_to_block(
+		ptr::get_gamestate().player().camera(),
+		ptr::get_gamestate().player(), world, REACH) else { return; };
+
+	world.set_block(block_pos, Block::default());
+	update_chunk_mesh(world, ChunkCoord::from_world_pos(block_pos));
 }
 
 
@@ -156,9 +158,8 @@ pub fn remove_targeted_block() {
 #[inline]
 pub fn add_full_chunk() {
 	let state = ptr::get_state();
-	if !state.is_world_running {
-		return;
-	}
+	if !state.is_world_running { return; }
+	
 	let pos:Vec3 = ptr::get_gamestate().player().pos();
 	let chunk_coord = ChunkCoord::from_world_posf(pos);
 

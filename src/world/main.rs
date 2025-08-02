@@ -145,15 +145,13 @@ impl World {
 		for dx in -radius_i32..=radius_i32 {
 			for dy in -radius_i32..=radius_i32 {
 				for dz in -radius_i32..=radius_i32 {
-					if dx * dx + dy * dy + dz * dz > radius_sq {
-						continue;
-					}
+					if dx * dx + dy * dy + dz * dz > radius_sq { continue; }
 
 					let coord = ChunkCoord::new(center_x + dx, center_y + dy, center_z + dz);
-					if force || !self.loaded_chunks.contains(&coord) {
-						self.generate_chunk(coord, seed);
-						self.create_bind_group(coord);
-					}
+					if !force && self.loaded_chunks.contains(&coord) { continue; }
+
+					self.generate_chunk(coord, seed);
+					self.create_bind_group(coord);
 				}
 			}
 		}

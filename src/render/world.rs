@@ -148,31 +148,23 @@ impl World {
 	pub fn render_chunks<'a>(&'a self, render_pass: &mut wgpu::RenderPass<'a>) {
 		for (_chunk_coord, chunk) in self.chunks.iter() {
 			// Skip empty chunks entirely - no mesh or bind group needed
-			if chunk.is_empty() {
-				continue;
-			}
-			if let (Some(mesh), Some(bind_group)) = (&chunk.mesh, &chunk.bind_group) {
-				// Skip if mesh has no indices (shouldn't happen but good to check)
-				if mesh.num_instances == 0 {
-					continue;
-				}
+			if chunk.is_empty() { continue; }
+			let (Some(mesh), Some(bind_group)) = (&chunk.mesh, &chunk.bind_group) else { continue; };
 
-				render_pass.set_bind_group(2, bind_group, &[]);
-				render_pass.set_vertex_buffer(1, mesh.instance_buffer.slice(..));
+			// Skip if mesh has no indices (shouldn't happen but good to check)
+			if mesh.num_instances == 0 { continue; }
 
-				render_pass.draw(0..6, 0..mesh.num_instances as u32);
-			}
+			render_pass.set_bind_group(2, bind_group, &[]);
+			render_pass.set_vertex_buffer(1, mesh.instance_buffer.slice(..));
+
+			render_pass.draw(0..6, 0..mesh.num_instances as u32);
 		}
 	}
 
 	pub fn create_bind_group(&mut self, chunk_coord: ChunkCoord) {
-		if self.loaded_chunks.contains(&chunk_coord) {
-			match self.get_chunk_mut(chunk_coord) {
-				Some(c) => {
-					c.create_bind_group(chunk_coord);
-				},
-				None => {}
-			}
-		}
+		if !self.loaded_chunks.contains(&chunk_coord) { return; }
+		let Some(c) = self.get_chunk_mut(chunk_coord) else { return; };
+		
+		c.create_bind_group(chunk_coord);
 	}
 }

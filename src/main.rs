@@ -80,9 +80,7 @@ fn run_app() {
 
 	loop {
 		// Check if we need to poll immediately due to wake signal
-		if waker
-			.1
-			.wake_flag
+		if waker.1.wake_flag
 			.swap(false, sync::atomic::Ordering::Relaxed)
 		{
 			if let task::Poll::Ready(_) = future.as_mut().poll(&mut context) {

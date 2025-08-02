@@ -261,21 +261,19 @@ impl<'a> State<'a> {
 
 	#[inline]
 	pub fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) -> bool {
-		if new_size.width > 0 && new_size.height > 0 {
-			self.render_context.size = new_size;
-			self.render_context.surface_config.width = new_size.width;
-			self.render_context.surface_config.height = new_size.height;
-			if self.is_world_running {
-				ptr::get_gamestate().player_mut().resize(new_size);
-			}
-			// Clone the values to avoid holding borrows
-			self.render_context.surface.configure(self.device(), self.surface_config());
-			*self.texture_manager.depth_texture_mut() = render::texture::create_depth_texture(self.device(), self.surface_config(),"depth_texture");
-			
-			true
-		} else {
-			false
+		if new_size.width <= 0 || new_size.height <= 0 { return false; }
+
+		self.render_context.size = new_size;
+		self.render_context.surface_config.width = new_size.width;
+		self.render_context.surface_config.height = new_size.height;
+		if self.is_world_running {
+			ptr::get_gamestate().player_mut().resize(new_size);
 		}
+		// Clone the values to avoid holding borrows
+		self.render_context.surface.configure(self.device(), self.surface_config());
+		*self.texture_manager.depth_texture_mut() = render::texture::create_depth_texture(self.device(), self.surface_config(),"depth_texture");
+		
+		true
 	}
 	#[inline]
 	pub fn update(&mut self) {
@@ -349,10 +347,10 @@ pub async fn run() {
 
 	#[cfg(debug_assertions)] {
 		if let Err(e) = mods::api::main() {
-			eprintln!("⚠Error modding: {}", e);
+			println!("⚠Error modding: {}", e);
 		}
 		if let Err(e) = mods::over::main() {
-			eprintln!("💥Error mod function override: {}", e);
+			println!("💥Error mod function override: {}", e);
 		}
 	}
 
@@ -367,15 +365,14 @@ pub async fn run() {
 			return;
 		}
 		let state = ext::ptr::get_state();
-		match &event {
-			Event::WindowEvent { event, window_id } if *window_id == state.window().id() => {
-				state.handle_events(event);
+		let Event::WindowEvent { event, window_id } = &event else { return; };
 
-				if state.is_world_running {
-					block::extra::update_full_world();
-				}
-			}
-			_ => {}
+		if *window_id != state.window().id() { return; };
+
+		state.handle_events(event);
+
+		if state.is_world_running {
+			block::extra::update_full_world();
 		}
 	}).expect("Event loop error");
 }
@@ -385,7 +382,7 @@ pub async fn run() {
 
 
 fn make_layout(device: &wgpu::Device) -> Box<[wgpu::BindGroupLayout]> {
-	let post_bind_group_layout =  device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+	let post_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
 		label: Some("Post Processing Bind Group Layout"),
 		entries: &[
 			// Texture
@@ -408,7 +405,7 @@ fn make_layout(device: &wgpu::Device) -> Box<[wgpu::BindGroupLayout]> {
 			},
 		],
 	});
-	let texture_bind_group_layout = 	device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+	let texture_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
 		label: Some("texture_array_bind_group_layout"),
 		entries: &[
 			wgpu::BindGroupLayoutEntry {

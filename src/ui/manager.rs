@@ -278,17 +278,15 @@ impl UIManager {
 	
 	#[inline]
 	pub fn remove_element(&mut self, id: usize) -> bool {
-		if let Some(element) = self.elements.iter().position(|e| e.id == id) {
-			if let Some(focused) = self.focused_element {
-				if focused.0 == element {
-					self.clear_focused_element();
-				}
+		let Some(element) = self.elements.iter().position(|e| e.id == id) else { return false; };
+
+		if let Some((idx, _)) = self.focused_element {
+			if idx == element {
+				self.clear_focused_element();
 			}
-			self.elements.remove(element);
-			true
-		} else {
-			false
 		}
+		self.elements.remove(element);
+		true
 	}
 
 	#[inline] pub fn visible_elements(&self) -> Vec<&UIElement> { self.elements.iter().filter(|e| e.visible).collect() }
@@ -300,30 +298,28 @@ impl UIManager {
 	#[inline]
 	pub fn handle_key_input(&mut self, key: Key, shift: bool) -> bool {
 		if matches!(self.focused_element, Some((_, 0))) {
-			if let Some(element) = self.get_focused_element_mut() {
-				if !(element.visible && element.enabled) {
-					return false;
-				}
-				if !element.is_input() {
-					if key == Key::Escape {
-						self.clear_focused_element();
-					} return false;
-				}
-				match key {
-					Key::Backspace => {
-						if let Some(text_mut) = element.get_text_mut() {
-							element::handle_backspace(text_mut);
-						}
-					},
-					Key::Enter | Key::Escape => self.clear_focused_element(),
-					_ => if let Some(c) = element::key_to_char(key, shift) {
-						if let Some(text_mut) = element.get_text_mut() {
-							element::process_text_input(text_mut, c);
-						}
-					},
-				}
-				return true;
+			let Some(element) = self.get_focused_element_mut() else { return false; };
+			if !(element.visible && element.enabled) { return false; }
+
+			if !element.is_input() {
+				if key != Key::Escape { return false; }
+				self.clear_focused_element();
+				return false;
 			}
+			match key {
+				Key::Backspace => {
+					let Some(text_mut) = element.get_text_mut() else { return false; };
+					
+					element::handle_backspace(text_mut);
+				},
+				Key::Enter | Key::Escape => self.clear_focused_element(),
+				_ => if let Some(c) = element::key_to_char(key, shift) {
+					let Some(text_mut) = element.get_text_mut() else { return false; };
+					
+					element::process_text_input(text_mut, c);
+				}
+			}
+			return true;
 		} else if matches!(self.focused_element, Some((_, 3))) {
 			if key == Key::Escape {
 				let inv = ptr::get_gamestate().player_mut().inventory_mut();
@@ -334,6 +330,7 @@ impl UIManager {
 				return true;
 			}
 		}
+		// we do not handle idx 2 because i don't think we need to ...
 
 
 		false
@@ -353,15 +350,14 @@ impl UIManager {
 			UIState::Inventory(inv_state) => {
 				let inv = ptr::get_gamestate().player_mut().inventory_mut();
 				
-				if let Some(inv_lay) = inv.layout.clone() {
-					let click_result = inv_lay.handle_click(inv_state, x, y);
+				let Some(inv_lay) = inv.layout.clone() else { return false; };
+				let click_result = inv_lay.handle_click(inv_state, x, y);
 					
-					if let ClickResult::SlotClicked { area_type, slot } = click_result {
-						inv.handle_click_press(slot, area_type);
-						self.setup_ui();
-						return true;
-					}
-				}
+				let ClickResult::SlotClicked { area_type, slot } = click_result else { return false; };
+
+				inv.handle_click_press(slot, area_type);
+				self.setup_ui();
+				return true;
 			}
 			_ => {
 				self.clear_focused_element();
@@ -369,23 +365,24 @@ impl UIManager {
 		}
 		let mut sorted_elements: Vec<&mut UIElement> = self.elements.iter_mut().filter(|e| e.visible && e.enabled).collect();
 		sorted_elements.sort_by_key(|e| e.z_index);
+
 		for (_, element) in sorted_elements.iter_mut().enumerate().rev() {
-			if element.contains_point(x, y) {
-				match element.data {
-					UIElementData::InputField{..} |
-					UIElementData::Checkbox{..} | 
-					UIElementData::Button{..} |
-					UIElementData::MultiStateButton{..} |
-					UIElementData::Slider{..} => {
-						element.set_calc_value(x, y); // only runs for sliders
+			if !element.contains_point(x, y) { continue; }
 
-						self.focused_element = Some((element.id, 0));
-						audio::set_fg("click.ogg");
+			match element.data {
+				UIElementData::InputField{..} |
+				UIElementData::Checkbox{..} | 
+				UIElementData::Button{..} |
+				UIElementData::MultiStateButton{..} |
+				UIElementData::Slider{..} => {
+					element.set_calc_value(x, y); // only runs for sliders
 
-						return true;
-					},
-					_=> { },
-				}
+					self.focused_element = Some((element.id, 0));
+					audio::set_fg("click.ogg");
+
+					return true;
+				},
+				_=> { },
 			}
 		}
 		false
@@ -395,16 +392,15 @@ impl UIManager {
 		match self.state.clone() {
 			UIState::Inventory(inv_state) => {
 				let inv = ptr::get_gamestate().player_mut().inventory_mut();
+				let Some(inv_lay) = inv.layout.clone() else { return false; };
+
+				let click_result = inv_lay.handle_click(inv_state, x, y);
 				
-				if let Some(inv_lay) = inv.layout.clone() {
-					let click_result = inv_lay.handle_click(inv_state, x, y);
-					
-					if let ClickResult::SlotClicked { area_type, slot } = click_result {
-						inv.handle_rclick_press(slot, area_type);
-						self.setup_ui();
-						return true;
-					}
-				}
+				let ClickResult::SlotClicked { area_type, slot } = click_result else { return false; };
+
+				inv.handle_rclick_press(slot, area_type);
+				self.setup_ui();
+				return true;
 			}
 			_ => {
 				self.clear_focused_element();
@@ -414,40 +410,40 @@ impl UIManager {
 	}
 	#[inline]
 	fn handle_click_release(&mut self, x: f32, y: f32) -> bool {
-		if let Some(element) = self.get_focused_element_mut() {
-			if element.contains_point(x, y) {
-				match &element.data {
-					UIElementData::InputField{..} |
-					UIElementData::Checkbox{..} |
-					UIElementData::Button{..} |
-					UIElementData::MultiStateButton{..} |
-					UIElementData::Slider{..} => {
+		let Some(element) = self.get_focused_element_mut() else { return false; };
 
-						element.toggle_checked(); // only checkbox
+		if !element.contains_point(x, y) { return false; };
 
-						element.next_state(); // only multi button
+		match &element.data {
+			UIElementData::InputField{..} |
+			UIElementData::Checkbox{..} |
+			UIElementData::Button{..} |
+			UIElementData::MultiStateButton{..} |
+			UIElementData::Slider{..} => {
 
-						element.set_calc_value(x, y); // only slider
-					},
-					_ => {
-						return false;
-					},
-				}
-				element.trigger_callback();
-				return true;
-			}
+				element.toggle_checked(); // only checkbox
+
+				element.next_state(); // only multi button
+
+				element.set_calc_value(x, y); // only slider
+			},
+			_ => {
+				return false;
+			},
 		}
+		element.trigger_callback();
+
+		return true;
 		// clearing the focused element is bad for text input, because you can't input then
-		false
 	}
 
 	pub fn handle_mouse_move(&mut self, x: f32, y: f32, is_pressed: bool) {
 		// First check the conditions that don't need the element
 		if matches!(self.state, UIState::Inventory(_)) {
 			let inventory = ptr::get_gamestate().player_mut().inventory_mut();
-			if let Some(item) = inventory.get_cursor() {
-				self.cursor_item_display(x,y,item);
-			}
+			let Some(item) = inventory.get_cursor() else { return; };
+
+			self.cursor_item_display(x,y,item);
 		}
 		// Then get the element
 		let Some(element) = self.get_focused_element_mut() else { return };
