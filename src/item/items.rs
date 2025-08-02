@@ -79,20 +79,20 @@ impl ItemStack {
 
 
 
-    /// Checks if this item can be stacked with another
-    pub fn can_stack_with(&self, other: &Self) -> bool {
-        // Implement your stacking logic (same type, same metadata, etc.)
-        self.id == other.id && self.data == other.data &&
-        self.stack < self.max_stack_size()
-    }
+	/// Checks if this item can be stacked with another
+	pub fn can_stack_with(&self, other: &Self) -> bool {
+		// Implement your stacking logic (same type, same metadata, etc.)
+		self.id == other.id && self.data == other.data &&
+		self.stack < self.max_stack_size()
+	}
 
-    /// Adds stack to this stack, returning any overflow
-    pub fn add_stack(&mut self, amount: u32) -> u32 {
-        let max_add = self.max_stack_size() - self.stack();
-        let to_add = amount.min(max_add);
-        self.set_stack(self.stack + to_add);
-        amount - to_add
-    }
+	/// Adds stack to this stack, returning any overflow
+	pub fn add_stack(&mut self, amount: u32) -> u32 {
+		let max_add = self.max_stack_size() - self.stack();
+		let to_add = amount.min(max_add);
+		self.set_stack(self.stack + to_add);
+		amount - to_add
+	}
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

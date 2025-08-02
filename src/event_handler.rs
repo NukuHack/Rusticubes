@@ -1,7 +1,7 @@
 
 use crate::ext::ptr;
 use crate::block::extra;
-use crate::ui::manager;
+use crate::ui::manager::{self, UIState};
 use crate::item::ui_inventory::{InventoryUIState};
 use std::iter::Iterator;
 use winit::{
@@ -97,16 +97,18 @@ impl<'a> crate::State<'a> {
 					_ => false,
 				};
 				// Handle UI input first if there's a focused element
-				if self.ui_manager.visibility == true && self.ui_manager.focused_is_some() { // if focused you can't press Esc, have to handle them in a custom way
-					if self.is_world_running {
-						ptr::get_gamestate().player_mut().controller().reset_keyboard(); // Temporary workaround
+				if self.ui_manager.visibility{
+					if let Some(element) = self.ui_manager.get_focused_element() { // if focused you can't press Esc, have to handle them in a custom way
+						if self.is_world_running && element.is_input() {
+							ptr::get_gamestate().player_mut().controller().reset_keyboard(); // Temporary workaround
+						}
+						if is_pressed {
+							// Handle keys for UI
+							if self.ui_manager.handle_key_input(key, self.input_system.modifiers.shift_key()) {
+								return true;
+							}
+						}
 					}
-					if is_pressed {
-						// Handle keys for UI
-						self.ui_manager.handle_key_input(key, self.input_system.modifiers.shift_key());
-						return true;
-					}
-					return true;
 				}
 				// Handle game controls if no UI element is focused
 				// `key` is of type `KeyCode` (e.g., KeyCode::W)
@@ -114,67 +116,57 @@ impl<'a> crate::State<'a> {
 				if self.is_world_running && ptr::get_gamestate().is_running() {
 					ptr::get_gamestate().player_mut().controller().process_keyboard(&key, is_pressed);
 					match key {
-						Key::KeyF => {
-							if is_pressed {
-								extra::place_looked_block();
-								return true
-							}
-						},
-						Key::KeyR => {
-							if is_pressed {
-								extra::remove_targeted_block();
-								return true
-							}
-						},
-						Key::KeyL => {
+						Key::KeyG => {
 							if is_pressed {
 								extra::add_full_chunk();
 								return true
 							}
 						},
-						Key::KeyI => {
+						Key::KeyE => {
 							if is_pressed {
-								let state = ptr::get_state();
-								match state.ui_manager.state.clone() {
-									manager::UIState::Inventory(_) => {
-										state.ui_manager.state = manager::UIState::InGame;
+								match self.ui_manager.state.clone() {
+									UIState::Inventory(_) => {
+										if matches!(self.ui_manager.focused_element, Some((_, 3))) {
+											let inv = ptr::get_gamestate().player_mut().inventory_mut();
+											let itm = inv.remove_cursor().unwrap();
+											inv.add_item_anywhere(itm);
+										};
+										manager::close_pressed();
 										self.toggle_mouse_capture();
 									},
-									manager::UIState::InGame => {
-										state.ui_manager.state = manager::UIState::Inventory(InventoryUIState::default());
+									UIState::InGame => {
+										self.ui_manager.state = UIState::Inventory(InventoryUIState::default());
 										if self.input_system.mouse_captured() { self.toggle_mouse_capture(); }
 									}
 									_ => return false,
 								}
-								state.ui_manager.setup_ui();
+								self.ui_manager.setup_ui();
 								return true
 							}
 						},
-						Key::KeyJ => {
+						Key::KeyI => {
 							if is_pressed {
-								let state = ptr::get_state();
-								match state.ui_manager.state.clone() {
-									manager::UIState::InGame => {
-										state.ui_manager.state = manager::UIState::Inventory(InventoryUIState::str().b());
+								match self.ui_manager.state.clone() {
+									UIState::InGame => {
+										self.ui_manager.state = UIState::Inventory(InventoryUIState::str().b());
 										if self.input_system.mouse_captured() { self.toggle_mouse_capture(); }
 									}
 									_ => return false,
 								}
-								state.ui_manager.setup_ui();
+								self.ui_manager.setup_ui();
 								return true
 							}
 						},
-						Key::KeyK => {
+						Key::KeyO => {
 							if is_pressed {
-								let state = ptr::get_state();
-								match state.ui_manager.state.clone() {
-									manager::UIState::InGame => {
-										state.ui_manager.state = manager::UIState::Inventory(InventoryUIState::craft().b());
+								match self.ui_manager.state.clone() {
+									UIState::InGame => {
+										self.ui_manager.state = UIState::Inventory(InventoryUIState::craft().b());
 										if self.input_system.mouse_captured() { self.toggle_mouse_capture(); }
 									}
 									_ => return false,
 								}
-								state.ui_manager.setup_ui();
+								self.ui_manager.setup_ui();
 								return true
 							}
 						},
@@ -235,6 +227,10 @@ impl<'a> crate::State<'a> {
 				match (button, *state) {
 					(MouseButton::Left, ElementState::Pressed) => {
 						self.input_system.mouse_button_state.left = true;
+						if self.input_system.mouse_captured() {
+							extra::remove_targeted_block();
+							return true
+						}
 						if self.ui_manager.visibility == true {
 							// Use the stored current mouse position
 							if let Some(current_position) = self.input_system.previous_mouse {
@@ -257,10 +253,28 @@ impl<'a> crate::State<'a> {
 					}
 					(MouseButton::Right, ElementState::Pressed) => {
 						self.input_system.mouse_button_state.right = true;
+						if self.input_system.mouse_captured() {
+							extra::place_looked_block();
+							return true
+						}
+						if self.ui_manager.visibility == true {
+							// Use the stored current mouse position
+							if let Some(current_position) = self.input_system.previous_mouse {
+								let (x, y) = convert_mouse_position(self.render_context.size.into(), &current_position);
+								self.ui_manager.handle_ui_rclick(x, y, true);
+							}
+						}
 						true
 					}
 					(MouseButton::Right, ElementState::Released) => {
 						self.input_system.mouse_button_state.right = false;
+						if self.ui_manager.visibility == true {
+							// Use the stored current mouse position
+							if let Some(current_position) = self.input_system.previous_mouse {
+								let (x, y) = convert_mouse_position(self.render_context.size.into(), &current_position);
+								self.ui_manager.handle_ui_rclick(x, y, false);
+							}
+						}
 						true
 					}
 					_ => false,
@@ -305,17 +319,7 @@ impl<'a> crate::State<'a> {
 						MouseScrollDelta::LineDelta(_, y) => y * -0.5,
 						MouseScrollDelta::PixelDelta(pos) => pos.y as f32 * -0.01,
 					}; // delta is reversed for some reason ... might need to look into it more (maybe it's different for platforms so yeah)
-					let state = ptr::get_state();
-					match state.ui_manager.state.clone() {
-						manager::UIState::Inventory(_) => {
-							// item interaction i guess
-						},
-						manager::UIState::InGame => {
-							ptr::get_gamestate().player_mut().inventory_mut().step_select_slot(delta);
-							ptr::get_state().ui_manager.setup_ui();
-						}
-						_ => return false,
-					}
+					self.ui_manager.handle_scroll(delta);
 				}
 				true
 			}

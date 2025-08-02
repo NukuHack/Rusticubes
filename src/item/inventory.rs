@@ -41,10 +41,10 @@ pub struct ItemContainer {
 
 impl ItemContainer {
 	/// Create a new 2D grid container (like main inventory)
-	pub fn new(rows: u8, cols: u8) -> Self {
+	#[inline] pub fn new(rows: u8, cols: u8) -> Self {
 		Self::with_dimensions(Slot::custom(rows, cols))
 	}
-	pub fn with_dimensions(size: Slot) -> Self {
+	#[inline] pub fn with_dimensions(size: Slot) -> Self {
 		let mut container = Self {
 			items: Vec::new(),
 			size,
@@ -100,10 +100,12 @@ impl ItemContainer {
 		if stack <= 1 {
 			return Some(item);
 		}
-		let half = (stack >> 1) + 1; // Fixed operator precedence
-		if half == 1 { return Some(item); }
-		item.set_stack(stack - half);
+		let half = stack / 2;
+		let remaining = stack - half;
+		// Put the remaining items back
+		item.set_stack(remaining);
 		self.set(index, Some(item.clone()));
+		// Return the half stack (if odd, the bigger half)
 		item.set_stack(half);
 		Some(item)
 	}
@@ -113,7 +115,7 @@ impl ItemContainer {
 	}
 
 	/// Helper method to calculate linear index from 2D coordinates
-	fn calculate_index(&self, row: u8, col: u8) -> Option<usize> {
+	#[inline] fn calculate_index(&self, row: u8, col: u8) -> Option<usize> {
 		if self.is_linear() {
 			// For linear containers, use whichever coordinate is non-zero
 			return Some((row + col) as usize);
@@ -127,8 +129,7 @@ impl ItemContainer {
 	}
 
 	/// Returns an iterator over all slots with their indices and items
-	#[inline] 
-	pub fn slot_iter(&self) -> impl Iterator<Item = (usize, &Option<ItemStack>)> {
+	#[inline] pub fn slot_iter(&self) -> impl Iterator<Item = (usize, &Option<ItemStack>)> {
 		self.items
 			.iter()
 			.enumerate()
@@ -136,8 +137,7 @@ impl ItemContainer {
 	}
 	
 	/// Returns an iterator over all slots with their indices and items
-	#[inline] 
-	pub fn slot_iter_mut(&mut self) -> impl Iterator<Item = (usize, &mut Option<ItemStack>)> {
+	#[inline] pub fn slot_iter_mut(&mut self) -> impl Iterator<Item = (usize, &mut Option<ItemStack>)> {
 		let cap = self.capacity();
 		self.items
 			.iter_mut()
@@ -147,7 +147,7 @@ impl ItemContainer {
 
 	/// Uses the slot iterator to set items based on a predicate
 	/// Returns the number of items set
-	pub fn update_items<F>(&mut self, mut predicate: F) -> usize
+	#[inline] pub fn update_items<F>(&mut self, mut predicate: F) -> usize
 	where
 		F: FnMut(usize, &Option<ItemStack>) -> Option<ItemStack>,
 	{
@@ -162,20 +162,17 @@ impl ItemContainer {
 	}
 
 	/// Find the first empty slot
-	#[inline] 
-	pub fn find_empty_slot(&self) -> Option<usize> {
+	#[inline] pub fn find_empty_slot(&self) -> Option<usize> {
 		self.items.iter().position(|slot| slot.is_none())
 	}
 
 	/// Count non-empty slots
-	#[inline] 
-	pub fn count_items(&self) -> usize {
+	#[inline] pub fn count_items(&self) -> usize {
 		self.items.iter().filter(|slot| slot.is_some()).count()
 	}
 
 	/// Check if the container is full
-	#[inline] 
-	pub fn is_full(&self) -> bool {
+	#[inline] pub fn is_full(&self) -> bool {
 		self.find_empty_slot().is_none()
 	}
 
@@ -216,7 +213,7 @@ impl ItemContainer {
 	}
 /*
 	/// Swap items between two linear indices
-	pub fn swap(&mut self, a: usize, b: usize) -> bool {
+	#[inline] pub fn swap(&mut self, a: usize, b: usize) -> bool {
 		if a >= self.capacity() || b >= self.capacity() {
 			return false;
 		}
@@ -225,7 +222,7 @@ impl ItemContainer {
 	}
 
 	/// Swap items between two grid positions
-	pub fn swap_at(&mut self, row_a: u8, col_a: u8, row_b: u8, col_b: u8) -> bool {
+	#[inline] pub fn swap_at(&mut self, row_a: u8, col_a: u8, row_b: u8, col_b: u8) -> bool {
 		if self.is_1d() {
 			// For 1D containers, use whichever coordinate is non-zero
 			let index_a = (row_a+col_a) as usize;
@@ -386,6 +383,9 @@ impl Inventory {
 	#[inline] pub fn set_cursor(&mut self, item: Option<ItemStack>) {
 		self.cursor_item = item;
 	}
+	#[inline] pub fn remove_cursor(&mut self) -> Option<ItemStack> {
+		self.cursor_item.take()
+	}
 
 	/// Get item at specific inventory position
 	#[inline] pub fn get_item(&self, row: u8, col: u8) -> Option<&ItemStack> {
@@ -412,6 +412,9 @@ impl Inventory {
 	#[inline] pub fn set_layout(&mut self, layout: &InventoryLayout) {
 		self.layout = Some(layout.clone());
 	}
+	#[inline] pub fn get_layout(&self) -> Option<&InventoryLayout> {
+		self.layout.as_ref()
+	}
 	
 	/// Get total item capacity
 	#[inline] pub fn total_capacity(&self) -> usize {
@@ -426,13 +429,16 @@ impl Inventory {
 			_ => &self.items, // should return nothing
 		}
 	}
-	#[inline] pub fn get_area_mut(&mut self, area: &AreaType) -> &mut ItemContainer {
+	#[inline] pub fn try_get_area_mut(&mut self, area: AreaType) -> Option<&mut ItemContainer> {
 		match area {
-			AreaType::Inventory => &mut self.items,
-			AreaType::Hotbar => &mut self.hotbar,
-			AreaType::Armor => &mut self.armor,
-			_ => &mut self.items, // should return nothing
+			AreaType::Inventory => Some(&mut self.items),
+			AreaType::Hotbar => Some(&mut self.hotbar),
+			AreaType::Armor => Some(&mut self.armor),
+			_ => None, // should return nothing
 		}
+	}
+	#[inline] pub fn get_area_mut(&mut self, area: AreaType) -> &mut ItemContainer {
+		self.try_get_area_mut(area).expect("Failed to get area from AreaType")
 	}
 
 	/// Add item to any available slot (tries hotbar first, then inventory, then armor)
@@ -447,5 +453,84 @@ impl Inventory {
 	}
 	#[inline] pub fn is_full(&self) -> bool {
 		self.armor.is_full() && self.hotbar.is_full() && self.items.is_full()
+	}
+
+
+
+
+	pub fn handle_click_press(&mut self, clicked_pos:(u8,u8), area_type: AreaType) {
+		let area = self.get_area(&area_type); let (click_x, click_y) = clicked_pos;
+
+		match (self.get_cursor().cloned(), area.get_at(click_x, click_y)) {
+			// Case 1: Trying to place an item from cursor
+			(Some(item), None) => {
+				self.get_area_mut(area_type).set_at(click_x, click_y, Some(item));
+				self.remove_cursor();
+			},
+			// Case 2: Trying to pick up an item with empty cursor
+			(None, Some(item)) => {
+				let item = item.clone();
+				self.set_cursor(Some(item.clone()));
+				self.get_area_mut(area_type).remove_at(click_x, click_y);
+				
+			},
+			// Case 3: Trying to place an item from cursor into an item
+			(Some(c_item), Some(item)) => {
+				if item.can_stack_with(&c_item) {
+					let mut item = self.get_area_mut(area_type).remove_at(click_x, click_y).unwrap();
+					let rem = item.add_stack(c_item.stack);
+					if rem != 0 {
+						self.get_area_mut(area_type).set_at(click_x, click_y, Some(item.clone()));
+						self.set_cursor(Some(item.with_stack(rem)));
+					} else {
+						self.get_area_mut(area_type).set_at(click_x, click_y, Some(item));
+						self.remove_cursor();
+					}
+				}
+				
+			},
+			// Case 4: Both empty
+			_ => {}
+		}
+	}
+	pub fn handle_rclick_press(&mut self, clicked_pos:(u8,u8), area_type: AreaType) {
+		let area = self.get_area(&area_type); let (click_x, click_y) = clicked_pos;
+
+		match (self.get_cursor().cloned(), area.get_at(click_x, click_y)) {
+			// Case 1: Trying to place an item from cursor
+			(Some(item), None) => {
+				if item.stack == 1 {
+					self.get_area_mut(area_type).set_at(click_x, click_y, Some(item));
+					self.remove_cursor();
+				} else {
+					self.get_area_mut(area_type).set_at(click_x, click_y, Some(item.with_stack(1)));
+					let mut item = self.remove_cursor().unwrap();
+					item.set_stack(item.stack - 1);
+					self.set_cursor(Some(item));
+				}
+			},
+			// Case 2: Trying to pick up half the item with empty cursor
+			(None, Some(_)) => {
+				let item = self.get_area_mut(area_type).get_half_stack_at(click_x, click_y);
+				self.set_cursor(item);
+				
+			},
+			// Case 3: Trying to place an item from cursor into an item
+			(Some(c_item), Some(item)) => {
+				if item.can_stack_with(&c_item) {
+					let mut item = self.get_area_mut(area_type).remove_at(click_x, click_y).unwrap();
+					let rem = item.add_stack(c_item.stack);
+					if rem != 0 {
+						self.set_cursor(Some(item.clone()));
+						self.get_area_mut(area_type).set_at(click_x, click_y, Some(item.with_stack(rem)));
+					} else {
+						self.set_cursor(Some(item));
+						self.get_area_mut(area_type).remove_at(click_x, click_y);
+					}
+				}
+			},
+			// Case 4: Both empty
+			_ => {}
+		}
 	}
 }

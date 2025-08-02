@@ -388,37 +388,38 @@ pub enum ClickResult {
 
 impl UIManager {
 	pub fn setup_inventory_ui(&mut self) {
-		let inv_lay = ptr::get_gamestate().player_mut().inventory_mut();
+		let mut inventory = ptr::get_gamestate().player_mut().inventory_mut();
 
 		if let UIState::Inventory(state) = self.state.clone() {
 			let layout = match state {
-				InventoryUIState::Player { inv } => InventoryLayout::calculate_for_player(inv, inv_lay),
-				InventoryUIState::Storage { inv, size } => InventoryLayout::calculate_for_storage(size, inv, inv_lay),
-				InventoryUIState::Crafting { inv, size, result } => InventoryLayout::calculate_for_crafting(size, result, inv, inv_lay),
+				InventoryUIState::Player { inv } => InventoryLayout::calculate_for_player(inv, &mut inventory),
+				InventoryUIState::Storage { inv, size } => InventoryLayout::calculate_for_storage(size, inv, &mut inventory),
+				InventoryUIState::Crafting { inv, size, result } => InventoryLayout::calculate_for_crafting(size, result, inv, &mut inventory),
 			};
 			
-			inv_lay.set_layout(&layout);
+			inventory.set_layout(&layout);
 			self.add_main_panel(&layout);
 			
 			match state {
 				InventoryUIState::Player { inv } => {
 					self.add_player_buttons(&layout);
-					self.create_inventory_slots(inv, &layout);
+					self.create_inventory_slots(inv, &inventory);
 				}
 				InventoryUIState::Storage { inv, .. } => {
 					// Create storage area with actual storage data
 					self.create_storage_area(&layout);
-					self.create_inventory_slots(inv, &layout);
+					self.create_inventory_slots(inv, &inventory);
 				}
 				InventoryUIState::Crafting { inv, .. } => {
 					// Create crafting areas with actual crafting data
 					self.create_crafting_areas(&layout);
-					self.create_inventory_slots(inv, &layout);
+					self.create_inventory_slots(inv, &inventory);
 				}
 			}
 		} else if UIState::InGame == self.state.clone() {
-			let layout = InventoryLayout::calculate_for_player(InvState::Hotbar, inv_lay);
-			self.create_inventory_slots(InvState::Hotbar, &layout);
+			let layout = InventoryLayout::calculate_for_player(InvState::Hotbar, &mut inventory);
+			inventory.set_layout(&layout);
+			self.create_inventory_slots(InvState::Hotbar, &inventory);
 		}
 	}
 
@@ -481,54 +482,74 @@ impl UIManager {
 	}
 
 	// Updated method to better utilize inventory data
-	fn create_inventory_slots(&mut self, inv_state: InvState, layout: &InventoryLayout) {
-		let inventory = &ptr::get_gamestate().player().inventory();
-		
-		for area in layout.get_areas_for_inv_state(inv_state) {
-			let items = inventory.get_area(&area.name);
-			self.create_area_slots(&area, items);
-			
-			// Enhanced hotbar highlighting using actual inventory state
-			if area.name == AreaType::Hotbar {
-				self.create_hotbar_selection_highlight(&area, inventory);
+	fn create_inventory_slots(&mut self, inv_state: InvState, inventory: &Inventory) {
+		if let Some(layout) = inventory.get_layout().clone() {
+			for area in layout.get_areas_for_inv_state(inv_state) {
+				let items = inventory.get_area(&area.name);
+				self.create_area_slots(&area, items);
+				
+				// Enhanced hotbar highlighting using actual inventory state
+				if area.name == AreaType::Hotbar && UIState::InGame == self.state.clone() {
+					self.hotbar_selection_highlight(inventory);
+				}
 			}
-		}
-		
-		// Add cursor item display if player is holding something
-		if let Some(cursor_item) = inventory.get_cursor() {
-			self.create_cursor_item_display(cursor_item);
+			
+			// Add cursor item display if player is holding something
+			if let Some(cursor_item) = inventory.get_cursor() {
+				let (mouse_x, mouse_y) = ptr::get_state().converted_mouse_position();
+				self.cursor_item_display(mouse_x, mouse_y, cursor_item);
+			}
 		}
 	}
 	// New method for better hotbar selection highlighting
-	fn create_hotbar_selection_highlight(&mut self, area: &AreaLayout, inventory: &Inventory) {
+	pub fn hotbar_selection_highlight(&mut self, inventory: &Inventory) {
 		let selected_index = inventory.selected_index();
+		let Some(layout) = inventory.get_layout() else { return; };
+		let binding = layout.get_areas_for_inv_state(InvState::Hotbar);
+		let Some(area) = binding.first() else { return; };
 		let col = selected_index as u8 % area.columns;
 		let row = selected_index as u8 / area.columns;
-		
-		if row < area.rows && col < area.columns {
-			let (x, y) = area.get_slot_position(row, col);
-			let slot = UIElement::panel(self.next_id())
-				.with_position(x, y)
-				.with_size(SLOT, SLOT)
-				.with_style(&ptr::get_settings().ui_theme.panels.nice.with_border_width(0.012))
-				.with_z_index(4);
-			self.add_element(slot);
-		}
-	}
+		if !(row < area.rows && col < area.columns) { return; };
+		let (x, y) = area.get_slot_position(row, col);
 
+		// Check if we have the correct focused element
+		if let Some((id, 2)) = self.focused_element {
+			if let Some(element) = self.get_element_mut(id) {
+				element.set_position(x, y);
+				return;
+			}
+		}
+		
+		// If we get here, either no focused element or wrong type
+		let item_id = self.next_id();
+		let slot = UIElement::panel(item_id)
+			.with_position(x, y)
+			.with_size(SLOT, SLOT)
+			.with_style(&ptr::get_settings().ui_theme.panels.nice.with_border_width(0.012))
+			.with_z_index(4);
+		self.add_element(slot);
+
+		self.focused_element = Some((item_id, 2));
+	}
 	// New method to display item being held by cursor
-	pub fn create_cursor_item_display(&mut self, cursor_item: &ItemStack) {
+	pub fn cursor_item_display(&mut self, x:f32, y:f32, cursor_item: &ItemStack) {
 		// You'll need to get mouse position from your input system
-		let (mouse_x, mouse_y) = ptr::get_state().converted_mouse_position();
-		
-		let config = &ptr::get_settings();
+
+		// Check if we have the correct focused element
+		if let Some((id, 3)) = self.focused_element {
+			if let Some(element) = self.get_element_mut(id) {
+				element.set_position(x - SLOT/2.0, y - SLOT/2.0);
+				return;
+			}
+		}
+
+		// If we get here, either no focused element or wrong type
 		let static_name: &'static str = Box::leak(cursor_item.to_icon().into_boxed_str());
-		
 		let item_id = self.next_id();
 		let cursor_display = UIElement::image(item_id, static_name)
-			.with_position(mouse_x - SLOT/2.0, mouse_y - SLOT/2.0)
+			.with_position(x - SLOT/2.0, y - SLOT/2.0)
 			.with_size(SLOT, SLOT)
-			.with_style(&config.ui_theme.images.basic)
+			.with_style(&ptr::get_settings().ui_theme.images.basic)
 			.with_z_index(15); // Higher z-index to appear above everything
 		self.add_element(cursor_display);
 

@@ -7,8 +7,10 @@ use crate::{
 		element::{self, UIElement, UIElementData, ElementData},
 		render::{UIRenderer, Vertex},
 	},
+	item::{
+		ui_inventory::{ClickResult, InventoryUIState},
+	}
 };
-use crate::item::ui_inventory::{ClickResult, InventoryUIState};
 use winit::keyboard::KeyCode as Key;
 
 #[derive(PartialEq, Clone, Copy)]
@@ -297,36 +299,52 @@ impl UIManager {
 	
 	#[inline]
 	pub fn handle_key_input(&mut self, key: Key, shift: bool) -> bool {
-		if!matches!(self.focused_element, Some((_, 0))) { return false; }
-		if let Some(element) = self.get_focused_element_mut() {
-			if !(element.visible && element.enabled && element.is_input()) {
-				return false;
+		if matches!(self.focused_element, Some((_, 0))) {
+			if let Some(element) = self.get_focused_element_mut() {
+				if !(element.visible && element.enabled) {
+					return false;
+				}
+				if !element.is_input() {
+					if key == Key::Escape {
+						self.clear_focused_element();
+					} return false;
+				}
+				match key {
+					Key::Backspace => {
+						if let Some(text_mut) = element.get_text_mut() {
+							element::handle_backspace(text_mut);
+						}
+					},
+					Key::Enter | Key::Escape => self.clear_focused_element(),
+					_ => if let Some(c) = element::key_to_char(key, shift) {
+						if let Some(text_mut) = element.get_text_mut() {
+							element::process_text_input(text_mut, c);
+						}
+					},
+				}
+				return true;
 			}
-			match key {
-				Key::Backspace => {
-					if let Some(text_mut) = element.get_text_mut() {
-						element::handle_backspace(text_mut);
-					}
-				},
-				Key::Enter | Key::Escape => self.clear_focused_element(),
-				_ => if let Some(c) = element::key_to_char(key, shift) {
-					if let Some(text_mut) = element.get_text_mut() {
-						element::process_text_input(text_mut, c);
-					}
-				},
+		} else if matches!(self.focused_element, Some((_, 3))) {
+			if key == Key::Escape {
+				let inv = ptr::get_gamestate().player_mut().inventory_mut();
+				let itm = inv.remove_cursor().unwrap();
+				inv.add_item_anywhere(itm);
+				close_pressed();
+				self.setup_ui();
+				return true;
 			}
-			true
-		} else {
-			false
 		}
+
+
+		false
 	}
 	
 	#[inline] pub const fn clear_focused_element(&mut self) { self.focused_element = None; }
 		
 	#[inline] pub const fn toggle_visibility(&mut self) { self.visibility = !self.visibility; }
 	#[inline] pub const fn focused_is_some(&self) -> bool { if self.focused_element.is_some() { true } else { false } }
-	#[inline] pub fn get_focused_element(&self) -> Option<&UIElement> { if let Some(idx) = self.focused_element { self.get_element(idx.0) } else { None } }
-	#[inline] pub fn get_focused_element_mut(&mut self) -> Option<&mut UIElement> { if let Some(idx) = self.focused_element { self.get_element_mut(idx.0) } else { None } }
+	#[inline] pub fn get_focused_element(&self) -> Option<&UIElement> { if let Some((idx,_)) = self.focused_element { self.get_element(idx) } else { None } }
+	#[inline] pub fn get_focused_element_mut(&mut self) -> Option<&mut UIElement> { if let Some((idx,_)) = self.focused_element { self.get_element_mut(idx) } else { None } }
 	#[inline] pub const fn next_id(&mut self) -> usize { let id = self.next_id; self.next_id += 1; id }
 		
 	#[inline]
@@ -339,26 +357,7 @@ impl UIManager {
 					let click_result = inv_lay.handle_click(inv_state, x, y);
 					
 					if let ClickResult::SlotClicked { area_type, slot } = click_result {
-						let (click_x, click_y) = (slot.0, slot.1);
-						let area = inv.get_area(&area_type);
-						
-						match (inv.get_cursor().cloned(), area.get_at(click_x, click_y)) {
-							// Case 1: Trying to place an item from cursor
-							(Some(item), None) => {
-								inv.get_area_mut(&area_type).set_at(click_x, click_y, Some(item));
-								inv.set_cursor(None);
-							},
-							
-							// Case 2: Trying to pick up an item with empty cursor
-							(None, Some(item)) => {
-								let item = item.clone();
-								inv.set_cursor(Some(item.clone()));
-								inv.get_area_mut(&area_type).remove_at(click_x, click_y);
-								
-							},
-							
-							_ => {}
-						}
+						inv.handle_click_press(slot, area_type);
 						self.setup_ui();
 						return true;
 					}
@@ -392,6 +391,28 @@ impl UIManager {
 		false
 	}
 	#[inline]
+	fn handle_rclick_press(&mut self, x: f32, y: f32) -> bool {
+		match self.state.clone() {
+			UIState::Inventory(inv_state) => {
+				let inv = ptr::get_gamestate().player_mut().inventory_mut();
+				
+				if let Some(inv_lay) = inv.layout.clone() {
+					let click_result = inv_lay.handle_click(inv_state, x, y);
+					
+					if let ClickResult::SlotClicked { area_type, slot } = click_result {
+						inv.handle_rclick_press(slot, area_type);
+						self.setup_ui();
+						return true;
+					}
+				}
+			}
+			_ => {
+				self.clear_focused_element();
+			}
+		}
+		return false;
+	}
+	#[inline]
 	fn handle_click_release(&mut self, x: f32, y: f32) -> bool {
 		if let Some(element) = self.get_focused_element_mut() {
 			if element.contains_point(x, y) {
@@ -419,12 +440,15 @@ impl UIManager {
 		// clearing the focused element is bad for text input, because you can't input then
 		false
 	}
-	
+
 	pub fn handle_mouse_move(&mut self, x: f32, y: f32, is_pressed: bool) {
 		// First check the conditions that don't need the element
-		let inventory_condition = matches!(self.state, UIState::Inventory(_));
-		let focused_condition = matches!(self.focused_element.unwrap_or((0,0)).1, 3);
-
+		if matches!(self.state, UIState::Inventory(_)) {
+			let inventory = ptr::get_gamestate().player_mut().inventory_mut();
+			if let Some(item) = inventory.get_cursor() {
+				self.cursor_item_display(x,y,item);
+			}
+		}
 		// Then get the element
 		let Some(element) = self.get_focused_element_mut() else { return };
 
@@ -433,9 +457,23 @@ impl UIManager {
 			element.set_calc_value(x, y);
 			element.trigger_callback();
 		}
-		if inventory_condition && focused_condition {
-			const SLOT: f32 = 0.08;
-			element.set_position(x - SLOT/2.0, y - SLOT/2.0);
+	}
+
+	pub fn handle_scroll(&mut self, delta: f32) -> bool {
+		match self.state.clone() {
+			UIState::Inventory(_) => {
+				// item interaction i guess
+				true
+			},
+			UIState::InGame => {
+				let inventory = ptr::get_gamestate().player_mut().inventory_mut();
+				inventory.step_select_slot(delta);
+				
+				self.hotbar_selection_highlight(inventory);
+
+				true
+			}
+			_ => false,
 		}
 	}
 	
@@ -453,6 +491,15 @@ impl UIManager {
 			self.handle_click_press(x, y)
 		} else {
 			self.handle_click_release(x, y)
+		}
+	}
+	#[inline]
+	pub fn handle_ui_rclick(&mut self, x: f32, y:f32, pressed: bool) -> bool {
+		if pressed {
+			self.handle_rclick_press(x, y)
+		} else {
+			//self.handle_rclick_release(x, y)
+			false
 		}
 	}
 	
