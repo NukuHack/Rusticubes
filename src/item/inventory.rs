@@ -93,6 +93,25 @@ impl ItemContainer {
 		self.calculate_index(row, col)
 			.map_or(false, |index| self.set(index, item))
 	}
+
+	#[inline] pub fn get_half_stack(&mut self, index: usize) -> Option<ItemStack> {
+		let mut item = self.remove(index)?;
+		let stack = item.stack();
+		if stack <= 1 {
+			return Some(item);
+		}
+		let half = (stack >> 1) + 1; // Fixed operator precedence
+		if half == 1 { return Some(item); }
+		item.set_stack(stack - half);
+		self.set(index, Some(item.clone()));
+		item.set_stack(half);
+		Some(item)
+	}
+	#[inline] pub fn get_half_stack_at(&mut self, row: u8, col: u8) -> Option<ItemStack> {
+		let index = self.calculate_index(row, col)?;
+		self.get_half_stack(index)
+	}
+
 	/// Helper method to calculate linear index from 2D coordinates
 	fn calculate_index(&self, row: u8, col: u8) -> Option<usize> {
 		if self.is_linear() {
@@ -162,28 +181,28 @@ impl ItemContainer {
 
 	/// Add an item to the first available slot
 	#[inline] pub fn add_item(&mut self, mut new_item: ItemStack) -> bool {
-	    // First try to stack with existing items of the same type
-	    for (_, slot) in self.slot_iter_mut() {
-	        if let Some(existing_item) = slot {
-	            if existing_item.can_stack_with(&new_item) {
-	                let remaining = existing_item.add_quantity(new_item.quantity);
-	                if remaining == 0 {
-	                    // Fully stacked the new item
-	                    return true;
-	                }
-	                // Partially stacked, continue with remaining quantity
-	                new_item.set_quantity(remaining);
-	            }
-	        }
-	    }
+		// First try to stack with existing items of the same type
+		for (_, slot) in self.slot_iter_mut() {
+			if let Some(existing_item) = slot {
+				if existing_item.can_stack_with(&new_item) {
+					let remaining = existing_item.add_stack(new_item.stack);
+					if remaining == 0 {
+						// Fully stacked the new item
+						return true;
+					}
+					// Partially stacked, continue with remaining stack
+					new_item.set_stack(remaining);
+				}
+			}
+		}
 
-	    // If we still have items left, try to find an empty slot
-	    if let Some(index) = self.find_empty_slot() {
-	        self.set(index, Some(new_item));
-	        true
-	    } else {
-	        false
-	    }
+		// If we still have items left, try to find an empty slot
+		if let Some(index) = self.find_empty_slot() {
+			self.set(index, Some(new_item));
+			true
+		} else {
+			false
+		}
 	}
 
 	/// Remove an item at the specified linear index

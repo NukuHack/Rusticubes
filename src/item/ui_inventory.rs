@@ -1,6 +1,6 @@
 
 use crate::item::inventory::{Inventory, ItemContainer, AreaType, Slot};
-use crate::ext::ptr;
+use crate::ext::{color::Solor, ptr};
 use crate::ui::{manager::{UIManager, UIState}, element::UIElement};
 use crate::item::items::{ItemStack, ItemId};
 
@@ -558,12 +558,13 @@ impl UIManager {
 					self.add_element(item_display);
 
 					// Add quantity display for stackable items
-					if item.quantity > 1 {
-						let static_count: &'static str = Box::leak(item.quantity.to_string().into_boxed_str());
+					if item.stack() > 1 {
+						let static_count: &'static str = Box::leak(item.stack.to_string().into_boxed_str());
 						let quantity_text = UIElement::label(self.next_id(), static_count)
-							.with_position(x + SLOT * 0.6, y)
-							.with_size(SLOT * 0.4, SLOT * 0.3)
-							.with_style(&config.ui_theme.labels.nice)
+							.with_position(x + SLOT * 0.3, y)
+							.with_size(SLOT * 0.7, SLOT * 0.6)
+							.with_text_color(Solor::Black.i())
+							//.with_border(Border::rgbf(80, 100, 140, 0.008))
 							.with_z_index(8);
 						self.add_element(quantity_text);
 					}

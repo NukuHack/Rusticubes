@@ -211,10 +211,11 @@ impl UIRenderer {
 				self.text_textures.insert(texture_key.clone(), (texture, bind_group));
 			}
 
+			let pix = if element.size.0 + element.size.1 < 0.2 { self.pixel_ratio * 3.0 } else { self.pixel_ratio };
 			if let Some((texture, _)) = self.text_textures.get(&texture_key) {
 				let (x, y) = element.position;
 				let (w, h) = element.size;
-				let pixel_to_unit = 1.0 / (100.0 * self.pixel_ratio);
+				let pixel_to_unit = 1.0 / (100.0 * pix);
 				let tex_w = texture.width() as f32 * pixel_to_unit;
 				let tex_h = texture.height() as f32 * pixel_to_unit;
 				let real_x = x + (w - tex_w) / 2.0;
@@ -245,8 +246,9 @@ impl UIRenderer {
 	}
 
 	fn render_text_to_texture(&self, device: &wgpu::Device, queue: &wgpu::Queue, text: &str, element_size: (f32, f32), color: Color) -> wgpu::Texture {
-		let target_width_px = (element_size.0 * 100.0 * self.pixel_ratio) as u32;
-		let target_height_px = (element_size.1 * 100.0 * self.pixel_ratio) as u32;
+		let pix = if element_size.0 + element_size.1 < 0.2 { self.pixel_ratio * 3.0 } else { self.pixel_ratio };
+		let target_width_px = (element_size.0 * 100.0 * pix) as u32;
+		let target_height_px = (element_size.1 * 100.0 * pix) as u32;
 		let font_size = target_height_px as f32 * 0.8;
 		let scale = Scale::uniform(font_size);
 		let v_metrics = self.font.v_metrics(scale);
@@ -495,23 +497,31 @@ impl UIRenderer {
 		r_pass.set_vertex_buffer(0, ui_manager.vertex_buffer.slice(..));
 		r_pass.set_index_buffer(ui_manager.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
 		r_pass.set_bind_group(1, &self.uniform_bind_group, &[]);
-		let mut i_off = 0;
+		let mut i_off:u32 = 0;
 		let mut sorted_elements = ui_manager.visible_elements();
 		sorted_elements.sort_by_key(|e| e.z_index);
+
+		#[inline] fn draw_six_set<'a>(r_pass: &mut wgpu::RenderPass<'a>, bind_g_idx:u32, bind_group: &wgpu::BindGroup, i_off: &mut u32) {
+			set_bind(r_pass, bind_g_idx, bind_group);
+			draw_six(r_pass, i_off);
+		}
+		#[inline] fn draw_six<'a>(r_pass: &mut wgpu::RenderPass<'a>, i_off: &mut u32) {
+			r_pass.draw_indexed(*i_off..(*i_off + 6), 0, 0..1);
+			*i_off += 6;
+		}
+		#[inline] fn set_bind<'a>(r_pass: &mut wgpu::RenderPass<'a>, bind_g_idx:u32, bind_group: &wgpu::BindGroup) {
+			r_pass.set_bind_group(bind_g_idx, Some(bind_group), &[]);
+		}
 		
 		for element in sorted_elements {
 			if element.border.width > 0.0 {
-				r_pass.set_bind_group(0, &self.default_bind_group, &[]);
-				r_pass.draw_indexed(i_off..(i_off + 6), 0, 0..1);
-				i_off += 6;
+				draw_six_set(r_pass, 0, &self.default_bind_group, &mut i_off);
 			}
 			match &element.data {
 				UIElementData::Image { path } => {
 					if let Some((_, bind_group)) = self.image_textures.get(&path.to_string()) {
-						r_pass.set_bind_group(0, bind_group, &[]);
-						r_pass.draw_indexed(i_off..(i_off + 6), 0, 0..1);
+						draw_six_set(r_pass, 0, &bind_group, &mut i_off);
 					}
-					i_off += 6;
 				},
 				UIElementData::Animation { frames, .. } => {
 					let frames_str: Vec<String> = frames.iter().map(|s| s.to_string()).collect();
@@ -519,66 +529,48 @@ impl UIRenderer {
 					if let Some((_, bind_group)) = self.animation_textures.get(&animation_key) {
 						if let Some(stuff) = element.get_packed_anim_data() {
 							ptr::get_state().queue().write_buffer(&self.uniform_buffer, 0, bytemuck::cast_slice(&stuff));
-							r_pass.set_bind_group(0, bind_group, &[]);
-							r_pass.draw_indexed(i_off..(i_off + 6), 0, 0..1);
+							draw_six_set(r_pass, 0, &bind_group, &mut i_off);
 						}
 					}
-					i_off += 6;
 				},
 				UIElementData::Checkbox { checked, .. } => {
-					r_pass.set_bind_group(0, &self.default_bind_group, &[]);
-					r_pass.draw_indexed(i_off..(i_off + 6), 0, 0..1);
-					i_off += 6;
+					draw_six_set(r_pass, 0, &self.default_bind_group, &mut i_off);
 					if *checked {
-						r_pass.draw_indexed(i_off..(i_off + 6), 0, 0..1);
-						i_off += 6;
+						draw_six(r_pass, &mut i_off);
 					}
 					if let Some(text) = element.get_str() {
 						let texture_key = format!("{}_{:?}", text, element.get_text_color());
 						if let Some((_, bind_group)) = self.text_textures.get(&texture_key) {
-							r_pass.set_bind_group(0, bind_group, &[]);
-							r_pass.draw_indexed(i_off..(i_off + 6), 0, 0..1);
+							draw_six_set(r_pass, 0, &bind_group, &mut i_off);
 						}
-						i_off += 6;
 					}
 				},
 				UIElementData::Slider { .. } => {
-					r_pass.set_bind_group(0, &self.default_bind_group, &[]);
 					// Draw track
-					r_pass.draw_indexed(i_off..(i_off + 6), 0, 0..1);
-					i_off += 6;
+					draw_six_set(r_pass, 0, &self.default_bind_group, &mut i_off);
 					// Draw handle
-					r_pass.draw_indexed(i_off..(i_off + 6), 0, 0..1);
-					i_off += 6;
+					draw_six(r_pass, &mut i_off);
 				},
 				UIElementData::InputField { .. } |
 				UIElementData::Button { .. } |
 				UIElementData::MultiStateButton { .. } => {
-					r_pass.set_bind_group(0, &self.default_bind_group, &[]);
-					r_pass.draw_indexed(i_off..(i_off + 6), 0, 0..1);
-					i_off += 6;
+					draw_six_set(r_pass, 0, &self.default_bind_group, &mut i_off);
 					if let Some(text) = element.get_str() {
 						let texture_key = format!("{}_{:?}", text, element.get_text_color());
 						if let Some((_, bind_group)) = self.text_textures.get(&texture_key) {
-							r_pass.set_bind_group(0, bind_group, &[]);
-							r_pass.draw_indexed(i_off..(i_off + 6), 0, 0..1);
+							draw_six_set(r_pass, 0, &bind_group, &mut i_off);
 						}
-						i_off += 6;
 					}
 				},
 				UIElementData::Panel { .. } => {
-					r_pass.set_bind_group(0, &self.default_bind_group, &[]);
-					r_pass.draw_indexed(i_off..(i_off + 6), 0, 0..1);
-					i_off += 6;
+					draw_six_set(r_pass, 0, &self.default_bind_group, &mut i_off);
 				},
 				UIElementData::Label { .. } => {
 					if let Some(text) = element.get_str() {
 						let texture_key = format!("{}_{:?}", text, element.get_text_color());
 						if let Some((_, bind_group)) = self.text_textures.get(&texture_key) {
-							r_pass.set_bind_group(0, bind_group, &[]);
-							r_pass.draw_indexed(i_off..(i_off + 6), 0, 0..1);
+							draw_six_set(r_pass, 0, &bind_group, &mut i_off);
 						}
-						i_off += 6;
 					}
 				}
 			}
