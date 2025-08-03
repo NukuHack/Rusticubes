@@ -1,6 +1,7 @@
 
 use crate::network::api;
 use crate::block;
+use glam::Vec2;
 use crate::ext::{ptr, memory, color::Solor};
 use crate::world::{handler, manager};
 use crate::ui::manager::{UIState, close_pressed, UIManager, UIStateID, get_element_str_by_id};
@@ -13,8 +14,8 @@ impl UIManager {
 		let theme = &ptr::get_settings().ui_theme;
 
 		let bg_panel = UIElement::panel(self.next_id())
-			.with_position(-1.0, -1.0)
-			.with_size(2.0, 2.0)
+			.with_position(Vec2::new(-1.0, -1.0))
+			.with_size(Vec2::new(2.0, 2.0))
 			.with_style(&theme.bg_panel)
 			.with_z_index(-5);
 
@@ -79,24 +80,24 @@ impl UIManager {
 		let theme = &ptr::get_settings().ui_theme;
 		// Main title
 		let title = UIElement::label(self.next_id(), "Rusticubes")
-			.with_position(-0.4, 0.3)
-			.with_size(0.8, 0.2)
+			.with_position(Vec2::new(-0.4, 0.3))
+			.with_size(Vec2::new(0.8, 0.2))
 			.with_style(&theme.title_label)
 			.with_z_index(10);
 		self.add_element(title);
 
 		// Button container panel
 		let button_panel = UIElement::panel(self.next_id())
-			.with_position(-0.35, -0.2)
-			.with_size(0.7, 0.5)
+			.with_position(Vec2::new(-0.35, -0.2))
+			.with_size(Vec2::new(0.7, 0.5))
 			.with_style(&theme.panels.basic)
 			.with_z_index(1);
 		self.add_element(button_panel);
 
 		// Start button
 		let start_button = UIElement::button(self.next_id(), "Start")
-			.with_position(-0.15, 0.0)
-			.with_size(0.3, 0.1)
+			.with_position(Vec2::new(-0.15, 0.0))
+			.with_size(Vec2::new(0.3, 0.1))
 			.with_style(&theme.best_button)
 			.with_z_index(6)
 			.with_callback(|| {
@@ -108,16 +109,16 @@ impl UIManager {
 
 		// Exit button
 		let exit_button = UIElement::button(self.next_id(), "Exit")
-			.with_position(-0.15, -0.15)
-			.with_size(0.3, 0.1)
+			.with_position(Vec2::new(-0.15, -0.15))
+			.with_size(Vec2::new(0.3, 0.1))
 			.with_style(&theme.worst_button)
 			.with_z_index(5)
 			.with_callback(|| close_pressed());
 		self.add_element(exit_button);
 
 		let memory_button = UIElement::button(self.next_id(), "Memory")
-			.with_position(0.55, 0.2)
-			.with_size(0.35, 0.1)
+			.with_position(Vec2::new(0.55, 0.2))
+			.with_size(Vec2::new(0.35, 0.1))
 			.with_style(&theme.buttons.nice)
 			.with_z_index(6)
 			.with_callback(|| {
@@ -127,8 +128,8 @@ impl UIManager {
 		self.add_element(memory_button);
 
 		let setting_button = UIElement::button(self.next_id(), "Settings")
-			.with_position(-0.9, 0.0)
-			.with_size(0.4, 0.1)
+			.with_position(Vec2::new(-0.9, 0.0))
+			.with_size(Vec2::new(0.4, 0.1))
 			.with_style(&theme.buttons.nice)
 			.with_z_index(6)
 			.with_callback(|| {
@@ -139,8 +140,8 @@ impl UIManager {
 		self.add_element(setting_button);
 
 		let multiplayer_button = UIElement::button(self.next_id(), "Multi")
-			.with_position(0.55, -0.1)
-			.with_size(0.35, 0.1)
+			.with_position(Vec2::new(0.55, -0.1))
+			.with_size(Vec2::new(0.35, 0.1))
 			.with_style(&theme.buttons.nice)
 			.with_z_index(6)
 			.with_callback(|| {
@@ -155,25 +156,24 @@ impl UIManager {
 
 		// Decorative elements
 		let tree_picture = UIElement::image(self.next_id(), "happy-tree.png")
-			.with_position(0.6, 0.5)
-			.with_size(0.27, 0.45)
+			.with_position(Vec2::new(0.6, 0.5))
+			.with_size(Vec2::new(0.27, 0.45))
 			.with_style(&theme.images.basic)
 			.with_z_index(6);
 		self.add_element(tree_picture);
 
 		let tree_animation = UIElement::animation(self.next_id(), vec!["happy-tree.png", "cube.jpg"])
-			.with_position(-0.8, 0.5)
-			.with_size(0.27, 0.45)
+			.with_position(Vec2::new(-0.8, 0.5))
+			.with_size(Vec2::new(0.27, 0.45))
 			.with_style(&theme.images.nice)
 			.with_z_index(6)
-			.with_smooth_transition(true)
 			.with_animation_duration(2.5);
 		self.add_element(tree_animation);
 
 		// Version label
 		let version = UIElement::label(self.next_id(), env!("CARGO_PKG_VERSION"))
-			.with_position(0.7, -0.95)
-			.with_size(0.2, 0.05)
+			.with_position(Vec2::new(0.7, -0.95))
+			.with_size(Vec2::new(0.2, 0.05))
 			.with_style(&theme.labels.extra())
 			.with_z_index(8);
 		self.add_element(version);
@@ -184,24 +184,24 @@ impl UIManager {
 		let theme = &ptr::get_settings().ui_theme;
 		// Title
 		let title = UIElement::label(self.next_id(), "Select World")
-			.with_position(-0.4, 0.6)
-			.with_size(0.8, 0.15)
+			.with_position(Vec2::new(-0.4, 0.6))
+			.with_size(Vec2::new(0.8, 0.15))
 			.with_style(&theme.title_label)
 			.with_z_index(10);
 		self.add_element(title);
 
 		// World list container
 		let list_panel = UIElement::panel(self.next_id())
-			.with_position(-0.6, -0.4)
-			.with_size(1.2, 0.9)
+			.with_position(Vec2::new(-0.6, -0.4))
+			.with_size(Vec2::new(1.2, 0.9))
 			.with_style(&theme.panels.basic)
 			.with_z_index(1);
 		self.add_element(list_panel);
 
 		// New World button
 		let new_button = UIElement::button(self.next_id(), "Create New World")
-			.with_position(-0.3, 0.4)
-			.with_size(0.6, 0.08)
+			.with_position(Vec2::new(-0.3, 0.4))
+			.with_size(Vec2::new(0.6, 0.08))
 			.with_style(&theme.buttons.nice)
 			.with_z_index(8)
 			.with_callback(|| {
@@ -226,8 +226,8 @@ impl UIManager {
 			let static_name: &'static str = Box::leak(name.clone().into_boxed_str());
 			
 			let world_button = UIElement::button(self.next_id(), static_name)
-				.with_position(-0.4, y_pos)
-				.with_size(0.8, 0.1)
+				.with_position(Vec2::new(-0.4, y_pos))
+				.with_size(Vec2::new(0.8, 0.1))
 				.with_style(&theme.buttons.basic)
 				.with_z_index(5)
 				.with_callback({
@@ -238,8 +238,8 @@ impl UIManager {
 
 			// Delete button
 			let delete_button = UIElement::button(self.next_id(), "X")
-				.with_position(0.43, y_pos)
-				.with_size(0.1, 0.1)
+				.with_position(Vec2::new(0.43, y_pos))
+				.with_size(Vec2::new(0.1, 0.1))
 				.with_style(&theme.buttons.bad)
 				.with_z_index(5)
 				.with_callback(move || {
@@ -256,8 +256,8 @@ impl UIManager {
 
 		// Back button
 		let back_button = UIElement::button(self.next_id(), "Back")
-			.with_position(-0.1, -0.8)
-			.with_size(0.2, 0.08)
+			.with_position(Vec2::new(-0.1, -0.8))
+			.with_size(Vec2::new(0.2, 0.08))
 			.with_style(&theme.buttons.extra())
 			.with_z_index(8)
 			.with_callback(|| {
@@ -277,22 +277,22 @@ impl UIManager {
 		let static_prompt: &'static str = Box::leak(prompt.clone().into_boxed_str());
 		
 		let title = UIElement::label(self.next_id(), static_prompt)
-			.with_position(-0.4, 0.6)
-			.with_size(0.8, 0.15)
+			.with_position(Vec2::new(-0.4, 0.6))
+			.with_size(Vec2::new(0.8, 0.15))
 			.with_style(&theme.title_label)
 			.with_z_index(10);
 		self.add_element(title);
 
 		let list_panel = UIElement::panel(self.next_id())
-			.with_position(-0.9, -0.4)
-			.with_size(1.8, 0.9)
+			.with_position(Vec2::new(-0.9, -0.4))
+			.with_size(Vec2::new(1.8, 0.9))
 			.with_style(&theme.panels.basic)
 			.with_z_index(1);
 		self.add_element(list_panel);
 
 		let option_button_1 = UIElement::button(self.next_id(), "Yes")
-			.with_position(-0.8, 0.0)
-			.with_size(0.6, 0.1)
+			.with_position(Vec2::new(-0.8, 0.0))
+			.with_size(Vec2::new(0.6, 0.1))
 			.with_style(&theme.deny_button)
 			.with_z_index(5)
 			.with_callback(move || {
@@ -304,8 +304,8 @@ impl UIManager {
 		self.add_element(option_button_1);
 		
 		let option_button_2 = UIElement::button(self.next_id(), "No")
-			.with_position(0.2, 0.0)
-			.with_size(0.6, 0.1)
+			.with_position(Vec2::new(0.2, 0.0))
+			.with_size(Vec2::new(0.6, 0.1))
 			.with_style(&theme.okay_button)
 			.with_z_index(5)
 			.with_callback(move || {
@@ -317,8 +317,8 @@ impl UIManager {
 		self.add_element(option_button_2);
 
 		let back_button = UIElement::button(self.next_id(), "Back")
-			.with_position(-0.1, -0.8)
-			.with_size(0.2, 0.08)
+			.with_position(Vec2::new(-0.1, -0.8))
+			.with_size(Vec2::new(0.2, 0.08))
 			.with_style(&theme.buttons.extra())
 			.with_z_index(8)
 			.with_callback(|| close_pressed());
@@ -334,22 +334,22 @@ impl UIManager {
 		let static_prompt: &'static str = Box::leak(prompt.clone().into_boxed_str());
 		
 		let title = UIElement::label(self.next_id(), static_prompt)
-			.with_position(-0.4, 0.6)
-			.with_size(0.8, 0.15)
+			.with_position(Vec2::new(-0.4, 0.6))
+			.with_size(Vec2::new(0.8, 0.15))
 			.with_style(&theme.title_label)
 			.with_z_index(10);
 		self.add_element(title);
 
 		let list_panel = UIElement::panel(self.next_id())
-			.with_position(-0.9, -0.4)
-			.with_size(1.8, 0.9)
+			.with_position(Vec2::new(-0.9, -0.4))
+			.with_size(Vec2::new(1.8, 0.9))
 			.with_style(&theme.panels.basic)
 			.with_z_index(1);
 		self.add_element(list_panel);
 
 		let option_button_1 = UIElement::button(self.next_id(), "Continue")
-			.with_position(-0.8, 0.0)
-			.with_size(0.6, 0.1)
+			.with_position(Vec2::new(-0.8, 0.0))
+			.with_size(Vec2::new(0.6, 0.1))
 			.with_style(&theme.deny_button)
 			.with_z_index(5)
 			.with_callback(move || {
@@ -361,8 +361,8 @@ impl UIManager {
 		self.add_element(option_button_1);
 		
 		let option_button_2 = UIElement::button(self.next_id(), "Cancel")
-			.with_position(0.2, 0.0)
-			.with_size(0.6, 0.1)
+			.with_position(Vec2::new(0.2, 0.0))
+			.with_size(Vec2::new(0.6, 0.1))
 			.with_style(&theme.okay_button)
 			.with_z_index(5)
 			.with_callback(move || {
@@ -374,8 +374,8 @@ impl UIManager {
 		self.add_element(option_button_2);
 
 		let back_button = UIElement::button(self.next_id(), "Back")
-			.with_position(-0.1, -0.8)
-			.with_size(0.2, 0.08)
+			.with_position(Vec2::new(-0.1, -0.8))
+			.with_size(Vec2::new(0.2, 0.08))
 			.with_style(&theme.buttons.extra())
 			.with_z_index(8)
 			.with_callback(|| close_pressed());
@@ -386,15 +386,15 @@ impl UIManager {
 	fn setup_multiplayer_ui(&mut self) {
 		let theme = &ptr::get_settings().ui_theme;
 		let title = UIElement::label(self.next_id(), "Select World")
-			.with_position(-0.4, 0.6)
-			.with_size(0.8, 0.15)
+			.with_position(Vec2::new(-0.4, 0.6))
+			.with_size(Vec2::new(0.8, 0.15))
 			.with_style(&theme.title_label)
 			.with_z_index(10);
 		self.add_element(title);
 
 		let list_panel = UIElement::panel(self.next_id())
-			.with_position(-0.6, -0.4)
-			.with_size(1.2, 0.9)
+			.with_position(Vec2::new(-0.6, -0.4))
+			.with_size(Vec2::new(1.2, 0.9))
 			.with_style(&theme.panels.basic)
 			.with_z_index(1);
 		self.add_element(list_panel);
@@ -410,8 +410,8 @@ impl UIManager {
 			let static_name: &'static str = Box::leak(name.clone().into_boxed_str());
 
 			let world_button = UIElement::button(self.next_id(), static_name)
-				.with_position(-0.4, y_pos)
-				.with_size(0.8, 0.1)
+				.with_position(Vec2::new(-0.4, y_pos))
+				.with_size(Vec2::new(0.8, 0.1))
 				.with_style(&theme.buttons.basic)
 				.with_z_index(5)
 				.with_callback(move || handler::join_local_world(&name_clone));
@@ -419,8 +419,8 @@ impl UIManager {
 		}
 
 		let re_button = UIElement::button(self.next_id(), "refresh")
-			.with_position(-0.4, -0.8)
-			.with_size(0.25, 0.08)
+			.with_position(Vec2::new(-0.4, -0.8))
+			.with_size(Vec2::new(0.25, 0.08))
 			.with_style(&theme.buttons.nice)
 			.with_z_index(8)
 			.with_callback(|| {
@@ -433,8 +433,8 @@ impl UIManager {
 		self.add_element(re_button);
 
 		let connect_button = UIElement::button(self.next_id(), "manual connect")
-			.with_position(0.15, -0.8)
-			.with_size(0.5, 0.08)
+			.with_position(Vec2::new(0.15, -0.8))
+			.with_size(Vec2::new(0.5, 0.08))
 			.with_style(&theme.buttons.nice)
 			.with_z_index(8)
 			.with_callback(|| {
@@ -445,8 +445,8 @@ impl UIManager {
 		self.add_element(connect_button);
 
 		let back_button = UIElement::button(self.next_id(), "Back")
-			.with_position(-0.1, -0.8)
-			.with_size(0.2, 0.08)
+			.with_position(Vec2::new(-0.1, -0.8))
+			.with_size(Vec2::new(0.2, 0.08))
 			.with_style(&theme.buttons.extra())
 			.with_z_index(8)
 			.with_callback(|| close_pressed());
@@ -457,38 +457,38 @@ impl UIManager {
 	fn setup_new_world_ui(&mut self) {
 		let theme = &ptr::get_settings().ui_theme;
 		let title = UIElement::label(self.next_id(), "Create New World")
-			.with_position(-0.5, 0.4)
-			.with_size(1.0, 0.15)
+			.with_position(Vec2::new(-0.5, 0.4))
+			.with_size(Vec2::new(1.0, 0.15))
 			.with_style(&theme.title_label)
 			.with_z_index(10);
 		self.add_element(title);
 
 		let form_panel = UIElement::panel(self.next_id())
-			.with_position(-0.4, -0.3)
-			.with_size(0.8, 0.7)
+			.with_position(Vec2::new(-0.4, -0.3))
+			.with_size(Vec2::new(0.8, 0.7))
 			.with_style(&theme.panels.basic)
 			.with_z_index(1);
 		self.add_element(form_panel);
 
 		let w_name_label = UIElement::label(self.next_id(), "World Name:")
-			.with_position(-0.35, 0.1)
-			.with_size(0.4, 0.08)
+			.with_position(Vec2::new(-0.35, 0.1))
+			.with_size(Vec2::new(0.4, 0.08))
 			.with_style(&theme.labels.basic)
 			.with_z_index(3);
 		self.add_element(w_name_label);
 
 		let input_id = self.next_id();
 		let world_name_input = UIElement::input(input_id)
-			.with_position(-0.35, -0.0)
-			.with_size(0.7, 0.1)
+			.with_position(Vec2::new(-0.35, -0.0))
+			.with_size(Vec2::new(0.7, 0.1))
 			.with_style(&theme.inputs.basic)
 			.with_placeholder(Some("New World"))
 			.with_z_index(5);
 		self.add_element(world_name_input);
 
 		let gen_button = UIElement::button(self.next_id(), "Create World")
-			.with_position(-0.3, -0.2)
-			.with_size(0.6, 0.1)
+			.with_position(Vec2::new(-0.3, -0.2))
+			.with_size(Vec2::new(0.6, 0.1))
 			.with_style(&theme.buttons.nice)
 			.with_z_index(6)
 			.with_callback(move || {
@@ -500,8 +500,8 @@ impl UIManager {
 		self.add_element(gen_button);
 
 		let back_button = UIElement::button(self.next_id(), "Back")
-			.with_position(-0.1, -0.45)
-			.with_size(0.2, 0.08)
+			.with_position(Vec2::new(-0.1, -0.45))
+			.with_size(Vec2::new(0.2, 0.08))
 			.with_style(&theme.buttons.extra())
 			.with_z_index(8)
 			.with_callback(|| close_pressed());
@@ -512,38 +512,38 @@ impl UIManager {
 	fn setup_connect_local_ui(&mut self) {
 		let theme = &ptr::get_settings().ui_theme;
 		let title = UIElement::label(self.next_id(), "Manual Connect")
-			.with_position(-0.5, 0.4)
-			.with_size(1.0, 0.15)
+			.with_position(Vec2::new(-0.5, 0.4))
+			.with_size(Vec2::new(1.0, 0.15))
 			.with_style(&theme.title_label)
 			.with_z_index(10);
 		self.add_element(title);
 
 		let form_panel = UIElement::panel(self.next_id())
-			.with_position(-0.4, -0.3)
-			.with_size(0.8, 0.7)
+			.with_position(Vec2::new(-0.4, -0.3))
+			.with_size(Vec2::new(0.8, 0.7))
 			.with_style(&theme.panels.basic)
 			.with_z_index(1);
 		self.add_element(form_panel);
 
 		let w_ip_label = UIElement::label(self.next_id(), "Server IP:")
-			.with_position(-0.35, 0.1)
-			.with_size(0.4, 0.08)
+			.with_position(Vec2::new(-0.35, 0.1))
+			.with_size(Vec2::new(0.4, 0.08))
 			.with_style(&theme.labels.basic)
 			.with_z_index(3);
 		self.add_element(w_ip_label);
 
 		let input_id = self.next_id();
 		let world_ip_input = UIElement::input(input_id)
-			.with_position(-0.35, -0.0)
-			.with_size(0.7, 0.1)
+			.with_position(Vec2::new(-0.35, -0.0))
+			.with_size(Vec2::new(0.7, 0.1))
 			.with_style(&theme.inputs.basic)
 			.with_placeholder(Some("255.255.255.255"))
 			.with_z_index(5);
 		self.add_element(world_ip_input);
 
 		let connect_button = UIElement::button(self.next_id(), "Connect Server")
-			.with_position(-0.3, -0.2)
-			.with_size(0.6, 0.1)
+			.with_position(Vec2::new(-0.3, -0.2))
+			.with_size(Vec2::new(0.6, 0.1))
 			.with_style(&theme.buttons.nice)
 			.with_z_index(6)
 			.with_callback(move || {
@@ -557,8 +557,8 @@ impl UIManager {
 		self.add_element(connect_button);
 
 		let back_button = UIElement::button(self.next_id(), "Back")
-			.with_position(-0.1, -0.45)
-			.with_size(0.2, 0.08)
+			.with_position(Vec2::new(-0.1, -0.45))
+			.with_size(Vec2::new(0.2, 0.08))
 			.with_style(&theme.buttons.extra())
 			.with_z_index(8)
 			.with_callback(|| close_pressed());
@@ -569,29 +569,29 @@ impl UIManager {
 	fn setup_loading_screen_ui(&mut self) {
 		let theme = &ptr::get_settings().ui_theme;
 		let loading_panel = UIElement::panel(self.next_id())
-			.with_position(-0.3, -0.1)
-			.with_size(0.6, 0.2)
+			.with_position(Vec2::new(-0.3, -0.1))
+			.with_size(Vec2::new(0.6, 0.2))
 			.with_style(&theme.panels.bad)
 			.with_z_index(10);
 		self.add_element(loading_panel);
 
 		let loading_text = UIElement::label(self.next_id(), "Loading...")
-			.with_position(-0.25, -0.05)
-			.with_size(0.5, 0.1)
+			.with_position(Vec2::new(-0.25, -0.05))
+			.with_size(Vec2::new(0.5, 0.1))
 			.with_style(&theme.labels.basic)
 			.with_z_index(15);
 		self.add_element(loading_text);
 
 		let progress_bg = UIElement::panel(self.next_id())
-			.with_position(-0.25, -0.15)
-			.with_size(0.5, 0.03)
+			.with_position(Vec2::new(-0.25, -0.15))
+			.with_size(Vec2::new(0.5, 0.03))
 			.with_style(&theme.panels.basic)
 			.with_z_index(8);
 		self.add_element(progress_bg);
 
 		let progress_bar = UIElement::panel(self.next_id())
-			.with_position(-0.245, -0.145)
-			.with_size(0.01, 0.02)
+			.with_position(Vec2::new(-0.245, -0.145))
+			.with_size(Vec2::new(0.01, 0.02))
 			.with_style(&theme.best_button)
 			.with_z_index(8);
 		self.add_element(progress_bar);
@@ -601,16 +601,16 @@ impl UIManager {
 	fn setup_escape_ui(&mut self) {
 		let theme = &ptr::get_settings().ui_theme;
 		let bg_panel = UIElement::panel(self.next_id())
-			.with_position(-1.0, -1.0)
-			.with_size(2.0, 2.0)
+			.with_position(Vec2::new(-1.0, -1.0))
+			.with_size(Vec2::new(2.0, 2.0))
 			.with_color(Solor::Black.i().with_a(50))
 			.with_alpha(40)
 			.with_z_index(-5);
 		self.add_element(bg_panel);
 
 		let save_button = UIElement::button(self.next_id(), "Save World")
-			.with_position(-0.8, 0.15)
-			.with_size(0.4, 0.08)
+			.with_position(Vec2::new(-0.8, 0.15))
+			.with_size(Vec2::new(0.4, 0.08))
 			.with_style(&theme.buttons.nice)
 			.with_z_index(8)
 			.with_callback(|| {
@@ -622,8 +622,8 @@ impl UIManager {
 		self.add_element(save_button);
 		
 		let load_button = UIElement::button(self.next_id(), "Load World")
-			.with_position(-0.8, 0.0)
-			.with_size(0.4, 0.08)
+			.with_position(Vec2::new(-0.8, 0.0))
+			.with_size(Vec2::new(0.4, 0.08))
 			.with_style(&theme.buttons.nice)
 			.with_z_index(8)
 			.with_callback(|| {
@@ -635,8 +635,8 @@ impl UIManager {
 		self.add_element(load_button);
 		
 		let setting_button = UIElement::button(self.next_id(), "Settings")
-			.with_position(-0.8, -0.15)
-			.with_size(0.4, 0.08)
+			.with_position(Vec2::new(-0.8, -0.15))
+			.with_size(Vec2::new(0.4, 0.08))
 			.with_style(&theme.buttons.nice)
 			.with_z_index(6)
 			.with_callback(|| {
@@ -647,8 +647,8 @@ impl UIManager {
 		self.add_element(setting_button);
 
 		let memory_button = UIElement::button(self.next_id(), "Memory")
-			.with_position(-0.8, -0.3)
-			.with_size(0.4, 0.08)
+			.with_position(Vec2::new(-0.8, -0.3))
+			.with_size(Vec2::new(0.4, 0.08))
 			.with_style(&theme.buttons.nice)
 			.with_z_index(6)
 			.with_callback(|| {
@@ -658,30 +658,30 @@ impl UIManager {
 		self.add_element(memory_button);
 
 		let side_panel = UIElement::panel(self.next_id())
-			.with_position(0.4, -0.9)
-			.with_size(0.6, 1.8)
+			.with_position(Vec2::new(0.4, -0.9))
+			.with_size(Vec2::new(0.6, 1.8))
 			.with_style(&theme.panels.basic)
 			.with_z_index(1);
 		self.add_element(side_panel);
 
 		let panel_title = UIElement::label(self.next_id(), "Game Menu")
-			.with_position(0.45, 0.75)
-			.with_size(0.5, 0.1)
+			.with_position(Vec2::new(0.45, 0.75))
+			.with_size(Vec2::new(0.5, 0.1))
 			.with_style(&theme.title_label)
 			.with_z_index(10);
 		self.add_element(panel_title);
 
 		let clean_button = UIElement::button(self.next_id(), "Clean World")
-			.with_position(0.45, 0.4)
-			.with_size(0.5, 0.1)
+			.with_position(Vec2::new(0.45, 0.4))
+			.with_size(Vec2::new(0.5, 0.1))
 			.with_style(&theme.buttons.bad)
 			.with_z_index(8)
 			.with_callback(|| block::extra::add_full_world());
 		self.add_element(clean_button);
 
 		let host_button = UIElement::button(self.next_id(), "Host World")
-			.with_position(0.5, 0.22)
-			.with_size(0.4, 0.08)
+			.with_position(Vec2::new(0.5, 0.22))
+			.with_size(Vec2::new(0.4, 0.08))
 			.with_style(&theme.buttons.extra())
 			.with_z_index(8)
 			.with_callback(|| { 
@@ -701,24 +701,24 @@ impl UIManager {
 
 		for (_i, (text, y_pos)) in help_texts.iter().enumerate() {
 			let help_text = UIElement::label(self.next_id(), *text)
-				.with_position(0.5, *y_pos)
-				.with_size(0.4, 0.08)
+				.with_position(Vec2::new(0.5, *y_pos))
+				.with_size(Vec2::new(0.4, 0.08))
 				.with_style(&theme.labels.bad)
 				.with_z_index(5);
 			self.add_element(help_text);
 		}
 
 		let back_button = UIElement::button(self.next_id(), "Back to World")
-			.with_position(0.5, -0.8)
-			.with_size(0.4, 0.08)
+			.with_position(Vec2::new(0.5, -0.8))
+			.with_size(Vec2::new(0.4, 0.08))
 			.with_style(&theme.buttons.extra())
 			.with_z_index(8)
 			.with_callback(|| close_pressed());
 		self.add_element(back_button);
 
 		let close_button = UIElement::button(self.next_id(), "Quit World")
-			.with_position(-0.2, -0.8)
-			.with_size(0.4, 0.08)
+			.with_position(Vec2::new(-0.2, -0.8))
+			.with_size(Vec2::new(0.4, 0.08))
 			.with_style(&theme.worst_button)
 			.with_z_index(8)
 			.with_callback(|| {
@@ -734,13 +734,13 @@ impl UIManager {
 	fn setup_in_game_ui(&mut self) {
 		let theme = &ptr::get_settings().ui_theme;
 		let crosshair_v = UIElement::panel(self.next_id())
-			.with_position(0.0, -0.02)
-			.with_size(0.02, 0.06)
+			.with_position(Vec2::new(0.0, -0.02))
+			.with_size(Vec2::new(0.02, 0.06))
 			.with_style(&theme.panels.extra())
 			.with_z_index(20);
 		let crosshair_h = UIElement::panel(self.next_id())
-			.with_position(-0.02, 0.0)
-			.with_size(0.06, 0.02)
+			.with_position(Vec2::new(-0.02, 0.0))
+			.with_size(Vec2::new(0.06, 0.02))
 			.with_vertical(true)
 			.with_style(&theme.panels.extra())
 			.with_z_index(20);

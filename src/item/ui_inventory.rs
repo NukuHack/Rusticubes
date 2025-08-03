@@ -1,4 +1,5 @@
 
+use glam::Vec2;
 use crate::item::inventory::{Inventory, ItemContainer, AreaType, Slot};
 use crate::ext::{color::Solor, ptr};
 use crate::ui::{manager::{UIManager, UIState}, element::UIElement};
@@ -62,8 +63,8 @@ const PADDING: f32 = 0.02;
 pub struct InventoryLayout {
 	pub section_spacing: f32,
 	pub panel_padding: f32,
-	pub panel_position: (f32, f32), // bottom-left corner
-	pub panel_size: (f32, f32),
+	pub panel_position: Vec2, // bottom-left corner
+	pub panel_size: Vec2,
 	
 	// Calculated positions for different sections
 	pub areas: Vec<AreaLayout>,
@@ -268,21 +269,21 @@ impl InventoryLayout {
 	#[inline] pub const fn default() -> Self {
 		Self {
 			section_spacing: 0.12, panel_padding: 0.05,
-			panel_position: (0.0, 0.0), panel_size: (0.0, 0.0),
+			panel_position: Vec2::new(0.0, 0.0), panel_size: Vec2::new(0.0, 0.0),
 			areas: Vec::new(),
 		}
 	}
 
 	#[inline] pub const fn contains_point(&self, x: f32, y: f32) -> bool {
-		let (px, py) = self.panel_position;
-		let (w, h) = self.panel_size;
+		let (px, py) = (self.panel_position.x, self.panel_position.y);
+		let (w, h) = (self.panel_size.x, self.panel_size.y);
 		x >= px && x <= px + w && y >= py && y <= py + h
 	}
 	
 	fn calculate_panel_bounds(&mut self, areas: &[AreaLayout]) {
 		if areas.is_empty() {
-			self.panel_size = (0.0, 0.0);
-			self.panel_position = (0.0, 0.0);
+			self.panel_size = Vec2::new(0.0, 0.0);
+			self.panel_position = Vec2::new(0.0, 0.0);
 			return;
 		}
 		
@@ -307,8 +308,8 @@ impl InventoryLayout {
 		max_x += self.panel_padding;
 		max_y += self.panel_padding;
 		
-		self.panel_size = (max_x - min_x, max_y - min_y);
-		self.panel_position = (min_x, min_y); // bottom-left corner
+		self.panel_size = Vec2::new(max_x - min_x, max_y - min_y);
+		self.panel_position = Vec2::new(min_x, min_y); // bottom-left corner
 	}
 	
 	/// Debug method to check for overlaps between areas
@@ -462,8 +463,8 @@ impl UIManager {
 	fn add_main_panel(&mut self, layout: &InventoryLayout) {
 		let inv_config = &ptr::get_settings().inv_config;
 		let panel = UIElement::panel(self.next_id())
-			.with_position(layout.panel_position.0, layout.panel_position.1)
-			.with_size(layout.panel_size.0, layout.panel_size.1)
+			.with_position(layout.panel_position)
+			.with_size(layout.panel_size)
 			.with_style(&inv_config.panel_bg)
 			.with_z_index(3);
 		self.add_element(panel);
@@ -472,8 +473,8 @@ impl UIManager {
 		let theme = &ptr::get_settings().ui_theme;
 		let w = 0.12; let h = SLOT/2.;
 		let version = UIElement::label(self.next_id(), env!("CARGO_PKG_VERSION"))
-			.with_position(layout.panel_position.0 + layout.panel_size.0 - w, layout.panel_position.1 - h - PADDING)
-			.with_size(w, h)
+			.with_position(Vec2::new(layout.panel_position.x + layout.panel_size.x - w, layout.panel_position.y - h - PADDING))
+			.with_size(Vec2::new(w, h))
 			.with_style(&theme.labels.extra())
 			.with_z_index(8);
 		self.add_element(version);
@@ -516,7 +517,7 @@ impl UIManager {
 		// Check if we have the correct focused element
 		if let Some((id, 2)) = self.focused_element {
 			if let Some(element) = self.get_element_mut(id) {
-				element.set_position(x, y);
+				element.set_position(Vec2::new(x, y));
 				return;
 			}
 		}
@@ -524,8 +525,8 @@ impl UIManager {
 		// If we get here, either no focused element or wrong type
 		let item_id = self.next_id();
 		let slot = UIElement::panel(item_id)
-			.with_position(x, y)
-			.with_size(SLOT, SLOT)
+			.with_position(Vec2::new(x, y))
+			.with_size(Vec2::new(SLOT, SLOT))
 			.with_style(&ptr::get_settings().ui_theme.panels.nice.with_border_width(0.012))
 			.with_z_index(4);
 		self.add_element(slot);
@@ -535,26 +536,20 @@ impl UIManager {
 	// New method to display item being held by cursor
 	pub fn cursor_item_display(&mut self, x:f32, y:f32, cursor_item: &ItemStack) {
 		// You'll need to get mouse position from your input system
-
+		let (x,y) = (x - SLOT/2.0, y - SLOT/2.0);
 		// Check if we have the correct focused element
 		if let Some((id, 3)) = self.focused_element {
 			if let Some(element) = self.get_element_mut(id) {
-				element.set_position(x - SLOT/2.0, y - SLOT/2.0);
+				element.set_position(Vec2::new(x , y));
 				return;
 			}
 		}
 
 		// If we get here, either no focused element or wrong type
-		let static_name: &'static str = Box::leak(cursor_item.to_icon().into_boxed_str());
-		let item_id = self.next_id();
-		let cursor_display = UIElement::image(item_id, static_name)
-			.with_position(x - SLOT/2.0, y - SLOT/2.0)
-			.with_size(SLOT, SLOT)
-			.with_style(&ptr::get_settings().ui_theme.images.basic)
-			.with_z_index(15); // Higher z-index to appear above everything
-		self.add_element(cursor_display);
 
-		self.focused_element = Some((item_id, 3));
+		let id = self.create_item_display(x, y, cursor_item, 10);
+
+		self.focused_element = Some((id, 3));
 	}
 
 	fn create_area_slots(&mut self, area: &AreaLayout, items: &ItemContainer) {
@@ -566,34 +561,41 @@ impl UIManager {
 				let (x, y) = area.get_slot_position(row, col);
 
 				let slot = UIElement::panel(self.next_id())
-					.with_position(x, y)
-					.with_size(SLOT, SLOT)
+					.with_position(Vec2::new(x, y))
+					.with_size(Vec2::new(SLOT, SLOT))
 					.with_style(&config.inv_config.get_style(area.name))
 					.with_z_index(5);
 				self.add_element(slot);
 
 				let Some(item) = items.get(row as usize * area.columns as usize + col as usize) else { continue; };
 
-				let static_name: &'static str = Box::leak(item.to_icon().into_boxed_str());
-				let item_display = UIElement::image(self.next_id(), static_name)
-					.with_position(x, y)
-					.with_size(SLOT, SLOT)
-					.with_style(&config.ui_theme.images.basic)
-					.with_z_index(7);
-				self.add_element(item_display);
-
-				// Add quantity display for stackable items
-				if item.stack() == 1 { continue; }
-
-				let static_count: &'static str = Box::leak(item.stack.to_string().into_boxed_str());
-				let quantity_text = UIElement::label(self.next_id(), static_count)
-					.with_position(x + SLOT * 0.3, y)
-					.with_size(SLOT * 0.7, SLOT * 0.6)
-					.with_text_color(Solor::Black.i())
-					//.with_border(Border::rgbf(80, 100, 140, 0.008))
-					.with_z_index(8);
-				self.add_element(quantity_text);
+				self.create_item_display(x, y, item, 7);
 			}
 		}
+	}
+
+	fn create_item_display(&mut self, x:f32, y:f32, item: &ItemStack, z:i32) -> usize {
+		let static_name: &'static str = Box::leak(item.to_icon().into_boxed_str());
+		let id = self.next_id();
+		let item_display = UIElement::image(id, static_name)
+			.with_position(Vec2::new(x, y))
+			.with_size(Vec2::new(SLOT, SLOT))
+			.with_style(&ptr::get_settings().ui_theme.images.basic)
+			.with_z_index(z);
+		self.add_element(item_display);
+
+		// Add quantity display for stackable items
+		if item.stack() == 1 { return id; }
+
+		let static_count: &'static str = Box::leak(item.stack.to_string().into_boxed_str());
+		let quantity_text = UIElement::label(self.next_id(), static_count)
+			.with_position(Vec2::new(x + SLOT * 0.3, y))
+			.with_size(Vec2::new(SLOT * 0.7, SLOT * 0.6))
+			.with_text_color(Solor::Black.i())
+			.with_z_index(z+1)
+			.with_parent(id.clone());
+		self.add_element(quantity_text);
+
+		id
 	}
 }

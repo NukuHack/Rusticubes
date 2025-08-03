@@ -8,6 +8,7 @@ pub mod fs { // file system, file related things
 pub mod hs { // helping structs
 	pub mod input;
 	pub mod math;
+	pub mod string; // just a single enum for nice string handling
 	pub mod cursor;
 	pub mod binary; // serialize to bytes ofc
 	pub mod time; // a nicely formatted time, just a struct

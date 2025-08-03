@@ -62,15 +62,12 @@ impl CameraConfig {
 // the image color will be used for animations too because that is just a "changing image" so yeah
 // button color will be used for multi-state button too
 // label's color is not rendered
-// image's color is and extra color on the image, most of the times leaving this on white is the best
 // slider's color is used for the track color and the text_color used for the actual slider's handle
 // checkbox's text_color is only used for optional text
-// the divider is currently only used as a makeshift crosshair in game
 
 // the extra is just used for cargo package showing not much else
 // Extra is optional since not all elements need it
-// The text color is optional since it is only used like half of the cases
-
+// The text color is optional since it is only used for like half of the cases
 
 #[derive(Debug, Clone, Copy)]
 pub struct ElementStyle {
@@ -315,7 +312,7 @@ impl UITheme {
 			},
 			images: VariantStyles {
 				basic: ElementStyle {
-					color: Color::rgb(255, 255, 255), // White for no color modification
+					color: Color::rgb(255, 255, 255),
 					border: Border::NONE,
 					text_color: None,
 				},

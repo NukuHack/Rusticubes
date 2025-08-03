@@ -51,6 +51,17 @@ impl Color {
 	#[inline] pub const fn o(self) -> Option<Self> { Some(self) }
 	#[inline] pub fn to_vec(&self) -> Vec<u8> { vec![self.r,self.g,self.b,self.a] }
 
+	pub fn distance(&self, other: &Self) -> f32 {
+		let dr = self.r as f32 - other.r as f32;
+		let dg = self.g as f32 - other.g as f32;
+		let db = self.b as f32 - other.b as f32;
+		(dr*dr + dg*dg + db*db).sqrt()
+	}
+
+	pub fn similarity(&self, other: &Self) -> f32 {
+		1.0 - (self.distance(other) / 441.67) // Max RGB distance
+	}
+
 	// Color operations
 	pub fn lerp(self, other: Self, t: f32) -> Self {
 		let t = t.clamp(0.0, 1.0);
@@ -168,6 +179,13 @@ impl Color {
 				let b = u8::from_str_radix(&hex[2..3], 16).ok()? * 17;
 				Some(Self::rgb(r, g, b))
 			}
+			4 => {
+				let r = u8::from_str_radix(&hex[0..1], 16).ok()? * 17;
+				let g = u8::from_str_radix(&hex[1..2], 16).ok()? * 17;
+				let b = u8::from_str_radix(&hex[2..3], 16).ok()? * 17;
+				let a = u8::from_str_radix(&hex[3..4], 16).ok()? * 17;
+				Some(Self::rgba(r, g, b, a))
+			}
 			6 => {
 				let r = u8::from_str_radix(&hex[0..2], 16).ok()?;
 				let g = u8::from_str_radix(&hex[2..4], 16).ok()?;
@@ -214,6 +232,31 @@ impl Color {
 		}
 
 		(h, s, l)
+	}
+	/// Converts to HSV color space
+	pub fn to_hsv(&self) -> (f32, f32, f32) {
+		let r = self.r as f32 / 255.0;
+		let g = self.g as f32 / 255.0;
+		let b = self.b as f32 / 255.0;
+
+		let max = r.max(g.max(b));
+		let min = r.min(g.min(b));
+		let delta = max - min;
+
+		let h = if delta == 0.0 {
+		0.0
+		} else if max == r {
+		60.0 * (((g - b) / delta) % 6.0)
+		} else if max == g {
+		60.0 * (((b - r) / delta) + 2.0)
+		} else {
+		60.0 * (((r - g) / delta) + 4.0)
+		};
+
+		let s = if max == 0.0 { 0.0 } else { delta / max };
+		let v = max;
+
+		(h / 360.0, s, v) // Normalize hue to 0-1
 	}
 
 	pub fn from_hsl(h: f32, s: f32, l: f32) -> Self {
@@ -304,34 +347,34 @@ impl std::ops::Mul<f32> for Color {
 }
 impl std::ops::Mul<Color> for Color {
 	type Output = Color;
-	fn mul(self, color: Color) -> Color {
+	fn mul(self, rhs: Color) -> Color {
 		Color {
-			r: self.r.saturating_mul(color.r),
-			g: self.g.saturating_mul(color.g),
-			b: self.b.saturating_mul(color.b),
-			a: self.a.saturating_mul(color.a),
+			r: self.r.saturating_mul(rhs.r),
+			g: self.g.saturating_mul(rhs.g),
+			b: self.b.saturating_mul(rhs.b),
+			a: self.a.saturating_mul(rhs.a),
 		}
 	}
 }
 impl std::ops::Add for Color {
 	type Output = Color;
-	fn add(self, color: Color) -> Color {
+	fn add(self, rhs: Color) -> Color {
 		Color {
-			r: self.r.saturating_add(color.r),
-			g: self.g.saturating_add(color.g),
-			b: self.b.saturating_add(color.b),
-			a: self.a.saturating_add(color.a),
+			r: self.r.saturating_add(rhs.r),
+			g: self.g.saturating_add(rhs.g),
+			b: self.b.saturating_add(rhs.b),
+			a: self.a.saturating_add(rhs.a),
 		}
 	}
 }
 impl std::ops::Sub for Color {
 	type Output = Color;
-	fn sub(self, color: Color) -> Color {
+	fn sub(self, rhs: Color) -> Color {
 		Color {
-			r: self.r.saturating_sub(color.r),
-			g: self.g.saturating_sub(color.g),
-			b: self.b.saturating_sub(color.b),
-			a: self.a.saturating_sub(color.a),
+			r: self.r.saturating_sub(rhs.r),
+			g: self.g.saturating_sub(rhs.g),
+			b: self.b.saturating_sub(rhs.b),
+			a: self.a.saturating_sub(rhs.a),
 		}
 	}
 }
@@ -409,6 +452,11 @@ pub enum Solor {
 	Purple,
 	Pink,
 	Brown,
+	Lime,
+	Teal,
+	Navy,
+	Maroon,
+	Olive,
 	
 	// Custom fallback
 	Custom(Color),
@@ -418,26 +466,40 @@ impl Solor {
 	pub fn i(self) -> Color{
 		self.into()
 	}
+	pub fn is_grayscale(&self) -> bool {
+		matches!(self, Self::Black | Self::White | Self::Gray | Self::LightGray | Self::DarkGray)
+	}
+	pub fn is_primary(&self) -> bool {
+		matches!(self, Self::Red | Self::Green | Self::Blue)
+	}
+	pub fn is_secondary(&self) -> bool {
+		matches!(self, Self::Yellow | Self::Cyan | Self::Magenta)
+	}
 }
 
 impl From<Solor> for Color {
 	fn from(color: Solor) -> Self {
 		match color {
-			Solor::Black => Color::rgba(0, 0, 0, 255),
-			Solor::White => Color::rgba(255, 255, 255, 255),
-			Solor::Red => Color::rgba(255, 0, 0, 255),
-			Solor::Green => Color::rgba(0, 255, 0, 255),
-			Solor::Blue => Color::rgba(0, 0, 255, 255),
-			Solor::Yellow => Color::rgba(255, 255, 0, 255),
-			Solor::Cyan => Color::rgba(0, 255, 255, 255),
-			Solor::Magenta => Color::rgba(255, 0, 255, 255),
-			Solor::Gray => Color::rgba(128, 128, 128, 255),
-			Solor::LightGray => Color::rgba(200, 200, 200, 255),
-			Solor::DarkGray => Color::rgba(80, 80, 80, 255),
-			Solor::Orange => Color::rgba(255, 165, 0, 255),
-			Solor::Purple => Color::rgba(128, 0, 128, 255),
-			Solor::Pink => Color::rgba(255, 192, 203, 255),
-			Solor::Brown => Color::rgba(165, 42, 42, 255),
+			Solor::Black => Self::rgba(0, 0, 0, 255),
+			Solor::White => Self::rgba(255, 255, 255, 255),
+			Solor::Red => Self::rgba(255, 0, 0, 255),
+			Solor::Green => Self::rgba(0, 255, 0, 255),
+			Solor::Blue => Self::rgba(0, 0, 255, 255),
+			Solor::Yellow => Self::rgba(255, 255, 0, 255),
+			Solor::Cyan => Self::rgba(0, 255, 255, 255),
+			Solor::Magenta => Self::rgba(255, 0, 255, 255),
+			Solor::Gray => Self::rgba(128, 128, 128, 255),
+			Solor::LightGray => Self::rgba(200, 200, 200, 255),
+			Solor::DarkGray => Self::rgba(80, 80, 80, 255),
+			Solor::Orange => Self::rgba(255, 165, 0, 255),
+			Solor::Purple => Self::rgba(128, 0, 128, 255),
+			Solor::Pink => Self::rgba(255, 192, 203, 255),
+			Solor::Brown => Self::rgba(165, 42, 42, 255),
+			Solor::Lime => Self::rgb(0, 255, 0),
+			Solor::Teal => Self::rgb(0, 128, 128),
+			Solor::Navy => Self::rgb(0, 0, 128),
+			Solor::Maroon => Self::rgb(128, 0, 0),
+			Solor::Olive => Self::rgb(128, 128, 0),
 			Solor::Custom(color) => color,
 		}
 	}

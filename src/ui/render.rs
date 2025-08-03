@@ -1,6 +1,7 @@
 
 use crate::ext::color::Color;
 use crate::fs::rs;
+use glam::Vec2;
 use crate::ext::ptr;
 use crate::ui::element::{UIElement, UIElementData};
 use crate::ui::manager::{UIManager};
@@ -211,16 +212,14 @@ impl UIRenderer {
 				self.text_textures.insert(texture_key.clone(), (texture, bind_group));
 			}
 
-			let pix = if element.size.0 + element.size.1 < 0.2 { self.pixel_ratio * 3.0 } else { self.pixel_ratio };
+			let pix = if element.size.x + element.size.y < 0.2 { self.pixel_ratio * 3.0 } else { self.pixel_ratio };
 			if let Some((texture, _)) = self.text_textures.get(&texture_key) {
-				let (x, y) = element.position;
-				let (w, h) = element.size;
 				let pixel_to_unit = 1.0 / (100.0 * pix);
 				let tex_w = texture.width() as f32 * pixel_to_unit;
 				let tex_h = texture.height() as f32 * pixel_to_unit;
-				let real_x = x + (w - tex_w) / 2.0;
-				let real_y = y + (h - tex_h) / 2.0;
-				self.proc_rect_element((real_x, real_y), (tex_w, tex_h), element.get_text_color(), mesh);
+				let real_x = element.position.x + (element.size.x - tex_w) / 2.0;
+				let real_y = element.position.y + (element.size.y - tex_h) / 2.0;
+				self.proc_rect_element(Vec2::new(real_x, real_y), Vec2::new(tex_w, tex_h), element.get_text_color(), mesh);
 			}
 		}
 	}
@@ -228,27 +227,27 @@ impl UIRenderer {
 	#[inline] 
 	fn process_slider(&mut self, element: &UIElement, mesh: &mut MeshData) {
 		if let UIElementData::Slider { min_value, max_value, current_value, .. } = &element.data {
-			let (x, y) = element.position;
-			let (w, h) = element.size;
+			let (x, y) = (element.position.x, element.position.y);
+			let (w, h) = (element.size.x, element.size.y);
 			
 			// Draw slider track
 			let track_height = h * 0.3;
 			let track_y = y + (h - track_height) / 2.0;
-			self.proc_rect_element((x, track_y), (w, track_height), element.color, mesh);
+			self.proc_rect_element(Vec2::new(x, track_y), Vec2::new(w, track_height), element.color, mesh);
 			
 			// Draw slider handle
 			let normalized_value = (current_value - min_value) / (max_value - min_value);
 			let handle_w = h * 0.8;
 			let handle_x = x + (w - handle_w) * normalized_value;
 			let handle_y = y + (h - handle_w) / 2.0;
-			self.proc_rect_element((handle_x, handle_y), (handle_w, handle_w), element.get_text_color(), mesh);
+			self.proc_rect_element(Vec2::new(handle_x, handle_y), Vec2::new(handle_w, handle_w), element.get_text_color(), mesh);
 		}
 	}
 
-	fn render_text_to_texture(&self, device: &wgpu::Device, queue: &wgpu::Queue, text: &str, element_size: (f32, f32), color: Color) -> wgpu::Texture {
-		let pix = if element_size.0 + element_size.1 < 0.2 { self.pixel_ratio * 3.0 } else { self.pixel_ratio };
-		let target_width_px = (element_size.0 * 100.0 * pix) as u32;
-		let target_height_px = (element_size.1 * 100.0 * pix) as u32;
+	fn render_text_to_texture(&self, device: &wgpu::Device, queue: &wgpu::Queue, text: &str, element_size: Vec2, color: Color) -> wgpu::Texture {
+		let pix = if element_size.x + element_size.y < 0.2 { self.pixel_ratio * 3.0 } else { self.pixel_ratio };
+		let target_width_px = (element_size.x * 100.0 * pix) as u32;
+		let target_height_px = (element_size.y * 100.0 * pix) as u32;
 		let font_size = target_height_px as f32 * 0.8;
 		let scale = Scale::uniform(font_size);
 		let v_metrics = self.font.v_metrics(scale);
@@ -433,22 +432,23 @@ impl UIRenderer {
 		self.process_rect_element(element, mesh);
 		if let UIElementData::Checkbox { checked, .. } = &element.data {
 			if *checked {
-				let (x, y) = element.position;
-				let (w, h) = element.size;
+			let (x, y) = (element.position.x, element.position.y);
+			let (w, h) = (element.size.x, element.size.y);
 				let padding = 0.2;
 				let check_x = x + w * padding;
 				let check_y = y + h * padding;
 				let check_w = w * (1.0 - 2.0 * padding);
 				let check_h = h * (1.0 - 2.0 * padding);
-				self.proc_rect_element((check_x, check_y), (check_w, check_h), element.color.with_g(255), mesh);
+				self.proc_rect_element(Vec2::new(check_x, check_y), Vec2::new(check_w, check_h), element.color.with_g(255), mesh);
 			}
 		}
 		if let Some(text) = element.get_str() {
 			let label_element = UIElement {
-				position: (element.position.0 + element.size.0 + 0.01, element.position.1),
-				size: (text.len() as f32 * 0.015, element.size.1),
-				data: UIElementData::Label { text, text_color: element.get_text_color(), on_click: None },
+				position: Vec2::new(element.position.x + element.size.x + 0.01, element.position.y),
+				size: Vec2::new(text.len() as f32 * 0.015, element.size.y),
+				data: UIElementData::Label { text, text_color: element.get_text_color() },
 				color: element.get_text_color(),
+				event_handler: None,
 				..UIElement::default()
 			};
 			self.process_text_element(&label_element, label_element.get_str(), mesh);
@@ -456,26 +456,27 @@ impl UIRenderer {
 	}
 
 	#[inline] fn process_border(&self, element: &UIElement, mesh: &mut MeshData) {
-		let (x, y) = element.position;
-		let (w, h) = element.size;
+			let (x, y) = (element.position.x, element.position.y);
+			let (w, h) = (element.size.x, element.size.y);
 		let border_width = element.border.width;
 		let border_x = x - border_width;
 		let border_y = y - border_width;
 		let border_w = w + 2.0 * border_width;
 		let border_h = h + 2.0 * border_width;
-		self.proc_rect_element((border_x, border_y), (border_w, border_h), element.border.color, mesh);
+		self.proc_rect_element(Vec2::new(border_x, border_y), Vec2::new(border_w, border_h), element.border.color, mesh);
 	}
 
 	#[inline] fn process_rect_element(&self, element: &UIElement, mesh: &mut MeshData) {
 		self.proc_rect_element(element.position, element.size, element.color, mesh);
 	}
-	#[inline] fn proc_rect_element(&self, pos: (f32, f32), size: (f32, f32), color: Color, mesh: &mut MeshData) {
+	#[inline] fn proc_rect_element(&self, pos: Vec2, size: Vec2, color: Color, mesh: &mut MeshData) {
 		self.add_rectangle(&mut mesh.v, pos, size, color);
 		mesh.i.extend(self.rectangle_indices(mesh.c));
 		mesh.c += 4;
 	}
 
-	#[inline] fn add_rectangle(&self, vertices: &mut Vec<Vertex>, (x, y): (f32, f32), (w, h): (f32, f32), color: Color) {
+	#[inline] fn add_rectangle(&self, vertices: &mut Vec<Vertex>, pos: Vec2, size: Vec2, color: Color) {
+		let (x,y,w,h) = (pos.x,pos.y, size.x,size.y);
 		const P:f32 = 1.0; const N:f32 = 0.0;
 		let positions = [
 			[x - w*N, y - h*N],
