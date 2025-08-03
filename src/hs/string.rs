@@ -34,31 +34,23 @@ impl MutStr {
 			None => Some(Self::default()),
 		}
 	}
-	/*
-	pub const fn convert_strs<const N: usize>(input: [&'static str; N]) -> [Self; N] {
-		let mut output = [const { Self::default() }; N]; // Removed `const {}` which isn't valid here
-		let mut i = 0;
-		while i < N {
-			output[i] = Self::from_str(input[i]); // Requires from_str to be const
-			i += 1;
-		}
-		output
+	pub const fn o(&self) -> Option<&Self> {
+		Some(self)
 	}
-	pub const fn convert_strs_vec(input: Vec<&'static str>) -> Vec<Self> {
-		let mut output = Vec::with_capacity(input.len());
-		let mut i = 0;
-		while i < input.len() {
-			output.push(Self::from_str(input[i])); // Requires from_str to be const
-			i += 1;
-		}
-		output
-	}
-	*/
+
 	// Basic operations
 	pub fn to_str(&self) -> &str {
 		match self {
 			Self::Static(s) => s,
 			Self::Dynamic(s) => s.as_str(),
+		}
+	}
+
+	pub fn get_mut(&mut self) -> &mut String {
+		self.ensure_mutable();
+		match self {
+			Self::Dynamic(s) => s,
+			_ => unreachable!(),
 		}
 	}
 	
@@ -165,6 +157,34 @@ impl MutStr {
 }
 
 
+// Common trait implementations
+impl From<&'static str> for MutStr {
+	fn from(s: &'static str) -> Self {
+		Self::Static(s)
+	}
+}
+impl From<String> for MutStr {
+	fn from(s: String) -> Self {
+		Self::Dynamic(s)
+	}
+}
+impl From<&String> for MutStr {
+	fn from(s: &String) -> Self {
+		Self::Dynamic(s.clone())
+	}
+}
+impl From<&mut String> for MutStr {
+	fn from(s: &mut String) -> Self {
+		Self::Dynamic(std::mem::take(s))
+	}
+}
+
+impl std::fmt::Display for MutStr {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		write!(f, "{}", self.to_str())
+	}
+}
+
 use std::ops::Deref;
 use std::option::Option;
 use std::borrow::Borrow;
@@ -193,34 +213,6 @@ impl Borrow<str> for MutStr {
 }
 
 
-
-// Common trait implementations
-impl From<&'static str> for MutStr {
-	fn from(s: &'static str) -> Self {
-		Self::Static(s)
-	}
-}
-impl From<String> for MutStr {
-	fn from(s: String) -> Self {
-		Self::Dynamic(s)
-	}
-}
-impl From<&String> for MutStr {
-	fn from(s: &String) -> Self {
-		Self::Dynamic(s.clone())
-	}
-}
-impl From<&mut String> for MutStr {
-	fn from(s: &mut String) -> Self {
-		Self::Dynamic(std::mem::take(s))
-	}
-}
-
-impl std::fmt::Display for MutStr {
-	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		write!(f, "{}", self.to_str())
-	}
-}
 
 
 // addition so i don't have to use format!() all the time ...

@@ -10,36 +10,37 @@ type Callback = Arc<RefCell<dyn FnMut() + 'static>>;
 #[derive(Clone)]
 pub enum UIElementData {
 	Panel,
-	Label { text: &'static str, text_color: Color },
-	Button { text: &'static str, text_color: Color },
+	Label { text: MutStr, text_color: Color },
+	Button { text: MutStr, text_color: Color },
 	MultiStateButton { states: Vec<&'static str>, text_color: Color, current_state: usize },
-	InputField { text: &'static str, text_color: Color, placeholder: Option<&'static str> },
-	Checkbox { label: Option<&'static str>, text_color: Color, checked: bool },
-	Image { path: &'static str },
+	InputField { text: MutStr, text_color: Color, placeholder: MutStr },
+	Checkbox { text: MutStr, text_color: Color, checked: bool },
+	Image { path: MutStr },
 	Animation {
 		frames: Vec<&'static str>, current_frame: u32, frame_duration: f32, elapsed_time: f32,
 		looping: bool, playing: bool, blend_delay: Option<u32>
 	},
 	Slider {
-		min_value: f32, slider_color: Color, max_value: f32, current_value: f32, step: Option<f32>
+		min_value: f32, text_color: Color, max_value: f32, current_value: f32, step: Option<f32>
 	},
 }
 impl UIElementData {
 	#[inline] pub const fn default() -> Self { UIElementData::Panel }
 }
+#[derive(Clone)]
 pub enum ElementData {
-	Text(&'static str),
+	Text(String),
 	Number(f32),
 	None,
 }
 impl ElementData {
-	#[inline] pub const fn text(&self) -> Option<&'static str> {
+	#[inline] pub fn text(&self) -> Option<String> {
 		match self {
-			ElementData::Text(s) if !s.is_empty() => Some(s),
+			ElementData::Text(s) if !s.is_empty() => Some(s.clone()),
 			_ => None,
 		}
 	}
-	#[inline] pub const fn num(&self) -> Option<f32> {
+	#[inline] pub fn num(&self) -> Option<f32> {
 		match self {
 			ElementData::Number(s) => Some(*s),
 			_ => None,
@@ -69,7 +70,6 @@ pub struct UIElement {
 
 	// Hierarchy
 	pub parent: ParentInfo,
-	pub children: Vec<usize>, // Non-const initialization
 
 	// Layout
 	pub position: Vec2,
@@ -113,6 +113,7 @@ impl UIElement {
 			position: Vec2::new(0.0, 0.0),
 			size: Vec2::new(0.0, 0.0),
 			color: Color::DEF_COLOR,
+			parent: ParentInfo::None,
 			hovered: false,
 			z_index: 0,
 			visible: true,
@@ -120,51 +121,51 @@ impl UIElement {
 			enabled: true,
 			vertical: false,
 			event_handler: None,
-			parent: ParentInfo::None,
-			children: Vec::new(),
 		}
 	}
 	#[inline]
-	pub const fn panel(id: usize) -> Self { Self::new(id, UIElementData::default() ) }
-	#[inline]
-	pub const fn label(id: usize, text: &'static str) -> Self {
-		Self::new(id, UIElementData::Label { text, text_color: Color::DEF_COLOR })
+	pub fn panel(id: usize) -> Self {
+		Self::new(id, UIElementData::default())
 	}
 	#[inline]
-	pub const fn button(id: usize, text: &'static str) -> Self {
-		Self::new(id, UIElementData::Button { text, text_color: Color::DEF_COLOR })
+	pub fn label(id: usize, text: &'static str) -> Self {
+		Self::new(id, UIElementData::Label { text: MutStr::from_str(text), text_color: Color::DEF_COLOR })
 	}
 	#[inline]
-	pub const fn input(id: usize) -> Self {
-		Self::new(id, UIElementData::InputField { text: "", text_color: Color::DEF_COLOR, placeholder: None })
+	pub fn button(id: usize, text: &'static str) -> Self {
+		Self::new(id, UIElementData::Button { text: MutStr::from_str(text), text_color: Color::DEF_COLOR })
 	}
 	#[inline]
-	pub const fn checkbox(id: usize, label: Option<&'static str>) -> Self {
-		Self::new(id, UIElementData::Checkbox { label, text_color: Color::DEF_COLOR, checked: false })
+	pub fn input(id: usize) -> Self {
+		Self::new(id, UIElementData::InputField { text: MutStr::default(), text_color: Color::DEF_COLOR, placeholder: MutStr::default() })
 	}
 	#[inline]
-	pub const fn image(id: usize, path: &'static str) -> Self {
-		Self::new(id, UIElementData::Image { path })
+	pub fn checkbox(id: usize) -> Self {
+		Self::new(id, UIElementData::Checkbox { text: MutStr::default(), text_color: Color::DEF_COLOR, checked: false })
 	}
 	#[inline]
-	pub const fn animation(id: usize, frames: Vec<&'static str>) -> Self {
+	pub fn image(id: usize, path: &'static str) -> Self {
+		Self::new(id, UIElementData::Image { path: MutStr::from_str(path) })
+	}
+	#[inline]
+	pub fn animation(id: usize, frames: Vec<&'static str>) -> Self {
 		Self::new(id, UIElementData::Animation {
 			frames, current_frame: 0, frame_duration: 1.0, elapsed_time: 0.0,
 			looping: true, playing: true, blend_delay: Some(20)
 		})
 	}
 	#[inline]
-	pub const fn multi_state_button(id: usize, states: Vec<&'static str>) -> Self {
+	pub fn multi_state_button(id: usize, states: Vec<&'static str>) -> Self {
 		Self::new(id, UIElementData::MultiStateButton {
 			states, text_color: Color::DEF_COLOR,
 			current_state: 0
 		})
 	}
 	#[inline]
-	pub const fn slider(id: usize, min_value: f32, max_value: f32) -> Self {
+	pub fn slider(id: usize, min_value: f32, max_value: f32) -> Self {
 		Self::new(id, UIElementData::Slider {
 			min_value, max_value, //vertical: false,
-			slider_color: Color::DEF_COLOR,
+			text_color: Color::DEF_COLOR,
 			current_value: min_value,
 			step: None,
 		})
@@ -207,26 +208,16 @@ impl UIElement {
 	// Builder methods
 	#[inline] pub const fn with_alpha(mut self, a: u8) -> Self { self.color = self.color.with_a(a); self }
 	#[inline] pub const fn with_parent(mut self, parent: usize) -> Self { self.parent = ParentInfo::new(parent); self }
-	#[inline] pub fn with_children(mut self, children: Vec<usize>) -> Self { self.children = children; self }
-	#[inline] pub fn with_child(mut self, child: usize) -> Self { self.children = vec![child]; self }
 	// setters
 	#[inline] pub const fn set_alpha(&mut self, a: u8){ self.color = self.color.with_a(a); }
 	#[inline] pub const fn set_parent(&mut self, parent: usize) { self.parent = ParentInfo::new(parent); }
-	#[inline] pub fn set_children(&mut self, children: Vec<usize>) { self.children = children; }
-	#[inline] pub fn set_child(&mut self, child: usize) { self.children = vec![child]; }
 
 	// Builder-style versions (return Self for chaining)
-	#[inline] pub fn with_added_child(mut self, child: usize) -> Self { self.add_child(child); self }
-	#[inline] pub fn with_added_children(mut self, children: &[usize]) -> Self { self.add_children(children); self }
 	#[inline] pub fn with_added_state(mut self, state: &'static str) -> Self { self.add_state(state); self }
 	#[inline] pub fn with_added_states(mut self, states: &[&'static str]) -> Self { self.add_states(states); self }
 	#[inline] pub fn with_added_frame(mut self, frame: &'static str) -> Self { self.add_frame(frame); self }
 	#[inline] pub fn with_added_frames(mut self, frames: &[&'static str]) -> Self { self.add_frames(frames); self }
 
-
-	// Children management
-	#[inline] pub fn add_child(&mut self, child: usize) { self.children.push(child); }
-	#[inline] pub fn add_children(&mut self, children: &[usize]) { self.children.extend_from_slice(children); }
 
 	// MultiStateButton states management
 	#[inline] pub fn add_state(&mut self, state: &'static str) {
@@ -262,15 +253,6 @@ impl UIElement {
 		self.vertical = vertical;
 		self
 	}
-	#[inline] pub fn with_data(self, data: UIElementData) -> Self {
-		let mut result = self;
-		result.data = data;
-		result
-	}
-	#[inline] pub const fn with_id(mut self, id: usize) -> Self {
-		self.id = id;
-		self
-	}
 
 	#[inline] pub fn with_callback<F: FnMut() + 'static>(mut self, callback: F) -> Self {
 		self.event_handler = Some(Arc::new(RefCell::new(callback)));
@@ -278,15 +260,17 @@ impl UIElement {
 	}
 			
 	// Utility methods
-	#[inline] pub const fn get_bounds(&self) -> (f32, f32, f32, f32) {
-		(self.position.x, self.position.y, self.position.x + self.size.x, self.position.y + self.size.y)
+	#[inline] pub fn get_bounds(&self) -> (f32, f32, f32, f32) {
+		let corner = self.position + self.size;
+		(self.position.x, self.position.y, corner.x, corner.y)
 	}
-	#[inline] pub const fn contains_point(&self, x: f32, y: f32) -> bool {
+	#[inline] pub fn contains_point(&self, x: f32, y: f32) -> bool {
 		if !self.visible || !self.enabled { return false; }
 		let (min_x, min_y, max_x, max_y) = self.get_bounds();
 		x >= min_x && x <= max_x && y >= min_y && y <= max_y
 	}
 	#[inline] pub const fn is_input(&self) -> bool { matches!(self.data, UIElementData::InputField { .. }) }
+
 	#[inline] pub const fn update_hover_state(&mut self, is_hovered: bool) {
 		self.hovered = is_hovered && self.enabled;
 		match self.data {
@@ -302,12 +286,14 @@ impl UIElement {
 			_ => { },
 		}
 	}
-	#[inline] pub const fn get_text_mut(&mut self) -> Option<&mut &'static str> {
+	#[inline] pub fn get_text_mut(&mut self) -> Option<&mut String> {
 		match &mut self.data {
 			UIElementData::Label { text, .. } |
 			UIElementData::Button { text, .. } |
-			UIElementData::InputField { text, .. } => Some(text),
-			UIElementData::Checkbox { label, .. } => label.as_mut(),
+			UIElementData::InputField { text, .. } |
+			UIElementData::Checkbox { text, .. } => {
+				Some(text.get_mut())
+			},
 			_ => None,
 		}
 	}
@@ -321,17 +307,15 @@ impl UIElement {
 		match &self.data {
 			UIElementData::Label { text, .. } |
 			UIElementData::Button { text, .. } |
-			UIElementData::InputField { text, .. } => {
-				ElementData::Text(text.trim())
-			},
-			UIElementData::Checkbox { label, .. } => {
-				label.map(ElementData::Text).unwrap_or(ElementData::None)
+			UIElementData::InputField { text, .. } |
+			UIElementData::Checkbox { text, .. } => {
+				ElementData::Text(text.to_string())
 			},
 			UIElementData::MultiStateButton { states, current_state, .. } => {
-				ElementData::Text(&states[*current_state])
+				ElementData::Text((&states[*current_state]).to_string())
 			},
 			UIElementData::Animation { frames, current_frame, .. } => {
-				ElementData::Text(&frames[*current_frame as usize])
+				ElementData::Text((&frames[*current_frame as usize]).to_string())
 			},
 			UIElementData::Slider { current_value, .. } => {
 				ElementData::Number(*current_value)
@@ -339,7 +323,7 @@ impl UIElement {
 			_ => ElementData::None,
 		}
 	}
-	#[inline] pub fn get_str(&self) -> Option<&'static str> {
+	#[inline] pub fn get_string(&self) -> Option<String> {
 		self.get_element_data().text()
 	}
 
@@ -347,8 +331,8 @@ impl UIElement {
 
 	// Text-related methods
 	#[inline]
-	pub const fn with_text(mut self, text: &'static str) -> Self {
-		if let Some(text_field) = self.get_text_mut() { *text_field = text; }
+	pub fn with_text(mut self, text: &str) -> Self {
+		if let Some(text_field) = self.get_text_mut() { *text_field = text.to_string(); }
 		self
 	}
 	#[inline]
@@ -358,8 +342,8 @@ impl UIElement {
 			UIElementData::Button { text_color, .. } |
 			UIElementData::InputField { text_color, .. } |
 			UIElementData::Checkbox { text_color, .. } |
-			UIElementData::MultiStateButton { text_color, .. } => *text_color = color,
-			UIElementData::Slider { slider_color, .. } => *slider_color = color,
+			UIElementData::MultiStateButton { text_color, .. } |
+			UIElementData::Slider { text_color, .. } => *text_color = color,
 			_ => {}
 		}
 		self
@@ -376,8 +360,8 @@ impl UIElement {
 			UIElementData::Button { text_color, .. } |
 			UIElementData::InputField { text_color, .. } |
 			UIElementData::Checkbox { text_color, .. } |
-			UIElementData::MultiStateButton { text_color, .. } => Some(*text_color),
-			UIElementData::Slider { slider_color, .. } => Some(*slider_color),
+			UIElementData::MultiStateButton { text_color, .. } |
+			UIElementData::Slider { text_color, .. } => Some(*text_color),
 			_ => None,
 		};
 		if let Some(color) = text_color {
@@ -385,9 +369,9 @@ impl UIElement {
 		} else { self.color }
 	}
 	#[inline]
-	pub const fn with_placeholder(mut self, placeholder: Option<&'static str>) -> Self {
-		if let UIElementData::InputField { placeholder: p, .. } = &mut self.data {
-			*p = placeholder;
+	pub fn with_placeholder(mut self, p: &'static str) -> Self {
+		if let UIElementData::InputField { placeholder, .. } = &mut self.data {
+			*placeholder = MutStr::from_str(p);
 		}
 		self
 	}
@@ -575,34 +559,19 @@ impl UIElement {
 
 // Input validation and processing
 #[inline]
-pub fn process_text_input(text: &mut &'static str, c: char) -> bool {
+pub fn process_text_input(text: &mut String, c: char) -> bool {
 	if text.len() >= 256 || c.is_control() { return false; }
 	
-	// Create a new string with the added character
-	let mut new_string = String::with_capacity(text.len() + 1);
-	new_string.push_str(text);
-	new_string.push(c);
-	
-	// Convert to &'static str and update the reference
-	let boxed_str = new_string.into_boxed_str();
-	let leaked = Box::leak(boxed_str);
-	*text = leaked;
+	text.push(c);
 	
 	true
 }
 
 #[inline]
-pub fn handle_backspace(text: &mut &'static str) -> bool {
+pub fn handle_backspace(text: &mut String) -> bool {
 	if text.is_empty() { return false; }
 
-	// Create a new string without the last character
-	let mut new_string = String::with_capacity(text.len() - 1);
-	new_string.push_str(&text[..text.len()-1]);
-	
-	// Convert to &'static str and update the reference
-	let boxed_str = new_string.into_boxed_str();
-	let leaked = Box::leak(boxed_str);
-	*text = leaked;
+	text.pop();
 	
 	true
 }

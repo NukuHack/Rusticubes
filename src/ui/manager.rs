@@ -513,12 +513,14 @@ pub fn get_element_data_by_id(id: &usize) -> Option<ElementData> {
 		.ui_manager()
 		.get_element(*id)
 		.map(|element| element.get_element_data())
-}#[inline]
-pub fn get_element_str_by_id(id: &usize) -> &str {
+}
+#[inline]
+pub fn get_element_str_by_id(id: &usize) -> String {
 	get_element_data_by_id(id)
 		.and_then(|data| data.text())
-		.unwrap_or("Null")
-}#[inline]
+		.unwrap_or("Null".to_string())
+}
+#[inline]
 pub fn get_element_num_by_id(id: &usize) -> f32 {
 	get_element_data_by_id(id)
 		.and_then(|data| data.num())

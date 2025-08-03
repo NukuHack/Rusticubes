@@ -482,7 +482,7 @@ impl UIManager {
 			.with_position(Vec2::new(-0.35, -0.0))
 			.with_size(Vec2::new(0.7, 0.1))
 			.with_style(&theme.inputs.basic)
-			.with_placeholder(Some("New World"))
+			.with_placeholder("New World")
 			.with_z_index(5);
 		self.add_element(world_name_input);
 
@@ -537,7 +537,7 @@ impl UIManager {
 			.with_position(Vec2::new(-0.35, -0.0))
 			.with_size(Vec2::new(0.7, 0.1))
 			.with_style(&theme.inputs.basic)
-			.with_placeholder(Some("255.255.255.255"))
+			.with_placeholder("255.255.255.255")
 			.with_z_index(5);
 		self.add_element(world_ip_input);
 
