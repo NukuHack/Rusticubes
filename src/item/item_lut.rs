@@ -141,17 +141,6 @@ impl PropertyValue {
 			Self::Speed(_) => PropertyVariantTag::Speed,
 		}
 	}
-	/*#[inline] pub const fn from_tag(tag: PropertyVariantTag) -> Self {
-		match tag {
-			PropertyVariantTag::Durability => Self::Durability(_),
-			PropertyVariantTag::ToolData => Self::ToolData(_),
-			PropertyVariantTag::ArmorData => Self::ArmorData(_),
-			PropertyVariantTag::Hunger => Self::Hunger(_),
-			PropertyVariantTag::ArmorValue => Self::ArmorValue(_),
-			PropertyVariantTag::Damage => Self::Damage(_),
-			PropertyVariantTag::Speed => Self::Speed(_),
-		}
-	}*/
 }
 #[derive(Debug, Clone, Copy, Eq, Hash, PartialEq)]
 #[repr(u8)] // Ensure each variant has a u8 representation, so up to 255 type

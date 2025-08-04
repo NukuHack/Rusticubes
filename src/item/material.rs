@@ -4,9 +4,43 @@
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(u8)] // Ensure each variant has a u8 representation, so up to 255 type
 pub enum Material {
+	Wood,
+	Stone,
+	Leather,
+	Copper,
 	Iron,
+	WroughtIron,
 	Gold,
+	Steel,
+	DamascusSteel,
+	StainlessSteel,
+	Titanium,
+	Tungsten,
 	Diamond,
+	Neutronium,
+}
+impl Material {
+	pub fn as_str(&self) -> &'static str {
+		match self {
+			Self::Wood => "Wood",
+			Self::Stone => "Stone",
+			Self::Leather => "Leather",
+			Self::Copper => "Copper",
+			Self::Iron => "Iron",
+			Self::WroughtIron => "WroughtIron",
+			Self::Gold => "Gold",
+			Self::Steel => "Steel",
+			Self::DamascusSteel => "DamascusSteel",
+			Self::StainlessSteel => "StainlessSteel",
+			Self::Titanium => "Titanium",
+			Self::Tungsten => "Tungsten",
+			Self::Diamond => "Diamond",
+			Self::Neutronium => "Neutronium",
+		}
+	}
+	#[inline] pub const fn from_u8(value: u8) -> Option<Self> {
+		unsafe { std::mem::transmute(value) }
+	}
 }
 
 

@@ -453,10 +453,13 @@ impl UIManager {
 
 		let mut storage_items = ItemContainer::new(area.rows, area.columns);
 		let _ = storage_items.update_items(|idx, _| 
+			Some(ItemStack::new_i(ItemId(idx as u16)))
+			/*
 			if idx % 2 == 0 {  // Set only even slots
 				Some(ItemStack::new_i(ItemId::from_str("brick_grey")))  // Placeholder item creation
-			} else { None
-		});
+			} else { None }
+			*/
+		);
 		storage_items
 	}
 	

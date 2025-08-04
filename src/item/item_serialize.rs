@@ -15,7 +15,7 @@ impl BinarySerializable for ItemId {
 	}
 	fn from_binary(bytes: &[u8]) -> Option<Self> {
 		if bytes.len() < 2 { return None; }
-		let result = u16::from_le_bytes([bytes[0], bytes[1]]);
+		let result = u16::from_binary(&bytes[0..2])?;
 		Some(Self(result))
 	}
 	fn binary_size(&self) -> usize {
@@ -32,7 +32,7 @@ impl BinarySerializable for ItemFlags {
 	}
 	fn from_binary(bytes: &[u8]) -> Option<Self> {
 		if bytes.len() < 4 { return None; }
-		let result = u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
+		let result = u32::from_binary(&bytes[0..4])?;
 		Some(Self::new(result))
 	}
 	fn binary_size(&self) -> usize {
@@ -210,7 +210,7 @@ where
 			}
 			2 => {
 				if bytes.len() < 5 { return None; } // 1 byte tag + 4 bytes size
-				let size = u32::from_le_bytes([bytes[1], bytes[2], bytes[3], bytes[4]]) as usize;
+				let size = u32::from_binary(&bytes[1..5])? as usize;
 				if bytes.len() < 5 + size { return None; }
 				let set = S::from_binary(&bytes[5..5 + size])?;
 				Some(EquipmentData::Multiple(set))
@@ -376,9 +376,9 @@ impl BinarySerializable for ItemComp {
 		
 		// Serialize basic fields
 		data.extend_from_slice(&self.id.to_binary());
+		data.extend_from_slice(&self.name.to_binary());
 		data.extend_from_slice(&self.max_stack.to_le_bytes());
 		data.extend_from_slice(&self.flags.to_binary());
-		data.extend_from_slice(&self.name.to_binary());
 		
 		// Serialize extended data
 		match &self.data {
@@ -401,16 +401,17 @@ impl BinarySerializable for ItemComp {
 		// Deserialize id (2 bytes)
 		let id = ItemId::from_binary(&bytes[offset..offset+2])?;
 		offset += 2;
+
+		let name_len = u16::from_binary(&bytes[offset..offset+BINARY_SIZE_STAT_STRING])? as usize;
+		let name:StatString = StatString::from_binary(&bytes[offset..offset+BINARY_SIZE_STAT_STRING+name_len])?;
+		offset += BINARY_SIZE_STAT_STRING + name_len;
+
 		// Deserialize max_stack (4 bytes)
 		let max_stack = u32::from_binary(&bytes[offset..offset+4])?;
 		offset += 4;
 		// Deserialize flags (2 bytes)
 		let flags = ItemFlags::from_binary(&bytes[offset..offset+4])?;
 		offset += 4;
-
-		let name_len = u16::from_binary(&bytes[offset..offset+BINARY_SIZE_STAT_STRING])? as usize;
-		let name:StatString = StatString::from_binary(&bytes[offset..offset+BINARY_SIZE_STAT_STRING+name_len])?;
-		offset += BINARY_SIZE_STAT_STRING + name_len;
 
 		// Deserialize extended data
 		let has_data = bytes[offset] != 0;
@@ -431,8 +432,9 @@ impl BinarySerializable for ItemComp {
 	}
 	
 	fn binary_size(&self) -> usize {
-		let mut size = 2 + 4 + 4; // id + max_stack + flags
+		let mut size = 2; // id
 		size += self.name.binary_size(); // name
+		size += 4 + 4; // max_stack + flags
 		size += 1; // has_data flag
 		if let Some(data) = &self.data {
 			size += data.binary_size();

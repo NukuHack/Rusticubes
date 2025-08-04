@@ -1,6 +1,6 @@
 
 use crate::fs::rs;
-use crate::item::item_lut::ItemComp;
+use crate::item::item_lut::{ItemFlags, ItemComp};
 
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -42,12 +42,10 @@ impl ItemStack {
 					.expect("Resources array should never be empty")
 			})
 	}
-	pub const fn lut(&self) -> ItemComp {
-		// yes not yet implemented ...
-		// will get the data from a LUT so it should be fast ... i hope 
+	pub fn lut(&self) -> ItemComp {
 		ITEM_REGISTRY_LUT[self.id.inner() as usize].copy()
 	}
-	pub const fn max_stack_size(&self) -> u32 {
+	pub fn max_stack_size(&self) -> u32 {
 		self.lut().max_stack
 	}
 
@@ -62,19 +60,19 @@ impl ItemStack {
 	}
 	
 	#[inline] pub fn is_block(&self) -> bool { matches!(self.lut().is_block(), true) }
-	#[inline] pub fn is_item(&self) -> bool { !self.is_block() }
 
 	#[inline] pub fn get_block_id(&self) -> Option<ItemId> {
-		if self.lut().is_block() {
+		if self.is_block() {
 			return Some(self.id);
 		} None
 	}
 
 	#[inline] pub const fn with_stack(mut self, stack: u32) -> Self { self.stack = stack; self }
 	#[inline] pub const fn set_stack(&mut self, stack: u32) { self.stack = stack }
-	#[inline] pub const fn stack(&self) -> u32 {
-		let q = self.stack;
-		if q > self.max_stack_size() { self.max_stack_size() } else { q }
+	#[inline] pub fn stack(&self) -> u32 {
+		if self.stack > self.max_stack_size()
+		{ self.max_stack_size() }
+		else { self.stack }
 	}
 
 
@@ -112,65 +110,64 @@ impl CustomData {
 }
 
 
-const MAP_SIZE: usize = 100usize;
-pub const ITEM_REGISTRY_LUT: [ItemComp; MAP_SIZE] = generate_item_registry_lut();
 ///Map size is bigger than needed, but this results a lot of unused space,
 ///Ofc you can not modify the array at runtime so you have to make it as big as it needs to be at compile-time for sure
 /// for this reason i implemented a purple-pink-black "0" block what would represent the "error" .. id 1 is air
 
-macro_rules! generate_item_registry {
-	($($id:literal => $name:literal - $block:expr),* $(,)?) => {
-		pub const fn generate_item_registry_lut() -> [ItemComp; MAP_SIZE] {
-			let mut map = [const { ItemComp::error().as_block() }; MAP_SIZE];
-			
-			$(
-				map[$id] = if $block {
-					ItemComp::new($id, $name).as_block()
-				} else { ItemComp::new($id, $name) };
-			)*
-			
-			map
+const MAP_SIZE: usize = 100usize;
+
+pub const ITEM_REGISTRY_LUT: [ItemComp; MAP_SIZE] = {
+	let mut map = [const { ItemComp::error().as_block() }; MAP_SIZE];
+	
+	map[1] = ItemComp::new_i(ItemId::from_str("air"), "air").with_flag(ItemFlags::new(ItemFlags::IS_BLOCK));
+	map[2] = ItemComp::new_i(ItemId::from_str("brick_grey"), "brick_grey").with_flag(ItemFlags::new(ItemFlags::IS_BLOCK));
+	map[3] = ItemComp::new_i(ItemId::from_str("brick_red"), "brick_red").with_flag(ItemFlags::new(ItemFlags::IS_BLOCK));
+	map[4] = ItemComp::new_i(ItemId::from_str("bush"), "bush").with_flag(ItemFlags::new(ItemFlags::IS_BLOCK));
+	map[5] = ItemComp::new_i(ItemId::from_str("wheat"), "wheat").with_flag(ItemFlags::new(ItemFlags::IS_CONSUMABLE));
+	map[6] = ItemComp::new_i(ItemId::from_str("iron_sword"), "iron_sword").with_flag(ItemFlags::new(ItemFlags::IS_TOOL));
+	map[7] = ItemComp::new_i(ItemId::from_str("bow"), "bow").with_flag(ItemFlags::new(ItemFlags::IS_TOOL));
+	map[8] = ItemComp::new_i(ItemId::from_str("arrow"), "arrow");
+	
+	map
+};
+
+impl ItemId {
+	pub const fn from_str(string: &'static str) -> Self {
+		const fn bytes_eq(a: &[u8], b: &[u8]) -> bool {
+			if a.len() != b.len() {
+				return false;
+			}
+			let mut i = 0;
+			while i < a.len() {
+				if a[i] != b[i] {
+					return false;
+				}
+				i += 1;
+			}
+			true
+		}
+		let bytes = string.as_bytes();
+
+		if bytes_eq(bytes, b"0") {
+			return Self(0);
+		} else if bytes_eq(bytes, b"air") {
+			return Self(1);
+		} else if bytes_eq(bytes, b"brick_grey") {
+			return Self(2);
+		} else if bytes_eq(bytes, b"brick_red") {
+			return Self(3);
+		} else if bytes_eq(bytes, b"bush") {
+			return Self(4);
+		} else if bytes_eq(bytes, b"wheat") {
+			return Self(5);
+		} else if bytes_eq(bytes, b"iron_sword") {
+			return Self(6);
+		} else if bytes_eq(bytes, b"bow") {
+			return Self(7);
+		} else if bytes_eq(bytes, b"arrow") {
+			return Self(8);
 		}
 		
-		impl ItemId {
-			pub const fn from_str(string: &'static str) -> Self {
-				const fn bytes_eq(a: &[u8], b: &[u8]) -> bool {
-					if a.len() != b.len() {
-						return false;
-					}
-					let mut i = 0;
-					while i < a.len() {
-						if a[i] != b[i] {
-							return false;
-						}
-						i += 1;
-					}
-					true
-				}
-				let bytes = string.as_bytes();
-				if bytes_eq(bytes, "0".as_bytes()) {
-					Self(0)
-				}
-				$(
-					else if bytes_eq(bytes, $name.as_bytes()) {
-						Self($id)
-					}
-				)*
-				else {
-					Self(0)
-				}
-			}
-		}
-	};
-}
-
-// Usage:
-generate_item_registry! {
-	// 0 is the error, but used inside the macro so not mapped here but only inside -> directly
-	1 => "air" - true,
-	2 => "brick_grey" - true,
-	3 => "brick_red" - true,
-	4 => "bush" - true,
-	5 => "bread" - false,
-	// Add more items here...
+		Self(0)
+	}
 }
