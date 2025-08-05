@@ -17,6 +17,84 @@ const PEER_PORT: u16 = 7000;
 const TCP_PORT: u16 = 9000;
 const DISCOVERY_PORT: u16 = 9010;
 
+// Custom serialization functions
+fn serialize_message(msg: &NetworkMessage) -> Result<String, String> {
+	match msg {
+		NetworkMessage::WorldInfoRequest => Ok("WORLD_INFO_REQUEST".to_string()),
+		NetworkMessage::WorldInfoResponse(world) => Ok(format!("WORLD_INFO_RESPONSE|{}", world)),
+		NetworkMessage::JoinRequest(pid) => Ok(format!("JOIN_REQUEST|{}", pid)),
+		NetworkMessage::JoinResponse(addr) => Ok(format!("JOIN_RESPONSE|{}", addr)),
+		NetworkMessage::PeerAddress(addr) => Ok(format!("PEER_ADDRESS|{}", addr)),
+		NetworkMessage::DiscoveryRequest => Ok("DISCOVERY_REQUEST".to_string()),
+		NetworkMessage::DiscoveryResponse { ip, port } => Ok(format!("DISCOVERY_RESPONSE|{}|{}", ip, port)),
+		NetworkMessage::Ping => Ok("PING".to_string()),
+		NetworkMessage::Pong => Ok("PONG".to_string()),
+	}
+	.map_err(|e: String | format!("Serialization error: {}", e))
+}
+
+fn deserialize_message(data: &str) -> Result<NetworkMessage, String> {
+	let parts: Vec<&str> = data.trim().split('|').collect();
+	
+	match parts[0] {
+		"WORLD_INFO_REQUEST" => Ok(NetworkMessage::WorldInfoRequest),
+		"WORLD_INFO_RESPONSE" => {
+			if parts.len() != 2 {
+				return Err("Invalid WorldInfoResponse format".to_string());
+			}
+			Ok(NetworkMessage::WorldInfoResponse(parts[1].to_string()))
+		},
+		"JOIN_REQUEST" => {
+			if parts.len() != 2 {
+				return Err("Invalid JoinRequest format".to_string());
+			}
+			let pid = parts[1].parse::<u32>().map_err(|e| format!("Invalid PID: {}", e))?;
+			Ok(NetworkMessage::JoinRequest(pid))
+		},
+		"JOIN_RESPONSE" => {
+			if parts.len() != 2 {
+				return Err("Invalid JoinResponse format".to_string());
+			}
+			let addr = parts[1].parse::<SocketAddr>().map_err(|e| format!("Invalid address: {}", e))?;
+			Ok(NetworkMessage::JoinResponse(addr))
+		},
+		"PEER_ADDRESS" => {
+			if parts.len() != 2 {
+				return Err("Invalid PeerAddress format".to_string());
+			}
+			let addr = parts[1].parse::<SocketAddr>().map_err(|e| format!("Invalid address: {}", e))?;
+			Ok(NetworkMessage::PeerAddress(addr))
+		},
+		"DISCOVERY_REQUEST" => Ok(NetworkMessage::DiscoveryRequest),
+		"DISCOVERY_RESPONSE" => {
+			if parts.len() != 3 {
+				return Err("Invalid DiscoveryResponse format".to_string());
+			}
+			let port = parts[2].parse::<u16>().map_err(|e| format!("Invalid port: {}", e))?;
+			Ok(NetworkMessage::DiscoveryResponse {
+				ip: parts[1].to_string(),
+				port,
+			})
+		},
+		"PING" => {
+			Ok(NetworkMessage::Ping)
+		},
+		"PONG" => {
+			Ok(NetworkMessage::Pong)
+		},
+		_ => Err(format!("Unknown message type: {}", parts[0])),
+	}
+}
+
+fn serialize_to_bytes(msg: &NetworkMessage) -> Result<Vec<u8>, String> {
+	serialize_message(msg).map(|s| s.into_bytes())
+}
+
+fn deserialize_from_bytes(data: &[u8]) -> Result<NetworkMessage, String> {
+	let s = std::str::from_utf8(data).map_err(|e| format!("UTF-8 error: {}", e))?;
+	deserialize_message(s)
+}
+
 impl NetworkSystem {
 	pub fn start_broadcast_listener(&mut self) -> Result<String, String> {
 		if !self.is_host { return Ok("Not host, no broadcast listener needed".into()); }
@@ -55,14 +133,14 @@ impl NetworkSystem {
 		let udp_addr = SocketAddr::new(local_ip, udp_port);
 		
 		let res = NetworkMessage::JoinResponse(udp_addr);
-		writeln!(stream, "{}", serde_json::to_string(&res).map_err(|e| format!("Serialize error: {}", e))?)
+		writeln!(stream, "{}", serialize_message(&res).map_err(|e| format!("Serialize error: {}", e))?)
 			.map_err(|e| format!("Write error: {}", e))?;
 		
 		let mut reader = BufReader::new(stream);
 		let mut line = String::new();
 		reader.read_line(&mut line).map_err(|e| format!("Read error: {}", e))?;
 		
-		if let NetworkMessage::PeerAddress(peer_addr) = serde_json::from_str(&line.trim())
+		if let NetworkMessage::PeerAddress(peer_addr) = deserialize_message(&line.trim())
 			.map_err(|e| format!("Parse error: {}", e))? {
 			self.local_udp_addr = Some(udp_addr);
 			self.remote_udp_addr = Some(peer_addr);
@@ -141,11 +219,11 @@ impl NetworkSystem {
 			let trimmed = line.trim();
 			if trimmed.is_empty() { continue; }
 			
-			match serde_json::from_str(trimmed).map_err(|e| format!("Parse error: {}", e))? {
+			match deserialize_message(trimmed).map_err(|e| format!("Parse error: {}", e))? {
 				NetworkMessage::WorldInfoRequest => {
 					let world = ptr::get_gamestate().worldname().to_string();
 					let res = NetworkMessage::WorldInfoResponse(world);
-					writeln!(&mut stream, "{}", serde_json::to_string(&res)
+					writeln!(&mut stream, "{}", serialize_message(&res)
 						.map_err(|e| format!("Serialize error: {}", e))?)
 						.map_err(|e| format!("Write error: {}", e))?;
 					stream.flush().map_err(|e| format!("Flush error: {}", e))?;
@@ -156,7 +234,7 @@ impl NetworkSystem {
 					let local_udp_addr = SocketAddr::new(local_ip, udp_port);
 					
 					let res = NetworkMessage::JoinResponse(local_udp_addr);
-					writeln!(&mut stream, "{}", serde_json::to_string(&res).map_err(|e| format!("Serialize error: {}", e))?)
+					writeln!(&mut stream, "{}", serialize_message(&res).map_err(|e| format!("Serialize error: {}", e))?)
 						.map_err(|e| format!("Write error: {}", e))?;
 					stream.flush().map_err(|e| format!("Flush error: {}", e))?;
 					
@@ -172,7 +250,7 @@ impl NetworkSystem {
 						}
 					} // reader is dropped here
 					
-					if let NetworkMessage::PeerAddress(peer_addr) = serde_json::from_str(&line.trim())
+					if let NetworkMessage::PeerAddress(peer_addr) = deserialize_message(&line.trim())
 						.map_err(|e| format!("Parse error: {}", e))? {
 						return Ok((local_udp_addr, peer_addr));
 					} else {
@@ -187,7 +265,7 @@ impl NetworkSystem {
 	fn handle_world_info_request(&mut self, stream: &mut TcpStream) -> Result<(bool, String), String> {
 		let world = ptr::get_gamestate().worldname().to_string();
 		let res = NetworkMessage::WorldInfoResponse(world.clone());
-		writeln!(stream, "{}", serde_json::to_string(&res).map_err(|e| format!("Serialize error: {}", e))?)
+		writeln!(stream, "{}", serialize_message(&res).map_err(|e| format!("Serialize error: {}", e))?)
 			.map_err(|e| format!("Write error: {}", e))?;
 		stream.flush().map_err(|e| format!("Flush error: {}", e))?;
 		Ok((false, format!("Sent world info: {} - connection kept open", world)))
@@ -208,7 +286,7 @@ impl NetworkSystem {
 		let local_udp_addr = SocketAddr::new(local_ip, udp_port);
 		
 		let msg = NetworkMessage::JoinRequest(current_pid);
-		writeln!(stream, "{}", serde_json::to_string(&msg).map_err(|e| format!("Serialize error: {}", e))?)
+		writeln!(stream, "{}", serialize_message(&msg).map_err(|e| format!("Serialize error: {}", e))?)
 			.map_err(|e| format!("Write error: {}", e))?;
 		stream.flush().map_err(|e| format!("Flush error: {}", e))?;
 		
@@ -216,13 +294,13 @@ impl NetworkSystem {
 		let mut line = String::new();
 		reader.read_line(&mut line).map_err(|e| format!("Read error: {}", e))?;
 		
-		let host_addr = match serde_json::from_str(&line.trim()).map_err(|e| format!("Parse error: {}", e))? {
+		let host_addr = match deserialize_message(&line.trim()).map_err(|e| format!("Parse error: {}", e))? {
 			NetworkMessage::JoinResponse(addr) => addr,
 			_ => return Err("Wrong response type".into()),
 		};
 		
 		let msg = NetworkMessage::PeerAddress(local_udp_addr);
-		writeln!(stream, "{}", serde_json::to_string(&msg).map_err(|e| format!("Serialize error: {}", e))?)
+		writeln!(stream, "{}", serialize_message(&msg).map_err(|e| format!("Serialize error: {}", e))?)
 			.map_err(|e| format!("Write error: {}", e))?;
 		stream.flush().map_err(|e| format!("Flush error: {}", e))?;
 		
@@ -271,13 +349,13 @@ impl NetworkSystem {
 		loop {
 			match socket.recv_from(&mut buf) {
 				Ok((size, sender)) => {
-					if let Ok(NetworkMessage::DiscoveryRequest) = serde_json::from_slice(&buf[..size]) {
+					if let Ok(NetworkMessage::DiscoveryRequest) = deserialize_from_bytes(&buf[..size]) {
 						let res = NetworkMessage::DiscoveryResponse {
 							ip: local_ip.clone(),
 							port: TCP_PORT,
 						};
-						if let Ok(json) = serde_json::to_string(&res) {
-							let _ = socket.send_to(json.as_bytes(), sender);
+						if let Ok(data) = serialize_to_bytes(&res) {
+							let _ = socket.send_to(&data, sender);
 						}
 					}
 				}
@@ -303,8 +381,13 @@ impl NetworkSystem {
 		socket.set_read_timeout(Some(Duration::from_millis(timeout_ms))).ok();
 				
 		let broadcast_addr = format!("{}:{}", types::get_broadcast_address(&local_ip), DISCOVERY_PORT);
-		if socket.send_to(&serde_json::to_vec(&NetworkMessage::DiscoveryRequest).unwrap(), &broadcast_addr).is_err() {
-			res.errors.push("Broadcast failed".into());
+		if let Ok(data) = serialize_to_bytes(&NetworkMessage::DiscoveryRequest) {
+			if socket.send_to(&data, &broadcast_addr).is_err() {
+				res.errors.push("Broadcast failed".into());
+				return res;
+			}
+		} else {
+			res.errors.push("Failed to serialize discovery request".into());
 			return res;
 		}
 		
@@ -314,7 +397,7 @@ impl NetworkSystem {
 		while start.elapsed() < Duration::from_millis(timeout_ms) {
 			match socket.recv_from(&mut buf) {
 				Ok((size, _)) => {
-					if let Ok(NetworkMessage::DiscoveryResponse { ip, port }) = serde_json::from_slice(&buf[..size]) {
+					if let Ok(NetworkMessage::DiscoveryResponse { ip, port }) = deserialize_from_bytes(&buf[..size]) {
 						let address = match ip.contains(':') {
 							true => ip.parse::<SocketAddr>(),
 							false => format!("{}:{}", ip, port).parse::<SocketAddr>(),
@@ -354,7 +437,7 @@ impl NetworkSystem {
 		}
 		
 		let msg = NetworkMessage::WorldInfoRequest;
-		if let Err(e) = writeln!(stream, "{}", serde_json::to_string(&msg).ok()?) {
+		if let Err(e) = writeln!(stream, "{}", serialize_message(&msg).ok()?) {
 			errors.push(format!("Failed to send request to {}: {}", addr, e)); 
 			return None;
 		}
@@ -377,7 +460,7 @@ impl NetworkSystem {
 			return None; 
 		}
 		
-		match serde_json::from_str(trimmed) {
+		match deserialize_message(trimmed) {
 			Ok(NetworkMessage::WorldInfoResponse(name)) => {
 				debug.push(format!("Got world '{}' from {}", name, addr));
 				Some(name)

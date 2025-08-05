@@ -7,7 +7,7 @@ use std::{
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct ItemFlags(u32);
+pub struct ItemFlags(pub u32);
 impl ItemFlags {
 	pub const IS_BLOCK: u32 = 1 << 0;
 	pub const IS_TOOL: u32 = 1 << 1;

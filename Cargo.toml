@@ -40,7 +40,6 @@ ggrs = "0.10"
 matchbox_socket = "0.7"
 # used for serialization and de-serialization
 serde = { version = "1", features = ["derive"] }
-serde_json = "1"
 # used to run external code at runtime -> modding
 wasmtime = "14"
 

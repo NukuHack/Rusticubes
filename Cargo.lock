@@ -3675,7 +3675,6 @@ dependencies = [
  "rodio",
  "rusttype",
  "serde",
- "serde_json",
  "walkdir",
  "wasmtime",
  "wgpu",

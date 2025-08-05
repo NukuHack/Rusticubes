@@ -53,7 +53,8 @@ pub mod game { // game related, instance related
 pub mod item {
 	pub mod items; // the items and item stack impl.
 	pub mod item_lut; // item related things what will not change at runtime
-	pub mod item_serialize; // it si what it sounds
+	pub mod item_binary; // it is what it sounds
+	pub mod item_serde; // json serialize for items
 	pub mod material; // item related basic stuff
 	pub mod inventory; // basic inventory impl.
 	pub mod ui_inventory;
