@@ -331,9 +331,6 @@ impl<const N: usize> ItemExtendedData<N> {
 
 
 // Type aliases for convenience
-pub type ToolTypeSet = EquipmentTypeSet<ToolType, u8>;
-pub type ArmorTypeSet = EquipmentTypeSet<ArmorType, u16>;
-
 pub type ToolData = EquipmentData<ToolType, ToolSet>;
 pub type ArmorData = EquipmentData<ArmorType, ArmorSet>;
 
@@ -347,6 +344,7 @@ pub trait EquipmentType: Copy + Clone {
 	// Add a safe conversion from u8
 	fn from_u8(value: u8) -> Option<Self>;
 }
+
 impl EquipmentType for ToolType {
 	const MAX_VARIANTS: u8 = 8;
 	const TO_U8: fn(Self) -> u8 = |x| x as u8;
@@ -355,6 +353,7 @@ impl EquipmentType for ToolType {
 		unsafe { std::mem::transmute(value) }
 	}
 }
+
 impl EquipmentType for ArmorType {
 	const MAX_VARIANTS: u8 = 16;
 	const TO_U8: fn(Self) -> u8 = |x| x as u8;
@@ -364,13 +363,6 @@ impl EquipmentType for ArmorType {
 	}
 }
 
-// Generic equipment data struct
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct EquipmentTypeSet<T: EquipmentType, S> {
-	pub slots: S,
-	pub _phantom: PhantomData<T>,
-}
-
 // Trait to handle bit operations for different storage types
 pub trait BitStorage: Copy + Clone + PartialEq + Eq {
 	const ZERO: Self;
@@ -378,101 +370,19 @@ pub trait BitStorage: Copy + Clone + PartialEq + Eq {
 	fn clear_bit(&mut self, bit: u8);
 	fn get_bit(&self, bit: u8) -> bool;
 }
+
 impl BitStorage for u8 {
 	const ZERO: Self = 0;
 	#[inline] fn set_bit(&mut self, bit: u8) { *self |= 1 << bit; }
 	#[inline] fn clear_bit(&mut self, bit: u8) { *self &= !(1 << bit); }
 	#[inline] fn get_bit(&self, bit: u8) -> bool { (*self & (1 << bit)) != 0 }
 }
+
 impl BitStorage for u16 {
 	const ZERO: Self = 0;
 	#[inline] fn set_bit(&mut self, bit: u8) { *self |= 1 << bit; }
 	#[inline] fn clear_bit(&mut self, bit: u8) { *self &= !(1 << bit); }
 	#[inline] fn get_bit(&self, bit: u8) -> bool { (*self & (1 << bit)) != 0 }
-}
-
-impl<T: EquipmentType, S: BitStorage> EquipmentTypeSet<T, S> {
-	#[inline] pub const fn new() -> Self { 
-		Self { 
-			slots: S::ZERO,
-			_phantom: PhantomData,
-		}
-	}
-	
-	#[inline] pub fn on_u(&mut self, slot: u8) { 
-		self.slots.set_bit(slot);
-	}
-	#[inline] pub fn off_u(&mut self, slot: u8) { 
-		self.slots.clear_bit(slot);
-	}
-	#[inline] pub fn is_u(&self, slot: u8) -> bool { 
-		self.slots.get_bit(slot)
-	}
-	#[inline] pub fn is_empty(&self) -> bool { 
-		self.slots == S::ZERO
-	}
-	#[inline] pub fn on(&mut self, slot: T) { 
-		self.slots.set_bit(T::TO_U8(slot));
-	}
-	#[inline] pub fn off(&mut self, slot: T) { 
-		self.slots.clear_bit(T::TO_U8(slot));
-	}
-	#[inline] pub fn is(&self, slot: T) -> bool { 
-		self.slots.get_bit(T::TO_U8(slot))
-	}
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-#[repr(u8)]
-pub enum ToolType {
-	Stone = 0,  // pickaxe related thing
-	Wood = 1,   // axe related thing
-	Dirt = 2,   // shovel related thing
-	Crop = 3,   // hoe related thing
-	String = 4, // sword and scissors related thing
-	Metal = 5,  // strong pickaxe related thing
-	// Add up to 2 more tool types as needed (max 8 total)
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-#[repr(u8)]
-pub enum ArmorType {
-	//Core Armor Slots (Typically Fixed Slots) 
-	Head = 0, // – Helmets, Hats, Crowns, Masks
-	Torso = 1, // – Chestplates, Robes, Tunics, Breastplates
-	Legs = 2, // – Greaves, Leggings, Pants, Skirts
-	Feet = 3, // – Boots, Sandals, Sabatons
-	Arms = 4, // – Pauldrons, Spaulders, Arm Guards
-	Hands = 5, // – Gauntlets, Gloves, Bracers
-	Back = 6, // – Cloaks, Capes, Wings, Backpacks
-	Neck = 7, // – Amulets, Necklaces, Pendants
-	Finger = 8, // – Rings (often allows 1-2 equipped)
-	//Additional/Expanded Slots 
-	Shoulders = 9, // – Separate from Arms (common in games like WoW)
-	Waist = 10, // – Belts, Sashes, Girdles
-	Eyes = 11, // – Goggles, Glasses, Blindfolds
-	Face = 12, // – Masks, Veils (sometimes separate from Head)
-	Pocket = 13, // – Utility items (e.g., Thieves' Tools, Quivers)
-	Aura = 14, // – Cosmetic or buff-granting effects (e.g., "Holy Aura")
-	// Add up to 1 more armor types as needed (max 16 total)
-}
-
-// Renamed to avoid conflict with trait
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct EquipmentSetStruct<T: EquipmentType, S: BitStorage, TierStorage> {
-	// Bits for tracking which types are present
-	pub types: EquipmentTypeSet<T, S>,
-	// Packed tiers for each possible type
-	pub tiers: TierStorage,
-}
-
-impl<T: EquipmentType, S: BitStorage, TS: TierStorage> EquipmentSetStruct<T, S, TS> {
-	#[inline] pub const fn new() -> Self {
-		EquipmentSetStruct {
-			types: EquipmentTypeSet::new(),
-			tiers: TS::ZERO,
-		}
-	}
 }
 
 // Trait for tier storage operations
@@ -482,6 +392,7 @@ pub trait TierStorage: Copy + Clone + PartialEq + Eq {
 	fn get_tier(&self, index: u8) -> u8;
 	fn max_types() -> u8;
 }
+
 impl TierStorage for u64 {
 	const ZERO: Self = 0;
 	#[inline] fn set_tier(&mut self, index: u8, tier: u8) {
@@ -492,6 +403,7 @@ impl TierStorage for u64 {
 	#[inline] fn get_tier(&self, index: u8) -> u8 { ((self >> (index * 8)) & 0xFF) as u8 }
 	#[inline] fn max_types() -> u8 { 8 }
 }
+
 impl TierStorage for u128 {
 	const ZERO: Self = 0;
 	#[inline] fn set_tier(&mut self, index: u8, tier: u8) {
@@ -503,28 +415,77 @@ impl TierStorage for u128 {
 	#[inline] fn max_types() -> u8 { 16 }
 }
 
+// Renamed to avoid conflict with trait
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct EquipmentSetStruct<T: EquipmentType, S: BitStorage, TierStorage> {
+	// Bits for tracking which types are present
+	pub slots: S,
+	// Packed tiers for each possible type
+	pub tiers: TierStorage,
+	_phantom: PhantomData<T>,
+}
+
 impl<T: EquipmentType, S: BitStorage, TS: TierStorage> EquipmentSetStruct<T, S, TS> {
+	#[inline] pub const fn new() -> Self {
+		EquipmentSetStruct {
+			slots: S::ZERO,
+			tiers: TS::ZERO,
+			_phantom: PhantomData,
+		}
+	}
+	
+	#[inline] fn on_u(&mut self, slot: u8) { 
+		self.slots.set_bit(slot);
+	}
+	
+	#[inline] fn off_u(&mut self, slot: u8) { 
+		self.slots.clear_bit(slot);
+	}
+	
+	#[inline] fn is_u(&self, slot: u8) -> bool { 
+		self.slots.get_bit(slot)
+	}
+	
+	#[inline] pub fn is_empty(&self) -> bool { 
+		self.slots == S::ZERO
+	}
+	
+	#[inline] pub fn on(&mut self, slot: T) { 
+		self.slots.set_bit(T::TO_U8(slot));
+	}
+	
+	#[inline] pub fn off(&mut self, slot: T) { 
+		self.slots.clear_bit(T::TO_U8(slot));
+	}
+	
+	#[inline] pub fn is(&self, slot: T) -> bool { 
+		self.slots.get_bit(T::TO_U8(slot))
+	}
+
+
 	#[inline] 
 	pub fn add_equipment(&mut self, equip_type: T, tier: MaterialLevel) {
 		if self.has_equipment(equip_type) {
 			panic!("Equipment type already exists");
 		}
 		let index = T::TO_U8(equip_type);
-		self.types.on_u(index);
+		self.on_u(index);
 		self.set_tier(index, tier as u8);
 	}
 	
-	#[inline] pub fn remove_equipment(&mut self, equip_type: T) {
+	#[inline] 
+	pub fn remove_equipment(&mut self, equip_type: T) {
 		if !self.has_equipment(equip_type) {
 			return;
 		}
 		let index = T::TO_U8(equip_type);
-		self.types.off_u(index);
+		self.off_u(index);
 		self.set_tier(index, 0);
 	}
 	
-	#[inline] pub fn has_equipment(&self, equip_type: T) -> bool {
-		self.types.is(equip_type)
+	#[inline] 
+	pub fn has_equipment(&self, equip_type: T) -> bool {
+		self.is(equip_type)
 	}
 
 	#[inline] 
@@ -539,7 +500,7 @@ impl<T: EquipmentType, S: BitStorage, TS: TierStorage> EquipmentSetStruct<T, S, 
 	#[inline] 
 	pub fn iter(&self) -> impl Iterator<Item = (T, MaterialLevel)> + '_ {
 		(0..TS::max_types()).filter_map(move |i| {
-			if !self.types.is_u(i) { return None; }
+			if !self.is_u(i) { return None; }
 
 			let value = TS::get_tier(&self.tiers, i);
 			let (Some(equip_type), Some(tier)) = (T::from_u8(i), MaterialLevel::from_u8(value)) 
@@ -555,16 +516,16 @@ impl<T: EquipmentType, S: BitStorage, TS: TierStorage> EquipmentSetStruct<T, S, 
 	}
 }
 
-// Trait for equipment sets (renamed to avoid conflict)
-pub trait EquipmentSet<T: EquipmentType> {
-	fn get_tier(&self, equip_type: T) -> Option<MaterialLevel>;
-}
-
 // Implement EquipmentSet trait for the generic version
 impl<T: EquipmentType, S: BitStorage, TS: TierStorage> EquipmentSet<T> for EquipmentSetStruct<T, S, TS> {
 	fn get_tier(&self, equip_type: T) -> Option<MaterialLevel> {
 		self.get_tier(equip_type)
 	}
+}
+
+// Trait for equipment sets (renamed to avoid conflict)
+pub trait EquipmentSet<T: EquipmentType> {
+	fn get_tier(&self, equip_type: T) -> Option<MaterialLevel>;
 }
 
 // Generic equipment data enum
@@ -605,4 +566,39 @@ impl<T: EquipmentType + PartialEq, S: EquipmentSet<T>> EquipmentData<T, S> {
 			_ => None,
 		}
 	}
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[repr(u8)]
+pub enum ToolType {
+	Stone = 0,  // pickaxe related thing
+	Wood = 1,   // axe related thing
+	Dirt = 2,   // shovel related thing
+	Crop = 3,   // hoe related thing
+	String = 4, // sword and scissors related thing
+	Metal = 5,  // strong pickaxe related thing
+	// Add up to 2 more tool types as needed (max 8 total)
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[repr(u8)]
+pub enum ArmorType {
+	//Core Armor Slots (Typically Fixed Slots) 
+	Head = 0, // – Helmets, Hats, Crowns, Masks
+	Torso = 1, // – Chestplates, Robes, Tunics, Breastplates
+	Legs = 2, // – Greaves, Leggings, Pants, Skirts
+	Feet = 3, // – Boots, Sandals, Sabatons
+	Arms = 4, // – Pauldrons, Spaulders, Arm Guards
+	Hands = 5, // – Gauntlets, Gloves, Bracers
+	Back = 6, // – Cloaks, Capes, Wings, Backpacks
+	Neck = 7, // – Amulets, Necklaces, Pendants
+	Finger = 8, // – Rings (often allows 1-2 equipped)
+	//Additional/Expanded Slots 
+	Shoulders = 9, // – Separate from Arms (common in games like WoW)
+	Waist = 10, // – Belts, Sashes, Girdles
+	Eyes = 11, // – Goggles, Glasses, Blindfolds
+	Face = 12, // – Masks, Veils (sometimes separate from Head)
+	Pocket = 13, // – Utility items (e.g., Thieves' Tools, Quivers)
+	Aura = 14, // – Cosmetic or buff-granting effects (e.g., "Holy Aura")
+	// Add up to 1 more armor types as needed (max 16 total)
 }

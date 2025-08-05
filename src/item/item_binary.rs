@@ -5,7 +5,7 @@ use crate::item::items::ItemId;
 use crate::item::item_lut::{
 	ItemComp, ItemFlags, ItemExtendedData, PropertyValue, PropertyVariantTag,
 	ToolData, ArmorData, ToolType, ArmorType, EquipmentData, EquipmentSetStruct,
-	EquipmentTypeSet, BitStorage, TierStorage, EquipmentType
+	BitStorage, TierStorage, EquipmentType
 };
 use crate::hs::binary::{BinarySerializable, FixedBinarySerializable};
 
@@ -49,9 +49,7 @@ impl BinarySerializable for MaterialLevel {
 		vec![*self as u8]
 	}
 	fn from_binary(bytes: &[u8]) -> Option<Self> {
-		if bytes.is_empty() { return None; }
-		// Assuming MaterialLevel can be safely transmuted from u8
-		Self::from_u8(bytes[0])
+		Self::from_u8(*bytes.first()?)
 	}
 	fn binary_size(&self) -> usize {
 		1
@@ -60,15 +58,13 @@ impl BinarySerializable for MaterialLevel {
 impl FixedBinarySerializable for MaterialLevel {
 	const BINARY_SIZE: usize = 1;
 }
-
 // ToolType and ArmorType serialization
 impl BinarySerializable for ToolType {
 	fn to_binary(&self) -> Vec<u8> {
 		vec![*self as u8]
 	}
 	fn from_binary(bytes: &[u8]) -> Option<Self> {
-		if bytes.is_empty() { return None; }
-		Self::from_u8(bytes[0])
+		Self::from_u8(*bytes.first()?)
 	}
 	fn binary_size(&self) -> usize {
 		1
@@ -77,14 +73,12 @@ impl BinarySerializable for ToolType {
 impl FixedBinarySerializable for ToolType {
 	const BINARY_SIZE: usize = 1;
 }
-
 impl BinarySerializable for ArmorType {
 	fn to_binary(&self) -> Vec<u8> {
 		vec![*self as u8]
 	}
 	fn from_binary(bytes: &[u8]) -> Option<Self> {
-		if bytes.is_empty() { return None; }
-		Self::from_u8(bytes[0])
+		Self::from_u8(*bytes.first()?)
 	}
 	fn binary_size(&self) -> usize {
 		1
@@ -93,15 +87,13 @@ impl BinarySerializable for ArmorType {
 impl FixedBinarySerializable for ArmorType {
 	const BINARY_SIZE: usize = 1;
 }
-
 // PropertyVariantTag serialization
 impl BinarySerializable for PropertyVariantTag {
 	fn to_binary(&self) -> Vec<u8> {
 		vec![*self as u8]
 	}
 	fn from_binary(bytes: &[u8]) -> Option<Self> {
-		if bytes.is_empty() { return None; }
-		Self::from_u8(bytes[0]) // already returns an option
+		Self::from_u8(*bytes.first()?)
 	}
 	fn binary_size(&self) -> usize {
 		1
@@ -122,7 +114,7 @@ where
 {
 	fn to_binary(&self) -> Vec<u8> {
 		let mut data = Vec::new();
-		data.extend_from_slice(&self.types.to_binary());
+		data.extend_from_slice(&self.slots.to_binary());
 		data.extend_from_slice(&self.tiers.to_binary());
 		data
 	}
@@ -132,35 +124,17 @@ where
 			return None;
 		}
 		
-		let types = EquipmentTypeSet::from_binary(&bytes[0..S::BINARY_SIZE])?;
+		let slots = S::from_binary(&bytes[0..S::BINARY_SIZE])?;
 		let tiers = TS::from_binary(&bytes[S::BINARY_SIZE..S::BINARY_SIZE + TS::BINARY_SIZE])?;
+		let mut out = EquipmentSetStruct::<T, S, TS>::new();
+		out.slots = slots;
+		out.tiers = tiers;
 		
-		Some(Self { types, tiers })
+		Some(out)
 	}
 	
 	fn binary_size(&self) -> usize {
 		S::BINARY_SIZE + TS::BINARY_SIZE
-	}
-}
-
-
-// EquipmentTypeSet serialization
-impl<T: EquipmentType, S: BitStorage> BinarySerializable for EquipmentTypeSet<T, S>
-where 
-	S: BinarySerializable + FixedBinarySerializable
-{
-	fn to_binary(&self) -> Vec<u8> {
-		self.slots.to_binary()
-	}
-	fn from_binary(bytes: &[u8]) -> Option<Self> {
-		let slots = S::from_binary(bytes)?;
-		Some(Self {
-			slots,
-			_phantom: std::marker::PhantomData,
-		})
-	}
-	fn binary_size(&self) -> usize {
-		S::BINARY_SIZE
 	}
 }
 
@@ -186,8 +160,6 @@ where
 			EquipmentData::Multiple(set) => {
 				data.push(2); // Variant tag
 				let set_data = set.to_binary();
-				// Store size as u32 little-endian
-				data.extend_from_slice(&(set_data.len() as u32).to_le_bytes());
 				data.extend_from_slice(&set_data);
 			}
 		}
@@ -209,10 +181,7 @@ where
 				Some(EquipmentData::Single { equip_type, tier })
 			}
 			2 => {
-				if bytes.len() < 5 { return None; } // 1 byte tag + 4 bytes size
-				let size = u32::from_binary(&bytes[1..5])? as usize;
-				if bytes.len() < 5 + size { return None; }
-				let set = S::from_binary(&bytes[5..5 + size])?;
+				let set = S::from_binary(&bytes[1..])?;
 				Some(EquipmentData::Multiple(set))
 			}
 			_ => None,
@@ -223,7 +192,7 @@ where
 		match self {
 			EquipmentData::None => 1,
 			EquipmentData::Single { .. } => 1 + T::BINARY_SIZE + MaterialLevel::BINARY_SIZE,
-			EquipmentData::Multiple(set) => 1 + 4 + set.binary_size(),
+			EquipmentData::Multiple(set) => 1 + set.binary_size(),
 		}
 	}
 }
@@ -265,8 +234,7 @@ impl BinarySerializable for PropertyValue {
 	fn from_binary(bytes: &[u8]) -> Option<Self> {
 		if bytes.is_empty() { return None; }
 		let tag = PropertyVariantTag::from_u8(*bytes.first()?)?;
-		let rest_bytes = &bytes[PropertyVariantTag::BINARY_SIZE..]; // Fixed typo: rest_bites -> rest_bytes
-		#[allow(unreachable_patterns)]
+		let rest_bytes = &bytes[PropertyVariantTag::BINARY_SIZE..];
 		match tag {
 			PropertyVariantTag::Durability => {
 				let value = u32::from_binary(rest_bytes)?;
@@ -297,7 +265,6 @@ impl BinarySerializable for PropertyValue {
 				let value = i16::from_binary(rest_bytes)?;
 				Some(PropertyValue::Speed(value))
 			}
-			_ => None,
 		}
 	}
 	
@@ -395,7 +362,7 @@ impl BinarySerializable for ItemComp {
 	}
 	
 	fn from_binary(bytes: &[u8]) -> Option<Self> {
-		if bytes.len() < 15 { return None; } // Minimum size: 2 + 4 + 4 + 2 + 1
+		if bytes.len() < 15 { return None; } // Minimum size
 		let mut offset = 0;
 		
 		// Deserialize id (2 bytes)
