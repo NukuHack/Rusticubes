@@ -1,13 +1,12 @@
 use std::mem;
 use std::num::NonZeroU32;
-use crate::item::material::MaterialLevel;
+use crate::item::material::{ArmorType, ToolType, MaterialLevel, EquipmentType, BasicConversion};
 use crate::item::items::ItemId;
 use crate::item::item_lut::{
-	ItemComp, ItemFlags, ItemExtendedData, PropertyValue, PropertyVariantTag,
-	ToolData, ArmorData, ToolType, ArmorType, EquipmentData, EquipmentSetStruct,
-	BitStorage, TierStorage, EquipmentType
+	ItemComp, ItemFlags, ItemExtendedData, PropertyValue, PropertyType,
+	ToolData, ArmorData, EquipmentData, EquipmentSetStruct, BitStorage, TierStorage
 };
-use crate::hs::binary::{BinarySerializable, FixedBinarySerializable};
+use crate::fs::binary::{BinarySerializable, FixedBinarySerializable};
 
 impl BinarySerializable for ItemId {
 	fn to_binary(&self) -> Vec<u8> {
@@ -46,7 +45,7 @@ impl FixedBinarySerializable for ItemFlags {
 // MaterialLevel serialization
 impl BinarySerializable for MaterialLevel {
 	fn to_binary(&self) -> Vec<u8> {
-		vec![*self as u8]
+		vec![self.to_u8()]
 	}
 	fn from_binary(bytes: &[u8]) -> Option<Self> {
 		Self::from_u8(*bytes.first()?)
@@ -87,8 +86,8 @@ impl BinarySerializable for ArmorType {
 impl FixedBinarySerializable for ArmorType {
 	const BINARY_SIZE: usize = 1;
 }
-// PropertyVariantTag serialization
-impl BinarySerializable for PropertyVariantTag {
+// PropertyType serialization
+impl BinarySerializable for PropertyType {
 	fn to_binary(&self) -> Vec<u8> {
 		vec![*self as u8]
 	}
@@ -99,7 +98,7 @@ impl BinarySerializable for PropertyVariantTag {
 		1
 	}
 }
-impl FixedBinarySerializable for PropertyVariantTag {
+impl FixedBinarySerializable for PropertyType {
 	const BINARY_SIZE: usize = 1;
 }
 
@@ -108,7 +107,7 @@ impl FixedBinarySerializable for PropertyVariantTag {
 // Add BinarySerializable implementation for EquipmentSetStruct
 impl<T, S, TS> BinarySerializable for EquipmentSetStruct<T, S, TS>
 where
-	T: EquipmentType,
+	T: EquipmentType + BasicConversion<T>,
 	S: BitStorage + BinarySerializable + FixedBinarySerializable,
 	TS: TierStorage + BinarySerializable + FixedBinarySerializable,
 {
@@ -149,9 +148,6 @@ where
 		let mut data = Vec::new();
 		
 		match self {
-			EquipmentData::None => {
-				data.push(0); // Variant tag
-			}
 			EquipmentData::Single { equip_type, tier } => {
 				data.push(1); // Variant tag
 				data.extend_from_slice(&equip_type.to_binary());
@@ -168,10 +164,7 @@ where
 	}
 	
 	fn from_binary(bytes: &[u8]) -> Option<Self> {
-		if bytes.is_empty() { return None; }
-		
-		match bytes[0] {
-			0 => Some(EquipmentData::None),
+		match bytes.first()? {
 			1 => {
 				if bytes.len() < 1 + T::BINARY_SIZE + MaterialLevel::BINARY_SIZE {
 					return None;
@@ -190,7 +183,6 @@ where
 	
 	fn binary_size(&self) -> usize {
 		match self {
-			EquipmentData::None => 1,
 			EquipmentData::Single { .. } => 1 + T::BINARY_SIZE + MaterialLevel::BINARY_SIZE,
 			EquipmentData::Multiple(set) => 1 + set.binary_size(),
 		}
@@ -201,7 +193,7 @@ where
 impl BinarySerializable for PropertyValue {
 	fn to_binary(&self) -> Vec<u8> {
 		let mut data: Vec<u8> = Vec::new();
-		let tag = self.to_tag().to_binary();
+		let tag = self.to_type().to_binary();
 		
 		data.extend_from_slice(&tag);
 		match self {
@@ -233,35 +225,35 @@ impl BinarySerializable for PropertyValue {
 	
 	fn from_binary(bytes: &[u8]) -> Option<Self> {
 		if bytes.is_empty() { return None; }
-		let tag = PropertyVariantTag::from_u8(*bytes.first()?)?;
-		let rest_bytes = &bytes[PropertyVariantTag::BINARY_SIZE..];
+		let tag = PropertyType::from_u8(*bytes.first()?)?;
+		let rest_bytes = &bytes[PropertyType::BINARY_SIZE..];
 		match tag {
-			PropertyVariantTag::Durability => {
+			PropertyType::Durability => {
 				let value = u32::from_binary(rest_bytes)?;
 				let non_zero = NonZeroU32::new(value)?;
 				Some(PropertyValue::Durability(non_zero))
 			}
-			PropertyVariantTag::ToolData => {
+			PropertyType::ToolData => {
 				let tool_data = ToolData::from_binary(rest_bytes)?;
 				Some(PropertyValue::ToolData(tool_data))
 			}
-			PropertyVariantTag::ArmorData => {
+			PropertyType::ArmorData => {
 				let armor_data = ArmorData::from_binary(rest_bytes)?;
 				Some(PropertyValue::ArmorData(armor_data))
 			}
-			PropertyVariantTag::Hunger => {
+			PropertyType::Hunger => {
 				let value = i16::from_binary(rest_bytes)?;
 				Some(PropertyValue::Hunger(value))
 			}
-			PropertyVariantTag::ArmorValue => {
+			PropertyType::ArmorValue => {
 				let value = i16::from_binary(rest_bytes)?;
 				Some(PropertyValue::ArmorValue(value))
 			}
-			PropertyVariantTag::Damage => {
+			PropertyType::Damage => {
 				let value = i16::from_binary(rest_bytes)?;
 				Some(PropertyValue::Damage(value))
 			}
-			PropertyVariantTag::Speed => {
+			PropertyType::Speed => {
 				let value = i16::from_binary(rest_bytes)?;
 				Some(PropertyValue::Speed(value))
 			}
@@ -278,7 +270,7 @@ impl BinarySerializable for PropertyValue {
 			PropertyValue::Damage(_) => i16::BINARY_SIZE,
 			PropertyValue::Speed(_) => i16::BINARY_SIZE,
 		};
-		PropertyVariantTag::BINARY_SIZE + size
+		PropertyType::BINARY_SIZE + size
 	}
 }
 

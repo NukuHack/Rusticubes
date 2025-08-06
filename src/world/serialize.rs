@@ -1,7 +1,7 @@
 
 use crate::block::math::{BlockRotation, ChunkCoord};
 use crate::block::main::{Block, Material, StorageType, Chunk, BlockStorage};
-use crate::hs::binary::{BinarySerializable, FixedBinarySerializable};
+use crate::fs::binary::{BinarySerializable, FixedBinarySerializable};
 
 
 //

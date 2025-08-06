@@ -4,10 +4,8 @@ use crate::{
 		main::{Chunk, BlockStorage}, math::ChunkCoord,
 	},
 	ext::ptr, world::main::World,
-	hs::{
-		binary::{BinarySerializable, FixedBinarySerializable},
-		time::Time,
-	},
+	hs::time::Time,
+	fs::binary::{BinarySerializable, FixedBinarySerializable},
 };
 use std::{
 	fs::{self, File},

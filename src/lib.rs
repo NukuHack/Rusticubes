@@ -5,13 +5,13 @@ pub mod fs { // file system, file related things
 	pub mod rs; // app-compiled resources
 	pub mod fs; // file system - from the disk
 	pub mod json; // json parser because i don't like serde-json
+	pub mod binary; // serialize to bytes ofc
 }
 pub mod hs { // helping structs
 	pub mod input;
 	pub mod math;
 	pub mod string; // just a single enum for nice string handling
 	pub mod cursor;
-	pub mod binary; // serialize to bytes ofc
 	pub mod time; // a nicely formatted time, just a struct
 }
 pub mod mods { // modding related
@@ -28,6 +28,7 @@ pub mod debug { // debug, test related
 	pub mod network;
 	pub mod world;
 	pub mod metadata;
+	pub mod json_serial;
 	pub mod serialize_item;
 	pub mod physics;
 }
@@ -55,6 +56,7 @@ pub mod item {
 	pub mod items; // the items and item stack impl.
 	pub mod item_lut; // item related things what will not change at runtime
 	pub mod item_binary; // it is what it sounds
+	pub mod item_json; // it is what it sounds
 	pub mod material; // item related basic stuff
 	pub mod inventory; // basic inventory impl.
 	pub mod ui_inventory;

@@ -5,7 +5,6 @@ use crate::world::manager::ensure_save_dir;
 use crate::game::player;
 use crate::ext::ptr;
 use crate::world;
-#[cfg(not(test))]
 use std::path::PathBuf;
 use std::sync::atomic::Ordering;
 use glam::Vec3;

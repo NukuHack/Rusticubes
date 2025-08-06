@@ -3,7 +3,7 @@
 ///
 /// This type is useful when you want to avoid allocations for static strings
 /// but still need the ability to mutate the string when necessary.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum MutStr {
 	/// A static string reference
 	Static(&'static str),

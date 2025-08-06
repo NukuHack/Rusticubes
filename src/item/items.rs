@@ -1,6 +1,7 @@
 
 use crate::fs::rs;
 use crate::item::item_lut::{ItemFlags, ItemComp};
+use crate::hs::string::MutStr;
 
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -95,7 +96,7 @@ impl ItemStack {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct CustomData {
-	pub name: Option<&'static str>,
+	pub name: Option<MutStr>,
 	pub durability: Option<u16>,
 	//pub effects -  // should be reworked later but the stuff what in minecraft gives + health and stuff
 	//pub cosmetics - // stuff that would like make the color change or make the sword be double edged ...

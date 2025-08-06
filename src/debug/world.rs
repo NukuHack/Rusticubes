@@ -6,7 +6,7 @@ mod tests {
 			main::{Block, StorageType, BlockStorage, Chunk, Material},
 			math::{BlockPosition, BlockRotation, ChunkCoord},
 		},
-		hs::binary::BinarySerializable,
+		fs::binary::BinarySerializable,
 		world::main::World,
 	};
 	use glam::IVec3;
@@ -188,7 +188,8 @@ mod tests {
 		assert_eq!(chunk.get_block(pos1.into()), block1);
 		assert_eq!(chunk.get_block(pos2.into()), block2);
 	}
-
+/*
+// world saving is now region related so no single .to_binary() is implemented for the world
 	#[test]
 	fn save_load_world() {
 		let mut world = World::empty();
@@ -231,7 +232,7 @@ mod tests {
 		assert_eq!(&simple_chunk, restored_world.chunks.get(&coord.offset(0,1,0)).unwrap());
 		assert_eq!(&rle_chunk, restored_world.chunks.get(&coord.offset(0,10,-2)).unwrap());
 	}
-
+*/
 	#[test]
 	fn save_load_single_chunk() {		
 		let chunk = Chunk::new(10u16);

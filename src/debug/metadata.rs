@@ -1,74 +1,74 @@
 
 #[cfg(test)]
-use crate::hs::binary::BinarySerializable;
-#[cfg(test)]
-use crate::world::manager::{WorldData, get_save_path, load_world_data, save_world_data, update_world_data};
-#[cfg(test)]
-use std::io::{self};
-#[cfg(test)]
-use crate::hs::time::Time;
+mod tests {
 
-// Test 1: Simple roundtrip serialization/deserialization with perfect data
-#[test]
-fn roundtrip_serialization() {
-	let original = WorldData {
-		version: "1.0.0".to_string(),
-		creation_date: Time::now(),
-		last_opened_date: Time::now(),
-	};
+	use crate::fs::binary::BinarySerializable;
+	use crate::world::manager::{WorldData, get_save_path, load_world_data, save_world_data, update_world_data};
+	use std::io::{self};
+	use crate::hs::time::Time;
 
-	let bytes = original.to_binary();
-	let deserialized = WorldData::from_binary(&bytes).unwrap();
+	// Test 1: Simple roundtrip serialization/deserialization with perfect data
+	#[test]
+	fn roundtrip_serialization() {
+		let original = WorldData {
+			version: "1.0.0".to_string(),
+			creation_date: Time::now(),
+			last_opened_date: Time::now(),
+		};
 
-	assert_eq!(original.version, deserialized.version);
-	assert_eq!(original.creation_date, deserialized.creation_date);
-	assert_eq!(original.last_opened_date, deserialized.last_opened_date);
-}
+		let bytes = original.to_binary();
+		let deserialized = WorldData::from_binary(&bytes).unwrap();
 
-// Test 2: File operations with correct data
-#[test]
-fn file_operations() -> io::Result<()> {
-	let temp_dir = get_save_path().join("test");
-	let path = temp_dir.as_path();
+		assert_eq!(original.version, deserialized.version);
+		assert_eq!(original.creation_date, deserialized.creation_date);
+		assert_eq!(original.last_opened_date, deserialized.last_opened_date);
+	}
 
-	// Test data
-	save_world_data(path, &WorldData::new())?;
-	let loaded = load_world_data(path)?;
-	assert_eq!(loaded.version, std::env!("CARGO_PKG_VERSION"));
-	
-	// Test saving and loading
-	let mut data = WorldData::new();
-	data.version = "test_version".to_string();
-	save_world_data(path, &data)?;
-	
-	let loaded = load_world_data(path)?;
-	assert_eq!(loaded.version, "test_version");
-	
-	// Test update functionality
-	update_world_data(&path.to_path_buf())?;
-	let updated = load_world_data(path)?;
-	assert_eq!(updated.version, std::env!("CARGO_PKG_VERSION"));
-	
-	Ok(())
-} // works just does not save new version for now...
+	// Test 2: File operations with correct data
+	#[test]
+	fn file_operations() -> io::Result<()> {
+		let temp_dir = get_save_path().join("test");
+		let path = temp_dir.as_path();
 
-// Test 3: Malformed data handling
-#[test]
-fn deserialization_errors() {
-	// Test empty input
-	assert!(WorldData::from_binary(&[]).is_none());
-	
-	// Test incomplete version length
-	assert!(WorldData::from_binary(&[1, 0, 0]).is_none());
-	
-	// Test version length longer than actual data
-	let mut bad_data = vec![10, 0, 0, 0]; // Says version is 10 bytes long
-	bad_data.extend_from_slice(b"short"); // But only provide 5 bytes
-	assert!(WorldData::from_binary(&bad_data).is_none());
-	
-	// Test incomplete time data
-	let mut partial_time = vec![5, 0, 0, 0];
-	partial_time.extend_from_slice(b"12345"); // Version
-	partial_time.extend_from_slice(&[0; 5]); // Only half of first Time struct
-	assert!(WorldData::from_binary(&partial_time).is_none());
+		// Test data
+		save_world_data(path, &WorldData::new())?;
+		let loaded = load_world_data(path)?;
+		assert_eq!(loaded.version, std::env!("CARGO_PKG_VERSION"));
+		
+		// Test saving and loading
+		let mut data = WorldData::new();
+		data.version = "test_version".to_string();
+		save_world_data(path, &data)?;
+		
+		let loaded = load_world_data(path)?;
+		assert_eq!(loaded.version, "test_version");
+		
+		// Test update functionality
+		update_world_data(&path.to_path_buf())?;
+		let updated = load_world_data(path)?;
+		assert_eq!(updated.version, std::env!("CARGO_PKG_VERSION"));
+		
+		Ok(())
+	} // works just does not save new version for now...
+
+	// Test 3: Malformed data handling
+	#[test]
+	fn deserialization_errors() {
+		// Test empty input
+		assert!(WorldData::from_binary(&[]).is_none());
+		
+		// Test incomplete version length
+		assert!(WorldData::from_binary(&[1, 0, 0]).is_none());
+		
+		// Test version length longer than actual data
+		let mut bad_data = vec![10, 0, 0, 0]; // Says version is 10 bytes long
+		bad_data.extend_from_slice(b"short"); // But only provide 5 bytes
+		assert!(WorldData::from_binary(&bad_data).is_none());
+		
+		// Test incomplete time data
+		let mut partial_time = vec![5, 0, 0, 0];
+		partial_time.extend_from_slice(b"12345"); // Version
+		partial_time.extend_from_slice(&[0; 5]); // Only half of first Time struct
+		assert!(WorldData::from_binary(&partial_time).is_none());
+	}
 }
