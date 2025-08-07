@@ -1,7 +1,7 @@
 
 use glam::Vec2;
 use crate::ext::ptr;
-use crate::ext::audio::set_bg_volume;
+use crate::ext::audio::{set_bg_volume, set_fg_volume};
 use crate::ui::manager::{close_pressed, UIManager, get_element_num_by_id};
 use crate::ui::element::UIElement;
 
@@ -26,14 +26,35 @@ impl UIManager {
 			.with_z_index(1);
 		self.add_element(list_panel);
 
-		let volume_label = UIElement::label(self.next_id(), "Background volume")
+		let fgvolume_label = UIElement::label(self.next_id(), "Foreground volume")
+			.with_position(Vec2::new(-0.4, 0.2))
+			.with_size(Vec2::new(0.55, 0.08))
+			.with_style(&theme.labels.basic)
+			.with_z_index(6);
+		self.add_element(fgvolume_label);
+		let id = self.next_id();
+		let fgvolume_slider = UIElement::slider(id, settings.music_settings.fg_volume.min, settings.music_settings.fg_volume.max)
+			.with_position(Vec2::new(-0.4, 0.1))
+			.with_size(Vec2::new(0.8, 0.1))
+			.with_style(&theme.sliders.basic)
+			.with_z_index(5)
+			//.with_step(0.5)
+			.with_value(settings.music_settings.fg_volume.val)
+			.with_callback(move || {
+				let data = get_element_num_by_id(&id);
+				ptr::get_settings().music_settings.fg_volume.set(data);
+				set_fg_volume(data);
+			});
+		self.add_element(fgvolume_slider);
+
+		let bgvolume_label = UIElement::label(self.next_id(), "Background volume")
 			.with_position(Vec2::new(-0.4, -0.05))
 			.with_size(Vec2::new(0.55, 0.08))
 			.with_style(&theme.labels.basic)
 			.with_z_index(6);
-		self.add_element(volume_label);
+		self.add_element(bgvolume_label);
 		let id = self.next_id();
-		let volume_slider = UIElement::slider(id, settings.music_settings.bg_volume.min, settings.music_settings.bg_volume.max)
+		let bgvolume_slider = UIElement::slider(id, settings.music_settings.bg_volume.min, settings.music_settings.bg_volume.max)
 			.with_position(Vec2::new(-0.4, -0.15))
 			.with_size(Vec2::new(0.8, 0.1))
 			.with_style(&theme.sliders.basic)
@@ -45,10 +66,7 @@ impl UIManager {
 				ptr::get_settings().music_settings.bg_volume.set(data);
 				set_bg_volume(data);
 			});
-		self.add_element(volume_slider);
-
-
-
+		self.add_element(bgvolume_slider);
 
 		// Back button
 		let back_button = UIElement::button(self.next_id(), "Back")

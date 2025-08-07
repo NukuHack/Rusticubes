@@ -7,11 +7,15 @@ use crate::hs::string::MutStr;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct ItemId(pub u16);
 impl ItemId {
-	pub const fn inner(&self) -> u16 {
+	#[inline] pub const fn inner(&self) -> u16 {
 		self.0
 	}
-	pub fn from(val:u16) -> Self {
+	#[inline] pub fn from(val:u16) -> Self {
 		Self(val)
+	}
+	// New method to get the name from the LUT
+	#[inline] pub fn name(&self) -> &'static str {
+	  ITEM_REGISTRY_LUT[self.inner() as usize].name
 	}
 }
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -43,10 +47,10 @@ impl ItemStack {
 					.expect("Resources array should never be empty")
 			})
 	}
-	pub fn lut(&self) -> ItemComp {
+	#[inline] pub fn lut(&self) -> ItemComp {
 		ITEM_REGISTRY_LUT[self.id.inner() as usize].copy()
 	}
-	pub fn max_stack_size(&self) -> u32 {
+	#[inline] pub fn max_stack_size(&self) -> u32 {
 		self.lut().max_stack
 	}
 
@@ -57,8 +61,12 @@ impl ItemStack {
 		Self::new_i(ItemId(id))
 	}
 	#[inline] pub const fn new_i(id: ItemId) -> Self {
-		Self { id, stack: 1u32, data: None }
+		Self { id, stack: 64u32, data: None }
 	}
+    // New constructor that takes a name instead of ID
+    #[inline] pub const fn new_n(name: &'static str) -> Self {
+        Self::new_i(ItemId::from_str(name))
+    }
 	
 	#[inline] pub fn is_block(&self) -> bool { matches!(self.lut().is_block(), true) }
 
@@ -75,8 +83,6 @@ impl ItemStack {
 		{ self.max_stack_size() }
 		else { self.stack }
 	}
-
-
 
 	/// Checks if this item can be stacked with another
 	pub fn can_stack_with(&self, other: &Self) -> bool {
@@ -128,6 +134,7 @@ pub const ITEM_REGISTRY_LUT: [ItemComp; MAP_SIZE] = {
 	map[6] = ItemComp::new_i(ItemId::from_str("iron_sword"), "iron_sword").with_flag(ItemFlags::new(ItemFlags::IS_TOOL));
 	map[7] = ItemComp::new_i(ItemId::from_str("bow"), "bow").with_flag(ItemFlags::new(ItemFlags::IS_TOOL));
 	map[8] = ItemComp::new_i(ItemId::from_str("arrow"), "arrow");
+	// add more
 	
 	map
 };
@@ -168,6 +175,7 @@ impl ItemId {
 		} else if bytes_eq(bytes, b"arrow") {
 			return Self(8);
 		}
+		// add more
 		
 		Self(0)
 	}
