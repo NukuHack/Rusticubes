@@ -1,29 +1,11 @@
 use std::mem;
 use std::num::NonZeroU32;
 use crate::item::material::{ArmorType, ToolType, MaterialLevel, EquipmentType, BasicConversion};
-use crate::item::items::ItemId;
 use crate::item::item_lut::{
 	ItemComp, ItemFlags, ItemExtendedData, PropertyValue, PropertyType,
 	ToolData, ArmorData, EquipmentData, EquipmentSetStruct, BitStorage, TierStorage
 };
 use crate::fs::binary::{BinarySerializable, FixedBinarySerializable};
-
-impl BinarySerializable for ItemId {
-	fn to_binary(&self) -> Vec<u8> {
-		self.inner().to_le_bytes().to_vec()
-	}
-	fn from_binary(bytes: &[u8]) -> Option<Self> {
-		if bytes.len() < 2 { return None; }
-		let result = u16::from_binary(&bytes[0..2])?;
-		Some(Self(result))
-	}
-	fn binary_size(&self) -> usize {
-		mem::size_of::<u16>()
-	}
-}
-impl FixedBinarySerializable for ItemId {
-	const BINARY_SIZE: usize = 2;
-}
 
 impl BinarySerializable for ItemFlags {
 	fn to_binary(&self) -> Vec<u8> {
@@ -334,7 +316,6 @@ impl BinarySerializable for ItemComp {
 		let mut data = Vec::new();
 		
 		// Serialize basic fields
-		data.extend_from_slice(&self.id.to_binary());
 		data.extend_from_slice(&self.name.to_binary());
 		data.extend_from_slice(&self.max_stack.to_le_bytes());
 		data.extend_from_slice(&self.flags.to_binary());
@@ -354,13 +335,10 @@ impl BinarySerializable for ItemComp {
 	}
 	
 	fn from_binary(bytes: &[u8]) -> Option<Self> {
-		if bytes.len() < 15 { return None; } // Minimum size
+		if bytes.len() < 13 { return None; } // Minimum size
 		let mut offset = 0;
 		
-		// Deserialize id (2 bytes)
-		let id = ItemId::from_binary(&bytes[offset..offset+2])?;
-		offset += 2;
-
+		// Deserialize name
 		let name_len = u16::from_binary(&bytes[offset..offset+BINARY_SIZE_STAT_STRING])? as usize;
 		let name:StatString = StatString::from_binary(&bytes[offset..offset+BINARY_SIZE_STAT_STRING+name_len])?;
 		offset += BINARY_SIZE_STAT_STRING + name_len;
@@ -382,7 +360,6 @@ impl BinarySerializable for ItemComp {
 		};
 		
 		Some(ItemComp {
-			id,
 			name,
 			max_stack,
 			flags,
@@ -391,8 +368,7 @@ impl BinarySerializable for ItemComp {
 	}
 	
 	fn binary_size(&self) -> usize {
-		let mut size = 2; // id
-		size += self.name.binary_size(); // name
+		let mut size = self.name.binary_size(); // name
 		size += 4 + 4; // max_stack + flags
 		size += 1; // has_data flag
 		if let Some(data) = &self.data {

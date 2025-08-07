@@ -1,8 +1,8 @@
 
 use crate::ext::config::CameraConfig;
-use crate::world::manager::get_save_path;
-use crate::world::manager::ensure_save_dir;
+use crate::world::manager::{get_save_path, ensure_save_dir};
 use crate::game::player;
+use crate::item::items;
 use crate::ext::ptr;
 use crate::world;
 use std::path::PathBuf;
@@ -58,7 +58,7 @@ impl GameState {
 		};
 		#[cfg(not(test))]
 		let player = {
-			use crate::item::items::{ItemStack, ItemId};
+			use crate::item::items::ItemStack;
 			use crate::item::inventory::AreaType;
 			let state = ptr::get_state();
 			let offset = Vec3::new(0., 1.7, 0.);
@@ -73,9 +73,11 @@ impl GameState {
 			player
 				.inventory_mut()
 				.get_area_mut(AreaType::Hotbar)
-				.add_item(ItemStack::new_i(ItemId::from_str("brick_grey")).with_stack(5));
+				.add_item(ItemStack::new("brick_grey").with_stack(5));
 			player
 		};
+
+		items::init_item_lut();
 		
 		// Create the save path
 		let save_path = get_save_path()

@@ -21,7 +21,7 @@ impl MutStr {
 	}
 	
 	// Conversion
-	pub fn into_string(self) -> String {
+	pub fn to_string(self) -> String {
 		match self {
 			Self::Static(s) => s.to_string(),
 			Self::Dynamic(s) => s,

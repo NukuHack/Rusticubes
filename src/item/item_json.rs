@@ -2,7 +2,6 @@
 use std::num::NonZeroU32;
 use std::collections::HashMap;
 use crate::item::material::{ToolType, ArmorType, MaterialLevel, EquipmentType, BasicConversion};
-use crate::item::items::ItemId;
 use crate::item::item_lut::{
 	ItemComp, ItemFlags, ItemExtendedData,
 	ToolData, ToolSet
@@ -18,11 +17,6 @@ impl JsonSerializable for ItemComp {
 		};
 
 		// Extract basic fields
-		let id = match obj.get("id") {
-			Some(JsonValue::Number(n)) => ItemId(*n as u16),
-			_ => return Err(JsonError::MissingField("id is not found or incorrect type".into())),
-		};
-
 		let name = match obj.get("name") {
 			Some(JsonValue::String(s)) => s.as_str(),
 			_ => return Err(JsonError::MissingField("name is not found or incorrect type".into())),
@@ -47,7 +41,6 @@ impl JsonSerializable for ItemComp {
 		};
 
 		Ok(ItemComp {
-			id,
 			name: Box::leak(name.to_string().into_boxed_str()),
 			max_stack,
 			flags,

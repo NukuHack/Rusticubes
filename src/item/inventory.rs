@@ -469,13 +469,13 @@ impl Inventory {
 		match (self.get_cursor().cloned(), area.get_at(click_x, click_y)) {
 			// Case 1: Trying to place an item from cursor
 			(Some(item), None) => {
-				if item.stack == 1 {
+				if item.stack() == 1 {
 					self.get_area_mut(area_type).set_at(click_x, click_y, Some(item));
 					self.remove_cursor();
 				} else {
 					self.get_area_mut(area_type).set_at(click_x, click_y, Some(item.with_stack(1)));
 					let mut item = self.remove_cursor().unwrap();
-					item.set_stack(item.stack - 1);
+					item.rem_stack(1);
 					self.set_cursor(Some(item));
 				}
 			},

@@ -4,7 +4,6 @@ mod tests {
 	use crate::fs::json::{JsonParser, JsonSerializable};
 	use std::num::NonZeroU32;
 	use crate::item::material::{ArmorType, ToolType, MaterialLevel, EquipmentType, BasicConversion};
-	use crate::item::items::ItemId;
 	use crate::item::item_lut::{
 		ItemComp, ItemFlags, ItemExtendedData,
 		ToolData, ToolSet
@@ -49,7 +48,7 @@ mod tests {
 			.with_durability(NonZeroU32::new(100).unwrap())
 			.with_damage(50);
 
-		let apple_item_data = ItemComp::new(55, "apple").with_stack(32).with_data(extended_data.clone());
+		let apple_item_data = ItemComp::new("apple").with_stack(32).with_data(extended_data.clone());
 		
 		let serialized = apple_item_data.to_binary();
 		let deserialized = ItemComp::from_binary(&serialized).unwrap();
@@ -61,7 +60,7 @@ mod tests {
 	}
 	#[test]
 	fn item_comp_serialization() {
-		let apple_item_data = ItemComp::new(12345, "poopy_head");
+		let apple_item_data = ItemComp::new("poopy_head");
 		let serialized = apple_item_data.copy().to_binary();
 		let deserialized = ItemComp::from_binary(&serialized).unwrap();
 		
@@ -86,7 +85,7 @@ mod tests {
 	#[test]
 	fn item_comp_serial() {
 
-		let item = ItemComp::new_i(ItemId::from_str("brick_grey"), "brick_grey").with_flag(ItemFlags::new(ItemFlags::IS_BLOCK));
+		let item = ItemComp::new("brick_grey").with_flag(ItemFlags::new(ItemFlags::IS_BLOCK));
 		let item_re = ItemComp::from_binary(&item.to_binary()).expect("Should deserialize correctly");
 
 		if item == item_re {
@@ -101,7 +100,6 @@ mod tests {
 	#[test]
 	fn item_test() {
 		let item = ItemComp {
-			id: ItemId(0),
 			name: "apple",
 			max_stack: 64,
 			flags: ItemFlags(1), // IS_BLOCK
@@ -110,7 +108,6 @@ mod tests {
 
 
 		let json_data = "{
-			\"id\": 0,
 			\"name\":\"apple\",
 			\"max_stack\": 64,
 			\"flags\": 1,
@@ -127,7 +124,6 @@ mod tests {
 	#[test]
 	fn item_test_data() {
 		let item = ItemComp {
-			id: ItemId(1),
 			name: "bread",
 			max_stack: 50,
 			flags: ItemFlags(0),
@@ -139,7 +135,6 @@ mod tests {
 
 
 		let json_data = r#"{
-			"id": 1,
 			"name":"bread",
 			"max_stack": 50,
 			"flags": 0,
@@ -161,7 +156,6 @@ mod tests {
 	#[test]
 	fn item_test_tooldata() {
 		let item = ItemComp {
-			id: ItemId(1),
 			name: "bread",
 			max_stack: 50,
 			flags: ItemFlags(0),
@@ -174,7 +168,6 @@ mod tests {
 
 
 		let json_data = r#"{
-			"id": 1,
 			"name":"bread",
 			"max_stack": 50,
 			"flags": 0,
@@ -208,7 +201,6 @@ mod tests {
 		data.add_equipment(ToolType::from_str("Metal").expect("REASON"), MaterialLevel::from_str("Calcite").expect("REASON"));
 		
 		let item = ItemComp {
-			id: ItemId(1),
 			name: "bread",
 			max_stack: 50,
 			flags: ItemFlags(0),
@@ -222,7 +214,6 @@ mod tests {
 
 		let json_data = r#"
 		{
-			"id": 1,
 			"name":"bread",
 			"max_stack": 50,
 			"flags": 0,

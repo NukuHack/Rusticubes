@@ -1,5 +1,4 @@
 
-use crate::item::items::ItemId;
 use std::{
 	num::NonZeroU32,
 	cmp::PartialEq,
@@ -24,10 +23,9 @@ impl ItemFlags {
 	#[inline] pub const fn combine(self, other: Self) -> Self { Self(self.0 | other.0) }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 #[repr(C)] // Ensure predictable layout for better cache performance
 pub struct ItemComp {
-	pub id: ItemId,
 	pub name: &'static str,
 	pub max_stack: u32,
 	pub flags: ItemFlags,
@@ -38,22 +36,17 @@ pub struct ItemComp {
 impl ItemComp {
 	pub const fn copy(&self) -> Self {
 		Self {
-			id: self.id,
 			name: self.name,
 			max_stack: self.max_stack,
 			flags: self.flags,
 			data: None,
 		}
 	}
-	pub const fn new(id: u16, name: &'static str) -> Self {
-		Self::new_i(ItemId(id), name)
-	}
 	pub const fn error() -> Self {
-		Self::new_i(ItemId(0), "0")
+		Self::new("0")
 	}
-	pub const fn new_i(id: ItemId, name: &'static str) -> Self {
+	pub const fn new(name: &'static str) -> Self {
 		Self {
-			id,
 			name,
 			max_stack: 64u32,
 			flags: ItemFlags::empty(),

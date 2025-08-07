@@ -3,7 +3,7 @@ use glam::Vec2;
 use crate::item::inventory::{Inventory, ItemContainer, AreaType, Slot};
 use crate::ext::{color::Solor, ptr};
 use crate::ui::{manager::{UIManager, UIState}, element::UIElement};
-use crate::item::items::{ItemStack, ItemId};
+use crate::item::items::ItemStack;
 
 #[derive(PartialEq, Clone, Copy, Debug)]
 pub enum InventoryUIState {
@@ -452,13 +452,8 @@ impl UIManager {
 		// This is a placeholder - implement based on your storage system
 
 		let mut storage_items = ItemContainer::new(area.rows, area.columns);
-		let _ = storage_items.update_items(|idx, _| 
-			Some(ItemStack::new_i(ItemId(idx as u16)))
-			/*
-			if idx % 2 == 0 {  // Set only even slots
-				Some(ItemStack::new_i(ItemId::from_str("brick_grey")))  // Placeholder item creation
-			} else { None }
-			*/
+		let _ = storage_items.update_items(|idx, _|
+			Some(ItemStack::new(ItemStack::lut_idx(idx).name))
 		);
 		storage_items
 	}
