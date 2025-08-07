@@ -141,7 +141,7 @@ impl<'a> crate::State<'a> {
 								inv.add_item_anywhere(itm);
 							};
 							manager::close_pressed();
-							self.toggle_mouse_capture();
+							if !self.input_system.mouse_captured() { self.toggle_mouse_capture(); }
 						},
 						UIState::InGame => {
 							self.ui_manager.state = UIState::Inventory(InventoryUIState::default());

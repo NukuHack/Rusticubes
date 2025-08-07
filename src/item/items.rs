@@ -11,28 +11,35 @@ pub struct ItemStack {
 	pub data: Option<Box<CustomData>>,  // Boxed to reduce size when None
 }
 impl ItemStack {
+    // More focused helper function
+    #[inline] fn get_resources_and_target(&self) -> (Vec<String>, String) {
+        let item_data = self.lut();
+        // Get the reliable assets vector based on whether this is a block or item
+        let resource_type = if item_data.is_block() { "block" } else { "item" };
+        let resources = rs::find_png_resources(resource_type);
+        // Construct the expected resource path
+        let target_name = format!("{}/{}.png", resource_type, item_data.name);
+        (resources, target_name)
+    }
 	pub fn to_icon(&self) -> String {
-		let item_data = self.lut();
-		let resource_type = if item_data.is_block() { "block" } else { "item" };
-
-		let resources = rs::find_png_resources(resource_type);
-		let target_name = format!("{}/{}.png", resource_type, item_data.name);
+        let (resources, target_name) = self.get_resources_and_target();
 
 		resources.iter()
 			.find(|&res| *res == target_name)
 			.cloned()
 			.unwrap_or_else(|| {
-				println!(
-					"No icon found for {} '{}' (ID: {}).",
-					resource_type,
-					item_data.name,
-					self.name.to_str(),
-				);
+				println!("No icon found for {}", self.name);
 				resources.first()
 					.cloned()
 					.expect("Resources array should never be empty")
 			})
 	}
+    #[inline] pub fn get_index(&self) -> Option<usize> {
+        let (resources, target_name) = self.get_resources_and_target();
+        // Find the index in the resources vector
+        resources.iter().position(|res| *res == target_name)
+    }
+
 	#[inline] pub fn lut(&self) -> ItemComp {
 		get_item_lut_ref().get(self.name.to_str()).unwrap_or(&DEFAULT_ITEM_COMP).clone()
 	}
@@ -64,18 +71,6 @@ impl ItemStack {
 			return self.get_index().map(|id| id as u16);
 		} None
 	}
-    pub fn get_index(&self) -> Option<usize> {
-        // Get the reliable assets vector based on whether this is a block or item
-        let resource_type = if self.is_block() { "block" } else { "item" };
-        let resources = rs::find_png_resources(resource_type);
-        
-        // Construct the expected resource path
-        let item_data = self.lut();
-        let target_name = format!("{}/{}.png", resource_type, item_data.name);
-        
-        // Find the index in the resources vector
-        resources.iter().position(|res| *res == target_name)
-    }
 
 	#[inline] pub const fn with_stack(mut self, stack: u32) -> Self { self.stack = stack; self }
 	#[inline] pub const fn set_stack(&mut self, stack: u32) { self.stack = stack }
