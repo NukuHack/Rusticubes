@@ -50,6 +50,8 @@ pub fn make_world(save_path: PathBuf) {
 #[allow(dead_code)]
 impl GameState {
 	#[inline] pub fn new(worldname: &str) -> Self {
+		items::init_item_lut();
+
 		#[cfg(test)]
 		let player = {
 			let offset = Vec3::new(0., 1.7, 0.);
@@ -76,8 +78,6 @@ impl GameState {
 				.add_item(ItemStack::new("brick_grey").with_stack(5));
 			player
 		};
-
-		items::init_item_lut();
 		
 		// Create the save path
 		let save_path = get_save_path()

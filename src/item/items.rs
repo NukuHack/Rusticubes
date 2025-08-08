@@ -11,18 +11,18 @@ pub struct ItemStack {
 	pub data: Option<Box<CustomData>>,  // Boxed to reduce size when None
 }
 impl ItemStack {
-    // More focused helper function
-    #[inline] fn get_resources_and_target(&self) -> (Vec<String>, String) {
-        let item_data = self.lut();
-        // Get the reliable assets vector based on whether this is a block or item
-        let resource_type = if item_data.is_block() { "block" } else { "item" };
-        let resources = rs::find_png_resources(resource_type);
-        // Construct the expected resource path
-        let target_name = format!("{}/{}.png", resource_type, item_data.name);
-        (resources, target_name)
-    }
+	// More focused helper function
+	#[inline] fn get_resources_and_target(&self) -> (Vec<String>, String) {
+		let item_data = self.lut();
+		// Get the reliable assets vector based on whether this is a block or item
+		let resource_type = if item_data.is_block() { "block" } else { "item" };
+		let resources = rs::find_png_resources(resource_type);
+		// Construct the expected resource path
+		let target_name = format!("{}/{}.png", resource_type, item_data.name);
+		(resources, target_name)
+	}
 	pub fn to_icon(&self) -> String {
-        let (resources, target_name) = self.get_resources_and_target();
+		let (resources, target_name) = self.get_resources_and_target();
 
 		resources.iter()
 			.find(|&res| *res == target_name)
@@ -34,17 +34,17 @@ impl ItemStack {
 					.expect("Resources array should never be empty")
 			})
 	}
-    #[inline] pub fn get_index(&self) -> Option<usize> {
-        let (resources, target_name) = self.get_resources_and_target();
-        // Find the index in the resources vector
-        resources.iter().position(|res| *res == target_name)
-    }
+	#[inline] pub fn get_index(&self) -> Option<usize> {
+		let (resources, target_name) = self.get_resources_and_target();
+		// Find the index in the resources vector
+		resources.iter().position(|res| *res == target_name)
+	}
 
 	#[inline] pub fn lut(&self) -> ItemComp {
-		get_item_lut_ref().get(self.name.to_str()).unwrap_or(&DEFAULT_ITEM_COMP).clone()
+		lut_by_name(self.name.to_str())
 	}
 	#[inline] pub fn lut_idx(idx: usize) -> ItemComp {
-		if let Some((_key, value)) = get_item_lut_ref().iter().nth(idx) {
+		if let Some((_key, value)) = item_lut_ref().iter().nth(idx) {
 			value.clone()
 		} else {
 			DEFAULT_ITEM_COMP.clone()
@@ -55,13 +55,14 @@ impl ItemStack {
 	}
 
 	#[inline] pub const fn default() -> Self {
-		Self::new("brick_grey")
+		Self { name: MutStr::from_str("brick_grey"), stack: 64, data: None }
 	}
-	#[inline] pub const fn new(name: &'static str) -> Self {
+	#[inline] pub fn new(name: &'static str) -> Self {
 		Self::new_i(MutStr::from_str(name))
 	}
-	#[inline] pub const fn new_i(name: MutStr) -> Self {
-		Self { name, stack: 64u32, data: None }
+	#[inline] pub fn new_i(name: MutStr) -> Self {
+		let stack = lut_by_name(&name).max_stack.min(64);
+		Self { name, stack, data: None }
 	}
 	
 	#[inline] pub fn is_block(&self) -> bool { matches!(self.lut().is_block(), true) }
@@ -118,44 +119,71 @@ impl CustomData {
 	}
 }
 
-
 /// I implemented a purple-pink-black "0" block what would represent the "error" .. id 1 is air
-
 pub const DEFAULT_ITEM_COMP: ItemComp = const { ItemComp::error().as_block() };
+
+#[inline] fn lut_by_name(name: &str) -> ItemComp {
+	item_lut_ref().get(name).unwrap_or(&DEFAULT_ITEM_COMP).clone()
+}
+
 
 use std::collections::HashMap;
 use std::sync::{OnceLock, RwLock, RwLockReadGuard, RwLockWriteGuard};
+
 // Global mutable state with RwLock
 static ITEM_LUT: OnceLock<RwLock<HashMap<String, ItemComp>>> = OnceLock::new();
 
-#[inline] pub fn get_item_lut() -> &'static RwLock<HashMap<String, ItemComp>> {
-	ITEM_LUT.get_or_init(|| RwLock::new(HashMap::new()))
+/// Returns a raw pointer to the OnceLock's storage location.
+/// This is safe because it's just an address calculation.
+pub const fn item_lut_ptr() -> *const OnceLock<RwLock<HashMap<String, ItemComp>>> {
+	&ITEM_LUT as *const _
 }
-#[inline] pub fn get_item_lut_mut() -> RwLockWriteGuard<'static, HashMap<String, ItemComp>> {
-	get_item_lut().write().unwrap()
+
+/// Returns a reference to the global item lookup table.
+/// # Panics
+/// Panics if it hasn't been initialized yet.
+#[inline]
+pub fn item_lut() -> &'static RwLock<HashMap<String, ItemComp>> {
+	ITEM_LUT.get().expect("ItemLut should be initialized")
 }
-#[inline] pub fn get_item_lut_ref() -> RwLockReadGuard<'static, HashMap<String, ItemComp>> {
-	get_item_lut().read().unwrap()
+
+/// Returns a mutable guard for writing to the item lookup table.
+///
+/// # Panics
+/// Panics if the lock is poisoned or cannot be acquired.
+#[inline]
+pub fn item_lut_mut() -> RwLockWriteGuard<'static, HashMap<String, ItemComp>> {
+	item_lut().write().expect("Failed to acquire write lock for item LUT")
+}
+
+/// Returns an immutable guard for reading from the item lookup table.
+///
+/// # Panics
+/// Panics if the lock is poisoned or cannot be acquired.
+#[inline]
+pub fn item_lut_ref() -> RwLockReadGuard<'static, HashMap<String, ItemComp>> {
+	item_lut().read().expect("Failed to acquire read lock for item LUT")
+}
+
+pub fn clean_item_lut() {
+	item_lut_mut().clear();
 }
 
 pub fn init_item_lut() {
+	{
+		// idk how to only specify the init and not get_or_init so yeah
+		let _ = ITEM_LUT.get_or_init(|| RwLock::new(HashMap::new()));
+	}
 	// Insert items (write lock)
 	{
-		let mut map = get_item_lut_mut();
+		let mut map = item_lut_mut();
 		map.insert("air".to_string(), ItemComp::new("air").with_flag(ItemFlags::new(ItemFlags::IS_BLOCK)));
 		map.insert("brick_grey".to_string(), ItemComp::new("brick_grey").with_flag(ItemFlags::new(ItemFlags::IS_BLOCK)));
 		map.insert("brick_red".to_string(), ItemComp::new("brick_red").with_flag(ItemFlags::new(ItemFlags::IS_BLOCK)));
 		map.insert("bush".to_string(), ItemComp::new("bush").with_flag(ItemFlags::new(ItemFlags::IS_BLOCK)));
 		map.insert("wheat".to_string(), ItemComp::new("wheat").with_flag(ItemFlags::new(ItemFlags::IS_CONSUMABLE)));
-		map.insert("iron_sword".to_string(), ItemComp::new("iron_sword").with_flag(ItemFlags::new(ItemFlags::IS_TOOL)));
-		map.insert("bow".to_string(), ItemComp::new("bow").with_flag(ItemFlags::new(ItemFlags::IS_TOOL)));
+		map.insert("iron_sword".to_string(), ItemComp::new("iron_sword").with_flag(ItemFlags::new(ItemFlags::IS_TOOL)).with_stack(1));
+		map.insert("bow".to_string(), ItemComp::new("bow").with_flag(ItemFlags::new(ItemFlags::IS_TOOL)).with_stack(1));
 		map.insert("arrow".to_string(), ItemComp::new("arrow"));
 	}
-	/*
-	// Read items (read lock)
-	{
-		let map = get_item_lut_ref();
-		println!("{:?}", map.get("air"));
-	}
-	*/
 }

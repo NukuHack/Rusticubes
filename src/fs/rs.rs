@@ -62,52 +62,43 @@ pub fn load_main_icon() -> Option<Icon> {
 /// (including compressed variants) and returns their paths as Strings relative
 /// to the resource directory.
 pub fn find_png_resources(subdir: &str) -> Vec<String> {
-	let mut png_paths = Vec::new();
 	let subdir_path = Path::new(subdir);
-
-	// Get the subdirectory within RESOURCE_DIR
 	let target_dir = match RESOURCE_DIR.get_dir(subdir_path) {
 		Some(dir) => dir,
 		None => {
-			println!("Subdirectory '{}' not found in resources", subdir);
-			return png_paths;
+			eprintln!("Subdirectory '{}' not found in resources", subdir);
+			return Vec::new();
 		}
 	};
 
-	// Iterate through the target directory entries
-	for entry in target_dir.entries() {
-		if let DirEntry::File(file) = entry {
+	target_dir.entries()
+		.iter()
+		.filter_map(|entry| {
+			// Only process files
+			let DirEntry::File(file) = entry else { return None };
+
 			let path = file.path();
 			
-			// Get the full extension (e.g., "png.lz4")
-			let full_ext = path.extension()
+			// Check for lz4 extension
+			let is_lz4 = path.extension()
 				.and_then(|e| e.to_str())
-				.unwrap_or("")
-				.to_lowercase();
+				.map(|ext| ext.eq_ignore_ascii_case("lz4"))
+				.unwrap_or(false);
+			
+			if !is_lz4 { return None; }
 
-			// Get the file stem (name without extensions)
-			let stem = path.file_stem()
+			// Check if stem ends with .png
+			let is_png = path.file_stem()
 				.and_then(|s| s.to_str())
-				.unwrap_or("")
-				.to_lowercase();
+				.map(|stem| stem.to_lowercase().ends_with(".png"))
+				.unwrap_or(false);
+			
+			if !is_png { return None; }
 
-			// Check for:
-			// .png.lz4 files (full_ext == "lz4" and stem ends with ".png")
-			let is_png = full_ext == "lz4" && stem.ends_with(".png");
-
-			if is_png {
-				// Convert to relative path string
-				if let Some(path_str) = path.to_str() {
-					// Remove .lz4 suffix
-					let clean_path = path_str.trim_end_matches(".lz4");
-
-					png_paths.push(clean_path.to_string());
-				}
-			}
-		}
-	}
-
-	png_paths
+			// Convert to string and remove .lz4 suffix
+			path.to_str().map(|s| s.trim_end_matches(".lz4").to_string())
+		})
+		.collect()
 }
 
 pub fn load_image_from_path<T: Into<String>>(path: T) -> Option<(Vec<u8>,u32,u32)> {
