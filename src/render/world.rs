@@ -83,9 +83,7 @@ impl World {
 		let world_ptr = self as *mut World;
 
 		for (chunk_coord, chunk) in self.chunks.iter_mut() {
-			if chunk.is_empty() {
-				continue;
-			}
+			if chunk.is_empty() { continue; }
 
 			// SAFETY:
 			// 1. We only use the pointer to access different chunks than the one we're modifying

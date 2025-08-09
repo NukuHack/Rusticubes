@@ -7,7 +7,7 @@ use crate::block::main::{Block, Material};
 use crate::world::main::World;
 use glam::{Vec3, IVec3};
 
-const REACH: f32 = 6.0;
+const REACH: f32 = 8.0;
 
 /// Helper function to update a chunk mesh after modification
 #[inline]
@@ -35,11 +35,7 @@ fn update_chunk_mesh(world: &mut World, chunk_coord: ChunkCoord) {
 		state.queue(),
 		neighbors);
 
-	for coord in chunk_coord.get_adjacent().iter() {
-		let Some(neighbor_chunk) = world.get_chunk_mut(*coord) else { continue; };
-
-		neighbor_chunk.final_mesh = false;
-	}
+	world.set_adjacent_un_final(chunk_coord);
 }
 
 /// Improved raycasting function that finds the first non-empty block and its face

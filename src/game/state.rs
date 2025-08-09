@@ -108,7 +108,16 @@ impl GameState {
 
 		// world create and spawn thread for chunk gen
 		let world = world::main::World::empty();
-		world.start_generation_thread(world_seed);
+
+		if let Some(core_count) = std::thread::available_parallelism().ok() {
+			let cpu_cores = core_count.get();
+			if cpu_cores < 4 { println!("I suggest manual debungging and profiling with not so new hardware"); }
+
+			world.start_generation_threads(world_seed, (cpu_cores / 2 -1).max(4).min(1) );
+		} else {
+			world.start_generation_threads(world_seed, 0);
+		}
+
 
 		Self {
 			worldname: worldname.to_string(),
