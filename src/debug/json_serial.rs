@@ -235,4 +235,18 @@ mod tests {
 		let result = parser.parse_self();
 		assert!(result.is_err());
 	}
+
+
+
+	/*
+	let file_data = json::read_json_file(Path::new("item.json")).unwrap_or("".to_string());
+	match json::JsonParser::parse(&file_data) {
+		Ok(result) => {
+			println!("Correctly serialized: {:?}", result);
+		},
+		Err(e) => {
+			println!("Error: {}", e);
+		}
+	}
+	*/
 }

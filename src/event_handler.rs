@@ -4,8 +4,6 @@ use crate::block::extra;
 use crate::ui::manager::{self, UIState};
 use crate::item::ui_inventory::{InventoryUIState};
 use std::iter::Iterator;
-use std::path::Path;
-use crate::fs::json;
 use winit::{
 	event::{ElementState, MouseButton, WindowEvent, MouseScrollDelta},
 	keyboard::KeyCode as Key,
@@ -196,20 +194,6 @@ impl<'a> crate::State<'a> {
 
 				self.ui_manager.toggle_visibility();
 				return true
-			},
-			Key::F5 => {
-				if !is_pressed { return false; }
-
-				let file_data = json::read_json_file(Path::new("item.json")).unwrap_or("".to_string());
-				match json::JsonParser::parse(&file_data) {
-					Ok(result) => {
-						println!("Correctly serialized: {:?}", result);
-					},
-					Err(e) => {
-						println!("Error: {}", e);
-					}
-				}
-				true
 			},
 			Key::F11 => {
 				if !is_pressed { return false; }
