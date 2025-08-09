@@ -1,35 +1,38 @@
 
-use crate::ext::ptr;
 use crate::block::math::{BlockPosition, ChunkCoord};
 use crate::block::main::{Block, Chunk};
+use std::collections::{HashMap, HashSet};
+use std::hash::BuildHasherDefault;
+use std::sync::{mpsc, Arc, Mutex};
+use std::thread;
 use ahash::AHasher;
 use glam::{IVec3, Vec3};
-use std::{
-	collections::{HashMap, HashSet},
-	hash::BuildHasherDefault,
-};
 
 // Type aliases for better readability
 type FastMap<K, V> = HashMap<K, V, BuildHasherDefault<AHasher>>;
 
 /// Represents the game world containing chunks
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct World {
-	pub chunks: FastMap<ChunkCoord, Chunk>,
-	pub loaded_chunks: HashSet<ChunkCoord>,
+    pub chunks: FastMap<ChunkCoord, Chunk>,
+    pub loaded_chunks: HashSet<ChunkCoord>,
+    pub chunk_generation_queue: Arc<Mutex<Vec<ChunkCoord>>>,
+    generated_chunks_receiver: mpsc::Receiver<(ChunkCoord, Chunk)>,
+    chunk_generation_sender: mpsc::Sender<(ChunkCoord, Chunk)>,
 }
 
-#[allow(dead_code)]
 impl World {
-	/// Creates an empty world
-	#[inline]
-	pub fn empty() -> Self {
-
-		Self {
-			chunks: FastMap::with_capacity_and_hasher(10_000, BuildHasherDefault::<AHasher>::default()),
-			loaded_chunks: HashSet::with_capacity(10_000),
-		}
-	}
+    pub fn empty() -> Self {
+        let (sender, receiver) = mpsc::channel();
+        
+        Self {
+            chunks: FastMap::with_capacity_and_hasher(10_000, BuildHasherDefault::<AHasher>::default()),
+            loaded_chunks: HashSet::with_capacity(10_000),
+            chunk_generation_queue: Arc::new(Mutex::new(Vec::new())),
+            generated_chunks_receiver: receiver,
+            chunk_generation_sender: sender,
+        }
+    }
 
 	#[inline] pub fn chunk_count(&self) -> usize {
 		self.chunks.len()
@@ -99,24 +102,66 @@ impl World {
 			chunk
 		);
 	}
-	#[inline]
-	/// Loads a chunk from storage
-	pub fn generate_chunk(&mut self, chunk_coord: ChunkCoord, seed: u32) {
-		let mut chunk = match Chunk::generate(chunk_coord, seed) {
-			Some(c) => c,
-			_ => Chunk::empty(),
-		};
 
+    pub fn start_generation_thread(&self, seed: u32) {
+        let queue = self.chunk_generation_queue.clone();
+        let sender = self.chunk_generation_sender.clone();
+        
+        thread::spawn(move || {
+            loop {
+                let coord = {
+                    let mut queue = queue.lock().unwrap();
+                    queue.pop()
+                };
+                
+                if let Some(coord) = coord {
+                    let chunk = match Chunk::generate(coord, seed) {
+                        Some(c) => c,
+                        _ => Chunk::empty(),
+                    };
+                    
+                    // Send the generated chunk back to the main thread
+                    if sender.send((coord, chunk)).is_err() {
+                        // Channel was disconnected, exit thread
+                        break;
+                    }
+                } else {
+                    // No work to do, sleep a bit to avoid busy waiting
+                    thread::sleep(std::time::Duration::from_millis(10));
+                }
+            }
+        });
+    }
+
+	#[inline]
+	pub fn generate_chunk(&mut self, chunk_coord: ChunkCoord) {
+		// Instead of generating immediately, add to queue
 		self.loaded_chunks.insert(chunk_coord);
 		
-		if let Some(m_chunk) = self.get_chunk_mut(chunk_coord) {
-			// Move the bind_group from the old chunk to the new one
-			chunk.bind_group = std::mem::take(&mut m_chunk.bind_group);
-		}
+		// Insert an empty chunk as placeholder
+		self.chunks.insert(chunk_coord, Chunk::empty());
 		
-		// This will replace the existing entry or insert a new one
-		self.chunks.insert(chunk_coord, chunk);
+		// Add to generation queue
+		self.chunk_generation_queue.lock().unwrap().push(chunk_coord);
 	}
+
+    pub fn process_generated_chunks(&mut self) {
+        // Process all available generated chunks
+        while let Ok((chunk_coord, mut chunk)) = self.generated_chunks_receiver.try_recv() {
+            let Some(m_chunk) = self.get_chunk_mut(chunk_coord) else { continue; };
+            // Move the bind_group from the old chunk to the new one
+            chunk.bind_group = std::mem::take(&mut m_chunk.bind_group);
+
+            for coord in chunk_coord.get_adjacent().iter() {
+                if let Some(neighbor_chunk) = self.get_chunk_mut(*coord) {
+                    neighbor_chunk.final_mesh = false;
+                }
+            }
+            
+            self.chunks.insert(chunk_coord, chunk);
+        }
+    }
+
 	/// Updates loaded chunks based on player position
 	pub fn update_loaded_chunks(&mut self, center: Vec3, radius: f32, force: bool) {
 		let center_coord = ChunkCoord::from_world_posf(center);
@@ -140,7 +185,10 @@ impl World {
 		for coord in to_unload {
 			self.unload_chunk(coord);
 		}
-		let seed = *ptr::get_gamestate().seed();
+
+		// Process any generated chunks that are ready
+		self.process_generated_chunks();
+
 		// Load new chunks in range
 		for dx in -radius_i32..=radius_i32 {
 			for dy in -radius_i32..=radius_i32 {
@@ -150,7 +198,7 @@ impl World {
 					let coord = ChunkCoord::new(center_x + dx, center_y + dy, center_z + dz);
 					if !force && self.loaded_chunks.contains(&coord) { continue; }
 
-					self.generate_chunk(coord, seed);
+					self.generate_chunk(coord);
 					self.create_bind_group(coord);
 				}
 			}

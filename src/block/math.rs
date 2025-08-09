@@ -174,16 +174,19 @@ impl std::ops::Add for ChunkCoord {
 }
 
 /// Compact position within a chunk (0-15 on each axis)
+// 2 ; 4 ; 8 ; 16 ; 32
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct BlockPosition(u16);
 
 impl BlockPosition {
 	pub const ZERO:Self = Self::new(0,0,0);
-	pub const CORNER:Self = Self::new(15,15,15);
+	pub const CORNER:Self = Self::new(Chunk::SIZE as u8 -1, Chunk::SIZE as u8 -1, Chunk::SIZE as u8 -1);
+	pub const OFFSET:u8 = 4;
+    pub const MASK: u16 = (1 << Self::OFFSET) - 1;
 
 	/// Creates a new BlockPosition from x,y,z coordinates (0-15)
 	#[inline] pub const fn new(x: u8, y: u8, z: u8) -> Self {
-		Self((x as u16) << 0 | ((y as u16) << 4) | ((z as u16) << 8))
+		Self((x as u16) << Self::OFFSET*0 | ((y as u16) << Self::OFFSET*1) | ((z as u16) << Self::OFFSET*2))
 	}
 
 	/// Universal constructor from any convertible type
@@ -193,23 +196,23 @@ impl BlockPosition {
 	}
 	/// Creates a new BlockPosition from a linear index (0-4095)
 	#[inline] pub const fn from_index(index: u16) -> Self {
-		debug_assert!(index < 4096, "Index must be 0-4095");
+		debug_assert!(index < Chunk::VOLUME as u16, "Index must be 0-Chunk::VOLUME");
 		Self(index)
 	}
 
 	/// Gets the x coordinate (0-15)
 	#[inline] pub const fn x(&self) -> u8 {
-		(self.0 & 0x000F) as u8
+		((self.0 >> Self::OFFSET*0) & Self::MASK) as u8
 	}
 
 	/// Gets the y coordinate (0-15)
 	#[inline] pub const fn y(&self) -> u8 {
-		((self.0 >> 4) & 0x000F) as u8
+		((self.0 >> Self::OFFSET*1) & Self::MASK) as u8
 	}
 
 	/// Gets the z coordinate (0-15)
 	#[inline] pub const fn z(&self) -> u8 {
-		((self.0 >> 8) & 0x000F) as u8
+		((self.0 >> Self::OFFSET*2) & Self::MASK) as u8
 	}
 
 	/// Gets the linear index (0-4095)

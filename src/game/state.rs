@@ -105,10 +105,15 @@ impl GameState {
 			}
 			hash.wrapping_add(creation_date as u32)
 		};
+
+		// world create and spawn thread for chunk gen
+		let world = world::main::World::empty();
+		world.start_generation_thread(world_seed);
+
 		Self {
 			worldname: worldname.to_string(),
 			player,
-			world: world::main::World::empty(),
+			world,
 			save_path,
 			world_seed,
 			is_running: false,
