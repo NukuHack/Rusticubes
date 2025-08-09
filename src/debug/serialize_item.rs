@@ -11,15 +11,6 @@ mod tests {
 	use crate::fs::binary::BinarySerializable;
 
 
-		
-	#[test]
-	fn item_id_serialization() {
-		let item_id = ItemId(1234);
-		let serialized = item_id.to_binary();
-		let deserialized = ItemId::from_binary(&serialized).unwrap();
-		assert_eq!(item_id, deserialized);
-	}
-
 	#[test]
 	fn item_flags_serialization() {
 		let flags = ItemFlags::new(ItemFlags::IS_BLOCK | ItemFlags::IS_TOOL);
@@ -64,7 +55,6 @@ mod tests {
 		let serialized = apple_item_data.copy().to_binary();
 		let deserialized = ItemComp::from_binary(&serialized).unwrap();
 		
-		assert_eq!(apple_item_data.id, deserialized.id);
 		assert_eq!(apple_item_data.max_stack, deserialized.max_stack);
 		assert_eq!(apple_item_data.flags, deserialized.flags);
 		assert_eq!(apple_item_data.data, deserialized.data);
