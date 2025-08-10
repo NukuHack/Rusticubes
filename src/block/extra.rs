@@ -3,7 +3,7 @@ use crate::player::Player;
 use crate::ext::ptr;
 use crate::block::math::ChunkCoord;
 use crate::game::player::Camera;
-use crate::block::main::{Block, Material};
+use crate::block::main::{Block, Chunk, Material};
 use crate::world::main::World;
 use glam::{Vec3, IVec3};
 
@@ -170,7 +170,7 @@ pub fn add_full_chunk() {
 	let chunk_coord = ChunkCoord::from_world_posf(pos);
 
 	let world = ptr::get_gamestate().world_mut();
-	world.load_chunk(chunk_coord);
+	world.set_chunk(chunk_coord, Chunk::empty());
 	world.create_bind_group(chunk_coord);
 	update_chunk_mesh(world, chunk_coord);
 }
@@ -201,10 +201,11 @@ pub fn add_full_world() {
 		return;
 	}
 	
-	let seed = ptr::get_gamestate().world().seed;
-	let thread_count = ptr::get_gamestate().world().thread_count;
+	let seed = ptr::get_gamestate().world().seed();
+	let thread_count = ptr::get_gamestate().world().thread_count();
 	*ptr::get_gamestate().world_mut() = World::empty();
-	ptr::get_gamestate().world_mut().seed = seed;
+	ptr::get_gamestate().world_mut().set_seed(seed);
+	ptr::get_gamestate().world_mut().set_thread_count(thread_count);
 	ptr::get_gamestate().world_mut().start_generation_threads(thread_count);
 
 	let state_b = ptr::get_state();

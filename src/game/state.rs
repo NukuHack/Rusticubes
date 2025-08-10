@@ -108,7 +108,7 @@ impl GameState {
 
 		// world create and spawn thread for chunk gen
 		let mut world = world::main::World::empty();
-		world.seed = world_seed;
+		world.set_seed(world_seed);
 
 		if let Some(core_count) = std::thread::available_parallelism().ok() {
 			let cpu_cores = core_count.get() as u8;
