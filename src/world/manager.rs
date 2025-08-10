@@ -212,7 +212,6 @@ impl BinarySerializable for WorldData {
 
 // Constants should be at module level and use consistent naming
 const REGION_SIZE: i32 = 32;
-const MIN_REGION_FILE_SIZE: usize = 4;
 const REGION_FILE_PREFIX: &str = "r.";
 const REGION_FILE_SUFFIX: &str = ".dat";
 const TEMP_FILE_SUFFIX: &str = ".tmp";
@@ -381,7 +380,7 @@ fn load_region_file(path: &Path, world: &mut World) -> Result<()> {
 	let region_coord = parse_region_filename(path)?;
 	let bytes = fs::read(path)?;
 	
-	if bytes.len() < MIN_REGION_FILE_SIZE {
+	if bytes.len() < 4 {
 		return Err(Error::new(ErrorKind::InvalidData, "Region file too small"));
 	}
 	

@@ -79,6 +79,7 @@ pub mod ui { // ui related
 	pub mod settings;
 	pub mod setup;
 	pub mod dialog;
+	pub mod events;
 }
 pub mod physic {
 	pub mod aabb;

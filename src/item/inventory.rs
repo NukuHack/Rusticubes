@@ -79,6 +79,16 @@ impl ItemContainer {
 		self.get(index)
 	}
 
+
+	#[inline] pub fn get_mut(&mut self, index: usize) -> Option<&mut ItemStack> {
+		self.items.get_mut(index).and_then(|x| x.as_mut())
+	}
+	#[inline] 
+	pub fn get_at_mut(&mut self, row: u8, col: u8) -> Option<&mut ItemStack> {
+		let index = self.calculate_index(row, col)?;
+		self.get_mut(index)
+	}
+
 	/// Set an item by linear index
 	#[inline] pub fn set(&mut self, index: usize, item: Option<ItemStack>) -> bool {
 		if let Some(slot) = self.items.get_mut(index) {
@@ -313,6 +323,9 @@ impl Inventory {
 	#[inline] pub fn selected_item(&self) -> Option<&ItemStack> {
 		self.hotbar.get(self.selected_index() as usize)
 	}
+	#[inline] pub fn selected_item_mut(&mut self) -> Option<&mut ItemStack> {
+		self.hotbar.get_mut(self.selected_index() as usize)
+	}
 	
 	/// Select a different hotbar slot
 	#[inline] pub fn select_slot(&mut self, idx: isize) {
@@ -409,69 +422,103 @@ impl Inventory {
 	/// naming : c_item -> Cursor Item
 	/// 		 item -> Item (from inventory or storage)
 	pub fn handle_click_press(&mut self, clicked_pos:(u8,u8), area_type: AreaType) {
-		let area = self.get_area(&area_type); let (c_x, c_y) = clicked_pos;
+		let cursor = self.get_cursor().cloned();
+		let area = self.get_area_mut(area_type); let (c_x, c_y) = clicked_pos;
+		let armor_in_not_armor_area = area_type == AreaType::Armor && !cursor.clone().map(|item| item.is_armor()).unwrap_or(false);
 
-		match (self.get_cursor().cloned(), area.get_at(c_x, c_y).cloned()) {
+		match (cursor, area.remove_at(c_x, c_y).clone()) {
 			// Case 1: Trying to place an item from cursor
 			(Some(c_item), None) => {
-				self.get_area_mut(area_type).set_at(c_x, c_y, c_item.opt());
+				if armor_in_not_armor_area { return; }
+				area.set_at(c_x, c_y, c_item.opt());
 				self.remove_cursor();
 			},
 			// Case 2: Trying to pick up an item with empty cursor
 			(None, Some(item)) => {
+				area.remove_at(c_x, c_y);
 				self.set_cursor(item.opt());
-				self.get_area_mut(area_type).remove_at(c_x, c_y);
-				
 			},
 			// Case 3: Trying to place an item from cursor into an item
-			(Some(c_item), Some(item)) => {
+			(Some(c_item), Some(mut item)) => {
+				if armor_in_not_armor_area { return; }
 				if !item.can_stack_with(&c_item) { // if can't stack switch
+					area.set_at(c_x, c_y, c_item.opt());
 					self.set_cursor(item.opt());
-					self.get_area_mut(area_type).set_at(c_x, c_y, c_item.opt());
 					return;
 				}
 
-				let mut item = self.get_area_mut(area_type).remove_at(c_x, c_y).unwrap();
 				let rem = item.add_stack(c_item.stack);
 
-				self.get_area_mut(area_type).set_at(c_x, c_y, item.clone().opt());
+				area.set_at(c_x, c_y, item.clone().opt());
 				self.set_cursor(item.with_stack(rem).opt());
-				
 			},
 			// Case 4: Both empty
 			_ => {}
 		}
 	}
 	pub fn handle_rclick_press(&mut self, clicked_pos:(u8,u8), area_type: AreaType) {
-		let area = self.get_area(&area_type); let (c_x, c_y) = clicked_pos;
+		let cursor = self.get_cursor().cloned();
+		let area = self.get_area_mut(area_type); let (c_x, c_y) = clicked_pos;
+		let armor_in_not_armor_area = area_type == AreaType::Armor && !cursor.clone().map(|item| item.is_armor()).unwrap_or(false);
 
-		match (self.get_cursor().cloned(), area.get_at(c_x, c_y).cloned()) {
+		match (cursor, area.remove_at(c_x, c_y).clone()) {
 			// Case 1: Trying to place an item from cursor
 			(Some(c_item), None) => {
-				self.get_area_mut(area_type).set_at(c_x, c_y, c_item.clone().with_stack(1).opt());
+				if armor_in_not_armor_area { return; }
+				area.set_at(c_x, c_y, c_item.clone().with_stack(1).opt());
 				self.set_cursor(c_item.rem_stack(1));
 			},
 			// Case 2: Trying to pick up half the item with empty cursor
 			(None, Some(item)) => {
 				// this is the smaller if the number is odd
 				let half_stack = item.half_stack();
-				self.get_area_mut(area_type).set_at(c_x, c_y, item.clone().with_stack(half_stack).opt());
+				area.set_at(c_x, c_y, item.clone().with_stack(half_stack).opt());
 				self.set_cursor(item.rem_stack(half_stack));
 				
 			},
 			// Case 3: Trying to place an item from cursor into an item
-			(Some(c_item), Some(item)) => {
+			(Some(c_item), Some(mut item)) => {
+				if armor_in_not_armor_area { return; }
 				if !item.can_stack_with(&c_item) { // if can't stack switch
+					area.set_at(c_x, c_y, c_item.opt());
 					self.set_cursor(item.opt());
-					self.get_area_mut(area_type).set_at(c_x, c_y, c_item.opt());
 					return;
 				}
 
-				let mut item = self.get_area_mut(area_type).remove_at(c_x, c_y).unwrap();
 				let rem = item.add_stack(c_item.stack);
 
-				self.set_cursor(item.clone().opt());
-				self.get_area_mut(area_type).set_at(c_x, c_y, item.with_stack(rem).opt());
+				area.set_at(c_x, c_y, item.clone().with_stack(rem).opt());
+				self.set_cursor(item.opt());
+			},
+			// Case 4: Both empty
+			_ => {}
+		}
+	}
+	pub fn handle_mclick_press(&mut self, clicked_pos:(u8,u8), area_type: AreaType) {
+		let cursor = self.get_cursor().cloned(); let (c_x, c_y) = clicked_pos;
+		let item = if area_type == AreaType::Storage || area_type == AreaType::Input || area_type == AreaType::Output {
+			let main_item = ItemStack::new(ItemStack::lut_idx((c_x + 1 * c_y) as usize).name.into()); // TODO : MAKE THIS ACTUALLY WORK AND NOT JUST A BASIC SOLUTION
+			main_item.opt()
+		} else { self.get_area_mut(area_type).get_at(c_x, c_y).cloned() };
+		let armor_in_not_armor_area = area_type == AreaType::Armor && !cursor.clone().map(|item| item.is_armor()).unwrap_or(false);
+
+		match (cursor, item) {
+			// Case 1: 
+			(Some(_c_item), None) => {
+				// nothign happens
+			},
+			// Case 2: Clicked on item with empty cursor
+			(None, Some(mut item)) => {
+				item.with_max_stack();
+				self.set_cursor(Some(item));
+				
+			},
+			// Case 3: Both full, Switch
+			(Some(c_item), Some(item)) => {
+				if armor_in_not_armor_area { return; }
+				self.set_cursor(item.opt());
+				if area_type == AreaType::Storage || area_type == AreaType::Input || area_type == AreaType::Output { return; }
+				self.get_area_mut(area_type).set_at(c_x, c_y, c_item.opt());
 			},
 			// Case 4: Both empty
 			_ => {}

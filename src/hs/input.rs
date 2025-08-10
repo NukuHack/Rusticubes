@@ -34,12 +34,18 @@ impl InputSystem {
 pub struct MouseButtonState {
 	pub left: bool,
 	pub right: bool,
+	pub middle: bool,
+	pub back: bool,
+	pub forward: bool,
 }
 impl MouseButtonState {
 	pub const fn default() -> Self {
 		Self {
 			left : false,
 			right : false,
+			middle : false,
+			back : false,
+			forward : false,
 		}
 	}
 }

@@ -147,20 +147,14 @@ if not exist "Cargo.toml" (
     pause >nul & exit /b 1
 )
 
-echo [[34mCOMPILING[0m] Compiling...
-cargo build || (
-    echo [[31mERROR[0m] Build failed
+echo [[34mCOMPILING[0m] Compiling in release mode...
+cargo run --release || (
+    echo [[31mERROR[0m] Build or run failed
     pause >nul & exit /b 1
 )
 
 for /f "tokens=2 delims== " %%a in ('findstr "^name *= *" Cargo.toml') do set "CRATE_NAME=%%a"
 set "CRATE_NAME=%CRATE_NAME:"=%"
 
-if not exist "target\debug\%CRATE_NAME%.exe" (
-    echo [[31mERROR[0m] Executable not found
-    pause >nul & exit /b 1
-)
-
-echo [[32mOK[0m] Deployment completed successfully!
-start "" "target\debug\%CRATE_NAME%.exe"
+echo [[32mOK[0m] Release build completed and executed successfully!
 pause >nul & exit /b 0

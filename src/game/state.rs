@@ -75,7 +75,7 @@ impl GameState {
 			player
 				.inventory_mut()
 				.get_area_mut(AreaType::Hotbar)
-				.add_item(ItemStack::new("brick_grey").with_stack(12));
+				.add_item(ItemStack::new("brick_grey".to_string().into()).with_stack(12));
 			player
 		};
 		

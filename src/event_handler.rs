@@ -231,7 +231,7 @@ impl<'a> crate::State<'a> {
 					// Use the stored current mouse position
 					if let Some(current_position) = self.input_system.previous_mouse {
 						let (x, y) = convert_mouse_position(self.render_context.size.into(), &current_position);
-						self.ui_manager.handle_ui_click(x, y, true);
+						self.ui_manager.handle_click(x, y, true);
 					}
 				}
 				true
@@ -242,7 +242,7 @@ impl<'a> crate::State<'a> {
 					// Use the stored current mouse position
 					if let Some(current_position) = self.input_system.previous_mouse {
 						let (x, y) = convert_mouse_position(self.render_context.size.into(), &current_position);
-						self.ui_manager.handle_ui_click(x, y, false);
+						self.ui_manager.handle_click(x, y, false);
 					}
 				}
 				true
@@ -257,7 +257,7 @@ impl<'a> crate::State<'a> {
 					// Use the stored current mouse position
 					if let Some(current_position) = self.input_system.previous_mouse {
 						let (x, y) = convert_mouse_position(self.render_context.size.into(), &current_position);
-						self.ui_manager.handle_ui_rclick(x, y, true);
+						self.ui_manager.handle_rclick(x, y, true);
 					}
 				}
 				true
@@ -268,15 +268,50 @@ impl<'a> crate::State<'a> {
 					// Use the stored current mouse position
 					if let Some(current_position) = self.input_system.previous_mouse {
 						let (x, y) = convert_mouse_position(self.render_context.size.into(), &current_position);
-						self.ui_manager.handle_ui_rclick(x, y, false);
+						self.ui_manager.handle_rclick(x, y, false);
 					}
 				}
 				true
 			}
-			(MouseButton::Middle, _) => false,
-			(MouseButton::Back, _) => false,
-			(MouseButton::Forward, _)  => false,
-			(MouseButton::Other(_), _) => false,
+			(MouseButton::Middle, ElementState::Pressed) => {
+				self.input_system.mouse_button_state.middle = true;
+				if self.ui_manager.visibility {
+					// Use the stored current mouse position
+					if let Some(current_position) = self.input_system.previous_mouse {
+						let (x, y) = convert_mouse_position(self.render_context.size.into(), &current_position);
+						self.ui_manager.handle_mclick(x, y, true);
+					}
+				}
+				true
+			},
+			(MouseButton::Middle, ElementState::Released) => {
+				self.input_system.mouse_button_state.middle = false;
+				if self.ui_manager.visibility {
+					// Use the stored current mouse position
+					if let Some(current_position) = self.input_system.previous_mouse {
+						let (x, y) = convert_mouse_position(self.render_context.size.into(), &current_position);
+						self.ui_manager.handle_mclick(x, y, false);
+					}
+				}
+				true
+			},
+			(MouseButton::Back, ElementState::Pressed) => {
+				self.input_system.mouse_button_state.back = false;
+				true
+			},
+			(MouseButton::Back, ElementState::Released) => {
+				self.input_system.mouse_button_state.back = false;
+				true
+			},
+			(MouseButton::Forward, ElementState::Pressed)  => {
+				self.input_system.mouse_button_state.forward = false;
+				true
+			},
+			(MouseButton::Forward, ElementState::Released)  => {
+				self.input_system.mouse_button_state.forward = false;
+				true
+			},
+			(MouseButton::Other(_), _) => false, // for now nothing needs this 
 		}
 	}
 	#[inline]
@@ -309,7 +344,7 @@ impl<'a> crate::State<'a> {
 			}
 			
 			// Handle UI hover
-			self.ui_manager.handle_ui_hover(x, y);
+			self.ui_manager.handle_hover(x, y);
 			self.input_system.previous_mouse = Some(*position);
 			return true;
 		}

@@ -3,7 +3,7 @@
 ///
 /// This type is useful when you want to avoid allocations for static strings
 /// but still need the ability to mutate the string when necessary.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Hash)]
 pub enum MutStr {
 	/// A static string reference
 	Static(&'static str),
@@ -184,6 +184,17 @@ impl std::fmt::Display for MutStr {
 		write!(f, "{}", self.to_str())
 	}
 }
+
+impl PartialEq for MutStr {
+    fn eq(&self, other: &Self) -> bool {
+        // Convert both to string slices and compare
+        self.to_str() == other.to_str()
+    }
+}
+
+// Since we're implementing PartialEq, we should also implement Eq
+// (which is just a marker trait for reflexive equality)
+impl Eq for MutStr {}
 
 use std::ops::Deref;
 use std::option::Option;

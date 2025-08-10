@@ -1,12 +1,11 @@
 
 use crate::fs::rs;
 use crate::item::item_lut::{ItemFlags, ItemComp};
-use crate::hs::string::MutStr;
 
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ItemStack {
-	name: MutStr,
+	name: String,
 	pub stack: u32,  // Typically 1-64 like Minecraft but let it be 255 for extreme cases
 	pub data: Option<Box<CustomData>>,  // Boxed to reduce size when None
 }
@@ -41,7 +40,7 @@ impl ItemStack {
 	}
 
 	#[inline] pub fn lut(&self) -> ItemComp {
-		lut_by_name(self.name.to_str())
+		lut_by_name(&self.name)
 	}
 	#[inline] pub fn lut_idx(idx: usize) -> ItemComp {
 		if let Some((_key, value)) = item_lut_ref().iter().nth(idx) {
@@ -54,18 +53,21 @@ impl ItemStack {
 		self.lut().max_stack
 	}
 
-	#[inline] pub const fn default() -> Self {
-		Self { name: MutStr::from_str("brick_grey"), stack: 64, data: None }
+	#[inline] pub fn default() -> Self {
+		Self { name: "brick_grey".to_string(), stack: 64, data: None }
 	}
-	#[inline] pub fn new(name: &'static str) -> Self {
-		Self::new_i(MutStr::from_str(name))
+	#[inline] pub fn new_str(name: &'static str) -> Self {
+		Self::new(name.to_string())
 	}
-	#[inline] pub fn new_i(name: MutStr) -> Self {
-		let stack = lut_by_name(&name).max_stack.min(64);
+	#[inline] pub fn new(name: String) -> Self {
+		let stack = lut_by_name(&name).max_stack;
 		Self { name, stack, data: None }
 	}
 	
 	#[inline] pub fn is_block(&self) -> bool { matches!(self.lut().is_block(), true) }
+	#[inline] pub fn is_armor(&self) -> bool { matches!(self.lut().is_armor(), true) }
+	#[inline] pub fn is_tool(&self) -> bool { matches!(self.lut().is_tool(), true) }
+	#[inline] pub fn is_weapon(&self) -> bool { matches!(self.lut().is_weapon(), true) }
 
 	#[inline] pub fn name(&self) -> String { self.name.clone().to_string() }
 
@@ -76,6 +78,17 @@ impl ItemStack {
 	#[inline] pub fn half_stack(&self) -> u32 { (self.stack / 2).min(self.max_stack_size()) }
 	#[inline] pub fn opt(self) -> Option<Self> { if self.stack == 0 { None } else { Some(self) } }
 
+	#[inline] pub fn set_self_stack(&mut self, stack: i64) {
+		assert!(stack < u32::MAX as i64 && stack > -(u32::MAX as i64));
+		let stack = if stack >= 0 { stack } else {-stack} as u32;
+		if self.stack > stack {
+			self.stack -= stack;
+		} else {
+			self.stack = 0;
+		}
+	}
+
+	#[inline] pub fn with_max_stack(&mut self) { self.stack = self.max_stack_size() }
 
 	/// Checks if this item can be stacked with another
 	pub fn can_stack_with(&self, other: &Self) -> bool {
@@ -93,14 +106,14 @@ impl ItemStack {
 	}
 	pub fn rem_stack(mut self, amount: u32) -> Option<Self> {
 		if amount >= self.stack { return None; }
-		self.set_stack(self.stack - amount);
+		self.set_self_stack(amount as i64);
 		Some(self)
 	}
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct CustomData {
-	pub name: Option<MutStr>,
+	pub name: Option<String>,
 	pub durability: Option<u16>,
 	//pub effects -  // should be reworked later but the stuff what in minecraft gives + health and stuff
 	//pub cosmetics - // stuff that would like make the color change or make the sword be double edged ...
@@ -180,5 +193,6 @@ pub fn init_item_lut() {
 		map.insert("iron_sword".to_string(), ItemComp::new("iron_sword").with_flag(ItemFlags::new(ItemFlags::IS_TOOL)).with_stack(1));
 		map.insert("bow".to_string(), ItemComp::new("bow").with_flag(ItemFlags::new(ItemFlags::IS_TOOL)).with_stack(1));
 		map.insert("arrow".to_string(), ItemComp::new("arrow"));
+		map.insert("coat".to_string(), ItemComp::new("coat").with_flag(ItemFlags::new(ItemFlags::IS_ARMOR)).with_stack(1));
 	}
 }

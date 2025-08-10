@@ -3,8 +3,10 @@ use crate::player::Player;
 use crate::ext::ptr;
 use crate::block::math::ChunkCoord;
 use crate::game::player::Camera;
+use crate::item::inventory::AreaType;
 use crate::block::main::{Block, Chunk, Material};
 use crate::world::main::World;
+use crate::item::items::ItemStack;
 use glam::{Vec3, IVec3};
 
 const REACH: f32 = 8.0;
@@ -111,12 +113,25 @@ pub fn raycast_to_block(camera: &Camera, player: &Player, world: &World, max_dis
 	None
 }
 
+pub fn get_block_id_from_item_name(item_name: &str) -> u16 {
+	use crate::render::texture::get_texture_map;
+	get_texture_map().iter()
+		.position(|name| name == item_name)
+		.map(|idx| idx as u16)
+		.unwrap_or(0)
+}
+
+pub fn get_item_name_from_block_id(block_id: u16) -> String {
+	use crate::render::texture::get_texture_map;
+	get_texture_map()
+		.get(block_id as usize)
+		.map(|s| s.to_string())
+		.unwrap_or("0".to_string())
+}
+
 /// Places a cube on the face of the block the player is looking at
 #[inline]
 pub fn place_looked_block() {
-	use crate::render::texture::get_texture_map;
-	let map = get_texture_map();
-
 	let state = ptr::get_state();
 	if !state.is_world_running {
 		return;
@@ -130,17 +145,35 @@ pub fn place_looked_block() {
 
 	// Simple for loop to find block ID
 	let Some(item) = player.inventory().selected_item() else { return; };
+	if !item.is_block() { return; }
 
-	let mut block_id = 0; // Default value if not found
-	for (idx, name) in map.iter().enumerate() {
-		if *name != item.name() { continue; }
+	let item_name = item.name();
+	let block_id = get_block_id_from_item_name(&item_name);
 
-		block_id = idx as u16; // Use the index as the block ID
-		break;
-	}
+	remove_placed_block_from_inv();
 
 	world.set_block(placement_pos, Block::new(Material(block_id)));
 	update_chunk_mesh(world, ChunkCoord::from_world_pos(placement_pos));
+}
+
+#[inline] fn remove_placed_block_from_inv() {
+	let inv_mut = ptr::get_gamestate().player_mut().inventory_mut();
+	let idx = inv_mut.selected_index();
+
+	let hotbar = inv_mut.get_area_mut(AreaType::Hotbar);
+	let Some(item) = hotbar.remove(idx) else { return; };
+	hotbar.set(idx, item.rem_stack(1));
+
+	ptr::get_state().ui_manager.setup_ui(); // to update the hotbar if changed
+}
+#[inline] fn add_mined_block_to_inv(block: &Block) {
+	let block_id = block.material.inner();
+	let item_name = get_item_name_from_block_id(block_id);
+
+	let inv_mut = ptr::get_gamestate().player_mut().inventory_mut();
+	inv_mut.add_item_anywhere(ItemStack::new(item_name).with_stack(1));
+
+	ptr::get_state().ui_manager.setup_ui(); // to update the hotbar if changed
 }
 
 /// Removes the block the player is looking at
@@ -154,6 +187,9 @@ pub fn remove_targeted_block() {
 	let Some((block_pos, _)) = raycast_to_block(
 		ptr::get_gamestate().player().camera(),
 		ptr::get_gamestate().player(), world, REACH) else { return; };
+
+	let block = world.get_block(block_pos);
+	add_mined_block_to_inv(&block);
 
 	world.set_block(block_pos, Block::default());
 	update_chunk_mesh(world, ChunkCoord::from_world_pos(block_pos));
