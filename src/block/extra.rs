@@ -114,6 +114,9 @@ pub fn raycast_to_block(camera: &Camera, player: &Player, world: &World, max_dis
 /// Places a cube on the face of the block the player is looking at
 #[inline]
 pub fn place_looked_block() {
+	use crate::render::texture::get_texture_map;
+	let map = get_texture_map();
+
 	let state = ptr::get_state();
 	if !state.is_world_running {
 		return;
@@ -124,10 +127,17 @@ pub fn place_looked_block() {
 	let Some((block_pos, normal)) = raycast_to_block(player.camera(), player, world, REACH) else { return; };
 
 	let placement_pos = block_pos + normal;
-	let block_id = player.inventory()
-		.selected_item()
-		.and_then(|item| item.get_block_id())
-		.map_or(0, |block_id| block_id);
+
+	// Simple for loop to find block ID
+	let Some(item) = player.inventory().selected_item() else { return; };
+
+	let mut block_id = 0; // Default value if not found
+	for (idx, name) in map.iter().enumerate() {
+		if *name != item.name() { continue; }
+
+		block_id = idx as u16; // Use the index as the block ID
+		break;
+	}
 
 	world.set_block(placement_pos, Block::new(Material(block_id)));
 	update_chunk_mesh(world, ChunkCoord::from_world_pos(placement_pos));
@@ -175,7 +185,6 @@ pub fn update_full_world() {
 	ptr::get_gamestate().world_mut().update_loaded_chunks(
 		ptr::get_gamestate().player().pos(),
 		REACH * 2.0,
-		false,
 	);
 
 	let state_b = ptr::get_state();
@@ -191,11 +200,12 @@ pub fn add_full_world() {
 	if !state.is_world_running {
 		return;
 	}
-	ptr::get_gamestate().world_mut().update_loaded_chunks(
-		ptr::get_gamestate().player().pos(),
-		REACH * 2.0,
-		true,
-	);
+	
+	let seed = ptr::get_gamestate().world().seed;
+	let thread_count = ptr::get_gamestate().world().thread_count;
+	*ptr::get_gamestate().world_mut() = World::empty();
+	ptr::get_gamestate().world_mut().seed = seed;
+	ptr::get_gamestate().world_mut().start_generation_threads(thread_count);
 
 	let state_b = ptr::get_state();
 	ptr::get_gamestate()

@@ -46,6 +46,8 @@ pub struct World {
 	generated_chunks_receiver: mpsc::Receiver<(ChunkCoord, Chunk)>,
 	chunk_generation_sender: mpsc::Sender<(ChunkCoord, Chunk)>,
 	generation_threads_running: Arc<AtomicBool>,
+	pub thread_count : u8,
+	pub seed: u32,
 }
 
 impl World {
@@ -59,18 +61,70 @@ impl World {
 			generated_chunks_receiver: receiver,
 			chunk_generation_sender: sender,
 			generation_threads_running: Arc::new(AtomicBool::new(false)),
+			thread_count: 1,
+			seed: 0,
 		}
 	}
 
-	pub fn start_generation_threads(&self, seed: u32, thread_count: usize) {
+	#[inline] pub fn get_chunk(&self, coord: ChunkCoord) -> Option<&Chunk> {
+		self.chunks.get(&coord)
+	}
+
+	#[inline] pub fn get_chunk_mut(&mut self, coord: ChunkCoord) -> Option<&mut Chunk> {
+		self.chunks.get_mut(&coord)
+	}
+
+	#[inline] pub fn get_block(&self, world_pos: IVec3) -> Block {
+		let chunk_coord = ChunkCoord::from_world_pos(world_pos);
+		let local_pos: BlockPosition = world_pos.into();
+		let index:usize = local_pos.into();
+
+		self.chunks
+			.get(&chunk_coord)
+			.map(|chunk| chunk.get_block(index))
+			.unwrap_or(Block::default())
+	}
+
+	#[inline] pub fn set_block(&mut self, world_pos: IVec3, block: Block) {
+		let chunk_coord = ChunkCoord::from_world_pos(world_pos);
+		
+		// Get immutable access first to check conditions
+		let needs_new_chunk = !self.chunks.contains_key(&chunk_coord);
+		let is_border_block = self.get_chunk(chunk_coord)
+			.map(|chunk| chunk.is_border_block(world_pos.into()))
+			.unwrap_or(false);
+		
+		// Only get mutable access if we actually need to modify
+		let chunk = if needs_new_chunk {
+			self.set_chunk(chunk_coord, Chunk::empty());
+			self.get_chunk_mut(chunk_coord).expect("Chunk should exist after insertion")
+		} else {
+			self.get_chunk_mut(chunk_coord).expect("Chunk should exist")
+		};
+		
+		let local_pos: BlockPosition = world_pos.into();
+		let index: usize = local_pos.into();
+		
+		// Only proceed if the block is actually different
+		if chunk.get_block(index) == block { return; }
+
+		chunk.set_block(index, block);
+		if !is_border_block { return; }
+
+		self.set_adjacent_un_final(chunk_coord);
+	}
+
+	pub fn start_generation_threads(&mut self, thread_count: u8) {
 		if self.generation_threads_running.load(Ordering::Relaxed) { return; } // Already running
 
 		self.generation_threads_running.store(true, Ordering::Relaxed);
+		self.thread_count = thread_count;
 		
 		for _ in 0..thread_count {
 			let queue = self.chunk_generation_queue.clone();
 			let sender = self.chunk_generation_sender.clone();
 			let running = self.generation_threads_running.clone();
+			let seed = self.seed.clone();
 			
 			thread::spawn(move || {
 				while running.load(Ordering::Relaxed) {
@@ -80,10 +134,7 @@ impl World {
 					};
 					
 					if let Some(priority_chunk) = priority_chunk {
-						let chunk = match Chunk::generate(priority_chunk.coord, seed) {
-							Some(c) => c,
-							_ => Chunk::empty(),
-						};
+						let chunk = Chunk::generate(priority_chunk.coord, seed);
 						
 						// Send the generated chunk back to the main thread
 						if sender.send((priority_chunk.coord, chunk)).is_err() {
@@ -98,42 +149,25 @@ impl World {
 			});
 		}
 	}
-
-	pub fn stop_generation_threads(&self) {
+	#[inline] pub fn stop_generation_threads(&self) {
 		self.generation_threads_running.store(false, Ordering::Relaxed);
 	}
 	
-	#[inline]
-	pub fn generate_chunk_with_priority(&mut self, chunk_coord: ChunkCoord, center: Vec3) {
-		if self.loaded_chunks.contains(&chunk_coord) {
-			return; // Skip if already loaded
-		}
+	#[inline] fn generate_chunk(&mut self, chunk: PriorityChunk) {
+		let coord = chunk.coord;
+		if self.loaded_chunks.contains(&coord) { return; } // Skip if already loaded
 
-		let (cx, cy, cz) = chunk_coord.unpack();
-		let center_coord = ChunkCoord::from_world_posf(center);
-		let (pcx, pcy, pcz) = center_coord.unpack();
-		
-		let dx = cx - pcx;
-		let dy = cy - pcy;
-		let dz = cz - pcz;
-		let distance_sq = dx * dx + dy * dy + dz * dz;
-		
-		self.loaded_chunks.insert(chunk_coord);
-		self.chunks.insert(chunk_coord, Chunk::empty());
-		
-		let priority_chunk = PriorityChunk {
-			coord: chunk_coord,
-			distance_sq,
-		};
+		self.loaded_chunks.insert(coord);
+		self.chunks.insert(coord, Chunk::empty());
 		
 		let mut queue = self.chunk_generation_queue.lock().unwrap();
 		// Optional: Check if the chunk is already in the queue to avoid duplicates
-		if !queue.iter().any(|c| c.coord == chunk_coord) {
-			queue.push(priority_chunk);
+		if !queue.iter().any(|c| c.coord == coord) {
+			queue.push(chunk);
 		}
 	}
 
-	pub fn update_loaded_chunks(&mut self, center: Vec3, radius: f32, force: bool) {
+	pub fn update_loaded_chunks(&mut self, center: Vec3, radius: f32) {
 		let center_coord = ChunkCoord::from_world_posf(center);
 		let (center_x, center_y, center_z) = center_coord.unpack();
 		let radius_i32 = radius.round() as i32; // Better rounding
@@ -167,7 +201,7 @@ impl World {
 					if distance_sq > radius_sq { continue; }
 
 					let coord = ChunkCoord::new(center_x + dx, center_y + dy, center_z + dz);
-					if !force && self.loaded_chunks.contains(&coord) { continue; }
+					if self.loaded_chunks.contains(&coord) { continue; }
 
 					chunks_to_load.push(PriorityChunk {
 						coord,
@@ -179,69 +213,28 @@ impl World {
 		
 		// Load chunks in priority order (closest first)
 		while let Some(priority_chunk) = chunks_to_load.pop() {
-			self.generate_chunk_with_priority(priority_chunk.coord, center);
+			self.generate_chunk(priority_chunk);
 			self.create_bind_group(priority_chunk.coord);
 		}
 	}
 
-	// Keep existing methods unchanged
-	#[inline] pub fn chunk_count(&self) -> usize {
-		self.chunks.len()
+	fn process_generated_chunks(&mut self) {
+		// Process all available generated chunks
+		while let Ok((chunk_coord, mut chunk)) = self.generated_chunks_receiver.try_recv() {
+			if !self.loaded_chunks.contains(&chunk_coord) { continue; }
+			let Some(m_chunk) = self.get_chunk_mut(chunk_coord) else { continue; };
+			// Move the bind_group from the old chunk to the new one
+			chunk.bind_group = std::mem::take(&mut m_chunk.bind_group);
+
+			self.set_adjacent_un_final(chunk_coord);
+			
+			let Some(m_chunk) = self.get_chunk_mut(chunk_coord) else { continue; };
+			*m_chunk = chunk;
+		}
 	}
 
-	#[inline] pub fn get_chunk(&self, coord: ChunkCoord) -> Option<&Chunk> {
-		self.chunks.get(&coord)
-	}
-
-	#[inline] pub fn get_chunk_mut(&mut self, coord: ChunkCoord) -> Option<&mut Chunk> {
-		self.chunks.get_mut(&coord)
-	}
-
-	#[inline]
-	pub fn get_block(&self, world_pos: IVec3) -> Block {
-		let chunk_coord = ChunkCoord::from_world_pos(world_pos);
-		let local_pos: BlockPosition = world_pos.into();
-		let index:usize = local_pos.into();
-
-		self.chunks
-			.get(&chunk_coord)
-			.map(|chunk| chunk.get_block(index))
-			.unwrap_or(Block::default())
-	}
-
-	#[inline]
-	pub fn set_block(&mut self, world_pos: IVec3, block: Block) {
-		let chunk_coord = ChunkCoord::from_world_pos(world_pos);
-		
-		// Get immutable access first to check conditions
-		let needs_new_chunk = !self.chunks.contains_key(&chunk_coord);
-		let is_border_block = self.get_chunk(chunk_coord)
-			.map(|chunk| chunk.is_border_block(world_pos.into()))
-			.unwrap_or(false);
-		
-		// Only get mutable access if we actually need to modify
-		let chunk = if needs_new_chunk {
-			self.set_chunk(chunk_coord, Chunk::empty());
-			self.get_chunk_mut(chunk_coord).expect("Chunk should exist after insertion")
-		} else {
-			self.get_chunk_mut(chunk_coord).expect("Chunk should exist")
-		};
-		
-		let local_pos: BlockPosition = world_pos.into();
-		let index: usize = local_pos.into();
-		
-		// Only proceed if the block is actually different
-		if chunk.get_block(index) == block { return; }
-
-		chunk.set_block(index, block);
-		if !is_border_block { return; }
-
-		self.set_adjacent_un_final(chunk_coord);
-	}
-
-	#[inline]
 	/// Loads a new chunk
-	pub fn load_chunk(&mut self, chunk_coord: ChunkCoord) {
+	#[inline] pub fn load_chunk(&mut self, chunk_coord: ChunkCoord) {
 		let chunk = Chunk::new(1u16);
 
 		self.loaded_chunks.insert(chunk_coord);
@@ -249,19 +242,6 @@ impl World {
 			chunk_coord,
 			chunk
 		);
-	}
-
-	pub fn process_generated_chunks(&mut self) {
-		// Process all available generated chunks
-		while let Ok((chunk_coord, mut chunk)) = self.generated_chunks_receiver.try_recv() {
-			let Some(m_chunk) = self.get_chunk_mut(chunk_coord) else { continue; };
-			// Move the bind_group from the old chunk to the new one
-			chunk.bind_group = std::mem::take(&mut m_chunk.bind_group);
-
-			self.set_adjacent_un_final(chunk_coord);
-			
-			self.chunks.insert(chunk_coord, chunk);
-		}
 	}
 
 	#[inline] pub fn set_adjacent_un_final(&mut self, chunk_coord: ChunkCoord) {

@@ -67,11 +67,7 @@ impl ItemStack {
 	
 	#[inline] pub fn is_block(&self) -> bool { matches!(self.lut().is_block(), true) }
 
-	#[inline] pub fn get_block_id(&self) -> Option<u16> {
-		if self.is_block() {
-			return self.get_index().map(|id| id as u16);
-		} None
-	}
+	#[inline] pub fn name(&self) -> String { self.name.clone().to_string() }
 
 	#[inline] pub const fn with_stack(mut self, stack: u32) -> Self { self.stack = stack; self }
 	#[inline] pub const fn set_stack(&mut self, stack: u32) { self.stack = stack }

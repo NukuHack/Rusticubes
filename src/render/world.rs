@@ -58,9 +58,7 @@ impl Chunk {
 
 		for pos in 0..Self::VOLUME {
 			let block = self.get_block(pos);
-			if block.is_empty() {
-				continue;
-			}
+			if block.is_empty() { continue; }
 			let local_pos:IVec3 = BlockPosition::from(pos).into();
 			builder.add_cube(local_pos, block.material().inner(), &self, &neighbors);
 		}

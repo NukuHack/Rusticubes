@@ -107,15 +107,16 @@ impl GameState {
 		};
 
 		// world create and spawn thread for chunk gen
-		let world = world::main::World::empty();
+		let mut world = world::main::World::empty();
+		world.seed = world_seed;
 
 		if let Some(core_count) = std::thread::available_parallelism().ok() {
-			let cpu_cores = core_count.get();
+			let cpu_cores = core_count.get() as u8;
 			if cpu_cores < 4 { println!("I suggest manual debungging and profiling with not so new hardware"); }
 
-			world.start_generation_threads(world_seed, (cpu_cores / 2 -1).max(4).min(1) );
+			world.start_generation_threads((cpu_cores / 2 -1).max(4).min(1) );
 		} else {
-			world.start_generation_threads(world_seed, 0);
+			world.start_generation_threads(0);
 		}
 
 

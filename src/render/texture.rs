@@ -1,7 +1,10 @@
-// Vertex and texture utilities for wgpu rendering.
+
 use crate::fs::rs;
+use std::collections::HashMap;
+use std::sync::OnceLock;
 /// Standard format for depth textures
 pub const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
+pub static TEXTURE_MAP: OnceLock<Vec<String>> = OnceLock::new();
 
 /// Creates a depth texture for rendering
 pub fn create_depth_texture(
@@ -29,11 +32,30 @@ pub fn create_depth_texture(
 	texture
 }
 
+fn initialize_texture_map(strings: Vec<String>) {
+	let transformed: Vec<String> = strings
+		.into_iter()
+		.map(|s| {
+			// Split at '/' and take the part after it
+			let after_slash = s.split('/').last().unwrap_or("");
+			// Then split at '.' and take the part before it
+			let before_dot = after_slash.split('.').next().unwrap_or("");
+			before_dot.to_string()
+		})
+		.collect();
+	
+	TEXTURE_MAP.set(transformed).expect("Already initialized");
+}
+pub fn get_texture_map() -> &'static [String] {
+	TEXTURE_MAP.get().expect("Not initialized").as_slice()
+}
+
 // --- Texture Manager ---
 
 /// Manages all texture resources for rendering
 pub struct TextureManager {
 	depth_texture: wgpu::Texture,
+	texture_array: HashMap<u16, u16>,
 	bind_group: wgpu::BindGroup,
 	render_texture: wgpu::Texture,
 	render_texture_view: wgpu::TextureView,
@@ -56,6 +78,8 @@ impl TextureManager {
 
 		// Create resources
 		let paths = rs::find_png_resources("block");
+		initialize_texture_map(paths.clone());
+		let texture_array = make_texture_array(&paths);
 		let (_array_texture, array_texture_view) = create_texture_array(&device, &queue, &paths).unwrap();
 		let array_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
 			address_mode_u: wgpu::AddressMode::ClampToEdge,
@@ -70,6 +94,7 @@ impl TextureManager {
 
 		Self {
 			depth_texture,
+			texture_array,
 			bind_group,
 			render_texture,
 			render_texture_view,
@@ -95,6 +120,18 @@ impl TextureManager {
 	#[inline] pub const fn post_bind_group(&self) -> &wgpu::BindGroup {
 		&self.post_bind_group
 	}
+}
+
+fn make_texture_array(paths: &[String]) -> HashMap<u16, u16> {
+	let mut map = HashMap::<u16, u16>::new();
+	for (i, _path) in paths.iter().enumerate() {
+		// Check if index can fit in u8
+		if i > u16::MAX as usize {
+			panic!("Too many textures! Maximum is {}", u16::MAX);
+		}
+		map.insert(i as u16, i as u16);
+	}
+	map
 }
 
 /// Creates a texture array from a list of image paths.

@@ -810,9 +810,9 @@ impl Chunk {
 		}
 	}
 
-	pub fn generate(coord: ChunkCoord, seed: u32) -> Option<Self> {
-		if coord.y() > 8i32 { return Some(Self::empty()); }
-		if coord.y() <= -2i32 { return Some(Self::new(1u16)); }
+	pub fn generate(coord: ChunkCoord, seed: u32) -> Self {
+		if coord.y() > 8i32 { return Self::empty(); }
+		if coord.y() <= -2i32 { return Self::new(2u16); }
 		
 		let noise_gen = Noise::new(seed);
 		let (world_x, world_y, world_z) = coord.unpack_to_worldpos();
@@ -841,7 +841,7 @@ impl Chunk {
 				}
 			}
 		}
-		Some(chunk)
+		chunk
 	}
 
 	#[inline]

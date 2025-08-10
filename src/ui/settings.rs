@@ -41,10 +41,9 @@ impl UIManager {
 						if !ptr::get_state().is_world_running { return; }
 
 						let data = get_element_num_by_id(&id);
-						let seed = ptr::get_gamestate().seed().clone();
 						let world = ptr::get_gamestate().world_mut();
 						world.stop_generation_threads();
-						world.start_generation_threads(seed, data as usize);
+						world.start_generation_threads(data as u8);
 					})
 			} else {
 				UIElement::slider(self.next_id(), 0.0, 1.0)
