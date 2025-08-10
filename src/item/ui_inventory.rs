@@ -338,9 +338,9 @@ impl InventoryLayout {
 		if !self.contains_point(x, y) { return ClickResult::OutsidePanel; }
 		
 		let inv:InvState = match inv_state {
-		    InventoryUIState::Storage { inv, .. } |
-		    InventoryUIState::Crafting { inv, .. } |
-		    InventoryUIState::Player { inv } => inv,
+			InventoryUIState::Storage { inv, .. } |
+			InventoryUIState::Crafting { inv, .. } |
+			InventoryUIState::Player { inv } => inv,
 		};
 
 		let mut areas = self.get_areas_for_ui_state(inv_state);
@@ -470,7 +470,7 @@ impl UIManager {
 	fn add_player_buttons(&mut self, layout: &InventoryLayout) {
 		let theme = &ptr::get_settings().ui_theme;
 		let w = 0.12; let h = SLOT/2.;
-		let version = UIElement::label(self.next_id(), env!("CARGO_PKG_VERSION"))
+		let version = UIElement::label(self.next_id(), env!("CARGO_PKG_VERSION").into())
 			.with_position(Vec2::new(layout.panel_position.x + layout.panel_size.x - w, layout.panel_position.y - h - PADDING))
 			.with_size(Vec2::new(w, h))
 			.with_style(&theme.labels.extra())
@@ -535,12 +535,18 @@ impl UIManager {
 	pub fn cursor_item_display(&mut self, x:f32, y:f32, cursor_item: &ItemStack) {
 		// You'll need to get mouse position from your input system
 		let (x,y) = (x - SLOT/2.0, y - SLOT/2.0);
+		let origo = Vec2::new(x , y);
 		// Check if we have the correct focused element
 		if let Some((id, 3)) = self.focused_element {
-			if let Some(element) = self.get_element_mut(id) {
-				element.set_position(Vec2::new(x , y));
-				return;
+			let Some(element) = self.get_element_mut(id) else { return; };
+			element.set_position(origo);
+
+			let childs = self.elements_with_parent_mut(id);
+			for child in childs {
+				let offset:Vec2 = child.parent.unwrap().1;
+				child.set_position(origo + offset);
 			}
+			return; // othervise it will create the element again 
 		}
 
 		// If we get here, either no focused element or wrong type
@@ -573,9 +579,8 @@ impl UIManager {
 	}
 
 	fn create_item_display(&mut self, x:f32, y:f32, item: &ItemStack, z:i32) -> usize {
-		let static_name: &'static str = Box::leak(item.to_icon().into_boxed_str());
 		let id = self.next_id();
-		let item_display = UIElement::image(id, static_name)
+		let item_display = UIElement::image(id, item.to_icon().into())
 			.with_position(Vec2::new(x, y))
 			.with_size(Vec2::new(SLOT, SLOT))
 			.with_style(&ptr::get_settings().ui_theme.images.basic)
@@ -585,13 +590,12 @@ impl UIManager {
 		// Add quantity display for stackable items
 		if item.stack() == 1 { return id; }
 
-		let static_count: &'static str = Box::leak(item.stack.to_string().into_boxed_str());
-		let quantity_text = UIElement::label(self.next_id(), static_count)
+		let quantity_text = UIElement::label(self.next_id(), item.stack.to_string().into())
 			.with_position(Vec2::new(x + SLOT * 0.3, y))
 			.with_size(Vec2::new(SLOT * 0.7, SLOT * 0.6))
 			.with_text_color(Solor::Black.i())
 			.with_z_index(z+1)
-			.with_parent(id.clone());
+			.with_parent_off(id.clone(), Vec2::new(SLOT * 0.3, 0.));
 		self.add_element(quantity_text);
 
 		id

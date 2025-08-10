@@ -2,7 +2,6 @@
 use crate::ext::color::Color;
 use crate::fs::rs;
 use glam::Vec2;
-use crate::hs::string::MutStr;
 use crate::ext::ptr;
 use crate::ui::element::{UIElement, UIElementData};
 use crate::ui::manager::{UIManager};
@@ -447,7 +446,7 @@ impl UIRenderer {
 			let label_element = UIElement {
 				position: Vec2::new(element.position.x + element.size.x + 0.01, element.position.y),
 				size: Vec2::new(text.len() as f32 * 0.015, element.size.y),
-				data: UIElementData::Label { text: MutStr::Dynamic(text.clone()), text_color: element.get_text_color() },
+				data: UIElementData::Label { text: text.clone().into(), text_color: element.get_text_color() },
 				color: element.get_text_color(),
 				event_handler: None,
 				..UIElement::default()

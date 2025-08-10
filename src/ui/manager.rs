@@ -292,6 +292,8 @@ impl UIManager {
 	#[inline] pub fn visible_elements(&self) -> Vec<&UIElement> { self.elements.iter().filter(|e| e.visible).collect() }
 	#[inline] pub fn get_element(&self, id: usize) -> Option<&UIElement> { self.elements.iter().find(|e| e.id == id) }
 	#[inline] pub fn get_element_mut(&mut self, id: usize) -> Option<&mut UIElement> { self.elements.iter_mut().find(|e| e.id == id) }
+	#[inline] pub fn elements_with_parent(&self, parent: usize) -> Vec<&UIElement> { self.elements.iter().filter(|e| e.parent.map_or(false, |p| p.0 == parent)).collect() }
+	#[inline] pub fn elements_with_parent_mut(&mut self, parent: usize) -> Vec<&mut UIElement> { self.elements.iter_mut().filter(|e| e.parent.map_or(false, |p| p.0 == parent)).collect() }
 	 
 	#[inline] pub fn clear_elements(&mut self) { self.elements.clear(); self.clear_focused_element(); self.next_id = 1; }
 	

@@ -1,6 +1,4 @@
 
-
-
 pub trait EquipmentType: Copy + Clone {
 	const MAX_VARIANTS: u8;
 	const TO_U8: fn(Self) -> u8;

@@ -12,12 +12,12 @@ pub enum UIElementData {
 	Panel,
 	Label { text: MutStr, text_color: Color },
 	Button { text: MutStr, text_color: Color },
-	MultiStateButton { states: Vec<&'static str>, text_color: Color, current_state: usize },
+	MultiStateButton { states: Vec<MutStr>, text_color: Color, current_state: usize },
 	InputField { text: MutStr, text_color: Color, placeholder: MutStr },
 	Checkbox { text: MutStr, text_color: Color, checked: bool },
 	Image { path: MutStr },
 	Animation {
-		frames: Vec<&'static str>, current_frame: u32, frame_duration: f32, elapsed_time: f32,
+		frames: Vec<MutStr>, current_frame: u32, frame_duration: f32, elapsed_time: f32,
 		looping: bool, playing: bool, blend_delay: Option<u32>
 	},
 	Slider {
@@ -47,29 +47,13 @@ impl ElementData {
 		}
 	}
 }
-#[derive(Clone, Copy, Debug)]
-pub enum ParentInfo {
-	None,
-	Some { id: usize, offset: Vec2 },
-}
-impl ParentInfo {
-	#[inline] pub const fn default() -> Self {
-		Self::None
-	}
-	#[inline] pub const fn new(id: usize) -> Self {
-		Self::Some { id, offset:Vec2::new(0.,0.) }
-	}
-	#[inline] pub const fn relative(id: usize, offset: Vec2) -> Self {
-		Self::Some { id, offset }
-	}
-}
 #[derive(Clone)]
 pub struct UIElement {
 	// Identity
 	pub id: usize,
 
 	// Hierarchy
-	pub parent: ParentInfo,
+	pub parent: Option<(usize, Vec2)>,
 
 	// Layout
 	pub position: Vec2,
@@ -113,7 +97,7 @@ impl UIElement {
 			position: Vec2::new(0.0, 0.0),
 			size: Vec2::new(0.0, 0.0),
 			color: Color::DEF_COLOR,
-			parent: ParentInfo::None,
+			parent: None,
 			hovered: false,
 			z_index: 0,
 			visible: true,
@@ -128,12 +112,12 @@ impl UIElement {
 		Self::new(id, UIElementData::default())
 	}
 	#[inline]
-	pub fn label(id: usize, text: &'static str) -> Self {
-		Self::new(id, UIElementData::Label { text: MutStr::from_str(text), text_color: Color::DEF_COLOR })
+	pub fn label(id: usize, text: MutStr) -> Self {
+		Self::new(id, UIElementData::Label { text, text_color: Color::DEF_COLOR })
 	}
 	#[inline]
-	pub fn button(id: usize, text: &'static str) -> Self {
-		Self::new(id, UIElementData::Button { text: MutStr::from_str(text), text_color: Color::DEF_COLOR })
+	pub fn button(id: usize, text: MutStr) -> Self {
+		Self::new(id, UIElementData::Button { text, text_color: Color::DEF_COLOR })
 	}
 	#[inline]
 	pub fn input(id: usize) -> Self {
@@ -144,18 +128,18 @@ impl UIElement {
 		Self::new(id, UIElementData::Checkbox { text: MutStr::default(), text_color: Color::DEF_COLOR, checked: false })
 	}
 	#[inline]
-	pub fn image(id: usize, path: &'static str) -> Self {
-		Self::new(id, UIElementData::Image { path: MutStr::from_str(path) })
+	pub fn image(id: usize, path: MutStr) -> Self {
+		Self::new(id, UIElementData::Image { path })
 	}
 	#[inline]
-	pub fn animation(id: usize, frames: Vec<&'static str>) -> Self {
+	pub fn animation(id: usize, frames: Vec<MutStr>) -> Self {
 		Self::new(id, UIElementData::Animation {
 			frames, current_frame: 0, frame_duration: 1.0, elapsed_time: 0.0,
 			looping: true, playing: true, blend_delay: Some(20)
 		})
 	}
 	#[inline]
-	pub fn multi_state_button(id: usize, states: Vec<&'static str>) -> Self {
+	pub fn multi_state_button(id: usize, states: Vec<MutStr>) -> Self {
 		Self::new(id, UIElementData::MultiStateButton {
 			states, text_color: Color::DEF_COLOR,
 			current_state: 0
@@ -207,36 +191,38 @@ impl UIElement {
 	setter_method!(set_border, border, Border);
 	// Builder methods
 	#[inline] pub const fn with_alpha(mut self, a: u8) -> Self { self.color = self.color.with_a(a); self }
-	#[inline] pub const fn with_parent(mut self, parent: usize) -> Self { self.parent = ParentInfo::new(parent); self }
+	#[inline] pub const fn with_parent(mut self, parent: usize) -> Self { self.parent = Some((parent, Vec2::new(0.,0.))); self }
+	#[inline] pub const fn with_parent_off(mut self, parent: usize, offset: Vec2) -> Self { self.parent = Some((parent, offset)); self }
 	// setters
 	#[inline] pub const fn set_alpha(&mut self, a: u8){ self.color = self.color.with_a(a); }
-	#[inline] pub const fn set_parent(&mut self, parent: usize) { self.parent = ParentInfo::new(parent); }
+	#[inline] pub const fn set_parent(&mut self, parent: usize) { self.parent = Some((parent, Vec2::new(0.,0.))); }
+	#[inline] pub const fn set_parent_off(&mut self, parent: usize, offset: Vec2) { self.parent = Some((parent, offset)) }
 
 	// Builder-style versions (return Self for chaining)
-	#[inline] pub fn with_added_state(mut self, state: &'static str) -> Self { self.add_state(state); self }
-	#[inline] pub fn with_added_states(mut self, states: &[&'static str]) -> Self { self.add_states(states); self }
-	#[inline] pub fn with_added_frame(mut self, frame: &'static str) -> Self { self.add_frame(frame); self }
-	#[inline] pub fn with_added_frames(mut self, frames: &[&'static str]) -> Self { self.add_frames(frames); self }
+	#[inline] pub fn with_added_state(mut self, state: MutStr) -> Self { self.add_state(state); self }
+	#[inline] pub fn with_added_states(mut self, states: &[MutStr]) -> Self { self.add_states(states); self }
+	#[inline] pub fn with_added_frame(mut self, frame: MutStr) -> Self { self.add_frame(frame); self }
+	#[inline] pub fn with_added_frames(mut self, frames: &[MutStr]) -> Self { self.add_frames(frames); self }
 
 
 	// MultiStateButton states management
-	#[inline] pub fn add_state(&mut self, state: &'static str) {
+	#[inline] pub fn add_state(&mut self, state: MutStr) {
 		if let UIElementData::MultiStateButton { states, .. } = &mut self.data {
 			states.push(state);
 		}
 	}
-	#[inline] pub fn add_states(&mut self, new_states: &[&'static str]) {
+	#[inline] pub fn add_states(&mut self, new_states: &[MutStr]) {
 		if let UIElementData::MultiStateButton { states, .. } = &mut self.data {
 			states.extend_from_slice(new_states);
 		}
 	}
 	// Animation frames management
-	#[inline] pub fn add_frame(&mut self, frame: &'static str) {
+	#[inline] pub fn add_frame(&mut self, frame: MutStr) {
 		if let UIElementData::Animation { frames, .. } = &mut self.data {
 			frames.push(frame);
 		}
 	}
-	#[inline] pub fn add_frames(&mut self, new_frames: &[&'static str]) {
+	#[inline] pub fn add_frames(&mut self, new_frames: &[MutStr]) {
 		if let UIElementData::Animation { frames, .. } = &mut self.data {
 			frames.extend_from_slice(new_frames);
 		}
@@ -384,7 +370,7 @@ impl UIElement {
 		}
 	}
 	#[inline]
-	pub fn with_states(mut self, states: Vec<&'static str>) -> Self {
+	pub fn with_states(mut self, states: Vec<MutStr>) -> Self {
 		if let UIElementData::MultiStateButton { states: s, .. } = &mut self.data {
 			*s = states;
 		}
@@ -468,7 +454,7 @@ impl UIElement {
 
 	// Animation-related methods
 	#[inline]
-	pub fn with_animation_frames(mut self, frames: Vec<&'static str>) -> Self {
+	pub fn with_animation_frames(mut self, frames: Vec<MutStr>) -> Self {
 		if let UIElementData::Animation { frames: f, .. } = &mut self.data {
 			*f = frames;
 		}

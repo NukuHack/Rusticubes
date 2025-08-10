@@ -71,11 +71,11 @@ impl ItemStack {
 
 	#[inline] pub const fn with_stack(mut self, stack: u32) -> Self { self.stack = stack; self }
 	#[inline] pub const fn set_stack(&mut self, stack: u32) { self.stack = stack }
-	#[inline] pub fn stack(&self) -> u32 {
-		if self.stack > self.max_stack_size()
-		{ self.max_stack_size() }
-		else { self.stack }
-	}
+	#[inline] pub fn stack(&self) -> u32 { self.max_stack_size().min(self.stack) }
+	// this is the smaller half if the number is odd
+	#[inline] pub fn half_stack(&self) -> u32 { (self.stack / 2).min(self.max_stack_size()) }
+	#[inline] pub fn opt(self) -> Option<Self> { if self.stack == 0 { None } else { Some(self) } }
+
 
 	/// Checks if this item can be stacked with another
 	pub fn can_stack_with(&self, other: &Self) -> bool {
@@ -91,11 +91,10 @@ impl ItemStack {
 		self.set_stack(self.stack + to_add);
 		amount - to_add
 	}
-	pub fn rem_stack(&mut self, amount: u32) -> u32 {
-		let max_rem = self.stack();
-		let to_rem = amount.min(max_rem);
-		self.set_stack(self.stack + to_rem);
-		amount - to_rem
+	pub fn rem_stack(mut self, amount: u32) -> Option<Self> {
+		if amount >= self.stack { return None; }
+		self.set_stack(self.stack - amount);
+		Some(self)
 	}
 }
 

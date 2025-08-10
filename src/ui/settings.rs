@@ -11,7 +11,7 @@ impl UIManager {
 		let theme = &ptr::get_settings().ui_theme;
 		let settings = &ptr::get_settings();
 		// Title
-		let title = UIElement::label(self.next_id(), "Settings ... yah")
+		let title = UIElement::label(self.next_id(), "Settings ... yah".into())
 			.with_position(Vec2::new(-0.4, 0.6))
 			.with_size(Vec2::new(0.8, 0.15))
 			.with_style(&theme.title_label)
@@ -26,7 +26,7 @@ impl UIManager {
 			.with_z_index(1);
 		self.add_element(list_panel);
 
-		let core_label = UIElement::label(self.next_id(), "Multithreading")
+		let core_label = UIElement::label(self.next_id(), "Multithreading".into())
 			.with_position(Vec2::new(-0.4, 0.14))
 			.with_size(Vec2::new(0.55, 0.06))
 			.with_style(&theme.labels.basic)
@@ -58,7 +58,7 @@ impl UIManager {
 		};
 		self.add_element(core_slider);
 
-		let fgvolume_label = UIElement::label(self.next_id(), "Foreground volume")
+		let fgvolume_label = UIElement::label(self.next_id(), "Foreground volume".into())
 			.with_position(Vec2::new(-0.4, -0.04))
 			.with_size(Vec2::new(0.55, 0.06))
 			.with_style(&theme.labels.basic)
@@ -79,7 +79,7 @@ impl UIManager {
 			});
 		self.add_element(fgvolume_slider);
 
-		let bgvolume_label = UIElement::label(self.next_id(), "Background volume")
+		let bgvolume_label = UIElement::label(self.next_id(), "Background volume".into())
 			.with_position(Vec2::new(-0.4, -0.22))
 			.with_size(Vec2::new(0.55, 0.06))
 			.with_style(&theme.labels.basic)
@@ -101,7 +101,7 @@ impl UIManager {
 		self.add_element(bgvolume_slider);
 
 		// Back button
-		let back_button = UIElement::button(self.next_id(), "Back")
+		let back_button = UIElement::button(self.next_id(), "Back".into())
 			.with_position(Vec2::new(-0.1, -0.8))
 			.with_size(Vec2::new(0.2, 0.08))
 			.with_style(&theme.buttons.extra())

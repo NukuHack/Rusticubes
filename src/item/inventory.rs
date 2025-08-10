@@ -1,6 +1,6 @@
+
 use crate::item::ui_inventory::InventoryLayout;
 use crate::item::items::ItemStack;
-
 
 #[derive(PartialEq, Clone, Copy, Debug)]
 pub enum AreaType { 
@@ -92,26 +92,6 @@ impl ItemContainer {
 	#[inline] pub fn set_at(&mut self, row: u8, col: u8, item: Option<ItemStack>) -> bool {
 		self.calculate_index(row, col)
 			.map_or(false, |index| self.set(index, item))
-	}
-
-	#[inline] pub fn get_half_stack(&mut self, index: usize) -> Option<ItemStack> {
-		let mut item = self.remove(index)?;
-		let stack = item.stack();
-		if stack <= 1 {
-			return Some(item);
-		}
-		let half = stack / 2;
-		let remaining = stack - half;
-		// Put the remaining items back
-		item.set_stack(remaining);
-		self.set(index, Some(item.clone()));
-		// Return the half stack (if odd, the bigger half)
-		item.set_stack(half);
-		Some(item)
-	}
-	#[inline] pub fn get_half_stack_at(&mut self, row: u8, col: u8) -> Option<ItemStack> {
-		let index = self.calculate_index(row, col)?;
-		self.get_half_stack(index)
 	}
 
 	/// Helper method to calculate linear index from 2D coordinates
@@ -426,37 +406,36 @@ impl Inventory {
 	}
 
 
-
-
+	/// naming : c_item -> Cursor Item
+	/// 		 item -> Item (from inventory or storage)
 	pub fn handle_click_press(&mut self, clicked_pos:(u8,u8), area_type: AreaType) {
-		let area = self.get_area(&area_type); let (click_x, click_y) = clicked_pos;
+		let area = self.get_area(&area_type); let (c_x, c_y) = clicked_pos;
 
-		match (self.get_cursor().cloned(), area.get_at(click_x, click_y)) {
+		match (self.get_cursor().cloned(), area.get_at(c_x, c_y).cloned()) {
 			// Case 1: Trying to place an item from cursor
-			(Some(item), None) => {
-				self.get_area_mut(area_type).set_at(click_x, click_y, Some(item));
+			(Some(c_item), None) => {
+				self.get_area_mut(area_type).set_at(c_x, c_y, c_item.opt());
 				self.remove_cursor();
 			},
 			// Case 2: Trying to pick up an item with empty cursor
 			(None, Some(item)) => {
-				let item = item.clone();
-				self.set_cursor(Some(item.clone()));
-				self.get_area_mut(area_type).remove_at(click_x, click_y);
+				self.set_cursor(item.opt());
+				self.get_area_mut(area_type).remove_at(c_x, c_y);
 				
 			},
 			// Case 3: Trying to place an item from cursor into an item
 			(Some(c_item), Some(item)) => {
-				if !item.can_stack_with(&c_item) { return; }
-
-				let mut item = self.get_area_mut(area_type).remove_at(click_x, click_y).unwrap();
-				let rem = item.add_stack(c_item.stack);
-				if rem == 0 {
-					self.get_area_mut(area_type).set_at(click_x, click_y, Some(item));
-					self.remove_cursor();
-				} else {
-					self.get_area_mut(area_type).set_at(click_x, click_y, Some(item.clone()));
-					self.set_cursor(Some(item.with_stack(rem)));
+				if !item.can_stack_with(&c_item) { // if can't stack switch
+					self.set_cursor(item.opt());
+					self.get_area_mut(area_type).set_at(c_x, c_y, c_item.opt());
+					return;
 				}
+
+				let mut item = self.get_area_mut(area_type).remove_at(c_x, c_y).unwrap();
+				let rem = item.add_stack(c_item.stack);
+
+				self.get_area_mut(area_type).set_at(c_x, c_y, item.clone().opt());
+				self.set_cursor(item.with_stack(rem).opt());
 				
 			},
 			// Case 4: Both empty
@@ -464,40 +443,35 @@ impl Inventory {
 		}
 	}
 	pub fn handle_rclick_press(&mut self, clicked_pos:(u8,u8), area_type: AreaType) {
-		let area = self.get_area(&area_type); let (click_x, click_y) = clicked_pos;
+		let area = self.get_area(&area_type); let (c_x, c_y) = clicked_pos;
 
-		match (self.get_cursor().cloned(), area.get_at(click_x, click_y)) {
+		match (self.get_cursor().cloned(), area.get_at(c_x, c_y).cloned()) {
 			// Case 1: Trying to place an item from cursor
-			(Some(item), None) => {
-				if item.stack() == 1 {
-					self.get_area_mut(area_type).set_at(click_x, click_y, Some(item));
-					self.remove_cursor();
-				} else {
-					self.get_area_mut(area_type).set_at(click_x, click_y, Some(item.with_stack(1)));
-					let mut item = self.remove_cursor().unwrap();
-					item.rem_stack(1);
-					self.set_cursor(Some(item));
-				}
+			(Some(c_item), None) => {
+				self.get_area_mut(area_type).set_at(c_x, c_y, c_item.clone().with_stack(1).opt());
+				self.set_cursor(c_item.rem_stack(1));
 			},
 			// Case 2: Trying to pick up half the item with empty cursor
-			(None, Some(_)) => {
-				let item = self.get_area_mut(area_type).get_half_stack_at(click_x, click_y);
-				self.set_cursor(item);
+			(None, Some(item)) => {
+				// this is the smaller if the number is odd
+				let half_stack = item.half_stack();
+				self.get_area_mut(area_type).set_at(c_x, c_y, item.clone().with_stack(half_stack).opt());
+				self.set_cursor(item.rem_stack(half_stack));
 				
 			},
 			// Case 3: Trying to place an item from cursor into an item
 			(Some(c_item), Some(item)) => {
-				if !item.can_stack_with(&c_item) { return; }
-
-				let mut item = self.get_area_mut(area_type).remove_at(click_x, click_y).unwrap();
-				let rem = item.add_stack(c_item.stack);
-				if rem == 0 {
-					self.set_cursor(Some(item));
-					self.get_area_mut(area_type).remove_at(click_x, click_y);
-				} else {
-					self.set_cursor(Some(item.clone()));
-					self.get_area_mut(area_type).set_at(click_x, click_y, Some(item.with_stack(rem)));
+				if !item.can_stack_with(&c_item) { // if can't stack switch
+					self.set_cursor(item.opt());
+					self.get_area_mut(area_type).set_at(c_x, c_y, c_item.opt());
+					return;
 				}
+
+				let mut item = self.get_area_mut(area_type).remove_at(c_x, c_y).unwrap();
+				let rem = item.add_stack(c_item.stack);
+
+				self.set_cursor(item.clone().opt());
+				self.get_area_mut(area_type).set_at(c_x, c_y, item.with_stack(rem).opt());
 			},
 			// Case 4: Both empty
 			_ => {}
