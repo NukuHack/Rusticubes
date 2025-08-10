@@ -11,9 +11,7 @@ impl<'a> crate::State<'a> {
 		let size: &winit::dpi::PhysicalSize<u32> = self.size();
 		let x:f64 = (size.width as f64) / 2.0;
 		let y:f64 = (size.height as f64) / 2.0;
-		if let Err(e) = self.window().set_cursor_position(winit::dpi::PhysicalPosition::new(x, y)) {
-			println!("Could not set mouse position: {:?}", e);
-		} // this crashed with .expect idk why or why not but her this is ...
+		let _ = self.window().set_cursor_position(winit::dpi::PhysicalPosition::new(x, y)); // error happens if the window is not focused while the cursor is locked
 	}
 
 	#[inline]

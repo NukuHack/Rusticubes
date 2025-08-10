@@ -419,18 +419,19 @@ impl Inventory {
 	}
 
 
-	/// naming : c_item -> Cursor Item
-	/// 		 item -> Item (from inventory or storage)
 	pub fn handle_click_press(&mut self, clicked_pos:(u8,u8), area_type: AreaType) {
+		if area_type == AreaType::Storage || area_type == AreaType::Input || area_type == AreaType::Output { return; } // hotfix for the crash made by these if user clicks
+		 // because we can not get area mutably for these tipes
+
 		let cursor = self.get_cursor().cloned();
 		let area = self.get_area_mut(area_type); let (c_x, c_y) = clicked_pos;
 		let armor_in_not_armor_area = area_type == AreaType::Armor && !cursor.clone().map(|item| item.is_armor()).unwrap_or(false);
 
 		match (cursor, area.remove_at(c_x, c_y).clone()) {
 			// Case 1: Trying to place an item from cursor
-			(Some(c_item), None) => {
+			(Some(cursor_item), None) => {
 				if armor_in_not_armor_area { return; }
-				area.set_at(c_x, c_y, c_item.opt());
+				area.set_at(c_x, c_y, cursor_item.opt());
 				self.remove_cursor();
 			},
 			// Case 2: Trying to pick up an item with empty cursor
@@ -439,59 +440,63 @@ impl Inventory {
 				self.set_cursor(item.opt());
 			},
 			// Case 3: Trying to place an item from cursor into an item
-			(Some(c_item), Some(mut item)) => {
+			(Some(cursor_item), Some(mut item)) => {
 				if armor_in_not_armor_area { return; }
-				if !item.can_stack_with(&c_item) { // if can't stack switch
-					area.set_at(c_x, c_y, c_item.opt());
+				if !item.can_stack_with(&cursor_item) { // if can't stack switch
+					area.set_at(c_x, c_y, cursor_item.opt());
 					self.set_cursor(item.opt());
 					return;
 				}
-
-				let rem = item.add_stack(c_item.stack);
-
+				// else : they can stack -> they are the same type
+				// let the inventory have the "main" item and the cursor will have the remaining
+				let rem = item.add_stack(cursor_item.stack);
 				area.set_at(c_x, c_y, item.clone().opt());
 				self.set_cursor(item.with_stack(rem).opt());
 			},
 			// Case 4: Both empty
-			_ => {}
+			(None, None) => {}
 		}
 	}
 	pub fn handle_rclick_press(&mut self, clicked_pos:(u8,u8), area_type: AreaType) {
+		if area_type == AreaType::Storage || area_type == AreaType::Input || area_type == AreaType::Output { return; } // hotfix for the crash made by these if user clicks
+		 // because we can not get area mutably for these tipes
+
 		let cursor = self.get_cursor().cloned();
 		let area = self.get_area_mut(area_type); let (c_x, c_y) = clicked_pos;
 		let armor_in_not_armor_area = area_type == AreaType::Armor && !cursor.clone().map(|item| item.is_armor()).unwrap_or(false);
 
 		match (cursor, area.remove_at(c_x, c_y).clone()) {
 			// Case 1: Trying to place an item from cursor
-			(Some(c_item), None) => {
+			(Some(cursor_item), None) => {
 				if armor_in_not_armor_area { return; }
-				area.set_at(c_x, c_y, c_item.clone().with_stack(1).opt());
-				self.set_cursor(c_item.rem_stack(1));
+				area.set_at(c_x, c_y, cursor_item.clone().with_stack(1).opt());
+				self.set_cursor(cursor_item.rem_stack(1));
 			},
 			// Case 2: Trying to pick up half the item with empty cursor
 			(None, Some(item)) => {
 				// this is the smaller if the number is odd
 				let half_stack = item.half_stack();
 				area.set_at(c_x, c_y, item.clone().with_stack(half_stack).opt());
+				// the "bigger half" will be on the cursor and the smaller side will be left in the inventory
 				self.set_cursor(item.rem_stack(half_stack));
 				
 			},
 			// Case 3: Trying to place an item from cursor into an item
-			(Some(c_item), Some(mut item)) => {
+			(Some(cursor_item), Some(mut item)) => {
 				if armor_in_not_armor_area { return; }
-				if !item.can_stack_with(&c_item) { // if can't stack switch
-					area.set_at(c_x, c_y, c_item.opt());
+				if !item.can_stack_with(&cursor_item) { // if can't stack switch
+					area.set_at(c_x, c_y, cursor_item.opt());
 					self.set_cursor(item.opt());
 					return;
 				}
-
-				let rem = item.add_stack(c_item.stack);
-
+				// else : they can stack -> they are the same type
+				// let the cursor have the "main" item and the inventory will have the remaining
+				let rem = item.add_stack(cursor_item.stack);
 				area.set_at(c_x, c_y, item.clone().with_stack(rem).opt());
 				self.set_cursor(item.opt());
 			},
 			// Case 4: Both empty
-			_ => {}
+			(None, None) => {}
 		}
 	}
 	pub fn handle_mclick_press(&mut self, clicked_pos:(u8,u8), area_type: AreaType) {
@@ -504,7 +509,7 @@ impl Inventory {
 
 		match (cursor, item) {
 			// Case 1: 
-			(Some(_c_item), None) => {
+			(Some(_cursor_item), None) => {
 				// nothign happens
 			},
 			// Case 2: Clicked on item with empty cursor
@@ -514,14 +519,15 @@ impl Inventory {
 				
 			},
 			// Case 3: Both full, Switch
-			(Some(c_item), Some(item)) => {
+			(Some(cursor_item), Some(item)) => {
 				if armor_in_not_armor_area { return; }
 				self.set_cursor(item.opt());
 				if area_type == AreaType::Storage || area_type == AreaType::Input || area_type == AreaType::Output { return; }
-				self.get_area_mut(area_type).set_at(c_x, c_y, c_item.opt());
+				// because we can not get area mutably for these tipes
+				self.get_area_mut(area_type).set_at(c_x, c_y, cursor_item.opt());
 			},
 			// Case 4: Both empty
-			_ => {}
+			(None, None) => {}
 		}
 	}
 }
