@@ -42,6 +42,8 @@ matchbox_socket = "0.7"
 serde = { version = "1", features = ["derive"] }
 # used to run external code at runtime -> modding
 wasmtime = "14"
+#safe multithread
+crossbeam = "0.8"
 
 
 [target.'cfg(windows)'.dependencies]

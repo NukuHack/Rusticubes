@@ -1,3 +1,4 @@
+
 use crate::block::math::{BlockPosition, ChunkCoord};
 use crate::block::main::{Block, Chunk};
 use std::{
@@ -5,13 +6,13 @@ use std::{
 	cmp::Ordering as CmpOrdering,
 	hash::BuildHasherDefault,
 	sync::{
-		atomic::{AtomicBool, Ordering},
-		mpsc, Arc, Mutex,
+		atomic::{AtomicBool, AtomicUsize, Ordering}, Arc, Mutex,
 	},
 	thread,
 };
 use ahash::AHasher;
 use glam::{IVec3, Vec3};
+use crossbeam::channel::{bounded, Sender, Receiver};
 
 // Type aliases for better readability
 type FastMap<K, V> = HashMap<K, V, BuildHasherDefault<AHasher>>;
@@ -68,9 +69,10 @@ pub struct World {
 	
 	// Chunk generation system
 	chunk_generation_queue: Arc<Mutex<BinaryHeap<PriorityChunk>>>,
-	generated_chunks_receiver: mpsc::Receiver<(ChunkCoord, Chunk)>,
-	chunk_generation_sender: mpsc::Sender<(ChunkCoord, Chunk)>,
+	generated_chunks_receiver: Receiver<(ChunkCoord, Chunk)>,
+	chunk_generation_sender: Sender<(ChunkCoord, Chunk)>,
 	generation_threads_running: Arc<AtomicBool>,
+	active_workers: Arc<AtomicUsize>,
 	
 	// Configuration
 	thread_count: u8,
@@ -80,15 +82,16 @@ pub struct World {
 impl World {
 	/// Creates an empty world
 	pub fn empty() -> Self {
-		let (sender, receiver) = mpsc::channel();
+		let (sender, receiver) = bounded(100); // Use bounded channel to prevent memory explosion
 		
 		Self {
 			chunks: FastMap::with_capacity_and_hasher(10_000, BuildHasherDefault::<AHasher>::default()),
 			loaded_chunks: HashSet::with_capacity(10_000),
-			chunk_generation_queue: Arc::new(Mutex::new(BinaryHeap::new())),
+			chunk_generation_queue: Arc::new(Mutex::new(BinaryHeap::with_capacity(100))),
 			generated_chunks_receiver: receiver,
 			chunk_generation_sender: sender,
 			generation_threads_running: Arc::new(AtomicBool::new(false)),
+			active_workers: Arc::new(AtomicUsize::new(0)),
 			thread_count: 1,
 			seed: 0,
 		}
@@ -150,37 +153,57 @@ impl World {
 
 		self.generation_threads_running.store(true, Ordering::Relaxed);
 		self.thread_count = thread_count;
+		self.active_workers.store(0, Ordering::Relaxed);
 		
 		for _ in 0..thread_count {
 			let queue = Arc::clone(&self.chunk_generation_queue);
 			let sender = self.chunk_generation_sender.clone();
 			let running = Arc::clone(&self.generation_threads_running);
+			let active_workers = Arc::clone(&self.active_workers);
 			let seed = self.seed;
 			
 			thread::spawn(move || {
+				active_workers.fetch_add(1, Ordering::Relaxed);
+				
 				while running.load(Ordering::Relaxed) {
+					// Try to get work without blocking first
 					let priority_chunk = {
-						let mut queue = queue.lock().unwrap();
+						let mut queue = match queue.try_lock() {
+							Ok(q) => q,
+							Err(_) => {
+								// Couldn't get lock, try again after short sleep
+								thread::sleep(std::time::Duration::from_micros(10));
+								continue;
+							}
+						};
 						queue.pop()
 					};
 					
 					if let Some(priority_chunk) = priority_chunk {
 						let chunk = Chunk::generate(priority_chunk.coord, seed);
 						
-						// Send the generated chunk back to the main thread
-						if sender.send((priority_chunk.coord, chunk)).is_err() {
-							break; // Channel disconnected
+						// Non-blocking send attempt
+						if let Err(e) = sender.try_send((priority_chunk.coord, chunk)) {
+							if e.is_disconnected() {
+								break; // Channel disconnected
+							}
+							// Full channel, put the chunk back in queue and sleep
+							queue.lock().unwrap().push(priority_chunk);
+							thread::sleep(std::time::Duration::from_millis(1));
 						}
 					} else {
-						// No work, sleep to avoid busy waiting
-						thread::sleep(std::time::Duration::from_millis(5));
+						// No work, sleep to avoid busy waiting but not too long
+						thread::sleep(std::time::Duration::from_millis(1));
 					}
 				}
+				
+				active_workers.fetch_sub(1, Ordering::Relaxed);
 			});
 		}
 	}
 
-	#[inline] pub fn stop_generation_threads(&self) {
+	#[inline]
+	pub fn stop_generation_threads(&self) {
 		self.generation_threads_running.store(false, Ordering::Relaxed);
 	}
 	
@@ -188,7 +211,15 @@ impl World {
 	#[inline] fn generate_chunk(&mut self, chunk: PriorityChunk) {
 		if !self.loaded_chunks.insert(chunk.coord) { return; } // Skip if already loaded
 		
-		let mut queue = self.chunk_generation_queue.lock().unwrap();
+		let mut queue = match self.chunk_generation_queue.try_lock() {
+			Ok(q) => q,
+			Err(_) => {
+				// Couldn't get lock, skip this chunk for now
+				self.loaded_chunks.remove(&chunk.coord);
+				return;
+			}
+		};
+		
 		// Avoid duplicates in the queue
 		if !queue.iter().any(|c| c.coord == chunk.coord) {
 			queue.push(chunk);
@@ -225,36 +256,57 @@ impl World {
 		});
 	}
 
-	/// Loads chunks within the given radius
-	#[inline] fn load_nearby_chunks(&mut self, center: ChunkCoord, radius: i32, radius_sq: i32) {
+	/// Loads chunks within the given radius using a more efficient spiral pattern
+	fn load_nearby_chunks(&mut self, center: ChunkCoord, radius: i32, radius_sq: i32) {
 		let (center_x, center_y, center_z) = center.unpack();
-		let mut chunks_to_load = BinaryHeap::new();
 		
-		// Generate coordinates for all chunks in the sphere
-		for dx in -radius..=radius {
-			for dy in -radius..=radius {
-				for dz in -radius..=radius {
-					let distance_sq = dx * dx + dy * dy + dz * dz;
+		// Spiral out from center for better prioritization
+		let mut chunks_to_load = Vec::with_capacity((radius * 2).pow(3) as usize);
+		
+		// Spiral pattern implementation
+		let mut x = 0;
+		let mut z = 0;
+		let mut dx = 0;
+		let mut dz = -1;
+		let max = radius.max(1) * radius.max(1);
+		
+		for _ in 0..max {
+			if (-radius < x && x <= radius) && (-radius < z && z <= radius) {
+				for dy in -radius..=radius {
+					let distance_sq = x*x + dy*dy + z*z;
 					if distance_sq > radius_sq {
 						continue;
 					}
-
-					let coord = ChunkCoord::new(center_x + dx, center_y + dy, center_z + dz);
-					if self.loaded_chunks.contains(&coord) { continue; }
-
-					chunks_to_load.push(PriorityChunk::new(coord, center));
+					
+					let coord = ChunkCoord::new(center_x + x, center_y + dy, center_z + z);
+					if !self.loaded_chunks.contains(&coord) {
+						chunks_to_load.push(PriorityChunk::new(coord, center));
+					}
 				}
 			}
+			
+			if x == z || (x < 0 && x == -z) || (x > 0 && x == 1-z) {
+				let tmp = dx;
+				dx = -dz;
+				dz = tmp;
+			}
+			
+			x += dx;
+			z += dz;
 		}
 		
-		// Load chunks in priority order (closest first)
-		while let Some(priority_chunk) = chunks_to_load.pop() {
-			self.generate_chunk(priority_chunk);
+		// Sort by distance (closest first)
+		chunks_to_load.sort_unstable();
+		
+		// Queue chunks for generation
+		for chunk in chunks_to_load {
+			self.generate_chunk(chunk);
 		}
 	}
 
 	/// Processes any chunks generated by worker threads
 	#[inline] fn process_generated_chunks(&mut self) {
+		// Process all available chunks without blocking
 		while let Ok((coord, chunk)) = self.generated_chunks_receiver.try_recv() {
 			if !self.loaded_chunks.contains(&coord) { continue; }
 
