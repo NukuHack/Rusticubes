@@ -453,7 +453,7 @@ impl UIManager {
 
 		let mut storage_items = ItemContainer::new(area.rows, area.columns);
 		let _ = storage_items.update_items(|idx, _|
-			Some(ItemStack::new(ItemStack::lut_idx(idx).name.into()))
+			Some(ItemStack::new(ItemStack::lut_by_index(idx).name.into()))
 		);
 		storage_items
 	}
@@ -580,7 +580,7 @@ impl UIManager {
 
 	fn create_item_display(&mut self, x:f32, y:f32, item: &ItemStack, z:i32) -> usize {
 		let id = self.next_id();
-		let item_display = UIElement::image(id, item.to_icon().into())
+		let item_display = UIElement::image(id, item.icon_path().into())
 			.with_position(Vec2::new(x, y))
 			.with_size(Vec2::new(SLOT, SLOT))
 			.with_style(&ptr::get_settings().ui_theme.images.basic)

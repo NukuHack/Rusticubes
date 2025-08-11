@@ -162,7 +162,7 @@ pub fn place_looked_block() {
 
 	let hotbar = inv_mut.get_area_mut(AreaType::Hotbar);
 	let Some(item) = hotbar.remove(idx) else { return; };
-	hotbar.set(idx, item.rem_stack(1));
+	hotbar.set(idx, item.remove_from_stack(1));
 
 	ptr::get_state().ui_manager.setup_ui(); // to update the hotbar if changed
 }
@@ -171,7 +171,7 @@ pub fn place_looked_block() {
 	let item_name = get_item_name_from_block_id(block_id);
 
 	let inv_mut = ptr::get_gamestate().player_mut().inventory_mut();
-	inv_mut.add_item_anywhere(ItemStack::new(item_name).with_stack(1));
+	inv_mut.add_item_anywhere(ItemStack::new(item_name).with_stack_size(1));
 
 	ptr::get_state().ui_manager.setup_ui(); // to update the hotbar if changed
 }

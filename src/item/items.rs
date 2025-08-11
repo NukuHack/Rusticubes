@@ -10,17 +10,145 @@ pub struct ItemStack {
 	pub data: Option<Box<CustomData>>,  // Boxed to reduce size when None
 }
 impl ItemStack {
-	// More focused helper function
-	#[inline] fn get_resources_and_target(&self) -> (Vec<String>, String) {
-		let item_data = self.lut();
-		// Get the reliable assets vector based on whether this is a block or item
-		let resource_type = if item_data.is_block() { "block" } else { "item" };
-		let resources = rs::find_png_resources(resource_type);
-		// Construct the expected resource path
-		let target_name = format!("{}/{}.png", resource_type, item_data.name);
-		(resources, target_name)
+	///////////////////////////////
+	// Construction and Initialization
+	///////////////////////////////
+	
+	#[inline] 
+	pub fn default() -> Self {
+		Self::from_str("brick_grey")
 	}
-	pub fn to_icon(&self) -> String {
+	
+	#[inline] 
+	pub fn new(name: String) -> Self {
+		let stack = lut_by_name(&name).max_stack;
+		Self { name, stack, data: None }
+	}
+	
+	#[inline] 
+	pub fn from_str(name: &'static str) -> Self {
+		Self::new(name.to_string())
+	}
+
+	///////////////////////////////
+	// Property Accessors
+	///////////////////////////////
+	
+	#[inline] 
+	pub fn name(&self) -> &str { &self.name }
+	
+	#[inline] 
+	pub fn stack(&self) -> u32 { self.max_stack_size().min(self.stack) }
+	
+	#[inline] 
+	pub fn max_stack_size(&self) -> u32 {
+		self.lut().max_stack
+	}
+	
+	///////////////////////////////
+	// Type Predicates
+	///////////////////////////////
+	
+	#[inline] 
+	pub fn is_block(&self) -> bool { self.lut().is_block() }
+	
+	#[inline] 
+	pub fn is_armor(&self) -> bool { self.lut().is_armor() }
+	
+	#[inline] 
+	pub fn is_tool(&self) -> bool { self.lut().is_tool() }
+	
+	#[inline] 
+	pub fn is_weapon(&self) -> bool { self.lut().is_weapon() }
+
+	///////////////////////////////
+	// Stack Manipulation (Mutable)
+	///////////////////////////////
+	
+	/// Sets the stack size to a specific value
+	#[inline] 
+	pub fn set_stack_size(&mut self, size: u32) { 
+		self.stack = size; 
+	}
+	
+	/// Sets the stack size to its maximum
+	#[inline] 
+	pub fn set_to_max_stack(&mut self) { 
+		self.stack = self.max_stack_size(); 
+	}
+	
+	/// Adds to the stack, returning any overflow amount
+	pub fn add_to_stack(&mut self, amount: u32) -> u32 {
+		let max_add = self.max_stack_size() - self.stack();
+		let to_add = amount.min(max_add);
+		self.stack += to_add;
+		amount - to_add
+	}
+	
+	/// Removes from the stack, returning the new stack if successful
+	pub fn remove_from_stack(mut self, amount: u32) -> Option<Self> {
+		if amount > self.stack { 
+			return None; 
+		}
+		self.stack -= amount;
+		Some(self)
+	}
+
+	/// Adds to the stack, returning any overflow amount
+	/// Removes from the stack, returning the new stack if successful
+	pub fn stack_op(mut self, amount: i32) -> Option<(Self, Option<u32>)> {
+		if amount > 0 {
+			let rem = self.add_to_stack(amount as u32);
+			return Some((self,Some(rem)));
+		} else if amount < 0 {
+			let item = self.remove_from_stack((-amount) as u32)?;
+			Some((item, None))
+		} else {
+			Some((self, None))
+		}
+	}
+
+	///////////////////////////////
+	// Stack Operations (Immutable)
+	///////////////////////////////
+	
+	/// Returns a new stack with the given size
+	#[inline] 
+	pub fn with_stack_size(self, size: u32) -> Self { 
+		Self { stack: size, ..self }
+	}
+	
+	/// Returns half of the current stack (rounded down)
+	#[inline] 
+	pub fn half_stack(&self) -> u32 { 
+		(self.stack / 2).min(self.max_stack_size()) 
+	}
+	
+	/// Splits the stack into two, modifying self and returning the split half (the bigger half, if size is odd)
+	pub fn split_stack(&mut self) -> Option<Self> {
+		let half = self.half_stack();
+		let result = self.clone();
+		self.set_stack_size(half);
+		result.remove_from_stack(half)
+	}
+
+	///////////////////////////////
+	// Conversion and Utility
+	///////////////////////////////
+	
+	/// Converts to Option, returning None if stack is empty
+	#[inline] 
+	pub fn opt(self) -> Option<Self> { 
+		if self.stack == 0 { None } else { Some(self) } 
+	}
+
+	#[inline] 
+	pub fn can_stack_with(&self, other: &Self) -> bool {
+		self.name == other.name && self.data == other.data
+	}
+	
+	/// Gets the icon path for this item
+	pub fn icon_path(&self) -> String {
 		let (resources, target_name) = self.get_resources_and_target();
 
 		resources.iter()
@@ -33,81 +161,38 @@ impl ItemStack {
 					.expect("Resources array should never be empty")
 			})
 	}
-	#[inline] pub fn get_index(&self) -> Option<usize> {
+	
+	/// Gets the index of this item in the resources list
+	#[inline]
+	pub fn resource_index(&self) -> Option<usize> {
 		let (resources, target_name) = self.get_resources_and_target();
-		// Find the index in the resources vector
 		resources.iter().position(|res| *res == target_name)
 	}
-
-	#[inline] pub fn lut(&self) -> ItemComp {
-		lut_by_name(&self.name)
-	}
-	#[inline] pub fn lut_idx(idx: usize) -> ItemComp {
-		if let Some((_key, value)) = item_lut_ref().iter().nth(idx) {
-			value.clone()
-		} else {
-			DEFAULT_ITEM_COMP.clone()
-		}
-	}
-	#[inline] pub fn max_stack_size(&self) -> u32 {
-		self.lut().max_stack
+	
+	#[inline] 
+	pub fn lut_by_index(idx: usize) -> ItemComp {
+		item_lut_ref().iter()
+			.nth(idx)
+			.map(|(_key, value)| value.clone())
+			.unwrap_or(DEFAULT_ITEM_COMP.clone())
 	}
 
-	#[inline] pub fn default() -> Self {
-		Self { name: "brick_grey".to_string(), stack: 64, data: None }
-	}
-	#[inline] pub fn new_str(name: &'static str) -> Self {
-		Self::new(name.to_string())
-	}
-	#[inline] pub fn new(name: String) -> Self {
-		let stack = lut_by_name(&name).max_stack;
-		Self { name, stack, data: None }
+	///////////////////////////////
+	// Internal Helpers
+	///////////////////////////////
+	
+	#[inline] 
+	fn get_resources_and_target(&self) -> (Vec<String>, String) {
+		let item_data = self.lut();
+		let resource_type = if item_data.is_block() { "block" } else { "item" };
+		let resources = rs::find_png_resources(resource_type);
+		let target_name = format!("{}/{}.png", resource_type, item_data.name);
+		(resources, target_name)
 	}
 	
-	#[inline] pub fn is_block(&self) -> bool { matches!(self.lut().is_block(), true) }
-	#[inline] pub fn is_armor(&self) -> bool { matches!(self.lut().is_armor(), true) }
-	#[inline] pub fn is_tool(&self) -> bool { matches!(self.lut().is_tool(), true) }
-	#[inline] pub fn is_weapon(&self) -> bool { matches!(self.lut().is_weapon(), true) }
-
-	#[inline] pub fn name(&self) -> String { self.name.clone().to_string() }
-
-	#[inline] pub const fn with_stack(mut self, stack: u32) -> Self { self.stack = stack; self }
-	#[inline] pub const fn set_stack(&mut self, stack: u32) { self.stack = stack }
-	#[inline] pub fn stack(&self) -> u32 { self.max_stack_size().min(self.stack) }
-	// this is the smaller half if the number is odd
-	#[inline] pub fn half_stack(&self) -> u32 { (self.stack / 2).min(self.max_stack_size()) }
-	#[inline] pub fn opt(self) -> Option<Self> { if self.stack == 0 { None } else { Some(self) } }
-
-	#[inline] pub fn set_self_stack(&mut self, stack: i64) {
-		assert!(stack < u32::MAX as i64 && stack > -(u32::MAX as i64));
-		let stack = if stack >= 0 { stack } else {-stack} as u32;
-		if self.stack > stack {
-			self.stack -= stack;
-		} else {
-			self.stack = 0;
-		}
-	}
-
-	#[inline] pub fn with_max_stack(&mut self) { self.stack = self.max_stack_size() }
-
-	/// Checks if this item can be stacked with another
-	pub fn can_stack_with(&self, other: &Self) -> bool {
-		// Implement your stacking logic (same type, same metadata, etc.)
-		self.name == other.name && self.data == other.data &&
-		self.stack < self.max_stack_size()
-	}
-
-	/// Adds stack to this stack, returning any overflow
-	pub fn add_stack(&mut self, amount: u32) -> u32 {
-		let max_add = self.max_stack_size() - self.stack();
-		let to_add = amount.min(max_add);
-		self.set_stack(self.stack + to_add);
-		amount - to_add
-	}
-	pub fn rem_stack(mut self, amount: u32) -> Option<Self> {
-		if amount >= self.stack { return None; }
-		self.set_self_stack(amount as i64);
-		Some(self)
+	#[inline] 
+	fn lut(&self) -> ItemComp {
+		lut_by_name(&self.name)
 	}
 }
 

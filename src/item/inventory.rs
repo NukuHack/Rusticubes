@@ -72,21 +72,16 @@ impl ItemContainer {
 	#[inline] pub fn get(&self, index: usize) -> Option<&ItemStack> {
 		self.items.get(index)?.as_ref()
 	}
+	// SAFETY: Caller must ensure `index < self.capacity()`
+	#[inline(always)]
+	pub unsafe fn get_unchecked(&self, index: usize) -> Option<&ItemStack> { unsafe {
+		self.items.get_unchecked(index).as_ref()
+	}}
 	/// Get item at grid position (row, col) - works for both 1D and 2D
 	#[inline] 
 	pub fn get_at(&self, row: u8, col: u8) -> Option<&ItemStack> {
 		let index = self.calculate_index(row, col)?;
 		self.get(index)
-	}
-
-
-	#[inline] pub fn get_mut(&mut self, index: usize) -> Option<&mut ItemStack> {
-		self.items.get_mut(index).and_then(|x| x.as_mut())
-	}
-	#[inline] 
-	pub fn get_at_mut(&mut self, row: u8, col: u8) -> Option<&mut ItemStack> {
-		let index = self.calculate_index(row, col)?;
-		self.get_mut(index)
 	}
 
 	/// Set an item by linear index
@@ -108,31 +103,33 @@ impl ItemContainer {
 	#[inline] fn calculate_index(&self, row: u8, col: u8) -> Option<usize> {
 		if self.is_linear() {
 			// For linear containers, use whichever coordinate is non-zero
-			return Some((row + col) as usize);
+			let sum = row as usize + col as usize;
+			if sum >= self.capacity() { return None; }
+
+			return Some(sum);
 		}
 
-		if row >= self.rows() || col >= self.cols() {
-			return None;
+		let mut r = row; let mut c = col;
+		if r >= self.rows() || c >= self.cols() {
+			r = col; c = row; // switch
+
+			if r >= self.rows() || c >= self.cols() {
+				return None;
+			}
 		}
 
-		Some((row as usize * self.cols() as usize) + col as usize)
+		Some((r as usize * self.cols() as usize) + c as usize)
 	}
 
 	/// Returns an iterator over all slots with their indices and items
 	#[inline] pub fn slot_iter(&self) -> impl Iterator<Item = (usize, &Option<ItemStack>)> {
-		self.items
-			.iter()
-			.enumerate()
-			.take(self.capacity())
+		self.items.iter().enumerate().take(self.capacity())
 	}
 	
 	/// Returns an iterator over all slots with their indices and items
 	#[inline] pub fn slot_iter_mut(&mut self) -> impl Iterator<Item = (usize, &mut Option<ItemStack>)> {
 		let cap = self.capacity();
-		self.items
-			.iter_mut()
-			.enumerate()
-			.take(cap)
+		self.items.iter_mut().enumerate().take(cap)
 	}
 
 	/// Uses the slot iterator to set items based on a predicate
@@ -174,11 +171,11 @@ impl ItemContainer {
 
 			if !existing_item.can_stack_with(&new_item) { continue; }
 
-			let remaining = existing_item.add_stack(new_item.stack);
+			let remaining = existing_item.add_to_stack(new_item.stack);
 			if remaining == 0 { return true; }// Fully stacked the new item
 
 			// Partially stacked, continue with remaining stack
-			new_item.set_stack(remaining);
+			new_item.set_stack_size(remaining);
 		}
 
 		// If we still have items left, try to find an empty slot
@@ -318,15 +315,11 @@ impl Inventory {
 	#[inline] pub const fn hotbar(&self) -> &ItemContainer { &self.hotbar }
 	#[inline] pub const fn inv(&self) -> &ItemContainer { &self.items }
 	#[inline] pub const fn selected_index(&self) -> usize { self.selected_slot }
-	
-	/// Get the currently selected hotbar item
+
 	#[inline] pub fn selected_item(&self) -> Option<&ItemStack> {
-		self.hotbar.get(self.selected_index() as usize)
+		self.hotbar.get(self.selected_index())
 	}
-	#[inline] pub fn selected_item_mut(&mut self) -> Option<&mut ItemStack> {
-		self.hotbar.get_mut(self.selected_index() as usize)
-	}
-	
+		
 	/// Select a different hotbar slot
 	#[inline] pub fn select_slot(&mut self, idx: isize) {
 		self.selected_slot = match idx {
@@ -348,27 +341,6 @@ impl Inventory {
 	}
 	#[inline] pub fn remove_cursor(&mut self) -> Option<ItemStack> {
 		self.cursor_item.take()
-	}
-
-	/// Get item at specific inventory position
-	#[inline] pub fn get_item(&self, row: u8, col: u8) -> Option<&ItemStack> {
-		self.items.get_at(row, col)
-	}
-	/// Get armor item at specific slot
-	#[inline] pub fn get_armor(&self, slot: u8) -> Option<&ItemStack> {
-		self.armor.get(slot as usize)
-	}
-	/// Get hotbar item at specific slot
-	#[inline] pub fn get_hotbar(&self, slot: u8) -> Option<&ItemStack> {
-		self.hotbar.get(slot as usize)
-	}
-	
-	// Inventory expansion
-	pub fn expand(&mut self, rows: u8, cols: u8, hotbar_slots: u8, armor_slots: u8) {
-		self.items.resize(rows, cols);
-		self.hotbar.expand(hotbar_slots);
-		self.armor.expand(armor_slots);
-		self.select_slot(self.selected_slot as isize);
 	}
 	
 	/// Set the UI layout
@@ -401,14 +373,14 @@ impl Inventory {
 		}
 	}
 	#[inline] pub fn get_area_mut(&mut self, area: AreaType) -> &mut ItemContainer {
-		self.try_get_area_mut(area).expect("Failed to get area from AreaType")
+		self.try_get_area_mut(area).unwrap_or_else(|| panic!("Invalid area type: {:?}", area)) // temporary will make the others work
 	}
 
-	/// Add item to any available slot (tries hotbar first, then inventory, then armor)
+	/// Add item to any available slot (tries hotbar first, then inventory, then armor - if is an armor item)
 	#[inline] pub fn add_item_anywhere(&mut self, item: ItemStack) -> bool {
 		self.hotbar.add_item(item.clone()) ||
 		self.items.add_item(item.clone()) ||
-		self.armor.add_item(item)
+		(item.is_armor() && self.armor.add_item(item))
 	}
 	/// Count total items across all containers
 	#[inline] pub fn total_count(&self) -> usize {
@@ -449,9 +421,9 @@ impl Inventory {
 				}
 				// else : they can stack -> they are the same type
 				// let the inventory have the "main" item and the cursor will have the remaining
-				let rem = item.add_stack(cursor_item.stack);
+				let rem = item.add_to_stack(cursor_item.stack);
 				area.set_at(c_x, c_y, item.clone().opt());
-				self.set_cursor(item.with_stack(rem).opt());
+				self.set_cursor(item.with_stack_size(rem).opt());
 			},
 			// Case 4: Both empty
 			(None, None) => {}
@@ -469,16 +441,16 @@ impl Inventory {
 			// Case 1: Trying to place an item from cursor
 			(Some(cursor_item), None) => {
 				if armor_in_not_armor_area { return; }
-				area.set_at(c_x, c_y, cursor_item.clone().with_stack(1).opt());
-				self.set_cursor(cursor_item.rem_stack(1));
+				area.set_at(c_x, c_y, cursor_item.clone().with_stack_size(1).opt());
+				self.set_cursor(cursor_item.remove_from_stack(1));
 			},
 			// Case 2: Trying to pick up half the item with empty cursor
-			(None, Some(item)) => {
+			(None, Some(mut item)) => {
 				// this is the smaller if the number is odd
-				let half_stack = item.half_stack();
-				area.set_at(c_x, c_y, item.clone().with_stack(half_stack).opt());
+				let half_stack = item.split_stack();
+				area.set_at(c_x, c_y, item.opt());
 				// the "bigger half" will be on the cursor and the smaller side will be left in the inventory
-				self.set_cursor(item.rem_stack(half_stack));
+				self.set_cursor(half_stack);
 				
 			},
 			// Case 3: Trying to place an item from cursor into an item
@@ -491,8 +463,8 @@ impl Inventory {
 				}
 				// else : they can stack -> they are the same type
 				// let the cursor have the "main" item and the inventory will have the remaining
-				let rem = item.add_stack(cursor_item.stack);
-				area.set_at(c_x, c_y, item.clone().with_stack(rem).opt());
+				let rem = item.add_to_stack(cursor_item.stack);
+				area.set_at(c_x, c_y, item.clone().with_stack_size(rem).opt());
 				self.set_cursor(item.opt());
 			},
 			// Case 4: Both empty
@@ -502,7 +474,7 @@ impl Inventory {
 	pub fn handle_mclick_press(&mut self, clicked_pos:(u8,u8), area_type: AreaType) {
 		let cursor = self.get_cursor().cloned(); let (c_x, c_y) = clicked_pos;
 		let item = if area_type == AreaType::Storage || area_type == AreaType::Input || area_type == AreaType::Output {
-			let main_item = ItemStack::new(ItemStack::lut_idx((c_x + 1 * c_y) as usize).name.into()); // TODO : MAKE THIS ACTUALLY WORK AND NOT JUST A BASIC SOLUTION
+			let main_item = ItemStack::new(ItemStack::lut_by_index((c_x + 1 * c_y) as usize).name.into()); // TODO : MAKE THIS ACTUALLY WORK AND NOT JUST A BASIC SOLUTION
 			main_item.opt()
 		} else { self.get_area_mut(area_type).get_at(c_x, c_y).cloned() };
 		let armor_in_not_armor_area = area_type == AreaType::Armor && !cursor.clone().map(|item| item.is_armor()).unwrap_or(false);
@@ -514,7 +486,7 @@ impl Inventory {
 			},
 			// Case 2: Clicked on item with empty cursor
 			(None, Some(mut item)) => {
-				item.with_max_stack();
+				item.set_to_max_stack();
 				self.set_cursor(Some(item));
 				
 			},
