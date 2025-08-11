@@ -1,6 +1,6 @@
 
 use crate::block::math::{self, ChunkCoord, BlockPosition, BlockRotation};
-use crate::hs::math::{Noise};
+use crate::utils::math::{Noise};
 use crate::render::meshing::GeometryBuffer;
 #[allow(unused_imports)]
 use crate::ext::stopwatch;

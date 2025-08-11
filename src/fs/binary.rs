@@ -1,5 +1,5 @@
 
-use crate::hs::time::Time;
+use crate::utils::time::Time;
 
 // Trait for binary serialization
 

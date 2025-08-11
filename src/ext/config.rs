@@ -1,7 +1,7 @@
 ﻿
 use crate::Vec3;
 use crate::item::inventory::AreaType;
-use crate::ext::color::{Color, Border};
+use crate::utils::color::{Color, Border};
 
 
 // note that these are currently offsets from real pos, might change them to actual pos later on

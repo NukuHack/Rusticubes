@@ -4,7 +4,7 @@ use crate::{
 		main::{Chunk, BlockStorage}, math::ChunkCoord,
 	},
 	ext::ptr, world::main::World,
-	hs::time::Time,
+	utils::time::Time,
 	fs::binary::{BinarySerializable, FixedBinarySerializable},
 };
 use std::{

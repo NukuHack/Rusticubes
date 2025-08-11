@@ -1,30 +1,17 @@
 ﻿
-mod event_handler;
 
-pub mod fs { // file system, file related things
-	pub mod rs; // app-compiled resources
-	pub mod fs; // file system - from the disk
-	pub mod json; // json parser because i don't like serde-json
-	pub mod binary; // serialize to bytes ofc
-}
-pub mod hs { // helping structs
-	pub mod input;
+/// Block and Chunk related
+pub mod block {
+	/// main block and chunk struct and basic fn
+	pub mod main;
+	/// chunk and block coords struct and all fn
 	pub mod math;
-	pub mod string; // just a single enum for nice string handling
-	pub mod cursor;
-	pub mod time; // a nicely formatted time, just a struct
+	/// block & chunk interaction and world modification
+	pub mod extra;
 }
-pub mod mods { // modding related
-	pub mod api; // mod loading and wasm sandbox 
-	pub mod over; // this is an overlay made by mods so they would execute instead of the real rust functions
-}
-pub mod network { // network related
-	pub mod api; // the networking system
-	pub mod discovery; // the networking system
-	pub mod types; // the networking system and extra utilities for basic stuff
-}
+/// Debug, test related
 #[cfg(test)]
-pub mod debug { // debug, test related
+pub mod debug {
 	pub mod network;
 	pub mod world;
 	pub mod metadata;
@@ -32,47 +19,89 @@ pub mod debug { // debug, test related
 	pub mod serialize_item;
 	pub mod physics;
 }
-pub mod ext { // extra things that did not fit anywhere else
-	pub mod audio; // audio manager, in extra thread
+// Extra things that did not fit anywhere else
+pub mod ext {
+	// audio manager, in extra thread
+	pub mod audio;
+	// basic configs
 	pub mod config;
+	// main settings
 	pub mod settings;
-	pub mod color;
-	pub mod ptr; // all the pointers and stuff
+	// all the pointers and stuff for globar variables
+	pub mod ptr;
+	// basic struct used for debugging and profiling
 	pub mod stopwatch;
-	pub mod memory; // memory management mainly focusing on memory clean up
+	// memory management mainly focusing on memory clean up
+	pub mod memory;
 }
-pub mod render { // rendering related
+/// Handles file system operations, including loading resources, reading from disk, and serialization.
+pub mod fs {
+	/// Compiled resources embedded in the binary.
+	pub mod rs;
+	/// File system operations (reading/writing to disk).
+	pub mod fs;
+	/// Custom JSON parser (alternative to `serde_json`).
+	pub mod json;
+	/// Binary serialization utilities.
+	pub mod binary;
+}
+// Game related, instance related
+pub mod game {
+	// main camera and player impl.
+	pub mod player;
+	// game-state with seed and stuff
+	pub mod state;
+}
+/// Item + Inventory and related stuffs
+pub mod item {
+	// Item and Itemstack body, inventory basics
+	pub mod items;
+	/// Item related things what will not change at runtime
+	pub mod item_lut;
+	/// Binary serialization and de-serialization for items
+	pub mod item_binary;
+	/// Json de-serialization for items
+	pub mod item_json;
+	/// Basic corner-stone of the item system
+	pub mod material;
+	/// Main inventory implementation, and Item grid impl.
+	pub mod inventory;
+	/// the rendering part of the inventory and the items
+	pub mod ui_inventory;
+}
+// Modding related
+pub mod mods {
+	// mod loading and wasm sandbox 
+	pub mod api;
+	// this is an overlay made by mods so they would execute instead of the real rust functions
+	pub mod over;
+}
+// Network related
+pub mod network {
+	// the networking system
+	pub mod api;
+	// the networking system
+	pub mod discovery;
+	// the networking system and extra utilities for basic stuff
+	pub mod types;
+}
+/// Physics stuff like gravity ...
+pub mod physic {
+	/// Axis-aligned bounding boxes.
+	pub mod aabb;
+	/// Physics bodies.
+	pub mod body;
+}
+// Rendering and related
+pub mod render {
 	pub mod meshing;
 	pub mod texture;
 	pub mod pipeline;
 	pub mod world;
 	pub mod skybox;
 }
-pub mod game { // game related, instance related
-	pub mod player; // main camera and player impl.
-	pub mod state; // game-state with seed and stuff
-}
-pub mod item {
-	pub mod items; // the items and item stack impl.
-	pub mod item_lut; // item related things what will not change at runtime
-	pub mod item_binary; // it is what it sounds
-	pub mod item_json; // it is what it sounds
-	pub mod material; // item related basic stuff
-	pub mod inventory; // basic inventory impl.
-	pub mod ui_inventory;
-}
-pub mod world { // world related, tiny bit rendering and game related
-	pub mod main;
-	pub mod manager;
-	pub mod serialize;
-	pub mod handler;
-}
-pub mod block { // block related, chunk related
-	pub mod main;
-	pub mod math;
-	pub mod extra;
-}
-pub mod ui { // ui related
+// Ui and related
+pub mod ui {
 	pub mod element;
 	pub mod render;
 	pub mod manager;
@@ -81,11 +110,30 @@ pub mod ui { // ui related
 	pub mod dialog;
 	pub mod events;
 }
-pub mod physic {
-	pub mod aabb;
-	pub mod body;
+/// Utility things, like helper Structs
+pub mod utils {
+	/// Input handling (keyboard/mouse).
+	pub mod input;
+	/// Math utilities (Noise gen, lerping).
+	pub mod math;
+	// my custom color struct with quick init
+	pub mod color;
+	/// String helpers (For compile and runtime strings).
+	pub mod string;
+	/// Cursor state (cursor change and locking).
+	pub mod cursor;
+	/// Time formatting is a pretty struct.
+	pub mod time;
 }
-
+// World related, tiny bit rendering and game related
+pub mod world {
+	pub mod main;
+	pub mod manager;
+	pub mod serialize;
+	pub mod handler;
+}
+/// Main event handler (focused on the user input)
+mod event_handler;
 
 use crate::ext::ptr;
 use crate::game::player;
@@ -101,7 +149,7 @@ pub struct State<'a> {
 	window: &'a Window,
 	render_context: RenderContext<'a>,
 	previous_frame_time: std::time::Instant,
-	input_system: hs::input::InputSystem,
+	input_system: utils::input::InputSystem,
 	pipeline: render::pipeline::Pipeline,
 	ui_manager: ui::manager::UIManager,
 	texture_manager: render::texture::TextureManager,
@@ -210,7 +258,7 @@ impl<'a> State<'a> {
 			window,
 			render_context,
 			previous_frame_time: std::time::Instant::now(),
-			input_system: hs::input::InputSystem::default(),
+			input_system: utils::input::InputSystem::default(),
 			pipeline,
 			texture_manager,
 			ui_manager,

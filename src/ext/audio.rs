@@ -1,5 +1,5 @@
 use crate::ptr::get_settings;
-use crate::hs::math;
+use crate::utils::math;
 use rodio::{Sink, Decoder, OutputStream, source::Source};
 use std::io::{Cursor, Write};
 use std::sync::atomic::{AtomicPtr, Ordering};

@@ -1,9 +1,10 @@
 
 use glam::Vec2;
 use crate::item::inventory::{Inventory, ItemContainer, AreaType, Slot};
-use crate::ext::{color::Solor, ptr};
+use crate::ext::ptr;
 use crate::ui::{manager::{UIManager, UIState}, element::UIElement};
 use crate::item::items::ItemStack;
+use crate::utils::color::Solor;
 
 #[derive(PartialEq, Clone, Copy, Debug)]
 pub enum InventoryUIState {

@@ -1,9 +1,9 @@
 
-use crate::ext::color::{Color, Border};
+use crate::utils::color::{Color, Border};
 use std::{cell::RefCell, sync::Arc };
 use crate::ext::config::ElementStyle;
 use glam::Vec2;
-use crate::hs::string::MutStr;
+use crate::utils::string::MutStr;
 
 type Callback = Arc<RefCell<dyn FnMut() + 'static>>;
 
