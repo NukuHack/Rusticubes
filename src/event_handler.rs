@@ -1,5 +1,5 @@
 
-use crate::ext::ptr;
+use crate::ext::{ptr, memory};
 use crate::block::extra;
 use crate::ui::manager::{self, UIState};
 use crate::item::ui_inventory::{InventoryUIState};
@@ -12,7 +12,7 @@ use winit::{
 impl<'a> crate::State<'a> {
 
 	#[inline]
-	pub fn handle_events(&mut self,event: &WindowEvent) -> bool{
+	pub fn handle_events(&mut self, event: &WindowEvent) -> bool{
 
 		// should rework this like this :
 			// send the entire event to "window event handler"
@@ -26,6 +26,13 @@ impl<'a> crate::State<'a> {
 		match event {
 			WindowEvent::CloseRequested => {ptr::close_app(); true},
 			WindowEvent::Resized(physical_size) => self.resize(*physical_size),
+			WindowEvent::Occluded(is_hidden) => {
+				if !is_hidden {return true;}
+				// here it should clean up stuff, and also make the rendering basically non existant
+				memory::light_trim();
+				memory::hard_clean(Some(ptr::get_state().device()));
+				true
+			},
 			WindowEvent::RedrawRequested => {
 				self.window().request_redraw();
 				self.update();
@@ -59,10 +66,18 @@ impl<'a> crate::State<'a> {
 				true
 			},
 			WindowEvent::ModifiersChanged(modifiers) => {
+				let change = self.input_system.compare(&modifiers.state());
 				self.input_system.modifiers = modifiers.state();
+				if change.alt_key() {
+					if self.input_system.modifiers.alt_key() {
+						self.toggle_mouse_capture();
+					}
+					self.center_mouse();
+				}
 				true
 			},
-			WindowEvent::KeyboardInput { .. } => {
+			WindowEvent::KeyboardInput { is_synthetic, .. } => {
+				if *is_synthetic { return true; }
 				self.handle_key_input(event);
 				true
 			},
@@ -87,8 +102,12 @@ impl<'a> crate::State<'a> {
 			event: winit::event::KeyEvent {
 				physical_key,
 				state, // ElementState::Released or ElementState::Pressed
-				/*rest of the booring stuff*/ logical_key: _, text: _, location: _, repeat: _, ..}, device_id: _, is_synthetic: _ 
+				/*rest of the booring stuff*/ logical_key, text: _, location: _, repeat: _, ..}, device_id: _, is_synthetic 
 			} = event else { return false; };
+
+		let input_str = logical_key.to_text().unwrap_or("");
+
+		if *is_synthetic { return true; }
 			
 		let key:Key = match physical_key {
 			winit::keyboard::PhysicalKey::Code(code) => *code,
@@ -110,7 +129,7 @@ impl<'a> crate::State<'a> {
 				}
 				if is_pressed {
 					// Handle keys for UI
-					if self.ui_manager.handle_key_input(key, self.input_system.modifiers.shift_key()) {
+					if self.ui_manager.handle_keyboard_input(key, input_str) {
 						return true;
 					}
 				}
@@ -176,13 +195,7 @@ impl<'a> crate::State<'a> {
 			};
 		}
 		match key {
-			Key::AltLeft | Key::AltRight => {
-				if is_pressed {
-					self.toggle_mouse_capture();
-				}
-				self.center_mouse();
-				true
-			},
+			// handling alt and shift block interaction is considered a "modifier button change" so it should be in the input system
 			Key::Escape => {
 				if !is_pressed { return false; }
 

@@ -18,7 +18,7 @@ pub enum UIElementData {
 }
 */
 impl UIManager {
-	pub fn handle_key_input_on_input_field(&mut self, key: Key, shift: bool) -> bool {
+	pub fn handle_key_input_on_input_field(&mut self, key: Key, input_str: &str) -> bool {
 		let Some(element) = self.get_focused_element_mut() else { return false; };
 		if !(element.visible && element.enabled) { return false; }
 
@@ -36,12 +36,12 @@ impl UIManager {
 				text_mut.pop();
 			},
 			Enter | Escape => self.clear_focused_element(),
-			_ => if let Some(c) = key_to_char(key, shift) {
+			_ => {
 				let Some(text_mut) = element.get_text_mut() else { return false; };
 				
-				if text_mut.len() >= 256 || c.is_control() { return false; }
+				if text_mut.len() >= 256 { return false; }
 				
-				text_mut.push(c);
+				text_mut.push_str(input_str);
 			}
 		}
 		return true;
@@ -385,99 +385,5 @@ impl UIRenderer {
 		self.font.layout(text, scale, point(0.0, 0.0))
 			.map(|g| g.position().x + g.unpositioned().h_metrics().advance_width)
 			.last().unwrap_or(0.0)
-	}
-}
-
-
-
-macro_rules! ch_mac { // char macro shortened
-
-	($char:expr) => (
-		Some($char)
-	);
-
-	($shift:expr, $lower:expr, $upper:expr) => (
-		Some(if $shift { $upper } else { $lower })
-	);
-
-}
-
-// Input handling utilities
-#[inline]
-pub const fn key_to_char(key: Key, shift: bool) -> Option<char> {
-	match key {
-		// Alphabet
-		KeyA => ch_mac!(shift, 'a', 'A'),
-		KeyB => ch_mac!(shift, 'b', 'B'),
-		KeyC => ch_mac!(shift, 'c', 'C'),
-		KeyD => ch_mac!(shift, 'd', 'D'),
-		KeyE => ch_mac!(shift, 'e', 'E'),
-		KeyF => ch_mac!(shift, 'f', 'F'),
-		KeyG => ch_mac!(shift, 'g', 'G'),
-		KeyH => ch_mac!(shift, 'h', 'H'),
-		KeyI => ch_mac!(shift, 'i', 'I'),
-		KeyJ => ch_mac!(shift, 'j', 'J'),
-		KeyK => ch_mac!(shift, 'k', 'K'),
-		KeyL => ch_mac!(shift, 'l', 'L'),
-		KeyM => ch_mac!(shift, 'm', 'M'),
-		KeyN => ch_mac!(shift, 'n', 'N'),
-		KeyO => ch_mac!(shift, 'o', 'O'),
-		KeyP => ch_mac!(shift, 'p', 'P'),
-		KeyQ => ch_mac!(shift, 'q', 'Q'),
-		KeyR => ch_mac!(shift, 'r', 'R'),
-		KeyS => ch_mac!(shift, 's', 'S'),
-		KeyT => ch_mac!(shift, 't', 'T'),
-		KeyU => ch_mac!(shift, 'u', 'U'),
-		KeyV => ch_mac!(shift, 'v', 'V'),
-		KeyW => ch_mac!(shift, 'w', 'W'),
-		KeyX => ch_mac!(shift, 'x', 'X'),
-		KeyY => ch_mac!(shift, 'y', 'Y'),
-		KeyZ => ch_mac!(shift, 'z', 'Z'),
-		
-		// Numbers
-		Digit0 => ch_mac!(shift, '0', ')'),
-		Digit1 => ch_mac!(shift, '1', '!'),
-		Digit2 => ch_mac!(shift, '2', '@'),
-		Digit3 => ch_mac!(shift, '3', '#'),
-		Digit4 => ch_mac!(shift, '4', '$'),
-		Digit5 => ch_mac!(shift, '5', '%'),
-		Digit6 => ch_mac!(shift, '6', '^'),
-		Digit7 => ch_mac!(shift, '7', '&'),
-		Digit8 => ch_mac!(shift, '8', '*'),
-		Digit9 => ch_mac!(shift, '9', '('),
-		
-		Space => ch_mac!(' '),
-		
-		// Symbols
-		Minus => ch_mac!(shift, '-', '_'),
-		Equal => ch_mac!(shift, '=', '+'),
-		BracketLeft => ch_mac!(shift, '[', '{'),
-		BracketRight => ch_mac!(shift, ']', '}'),
-		Backslash => ch_mac!(shift, '\\', '|'),
-		Semicolon => ch_mac!(shift, ';', ':'),
-		Quote => ch_mac!(shift, '\'', '"'),
-		Comma => ch_mac!(shift, ',', '<'),
-		Period => ch_mac!(shift, '.', '>'),
-		Slash => ch_mac!(shift, '/', '?'),
-		
-		// Numpad keys (with NumLock on)
-		Numpad0 => ch_mac!('0'),
-		Numpad1 => ch_mac!('1'),
-		Numpad2 => ch_mac!('2'),
-		Numpad3 => ch_mac!('3'),
-		Numpad4 => ch_mac!('4'),
-		Numpad5 => ch_mac!('5'),
-		Numpad6 => ch_mac!('6'),
-		Numpad7 => ch_mac!('7'),
-		Numpad8 => ch_mac!('8'),
-		Numpad9 => ch_mac!('9'),
-		NumpadAdd => ch_mac!('+'),
-		NumpadSubtract => ch_mac!('-'),
-		NumpadMultiply => ch_mac!('*'),
-		NumpadDivide => ch_mac!('/'),
-		NumpadDecimal => ch_mac!('.'),
-		
-		// Fallback - undefined
-		_ => None,
 	}
 }

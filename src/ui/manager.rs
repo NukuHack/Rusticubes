@@ -257,12 +257,12 @@ impl UIManager {
 		}
 	}
 
-	pub fn handle_key_input(&mut self, key: Key, shift: bool) -> bool {
+	pub fn handle_keyboard_input(&mut self, key: Key, input_str: &str) -> bool {
 		// 0 = normal item like input fields
 		// 3 = normal item but not input field
 		// 2 = normal item but should not process input (like in game UI)
 		if matches!(self.focused_element, Some((_, 0))) {
-			return self.handle_key_input_on_input_field(key, shift);
+			return self.handle_key_input_on_input_field(key, input_str);
 		} else if matches!(self.focused_element, Some((_, 3))) {
 			if key == Escape {
 				let inv = ptr::get_gamestate().player_mut().inventory_mut();

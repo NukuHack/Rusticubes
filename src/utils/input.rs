@@ -16,8 +16,7 @@ impl InputSystem {
 			mouse_captured: false,
 		}
 	}
-}
-impl InputSystem {
+
 	#[inline] pub const fn set_mouse_captured(&mut self, is_captured:bool) {
 		self.mouse_captured = is_captured;
 	}
@@ -29,6 +28,13 @@ impl InputSystem {
 		*self = Self::default();
 		self.set_mouse_captured(is_mouse_captured);
 	}
+
+    /// Compares two ModifiersState and returns the differences as a new ModifiersState.
+    /// Each bit in the returned value represents a modifier that is in a different state
+    /// between the two ModifiersState instances.
+    pub fn compare(&self, other: &ModifiersState) -> ModifiersState {
+        ModifiersState::from_bits(self.modifiers.bits() ^ other.bits()).unwrap_or_default()
+    }
 }
 
 pub struct MouseButtonState {

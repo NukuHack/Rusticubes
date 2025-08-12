@@ -420,6 +420,7 @@ pub async fn run() {
 		}
 		let state = ext::ptr::get_state();
 		let Event::WindowEvent { event, window_id } = &event else { return; };
+		//let Event::DeviceEvent { event, device_id } = &event else { return; };
 
 		if *window_id != state.window().id() { return; };
 
