@@ -20,9 +20,7 @@ pub enum UIElementData {
 		frames: Vec<MutStr>, current_frame: u32, frame_duration: f32, elapsed_time: f32,
 		looping: bool, playing: bool, blend_delay: Option<u32>
 	},
-	Slider {
-		min_value: f32, text_color: Color, max_value: f32, current_value: f32, step: Option<f32>
-	},
+	Slider { min_value: f32, text_color: Color, max_value: f32, current_value: f32, step: Option<f32> },
 }
 impl UIElementData {
 	#[inline] pub const fn default() -> Self { UIElementData::Panel }
@@ -540,102 +538,5 @@ impl UIElement {
 		let delay = if blend_delay.is_some() { blend_delay.unwrap() } else { 0 };
 		let packed_progress = (raw_progress & 0xFFFF) | ((delay & 0xFFFF) << 16);
 		return Some([packed_frames, packed_progress]);
-	}
-}
-
-// Input validation and processing
-#[inline]
-pub fn process_text_input(text: &mut String, c: char) -> bool {
-	if text.len() >= 256 || c.is_control() { return false; }
-	
-	text.push(c);
-	
-	true
-}
-
-#[inline]
-pub fn handle_backspace(text: &mut String) -> bool {
-	if text.is_empty() { return false; }
-
-	text.pop();
-	
-	true
-}
-
-
-use winit::keyboard::KeyCode as Key;
-
-// Input handling utilities (unchanged)
-#[inline]
-pub const fn key_to_char(key: Key, shift: bool) -> Option<char> {
-	match key {
-			// Alphabet
-		Key::KeyA => Some(if shift { 'A' } else { 'a' }),
-		Key::KeyB => Some(if shift { 'B' } else { 'b' }),
-		Key::KeyC => Some(if shift { 'C' } else { 'c' }),
-		Key::KeyD => Some(if shift { 'D' } else { 'd' }),
-		Key::KeyE => Some(if shift { 'E' } else { 'e' }),
-		Key::KeyF => Some(if shift { 'F' } else { 'f' }),
-		Key::KeyG => Some(if shift { 'G' } else { 'g' }),
-		Key::KeyH => Some(if shift { 'H' } else { 'h' }),
-		Key::KeyI => Some(if shift { 'I' } else { 'i' }),
-		Key::KeyJ => Some(if shift { 'J' } else { 'j' }),
-		Key::KeyK => Some(if shift { 'K' } else { 'k' }),
-		Key::KeyL => Some(if shift { 'L' } else { 'l' }),
-		Key::KeyM => Some(if shift { 'M' } else { 'm' }),
-		Key::KeyN => Some(if shift { 'N' } else { 'n' }),
-		Key::KeyO => Some(if shift { 'O' } else { 'o' }),
-		Key::KeyP => Some(if shift { 'P' } else { 'p' }),
-		Key::KeyQ => Some(if shift { 'Q' } else { 'q' }),
-		Key::KeyR => Some(if shift { 'R' } else { 'r' }),
-		Key::KeyS => Some(if shift { 'S' } else { 's' }),
-		Key::KeyT => Some(if shift { 'T' } else { 't' }),
-		Key::KeyU => Some(if shift { 'U' } else { 'u' }),
-		Key::KeyV => Some(if shift { 'V' } else { 'v' }),
-		Key::KeyW => Some(if shift { 'W' } else { 'w' }),
-		Key::KeyX => Some(if shift { 'X' } else { 'x' }),
-		Key::KeyY => Some(if shift { 'Y' } else { 'y' }),
-		Key::KeyZ => Some(if shift { 'Z' } else { 'z' }),
-			// Numbers
-		Key::Digit0 => Some(if shift { ')' } else { '0' }),
-		Key::Digit1 => Some(if shift { '!' } else { '1' }),
-		Key::Digit2 => Some(if shift { '@' } else { '2' }),
-		Key::Digit3 => Some(if shift { '#' } else { '3' }),
-		Key::Digit4 => Some(if shift { '$' } else { '4' }),
-		Key::Digit5 => Some(if shift { '%' } else { '5' }),
-		Key::Digit6 => Some(if shift { '^' } else { '6' }),
-		Key::Digit7 => Some(if shift { '&' } else { '7' }),
-		Key::Digit8 => Some(if shift { '*' } else { '8' }),
-		Key::Digit9 => Some(if shift { '(' } else { '9' }),
-		Key::Space => Some(' '),
-			// Symbols
-		Key::Minus => Some(if shift { '_' } else { '-' }),
-		Key::Equal => Some(if shift { '+' } else { '=' }),
-		Key::BracketLeft => Some(if shift { '{' } else { '[' }),
-		Key::BracketRight => Some(if shift { '}' } else { ']' }),
-		Key::Backslash => Some(if shift { '|' } else { '\\' }),
-		Key::Semicolon => Some(if shift { ':' } else { ';' }),
-		Key::Quote => Some(if shift { '"' } else { '\'' }),
-		Key::Comma => Some(if shift { '<' } else { ',' }),
-		Key::Period => Some(if shift { '>' } else { '.' }),
-		Key::Slash => Some(if shift { '?' } else { '/' }),
-			// Numpad keys (with NumLock on)
-		Key::Numpad0 => Some('0'),
-		Key::Numpad1 => Some('1'),
-		Key::Numpad2 => Some('2'),
-		Key::Numpad3 => Some('3'),
-		Key::Numpad4 => Some('4'),
-		Key::Numpad5 => Some('5'),
-		Key::Numpad6 => Some('6'),
-		Key::Numpad7 => Some('7'),
-		Key::Numpad8 => Some('8'),
-		Key::Numpad9 => Some('9'),
-		Key::NumpadAdd => Some('+'),
-		Key::NumpadSubtract => Some('-'),
-		Key::NumpadMultiply => Some('*'),
-		Key::NumpadDivide => Some('/'),
-		Key::NumpadDecimal => Some('.'),
-			// Fallback - undefined
-		_ => None,
 	}
 }

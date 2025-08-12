@@ -109,6 +109,7 @@ pub mod ui {
 	pub mod setup;
 	pub mod dialog;
 	pub mod events;
+	pub mod text;
 }
 /// Utility things, like helper Structs
 pub mod utils {

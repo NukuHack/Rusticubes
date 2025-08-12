@@ -6,7 +6,7 @@ use crate::{
 	item::ui_inventory::ClickResult
 };
 
-impl UIManager {		
+impl UIManager {
 	#[inline]
 	fn handle_click_press(&mut self, x: f32, y: f32) -> bool {
 		match self.state.clone() {

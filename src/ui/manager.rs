@@ -4,12 +4,12 @@ use crate::{
 	get_string,
 	ui::{
 		dialog,
-		element::{self, UIElement, UIElementData, ElementData},
+		element::{UIElement, UIElementData, ElementData},
 		render::{UIRenderer, Vertex},
 	},
 	item::ui_inventory::InventoryUIState
 };
-use winit::keyboard::KeyCode as Key;
+use winit::keyboard::KeyCode::{self as Key, *};
 
 #[derive(PartialEq, Clone, Copy)]
 pub struct UIStateID(u32);
@@ -256,6 +256,27 @@ impl UIManager {
 			queue.write_buffer(&self.index_buffer, 0, bytemuck::cast_slice(&indices));
 		}
 	}
+
+	pub fn handle_key_input(&mut self, key: Key, shift: bool) -> bool {
+		// 0 = normal item like input fields
+		// 3 = normal item but not input field
+		// 2 = normal item but should not process input (like in game UI)
+		if matches!(self.focused_element, Some((_, 0))) {
+			return self.handle_key_input_on_input_field(key, shift);
+		} else if matches!(self.focused_element, Some((_, 3))) {
+			if key == Escape {
+				let inv = ptr::get_gamestate().player_mut().inventory_mut();
+				let itm = inv.remove_cursor().unwrap();
+				inv.add_item_anywhere(itm);
+				close_pressed();
+				self.setup_ui();
+				return true;
+			}
+		}
+		// we do not handle idx 2 because i don't think we need to ...
+
+		false
+	}
 	
 	#[inline]
 	fn update_anim(&mut self, delta: f32) {
@@ -294,48 +315,7 @@ impl UIManager {
 	#[inline] pub fn elements_with_parent_mut(&mut self, parent: usize) -> Vec<&mut UIElement> { self.elements.iter_mut().filter(|e| e.parent.map_or(false, |p| p.0 == parent)).collect() }
 	 
 	#[inline] pub fn clear_elements(&mut self) { self.elements.clear(); self.clear_focused_element(); self.next_id = 1; }
-	
-	#[inline]
-	pub fn handle_key_input(&mut self, key: Key, shift: bool) -> bool {
-		if matches!(self.focused_element, Some((_, 0))) {
-			let Some(element) = self.get_focused_element_mut() else { return false; };
-			if !(element.visible && element.enabled) { return false; }
-
-			if !element.is_input() {
-				if key != Key::Escape { return false; }
-				self.clear_focused_element();
-				return false;
-			}
-			match key {
-				Key::Backspace => {
-					let Some(text_mut) = element.get_text_mut() else { return false; };
-					
-					element::handle_backspace(text_mut);
-				},
-				Key::Enter | Key::Escape => self.clear_focused_element(),
-				_ => if let Some(c) = element::key_to_char(key, shift) {
-					let Some(text_mut) = element.get_text_mut() else { return false; };
-					
-					element::process_text_input(text_mut, c);
-				}
-			}
-			return true;
-		} else if matches!(self.focused_element, Some((_, 3))) {
-			if key == Key::Escape {
-				let inv = ptr::get_gamestate().player_mut().inventory_mut();
-				let itm = inv.remove_cursor().unwrap();
-				inv.add_item_anywhere(itm);
-				close_pressed();
-				self.setup_ui();
-				return true;
-			}
-		}
-		// we do not handle idx 2 because i don't think we need to ...
-
-
-		false
-	}
-	
+		
 	#[inline] pub const fn clear_focused_element(&mut self) { self.focused_element = None; }
 		
 	#[inline] pub const fn toggle_visibility(&mut self) { self.visibility = !self.visibility; }

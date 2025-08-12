@@ -10,5 +10,6 @@ pub mod ui {
 	pub mod setup;
 	pub mod dialog;
 	pub mod events;
+	pub mod text;
 }
 

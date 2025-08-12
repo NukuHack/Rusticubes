@@ -1,12 +1,12 @@
 
+use crate::ui::text::{TruncateMode, AlignMode};
 use crate::utils::color::Color;
 use crate::fs::rs;
-use glam::Vec2;
 use crate::ext::ptr;
 use crate::ui::element::{UIElement, UIElementData};
 use crate::ui::manager::{UIManager};
-use rusttype::{Font, Scale, point};
-use image::{ImageBuffer, Rgba};
+use rusttype::Font;
+use glam::Vec2;
 use std::collections::HashMap;
 
 #[repr(C)]
@@ -40,12 +40,12 @@ pub struct UIRenderer {
 	uniform_buffer: wgpu::Buffer,
 	uniform_bind_group: wgpu::BindGroup,
 	uniform_bind_group_layout: wgpu::BindGroupLayout,
-	font: Font<'static>,
 	text_textures: HashMap<String, (wgpu::Texture, wgpu::BindGroup)>,
 	image_textures: HashMap<String, (wgpu::Texture, wgpu::BindGroup)>,
 	animation_textures: HashMap<String, (wgpu::Texture, wgpu::BindGroup)>,
 	default_bind_group: wgpu::BindGroup,
-	pixel_ratio: f32,
+	pub font: Font<'static>,
+	pub pixel_ratio: f32,
 }
 
 impl UIRenderer {
@@ -144,14 +144,9 @@ impl UIRenderer {
 			default_bind_group, pixel_ratio: 4.0,
 		}
 	}
-	
-	#[inline] pub fn change_font(&mut self, path: String) {
-		self.font = Font::try_from_vec(crate::get_bytes!(path)).expect("Failed to load font");
+
+	#[inline] pub fn clear_text(&mut self) {
 		self.text_textures.clear();
-	}
-	
-	#[inline] pub const fn set_pixel_ratio(&mut self, ratio: f32) {
-		self.pixel_ratio = ratio.max(10.0).min(0.5);
 	}
 	
 	#[inline] 
@@ -198,7 +193,7 @@ impl UIRenderer {
 		if let Some(text) = text {
 			let texture_key = format!("{}_{:?}", text, element.get_text_color());
 			if !self.text_textures.contains_key(&texture_key) {
-				let texture = self.render_text_to_texture(state.device(), state.queue(), &text, element.size, element.get_text_color());
+				let texture = self.render_text_to_texture(state.device(), state.queue(), &text, element.size, element.get_text_color(), TruncateMode::default(), AlignMode::default());
 				let texture_view = texture.create_view(&wgpu::TextureViewDescriptor {
 					dimension: Some(wgpu::TextureViewDimension::D2Array), ..Default::default() });
 				let bind_group = state.device().create_bind_group(&wgpu::BindGroupDescriptor {
@@ -242,91 +237,6 @@ impl UIRenderer {
 			let handle_y = y + (h - handle_w) / 2.0;
 			self.proc_rect_element(Vec2::new(handle_x, handle_y), Vec2::new(handle_w, handle_w), element.get_text_color(), mesh);
 		}
-	}
-
-	fn render_text_to_texture(&self, device: &wgpu::Device, queue: &wgpu::Queue, text: &str, element_size: Vec2, color: Color) -> wgpu::Texture {
-		let pix = if element_size.x + element_size.y < 0.2 { self.pixel_ratio * 3.0 } else { self.pixel_ratio };
-		let target_width_px = (element_size.x * 100.0 * pix) as u32;
-		let target_height_px = (element_size.y * 100.0 * pix) as u32;
-		let font_size = target_height_px as f32 * 0.8;
-		let scale = Scale::uniform(font_size);
-		let v_metrics = self.font.v_metrics(scale);
-		
-		// Calculate text width by summing up advances
-		let text_width = self.font.layout(text, scale, point(0.0, 0.0))
-			.fold(0.0, |width, g| width + g.unpositioned().h_metrics().advance_width);
-		
-		let (final_text, final_width) = if text_width > target_width_px as f32 * 0.9 {
-			let truncated = self.truncate_text(text, scale, target_width_px as f32 * 1.1);
-			let truncated_width = self.font.layout(&truncated, scale, point(0.0, 0.0))
-				.fold(0.0, |width, g| width + g.unpositioned().h_metrics().advance_width);
-			(truncated, truncated_width)
-		} else {
-			(text.to_string(), text_width)
-		};
-		
-		let padding = (font_size * 0.05).ceil() as u32;
-		let text_height = (v_metrics.ascent - v_metrics.descent).ceil() as u32;
-		let width = (final_width.ceil() as u32 + padding * 2).max(1);
-		let height = (text_height + padding * 2).max(1);
-
-		let mut image = ImageBuffer::from_pixel(width, height, Rgba([0, 0, 0, 0]));
-		let text_start_x = (width as f32 - final_width) / 2.0;
-		let adjusted_glyphs: Vec<_> = self.font.layout(&final_text, scale, 
-			point(text_start_x, v_metrics.ascent + padding as f32)).collect();
-
-		for glyph in adjusted_glyphs {
-			if let Some(bounding_box) = glyph.pixel_bounding_box() {
-				glyph.draw(|x, y, v| {
-					let x = x as i32 + bounding_box.min.x;
-					let y = y as i32 + bounding_box.min.y;
-					if x >= 0 && x < width as i32 && y >= 0 && y < height as i32 {
-						image.put_pixel(x as u32, y as u32, Rgba(color.with_a((v * 200.) as u8).to_arr()));
-					}
-				});
-			}
-		}
-
-		let texture = device.create_texture(&wgpu::TextureDescriptor {
-			label: Some("Text Texture"),
-			size: wgpu::Extent3d { width, height, depth_or_array_layers: 1 },
-			mip_level_count: 1, sample_count: 1, dimension: wgpu::TextureDimension::D2,
-			format: wgpu::TextureFormat::Rgba8Unorm,
-			usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-			view_formats: &[],
-		});
-
-		let raw_data = image.into_raw();
-		queue.write_texture(
-			wgpu::TexelCopyTextureInfo { texture: &texture, mip_level: 0, 
-				origin: wgpu::Origin3d::ZERO, aspect: wgpu::TextureAspect::All },
-			&raw_data,
-			wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(4 * width), rows_per_image: Some(height) },
-			wgpu::Extent3d { width, height, depth_or_array_layers: 1 },
-		);
-		texture
-	}
-
-	fn truncate_text(&self, text: &str, scale: Scale, max_width: f32) -> String {
-		let mut result = String::new();
-		let ellipsis = "...";
-		let ellipsis_width = self.font.layout(ellipsis, scale, point(0.0, 0.0))
-			.map(|g| g.position().x + g.unpositioned().h_metrics().advance_width)
-			.last().unwrap_or(0.0);
-		
-		if ellipsis_width >= max_width { return ellipsis.to_string(); }
-		
-		let mut current_width = 0.0;
-		for c in text.chars() {
-			let advance = self.font.glyph(c).scaled(scale).h_metrics().advance_width;
-			if current_width + advance + ellipsis_width > max_width {
-				result.push_str(ellipsis);
-				break;
-			}
-			result.push(c);
-			current_width += advance;
-		}
-		result
 	}
 
 	#[inline] fn process_image_element(&mut self, element: &UIElement, mesh: &mut MeshData) {
