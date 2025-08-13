@@ -128,13 +128,10 @@ pub fn close_pressed() {
 		UIState::Inventory(_) => {
 			let focus_state = state.ui_manager.get_focused_state();
 			if matches!(focus_state, FocusState::Item { .. }) {
-				println!(" good boy");
 				let inv = ptr::get_gamestate().player_mut().inventory_mut();
 				let itm = inv.remove_cursor().unwrap();
 				inv.add_item_anywhere(itm);
-			} else {
-				println!("focus: {:?}", focus_state);
-			};
+			}
 			state.ui_manager.state = UIState::InGame;
 			state.toggle_mouse_capture();
 		},
@@ -171,12 +168,10 @@ pub enum FocusState {
 		id: usize,
 		cursor_pos: usize,
 		selection_start: Option<usize>,
-		// You might also want to store the text being edited here
-		// or keep it in the UIElement and reference it by index
 	},
-
-	// Other interaction states as needed
+	// Item as in game inventory
 	Item { id: usize },
+	// Simple overlay for hotbar selection
 	HotbarOverlay { id: usize },
 }
 impl FocusState {

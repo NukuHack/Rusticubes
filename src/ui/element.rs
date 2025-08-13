@@ -10,17 +10,17 @@ type Callback = Arc<RefCell<dyn FnMut() + 'static>>;
 #[derive(Clone)]
 pub enum UIElementData {
 	Panel,
-	Label { text: MutStr, text_color: Color },
-	Button { text: MutStr, text_color: Color },
-	MultiStateButton { states: Vec<MutStr>, text_color: Color, current_state: usize },
-	InputField { text: MutStr, text_color: Color, placeholder: MutStr },
-	Checkbox { text: MutStr, text_color: Color, checked: bool },
+	Label { text: MutStr },
+	Button { text: MutStr },
+	MultiStateButton { states: Vec<MutStr>, current_state: usize },
+	InputField { text: MutStr, placeholder: MutStr },
+	Checkbox { text: MutStr, checked: bool },
 	Image { path: MutStr },
 	Animation {
 		frames: Vec<MutStr>, current_frame: u32, frame_duration: f32, elapsed_time: f32,
-		looping: bool, playing: bool, blend_delay: Option<u32>
+		looping: bool, playing: bool, blend_delay: Option<u32> // having a blend delay "0" means the animation will be smooth, otherwise it just "snaps" to the next frame
 	},
-	Slider { min_value: f32, text_color: Color, max_value: f32, current_value: f32, step: Option<f32> },
+	Slider { min_value: f32, max_value: f32, current_value: f32, step: Option<f32> },
 }
 impl UIElementData {
 	#[inline] pub const fn default() -> Self { UIElementData::Panel }
@@ -66,6 +66,7 @@ pub struct UIElement {
 	// Appearance
 	pub color: Color,
 	pub border: Border,
+	pub ext_color: Color,
 	//pub background: Option<Color>,  // Could support gradients/textures
 
 	// State
@@ -121,9 +122,10 @@ impl UIElement {
 		Self {
 			id,
 			data,
-			position: Vec2::new(0.0, 0.0),
-			size: Vec2::new(0.0, 0.0),
+			position: Vec2::ZERO,
+			size: Vec2::ZERO,
 			color: Color::DEF_COLOR,
+			ext_color: Color::DEF_COLOR,
 			parent: Parent::None,
 			hovered: false,
 			z_index: 0,
@@ -140,19 +142,19 @@ impl UIElement {
 	}
 	#[inline]
 	pub fn label(id: usize, text: MutStr) -> Self {
-		Self::new(id, UIElementData::Label { text, text_color: Color::DEF_COLOR })
+		Self::new(id, UIElementData::Label { text })
 	}
 	#[inline]
 	pub fn button(id: usize, text: MutStr) -> Self {
-		Self::new(id, UIElementData::Button { text, text_color: Color::DEF_COLOR })
+		Self::new(id, UIElementData::Button { text })
 	}
 	#[inline]
 	pub fn input(id: usize) -> Self {
-		Self::new(id, UIElementData::InputField { text: MutStr::default(), text_color: Color::DEF_COLOR, placeholder: MutStr::default() })
+		Self::new(id, UIElementData::InputField { text: MutStr::default(), placeholder: MutStr::default() })
 	}
 	#[inline]
 	pub fn checkbox(id: usize) -> Self {
-		Self::new(id, UIElementData::Checkbox { text: MutStr::default(), text_color: Color::DEF_COLOR, checked: false })
+		Self::new(id, UIElementData::Checkbox { text: MutStr::default(), checked: false })
 	}
 	#[inline]
 	pub fn image(id: usize, path: MutStr) -> Self {
@@ -161,30 +163,26 @@ impl UIElement {
 	#[inline]
 	pub fn animation(id: usize, frames: Vec<MutStr>) -> Self {
 		Self::new(id, UIElementData::Animation {
-			frames, current_frame: 0, frame_duration: 1.0, elapsed_time: 0.0,
+			frames, current_frame: 0, frame_duration: 1., elapsed_time: 0.,
 			looping: true, playing: true, blend_delay: Some(20)
 		})
 	}
 	#[inline]
 	pub fn multi_state_button(id: usize, states: Vec<MutStr>) -> Self {
-		Self::new(id, UIElementData::MultiStateButton {
-			states, text_color: Color::DEF_COLOR,
-			current_state: 0
-		})
+		Self::new(id, UIElementData::MultiStateButton { states, current_state: 0 })
 	}
 	#[inline]
 	pub fn slider(id: usize, min_value: f32, max_value: f32) -> Self {
 		Self::new(id, UIElementData::Slider {
-			min_value, max_value, //vertical: false,
-			text_color: Color::DEF_COLOR,
-			current_value: min_value,
-			step: None,
+			min_value, max_value, current_value: min_value, step: None,
 		})
 	}
 }
 
 macro_rules! builder_method {
-	($name:ident, $field:ident, $type:ty) => {
+	($name:ident, $field:ident: $type:ty) => {
+		#[inline]
+		#[must_use = "builder methods return the modified instance"]
 		pub const fn $name(mut self, $field: $type) -> Self {
 			self.$field = $field;
 			self
@@ -192,44 +190,47 @@ macro_rules! builder_method {
 	};
 }
 macro_rules! setter_method {
-	($name:ident, $field:ident, $type:ty) => {
-		pub const fn $name(&mut self, $field: $type) {
+	($name:ident, $field:ident: $type:ty) => {
+		#[inline]
+		pub const fn $name(&mut self, $field: $type) -> &mut Self {
 			self.$field = $field;
+			self
 		}
 	};
 }
-
 impl UIElement {
-	// Builder macro
-	builder_method!(with_position, position, Vec2);
-	builder_method!(with_size, size, Vec2);
-	builder_method!(with_color, color, Color);
-	builder_method!(with_z_index, z_index, i32);
-	builder_method!(with_visible, visible, bool);
-	builder_method!(with_enabled, enabled, bool);
-	builder_method!(with_border, border, Border);
-	// Setter macro
-	setter_method!(set_position, position, Vec2);
-	setter_method!(set_size, size, Vec2);
-	setter_method!(set_color, color, Color);
-	setter_method!(set_z_index, z_index, i32);
-	setter_method!(set_visible, visible, bool);
-	setter_method!(set_enabled, enabled, bool);
-	setter_method!(set_border, border, Border);
+	// Builder methods (consuming self)
+	builder_method!(with_position, position: Vec2);
+	builder_method!(with_size, size: Vec2);
+	builder_method!(with_color, color: Color);
+	builder_method!(with_z_index, z_index: i32);
+	builder_method!(with_visible, visible: bool);
+	builder_method!(with_enabled, enabled: bool);
+	builder_method!(with_border, border: Border);
+	builder_method!(with_ext_color, ext_color: Color);
+	builder_method!(with_vertical, vertical: bool);
+	
+	// Setter methods (mutating self)
+	setter_method!(set_position, position: Vec2);
+	setter_method!(set_size, size: Vec2);
+	setter_method!(set_color, color: Color);
+	setter_method!(set_z_index, z_index: i32);
+	setter_method!(set_visible, visible: bool);
+	setter_method!(set_enabled, enabled: bool);
+	setter_method!(set_border, border: Border);
+	setter_method!(set_ext_color, ext_color: Color);
+	setter_method!(set_vertical, vertical: bool);
+
 	// Builder methods
 	#[inline] pub const fn with_alpha(mut self, a: u8) -> Self { self.color = self.color.with_a(a); self }
-	#[inline] pub const fn with_parent(mut self, parent: usize) -> Self { self.parent = Parent::some(parent, Vec2::new(0.,0.)); self }
+	#[inline] pub const fn with_ext_alpha(mut self, a: u8) -> Self { self.ext_color = self.ext_color.with_a(a); self }
+	#[inline] pub const fn with_parent(mut self, parent: usize) -> Self { self.parent = Parent::some(parent, Vec2::ZERO); self }
 	#[inline] pub const fn with_parent_off(mut self, parent: usize, offset: Vec2) -> Self { self.parent = Parent::some(parent, offset); self }
-	// setters
-	#[inline] pub const fn set_alpha(&mut self, a: u8){ self.color = self.color.with_a(a); }
-	#[inline] pub const fn set_parent(&mut self, parent: usize) { self.parent = Parent::some(parent, Vec2::new(0.,0.)); }
-	#[inline] pub const fn set_parent_off(&mut self, parent: usize, offset: Vec2) { self.parent = Parent::some(parent, offset) }
 
-	// Builder-style versions (return Self for chaining)
-	#[inline] pub fn with_added_state(mut self, state: MutStr) -> Self { self.add_state(state); self }
-	#[inline] pub fn with_added_states(mut self, states: &[MutStr]) -> Self { self.add_states(states); self }
-	#[inline] pub fn with_added_frame(mut self, frame: MutStr) -> Self { self.add_frame(frame); self }
-	#[inline] pub fn with_added_frames(mut self, frames: &[MutStr]) -> Self { self.add_frames(frames); self }
+	// Setter methods
+	#[inline] pub const fn set_alpha(&mut self, a: u8){ self.color = self.color.with_a(a); }
+	#[inline] pub const fn set_parent(&mut self, parent: usize) { self.parent = Parent::some(parent, Vec2::ZERO); }
+	#[inline] pub const fn set_parent_off(&mut self, parent: usize, offset: Vec2) { self.parent = Parent::some(parent, offset) }
 
 
 	// MultiStateButton states management
@@ -255,21 +256,18 @@ impl UIElement {
 		}
 	}
 
+	// Builder-style versions (return Self for chaining)
+	#[inline] pub fn with_added_state(mut self, state: MutStr) -> Self { self.add_state(state); self }
+	#[inline] pub fn with_added_states(mut self, states: &[MutStr]) -> Self { self.add_states(states); self }
+	#[inline] pub fn with_added_frame(mut self, frame: MutStr) -> Self { self.add_frame(frame); self }
+	#[inline] pub fn with_added_frames(mut self, frames: &[MutStr]) -> Self { self.add_frames(frames); self }
+
 
 
 	#[inline] pub const fn with_style(self, style: &ElementStyle) -> Self {
 		self.with_color(style.color)
 			.with_border(style.border)
-			.with_text_color(style.text_color())
-	}
-	#[inline] pub const fn with_vertical(mut self, vertical: bool) -> Self {
-		self.vertical = vertical;
-		self
-	}
-
-	#[inline] pub fn with_callback<F: FnMut() + 'static>(mut self, callback: F) -> Self {
-		self.event_handler = Some(Arc::new(RefCell::new(callback)));
-		self
+			.with_ext_color(style.text_color())
 	}
 			
 	// Utility methods
@@ -310,6 +308,11 @@ impl UIElement {
 			_ => None,
 		}
 	}
+
+	#[inline] pub fn with_callback<F: FnMut() + 'static>(mut self, callback: F) -> Self {
+		self.event_handler = Some(Arc::new(RefCell::new(callback)));
+		self
+	}
 	#[inline] pub fn trigger_callback(&mut self) {
 		if let Some(cb) = self.event_handler.clone() {
 			cb.borrow_mut()();
@@ -336,50 +339,13 @@ impl UIElement {
 			_ => ElementData::None,
 		}
 	}
-	#[inline] pub fn get_string(&self) -> Option<String> {
-		self.get_element_data().text()
-	}
 
-	
 
 	// Text-related methods
 	#[inline]
 	pub fn with_text(mut self, text: &str) -> Self {
 		if let Some(text_field) = self.get_text_mut() { *text_field = text.to_string(); }
 		self
-	}
-	#[inline]
-	pub const fn with_text_color(mut self, color: Color) -> Self {
-		match &mut self.data {
-			UIElementData::Label { text_color, .. } |
-			UIElementData::Button { text_color, .. } |
-			UIElementData::InputField { text_color, .. } |
-			UIElementData::Checkbox { text_color, .. } |
-			UIElementData::MultiStateButton { text_color, .. } |
-			UIElementData::Slider { text_color, .. } => *text_color = color,
-			_ => {}
-		}
-		self
-	}
-	#[inline]
-	pub const fn with_text_alpha(self, a: u8) -> Self {
-		let color = self.get_text_color().with_a(a);
-		self.with_text_color(color)
-	}
-	#[inline]
-	pub const fn get_text_color(&self) -> Color {
-		let text_color = match &self.data {
-			UIElementData::Label { text_color, .. } |
-			UIElementData::Button { text_color, .. } |
-			UIElementData::InputField { text_color, .. } |
-			UIElementData::Checkbox { text_color, .. } |
-			UIElementData::MultiStateButton { text_color, .. } |
-			UIElementData::Slider { text_color, .. } => Some(*text_color),
-			_ => None,
-		};
-		if let Some(color) = text_color {
-			color
-		} else { self.color }
 	}
 	#[inline]
 	pub fn with_placeholder(mut self, p: &'static str) -> Self {
@@ -513,7 +479,7 @@ impl UIElement {
 	#[inline]
 	pub const fn reset_anim(&mut self) {
 		if let UIElementData::Animation { current_frame, elapsed_time, .. } = &mut self.data {
-			*current_frame = 0; *elapsed_time = 0.0;
+			*current_frame = 0; *elapsed_time = 0.;
 		}
 	}
 	#[inline]
@@ -555,8 +521,8 @@ impl UIElement {
 		let packed_frames = (*current_frame & 0xFFFF) | ((next_frame & 0xFFFF) << 16);
 		
 		// Convert to integer arithmetic by working in hundredths (like fixed-point)
-		let elapsed_hundredths = (*elapsed_time * 100.0) as u32;
-		let duration_hundredths = (*frame_duration * 100.0) as u32;
+		let elapsed_hundredths = (*elapsed_time * 100.) as u32;
+		let duration_hundredths = (*frame_duration * 100.) as u32;
 		
 		// Calculate progress using integer division (0-100 range)
 		let raw_progress = if duration_hundredths > 0 {

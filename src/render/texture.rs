@@ -55,7 +55,7 @@ pub fn get_texture_map() -> &'static [String] {
 /// Manages all texture resources for rendering
 pub struct TextureManager {
 	depth_texture: wgpu::Texture,
-	texture_array: HashMap<u16, u16>,
+	//texture_array: HashMap<u16, u16>,
 	bind_group: wgpu::BindGroup,
 	render_texture: wgpu::Texture,
 	render_texture_view: wgpu::TextureView,
@@ -79,7 +79,7 @@ impl TextureManager {
 		// Create resources
 		let paths = rs::find_png_resources("block");
 		initialize_texture_map(paths.clone());
-		let texture_array = make_texture_array(&paths);
+		//let texture_array = make_texture_array(&paths);
 		let (_array_texture, array_texture_view) = create_texture_array(&device, &queue, &paths).unwrap();
 		let array_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
 			address_mode_u: wgpu::AddressMode::ClampToEdge,
@@ -94,7 +94,7 @@ impl TextureManager {
 
 		Self {
 			depth_texture,
-			texture_array,
+			//texture_array,
 			bind_group,
 			render_texture,
 			render_texture_view,
@@ -121,7 +121,7 @@ impl TextureManager {
 		&self.post_bind_group
 	}
 }
-
+#[allow(dead_code)]
 fn make_texture_array(paths: &[String]) -> HashMap<u16, u16> {
 	let mut map = HashMap::<u16, u16>::new();
 	for (i, _path) in paths.iter().enumerate() {

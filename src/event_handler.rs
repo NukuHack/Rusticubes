@@ -350,9 +350,6 @@ impl<'a> crate::State<'a> {
 			if self.ui_manager.visibility {
 				self.ui_manager.handle_mouse_move(x, y, self.input_system.mouse_button_state.left);
 			}
-			
-			// Handle UI hover
-			self.ui_manager.handle_hover(x, y);
 			self.input_system.previous_mouse = Some(*position);
 			return true;
 		}

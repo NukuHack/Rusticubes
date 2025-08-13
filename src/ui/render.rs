@@ -170,14 +170,14 @@ impl UIRenderer {
 				UIElementData::Slider { .. } => self.process_slider(element, &mut mesh_data),
 				UIElementData::InputField { .. } | UIElementData::Button { .. } => {
 					self.process_rect_element(element, &mut mesh_data);
-					self.process_text_element(element, element.get_string(), &mut mesh_data);
+					self.process_text_element(element, element.get_element_data().text(), &mut mesh_data);
 				}
 				UIElementData::Label { .. } => {
-					self.process_text_element(element, element.get_string(), &mut mesh_data);
+					self.process_text_element(element, element.get_element_data().text(), &mut mesh_data);
 				}
 				UIElementData::MultiStateButton { .. } => {
 					self.process_rect_element(element, &mut mesh_data);
-					self.process_text_element(element, element.get_string(), &mut mesh_data);
+					self.process_text_element(element, element.get_element_data().text(), &mut mesh_data);
 				}
 				_ => self.process_rect_element(element, &mut mesh_data),
 			}
@@ -191,9 +191,9 @@ impl UIRenderer {
 		let state = ptr::get_state();
 		
 		if let Some(text) = text {
-			let texture_key = format!("{}_{:?}", text, element.get_text_color());
+			let texture_key = format!("{}_{:?}", text, element.ext_color);
 			if !self.text_textures.contains_key(&texture_key) {
-				let texture = self.render_text_to_texture(state.device(), state.queue(), &text, element.size, element.get_text_color(), TruncateMode::default(), AlignMode::default());
+				let texture = self.render_text_to_texture(state.device(), state.queue(), &text, element.size, element.ext_color, TruncateMode::default(), AlignMode::default());
 				let texture_view = texture.create_view(&wgpu::TextureViewDescriptor {
 					dimension: Some(wgpu::TextureViewDimension::D2Array), ..Default::default() });
 				let bind_group = state.device().create_bind_group(&wgpu::BindGroupDescriptor {
@@ -214,7 +214,7 @@ impl UIRenderer {
 				let tex_h = texture.height() as f32 * pixel_to_unit;
 				let real_x = element.position.x + (element.size.x - tex_w) / 2.0;
 				let real_y = element.position.y + (element.size.y - tex_h) / 2.0;
-				self.proc_rect_element(Vec2::new(real_x, real_y), Vec2::new(tex_w, tex_h), element.get_text_color(), mesh);
+				self.proc_rect_element(Vec2::new(real_x, real_y), Vec2::new(tex_w, tex_h), element.ext_color, mesh);
 			}
 		}
 	}
@@ -235,7 +235,7 @@ impl UIRenderer {
 			let handle_w = h * 0.8;
 			let handle_x = x + (w - handle_w) * normalized_value;
 			let handle_y = y + (h - handle_w) / 2.0;
-			self.proc_rect_element(Vec2::new(handle_x, handle_y), Vec2::new(handle_w, handle_w), element.get_text_color(), mesh);
+			self.proc_rect_element(Vec2::new(handle_x, handle_y), Vec2::new(handle_w, handle_w), element.ext_color, mesh);
 		}
 	}
 
@@ -286,7 +286,6 @@ impl UIRenderer {
 	#[inline] fn process_animation_element(&mut self, element: &UIElement, mesh: &mut MeshData) {
 		if let UIElementData::Animation { frames, .. } = &element.data {
 			let state = ptr::get_state();
-			// Convert Vec<&str> to Vec<String>
 			let frames_str: Vec<String> = frames.iter().map(|s| s.to_string()).collect();
 			let animation_key = frames_str.join("|");
 			
@@ -352,16 +351,17 @@ impl UIRenderer {
 				self.proc_rect_element(Vec2::new(check_x, check_y), Vec2::new(check_w, check_h), element.color.with_g(255), mesh);
 			}
 		}
-		if let Some(text) = element.get_string() {
+		if let Some(text) = element.get_element_data().text() {
 			let label_element = UIElement {
 				position: Vec2::new(element.position.x + element.size.x + 0.01, element.position.y),
 				size: Vec2::new(text.len() as f32 * 0.015, element.size.y),
-				data: UIElementData::Label { text: text.clone().into(), text_color: element.get_text_color() },
-				color: element.get_text_color(),
+				data: UIElementData::Label { text: text.clone().into() },
+				color: element.ext_color,
+				ext_color: element.ext_color,
 				event_handler: None,
 				..UIElement::default()
 			};
-			self.process_text_element(&label_element, label_element.get_string(), mesh);
+			self.process_text_element(&label_element, label_element.get_element_data().text(), mesh);
 		}
 	}
 
@@ -449,8 +449,8 @@ impl UIRenderer {
 					if *checked {
 						draw_six(r_pass, &mut i_off);
 					}
-					if let Some(text) = element.get_string() {
-						let texture_key = format!("{}_{:?}", text, element.get_text_color());
+					if let Some(text) = element.get_element_data().text() {
+						let texture_key = format!("{}_{:?}", text, element.ext_color);
 						if let Some((_, bind_group)) = self.text_textures.get(&texture_key) {
 							draw_six_set(r_pass, 0, &bind_group, &mut i_off);
 						}
@@ -466,8 +466,8 @@ impl UIRenderer {
 				UIElementData::Button { .. } |
 				UIElementData::MultiStateButton { .. } => {
 					draw_six_set(r_pass, 0, &self.default_bind_group, &mut i_off);
-					if let Some(text) = element.get_string() {
-						let texture_key = format!("{}_{:?}", text, element.get_text_color());
+					if let Some(text) = element.get_element_data().text() {
+						let texture_key = format!("{}_{:?}", text, element.ext_color);
 						if let Some((_, bind_group)) = self.text_textures.get(&texture_key) {
 							draw_six_set(r_pass, 0, &bind_group, &mut i_off);
 						}
@@ -477,8 +477,8 @@ impl UIRenderer {
 					draw_six_set(r_pass, 0, &self.default_bind_group, &mut i_off);
 				},
 				UIElementData::Label { .. } => {
-					if let Some(text) = element.get_string() {
-						let texture_key = format!("{}_{:?}", text, element.get_text_color());
+					if let Some(text) = element.get_element_data().text() {
+						let texture_key = format!("{}_{:?}", text, element.ext_color);
 						if let Some((_, bind_group)) = self.text_textures.get(&texture_key) {
 							draw_six_set(r_pass, 0, &bind_group, &mut i_off);
 						}

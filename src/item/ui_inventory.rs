@@ -594,7 +594,7 @@ impl UIManager {
 		let quantity_text = UIElement::label(self.next_id(), item.stack.to_string().into())
 			.with_position(Vec2::new(x + SLOT * 0.3, y))
 			.with_size(Vec2::new(SLOT * 0.7, SLOT * 0.6))
-			.with_text_color(Solor::Black.i())
+			.with_ext_color(Solor::Black.i())
 			.with_z_index(z+1)
 			.with_parent_off(id.clone(), Vec2::new(SLOT * 0.3, 0.));
 		self.add_element(quantity_text);
