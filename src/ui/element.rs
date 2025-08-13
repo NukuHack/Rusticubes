@@ -51,7 +51,7 @@ pub struct UIElement {
 	pub id: usize,
 
 	// Hierarchy
-	pub parent: Option<(usize, Vec2)>,
+	pub parent: Parent,
 
 	// Layout
 	pub position: Vec2,
@@ -81,6 +81,35 @@ pub struct UIElement {
 	// Content
 	pub data: UIElementData,
 }
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub enum Parent {
+	None,
+	Some { parent: usize, offset: Vec2 },
+}
+impl Parent {
+	#[inline] pub const fn some(id:usize, offset:Vec2) -> Self {
+		Self::Some{ parent:id, offset:offset }
+	}
+	#[inline] pub const fn none() -> Self { Self::None }
+	#[inline] pub const fn is_none(&self) -> bool {
+		matches!(self, Self::None)
+	}
+	#[inline] pub const fn is_some(&self) -> bool {
+		!self.is_none()
+	}
+	#[inline] pub const fn pos(&self) -> Vec2 {
+		match self {
+			Self::Some{ offset, ..} => *offset,
+			_ => todo!(),
+		}
+	}
+	#[inline] pub const fn id(&self) -> usize {
+		match self {
+			Self::Some{ parent, ..} => *parent,
+			_ => todo!(),
+		}
+	}
+}
 
 impl UIElement {
 	#[inline] pub const fn default() -> Self {
@@ -95,7 +124,7 @@ impl UIElement {
 			position: Vec2::new(0.0, 0.0),
 			size: Vec2::new(0.0, 0.0),
 			color: Color::DEF_COLOR,
-			parent: None,
+			parent: Parent::None,
 			hovered: false,
 			z_index: 0,
 			visible: true,
@@ -189,12 +218,12 @@ impl UIElement {
 	setter_method!(set_border, border, Border);
 	// Builder methods
 	#[inline] pub const fn with_alpha(mut self, a: u8) -> Self { self.color = self.color.with_a(a); self }
-	#[inline] pub const fn with_parent(mut self, parent: usize) -> Self { self.parent = Some((parent, Vec2::new(0.,0.))); self }
-	#[inline] pub const fn with_parent_off(mut self, parent: usize, offset: Vec2) -> Self { self.parent = Some((parent, offset)); self }
+	#[inline] pub const fn with_parent(mut self, parent: usize) -> Self { self.parent = Parent::some(parent, Vec2::new(0.,0.)); self }
+	#[inline] pub const fn with_parent_off(mut self, parent: usize, offset: Vec2) -> Self { self.parent = Parent::some(parent, offset); self }
 	// setters
 	#[inline] pub const fn set_alpha(&mut self, a: u8){ self.color = self.color.with_a(a); }
-	#[inline] pub const fn set_parent(&mut self, parent: usize) { self.parent = Some((parent, Vec2::new(0.,0.))); }
-	#[inline] pub const fn set_parent_off(&mut self, parent: usize, offset: Vec2) { self.parent = Some((parent, offset)) }
+	#[inline] pub const fn set_parent(&mut self, parent: usize) { self.parent = Parent::some(parent, Vec2::new(0.,0.)); }
+	#[inline] pub const fn set_parent_off(&mut self, parent: usize, offset: Vec2) { self.parent = Parent::some(parent, offset) }
 
 	// Builder-style versions (return Self for chaining)
 	#[inline] pub fn with_added_state(mut self, state: MutStr) -> Self { self.add_state(state); self }

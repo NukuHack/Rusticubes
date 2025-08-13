@@ -2,7 +2,7 @@
 use glam::Vec2;
 use crate::item::inventory::{Inventory, ItemContainer, AreaType, Slot};
 use crate::ext::ptr;
-use crate::ui::{manager::{UIManager, UIState}, element::UIElement};
+use crate::ui::{manager::{UIManager, UIState, FocusState}, element::UIElement};
 use crate::item::items::ItemStack;
 use crate::utils::color::Solor;
 
@@ -514,23 +514,23 @@ impl UIManager {
 		let (x, y) = area.get_slot_position(row, col);
 
 		// Check if we have the correct focused element
-		if let Some((id, 2)) = self.focused_element {
-			if let Some(element) = self.get_element_mut(id) {
-				element.set_position(Vec2::new(x, y));
-				return;
-			}
+		let focus_state = self.get_focused_state();
+		if matches!(focus_state, FocusState::HotbarOverlay { .. }) {
+			let Some(element) = self.get_focused_element_mut() else { return; };
+			element.set_position(Vec2::new(x, y));
+			return;
 		}
 		
 		// If we get here, either no focused element or wrong type
-		let item_id = self.next_id();
-		let slot = UIElement::panel(item_id)
+		let id = self.next_id();
+		let slot = UIElement::panel(id)
 			.with_position(Vec2::new(x, y))
 			.with_size(Vec2::new(SLOT, SLOT))
 			.with_style(&ptr::get_settings().ui_theme.panels.nice.with_border_width(0.012))
 			.with_z_index(4);
 		self.add_element(slot);
 
-		self.focused_element = Some((item_id, 2));
+		self.set_focused_state(FocusState::HotbarOverlay { id });
 	}
 	// New method to display item being held by cursor
 	pub fn cursor_item_display(&mut self, x:f32, y:f32, cursor_item: &ItemStack) {
@@ -538,13 +538,13 @@ impl UIManager {
 		let (x,y) = (x - SLOT/2.0, y - SLOT/2.0);
 		let origo = Vec2::new(x , y);
 		// Check if we have the correct focused element
-		if let Some((id, 3)) = self.focused_element {
-			let Some(element) = self.get_element_mut(id) else { return; };
+		if matches!(self.get_focused_state(), FocusState::Item { .. }) {
+			let Some(element) = self.get_focused_element_mut() else { return; };
 			element.set_position(origo);
 
-			let childs = self.elements_with_parent_mut(id);
+			let childs = self.elements_with_parent_mut(self.get_focused_state().id());
 			for child in childs {
-				let offset:Vec2 = child.parent.unwrap().1;
+				let offset:Vec2 = child.parent.pos();
 				child.set_position(origo + offset);
 			}
 			return; // othervise it will create the element again 
@@ -554,7 +554,7 @@ impl UIManager {
 
 		let id = self.create_item_display(x, y, cursor_item, 10);
 
-		self.focused_element = Some((id, 3));
+		self.set_focused_state(FocusState::Item { id });
 	}
 
 	fn create_area_slots(&mut self, area: &AreaLayout, items: &ItemContainer) {

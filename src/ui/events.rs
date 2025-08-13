@@ -1,8 +1,10 @@
 
-use crate::ui::manager::{UIManager, UIState};
 use crate::{
 	ext::{audio, ptr},
-	ui::element::{UIElement, UIElementData},
+	ui::{
+		manager::{UIManager, UIState, FocusState},
+		element::UIElementData,
+	},
 	item::ui_inventory::ClickResult
 };
 
@@ -26,27 +28,41 @@ impl UIManager {
 				self.clear_focused_element();
 			}
 		}
-		let mut sorted_elements: Vec<&mut UIElement> = self.elements.iter_mut().filter(|e| e.visible && e.enabled).collect();
-		sorted_elements.sort_by_key(|e| e.z_index);
+		// First collect the IDs of elements that need to be processed
+		let mut candidate_ids: Vec<(usize, i32)> = self.elements.iter()
+			.enumerate()
+			.filter(|(_, e)| e.visible && e.enabled)
+			.map(|(i, e)| (i, e.z_index))
+			.collect();
 
-		for (_, element) in sorted_elements.iter_mut().enumerate().rev() {
+		// Sort by z_index (highest first since we'll process in reverse)
+		candidate_ids.sort_by_key(|(_, z)| -z);
+
+		for (i, _) in candidate_ids {
+			let element = &mut self.elements[i];
 			if !element.contains_point(x, y) { continue; }
 
-			match element.data {
-				UIElementData::InputField{..} |
+			let id = element.id; // Copy the ID first
+			let focus_state:FocusState = match element.data {
 				UIElementData::Checkbox{..} | 
 				UIElementData::Button{..} |
 				UIElementData::MultiStateButton{..} |
 				UIElementData::Slider{..} => {
-					element.set_calc_value(x, y); // only runs for sliders
-
-					self.focused_element = Some((element.id, 0));
+					element.set_calc_value(x, y);
 					audio::set_fg("click.ogg");
-
-					return true;
+					FocusState::Simple { id }
 				},
-				_=> { },
-			}
+				UIElementData::InputField{..}  => {
+					audio::set_fg("click.ogg");
+					FocusState::input(id)
+				},
+				_=> FocusState::default(),
+			};
+
+			if focus_state.is_none() { continue; }
+
+			self.set_focused_state(focus_state);
+			return true;
 		}
 		false
 	}

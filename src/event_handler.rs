@@ -152,11 +152,6 @@ impl<'a> crate::State<'a> {
 
 					match self.ui_manager.state.clone() {
 						UIState::Inventory(_) => {
-							if matches!(self.ui_manager.focused_element, Some((_, 3))) {
-								let inv = ptr::get_gamestate().player_mut().inventory_mut();
-								let itm = inv.remove_cursor().unwrap();
-								inv.add_item_anywhere(itm);
-							};
 							manager::close_pressed();
 							if !self.input_system.mouse_captured() { self.toggle_mouse_capture(); }
 						},

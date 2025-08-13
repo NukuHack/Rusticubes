@@ -126,6 +126,15 @@ pub fn close_pressed() {
 		UIState::Settings(prev_state) => state.ui_manager.state = UIState::from(prev_state),
 		UIState::ConnectLocal => state.ui_manager.state = UIState::WorldSelection,
 		UIState::Inventory(_) => {
+			let focus_state = state.ui_manager.get_focused_state();
+			if matches!(focus_state, FocusState::Item { .. }) {
+				println!(" good boy");
+				let inv = ptr::get_gamestate().player_mut().inventory_mut();
+				let itm = inv.remove_cursor().unwrap();
+				inv.add_item_anywhere(itm);
+			} else {
+				println!("focus: {:?}", focus_state);
+			};
 			state.ui_manager.state = UIState::InGame;
 			state.toggle_mouse_capture();
 		},
@@ -144,14 +153,51 @@ pub struct UIManager {
 	pub pipeline: wgpu::RenderPipeline,
 	// main data
 	pub elements: Vec<UIElement>,
-	pub focused_element: Option<(usize, usize)>,
+	focused_element: FocusState,
 	renderer: UIRenderer,
 	// extra for double callbacks
 	pub dialogs: dialog::DialogManager,
 	// helper stuff, mainly for init
 	next_id: usize,
 }
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub enum FocusState {
+	/// No element is focused
+	None,
+	/// A button or other simple element is focused
+	Simple { id: usize },
+	/// An input box is focused with cursor position and selection
+	Input {
+		id: usize,
+		cursor_pos: usize,
+		selection_start: Option<usize>,
+		// You might also want to store the text being edited here
+		// or keep it in the UIElement and reference it by index
+	},
 
+	// Other interaction states as needed
+	Item { id: usize },
+	HotbarOverlay { id: usize },
+}
+impl FocusState {
+	#[inline] pub const fn is_some(&self) -> bool { !self.is_none() }
+	#[inline] pub const fn is_none(&self) -> bool { matches!(self, Self::None) }
+	#[inline] pub const fn default() -> Self { Self::None }
+
+	#[inline] pub const fn input(id: usize) -> Self {
+		Self::Input { id, cursor_pos: 0, selection_start: None }
+	}
+
+	#[inline] pub const fn id(&self) -> usize {
+		match self {
+			Self::Simple { id } |
+			Self::Input { id, .. } |
+			Self::Item { id } |
+			Self::HotbarOverlay { id } => *id,
+			Self::None => 0,
+		}
+	}
+}
 
 /// this is the screen related UI layout, also use f32 for position setting
 /// -1,1|    |    |   |1,1 
@@ -224,7 +270,7 @@ impl UIManager {
 			index_buffer,
 			pipeline: ui_pipeline,
 			elements: Vec::new(),
-			focused_element: None,
+			focused_element: FocusState::default(),
 			visibility: true,
 			dialogs: dialog::DialogManager::new(),
 			renderer,
@@ -258,12 +304,10 @@ impl UIManager {
 	}
 
 	pub fn handle_keyboard_input(&mut self, key: Key, input_str: &str) -> bool {
-		// 0 = normal item like input fields
-		// 3 = normal item but not input field
-		// 2 = normal item but should not process input (like in game UI)
-		if matches!(self.focused_element, Some((_, 0))) {
+		let focus_state = self.get_focused_state();
+		if matches!(focus_state, FocusState::Input { .. }) {
 			return self.handle_key_input_on_input_field(key, input_str);
-		} else if matches!(self.focused_element, Some((_, 3))) {
+		} else if matches!(focus_state, FocusState::Simple { .. }) {
 			if key == Escape {
 				let inv = ptr::get_gamestate().player_mut().inventory_mut();
 				let itm = inv.remove_cursor().unwrap();
@@ -273,7 +317,7 @@ impl UIManager {
 				return true;
 			}
 		}
-		// we do not handle idx 2 because i don't think we need to ...
+		// we do not handle other kinds because i don't think we need to ...
 
 		false
 	}
@@ -297,31 +341,38 @@ impl UIManager {
 	
 	#[inline]
 	pub fn remove_element(&mut self, id: usize) -> bool {
-		let Some(element) = self.elements.iter().position(|e| e.id == id) else { return false; };
-
-		if let Some((idx, _)) = self.focused_element {
-			if idx == element {
+		let Some(element_id) = self.elements.iter().position(|e| e.id == id) else { return false; };
+		let focus_state = self.get_focused_state();
+		if focus_state.is_some() {
+			if focus_state.id() == element_id {
 				self.clear_focused_element();
 			}
 		}
-		self.elements.remove(element);
+		self.elements.remove(element_id);
 		true
 	}
 
-	#[inline] pub fn visible_elements(&self) -> Vec<&UIElement> { self.elements.iter().filter(|e| e.visible).collect() }
 	#[inline] pub fn get_element(&self, id: usize) -> Option<&UIElement> { self.elements.iter().find(|e| e.id == id) }
 	#[inline] pub fn get_element_mut(&mut self, id: usize) -> Option<&mut UIElement> { self.elements.iter_mut().find(|e| e.id == id) }
-	#[inline] pub fn elements_with_parent(&self, parent: usize) -> Vec<&UIElement> { self.elements.iter().filter(|e| e.parent.map_or(false, |p| p.0 == parent)).collect() }
-	#[inline] pub fn elements_with_parent_mut(&mut self, parent: usize) -> Vec<&mut UIElement> { self.elements.iter_mut().filter(|e| e.parent.map_or(false, |p| p.0 == parent)).collect() }
+
+	#[inline] pub fn visible_elements(&self) -> Vec<&UIElement> { self.elements.iter().filter(|e| e.visible).collect() }
+
+	#[inline] pub fn elements_with_parent(&self, parent: usize) -> Vec<&UIElement> { self.elements.iter().filter(|e| e.parent.is_some() && e.parent.id() == parent).collect() }
+	#[inline] pub fn elements_with_parent_mut(&mut self, parent: usize) -> Vec<&mut UIElement> { self.elements.iter_mut().filter(|e| e.parent.is_some() && e.parent.id() == parent).collect() }
 	 
 	#[inline] pub fn clear_elements(&mut self) { self.elements.clear(); self.clear_focused_element(); self.next_id = 1; }
 		
-	#[inline] pub const fn clear_focused_element(&mut self) { self.focused_element = None; }
+	#[inline] pub const fn clear_focused_element(&mut self) { self.focused_element = FocusState::default(); }
 		
 	#[inline] pub const fn toggle_visibility(&mut self) { self.visibility = !self.visibility; }
 	#[inline] pub const fn focused_is_some(&self) -> bool { if self.focused_element.is_some() { true } else { false } }
-	#[inline] pub fn get_focused_element(&self) -> Option<&UIElement> { if let Some((idx,_)) = self.focused_element { self.get_element(idx) } else { None } }
-	#[inline] pub fn get_focused_element_mut(&mut self) -> Option<&mut UIElement> { if let Some((idx,_)) = self.focused_element { self.get_element_mut(idx) } else { None } }
+
+	#[inline] pub fn set_focused_state(&mut self, focused_state: FocusState) { self.focused_element = focused_state }
+	#[inline] pub fn get_focused_state(&self) -> &FocusState { &self.focused_element }
+
+	#[inline] pub fn get_focused_element(&self) -> Option<&UIElement> { if self.focused_element.is_some() { self.get_element(self.focused_element.id()) } else { None } }
+	#[inline] pub fn get_focused_element_mut(&mut self) -> Option<&mut UIElement> { if self.focused_element.is_some() { self.get_element_mut(self.focused_element.id()) } else { None } }
+
 	#[inline] pub const fn next_id(&mut self) -> usize { let id = self.next_id; self.next_id += 1; id }
 	
 	#[inline]
