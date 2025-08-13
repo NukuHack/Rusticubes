@@ -7,8 +7,48 @@ use crate::utils::string::MutStr;
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum JsonValue {
-	Null, Bool(bool), Number(f64), String(String),
-	Array(Vec<JsonValue>), Object(HashMap<String, JsonValue>),
+    Null,
+    Bool(bool),
+    Number(f64),
+    String(String),
+    Array(Vec<JsonValue>),
+    Object(HashMap<String, JsonValue>),
+}
+
+impl JsonValue {
+    pub fn as_f64(&self) -> Option<f64> {
+        match self {
+            JsonValue::Number(n) => Some(*n),
+            _ => None,
+        }
+    }
+    pub fn as_str(&self) -> Option<&str> {
+        match self {
+            JsonValue::String(s) => Some(s.as_str()),
+            _ => None,
+        }
+    }
+    pub fn as_object(&self) -> Option<&HashMap<String, JsonValue>> {
+        match self {
+            JsonValue::Object(obj) => Some(obj),
+            _ => None,
+        }
+    }
+    pub fn as_array(&self) -> Option<&Vec<JsonValue>> {
+        match self {
+            JsonValue::Array(arr) => Some(arr),
+            _ => None,
+        }
+    }
+    pub fn as_bool(&self) -> Option<bool> {
+        match self {
+            JsonValue::Bool(b) => Some(*b),
+            _ => None,
+        }
+    }
+    pub fn is_null(&self) -> bool {
+        matches!(self, JsonValue::Null)
+    }
 }
 
 #[derive(Debug)]

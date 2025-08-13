@@ -1,6 +1,5 @@
 
 use std::num::NonZeroU32;
-use std::collections::HashMap;
 use crate::item::material::{ToolType, ArmorType, MaterialLevel, EquipmentType, BasicConversion};
 use crate::item::item_lut::{
 	ItemComp, ItemFlags, ItemExtendedData,
@@ -18,7 +17,7 @@ impl JsonSerializable for ItemComp {
 
 		// Extract basic fields
 		let name = match obj.get("name") {
-			Some(JsonValue::String(s)) => s.as_str(),
+			Some(JsonValue::String(s)) => s.clone(),
 			_ => return Err(JsonError::MissingField("name is not found or incorrect type".into())),
 		};
 
@@ -33,15 +32,14 @@ impl JsonSerializable for ItemComp {
 		};
 
 		// Handle extended data
-		let data = match obj.get("data") {
-			Some(JsonValue::Object(data_obj)) => {
-				parse_extended_data(data_obj)
-			},
-			_ => None,
+		let data = if let Some(data_value) = obj.get("data") {
+			parse_extended_data(data_value)?
+		} else {
+			None
 		};
 
 		Ok(ItemComp {
-			name: Box::leak(name.to_string().into_boxed_str()),
+			name: name.into(),
 			max_stack,
 			flags,
 			data,
@@ -53,62 +51,101 @@ impl JsonSerializable for ItemComp {
 	}
 }
 
-fn parse_extended_data(data_obj: &HashMap<String, JsonValue>) -> Option<ItemExtendedData> {
-	let inner_data = match data_obj.get("data") {
-		Some(JsonValue::Object(inner)) => inner,
-		_ => return None,
-	};
+fn parse_extended_data(data_value: &JsonValue) -> Result<Option<ItemExtendedData>, JsonError> {
+    let data_obj = data_value.as_object()
+        .ok_or_else(|| JsonError::Custom("Extended data must be an object".into()))?;
 
-	let mut extended_data = ItemExtendedData::new();
+    let mut extended_data = ItemExtendedData::new();
 
-	// Parse durability
-	if let Some(JsonValue::Number(durability)) = inner_data.get("durability") {
-		if let Some(nz) = NonZeroU32::new(*durability as u32) {
-			extended_data = extended_data.with_durability(nz);
-		}
-	}
+    for (key, value) in data_obj {
+        match key.as_str() {
+            "durability" => {
+                let durability = value.as_f64()
+                    .and_then(|n| NonZeroU32::new(n as u32))
+                    .ok_or_else(|| JsonError::Custom("Invalid durability value".into()))?;
+                extended_data = extended_data.with_durability(durability);
+            },
+            "damage" => {
+                let damage = value.as_f64()
+                    .map(|n| n as i16)
+                    .ok_or_else(|| JsonError::Custom("Invalid damage value".into()))?;
+                extended_data = extended_data.with_damage(damage);
+            },
+            "hunger" => {
+                let hunger = value.as_f64()
+                    .map(|n| n as i16)
+                    .ok_or_else(|| JsonError::Custom("Invalid hunger value".into()))?;
+                extended_data = extended_data.with_hunger(hunger);
+            },
+            "armor_value" => {
+                let armor_value = value.as_f64()
+                    .map(|n| n as i16)
+                    .ok_or_else(|| JsonError::Custom("Invalid armor_value".into()))?;
+                extended_data = extended_data.with_armor(armor_value);
+            },
+            "speed" => {
+                let speed = value.as_f64()
+                    .map(|n| n as i16)
+                    .ok_or_else(|| JsonError::Custom("Invalid speed value".into()))?;
+                extended_data = extended_data.with_speed(speed);
+            },
+            "tool_data" => {
+                match value {
+                    JsonValue::Object(tool_obj) => {
+                        let material = tool_obj.get("material")
+                            .and_then(|v| v.as_str())
+                            .ok_or_else(|| JsonError::MissingField("tool_data.material is missing or not a string".into()))?;
 
-	// Parse damage
-	if let Some(JsonValue::Number(damage)) = inner_data.get("damage") {
-		extended_data = extended_data.with_damage(*damage as i16);
-	}
+                        let equip_type = tool_obj.get("equip_type")
+                            .and_then(|v| v.as_str())
+                            .ok_or_else(|| JsonError::MissingField("tool_data.equip_type is missing or not a string".into()))?;
 
-	// Parse tool data
-	if let Some(tool_data) = inner_data.get("tool_data") {
-		match tool_data {
-			JsonValue::Object(tool_obj) => {
-				// Handle single material tool
-				let Some(JsonValue::String(material)) = tool_obj.get("material") else { return None; };
+                        let tier = MaterialLevel::from_str(material)
+                            .ok_or_else(|| JsonError::Custom(format!("Invalid material level: {}", material).into()))?;
+                        let tool_type = ToolType::from_str(equip_type)
+                            .ok_or_else(|| JsonError::Custom(format!("Invalid tool type: {}", equip_type).into()))?;
+                        
+                        let tool_data = ToolData::single(tool_type, tier);
+                        extended_data = extended_data.with_tool_data(tool_data);
+                    },
+                    JsonValue::Array(tiers) => {
+                        let mut tool_set = ToolSet::new();
+                        
+                        for tier_val in tiers {
+                            let tier_obj = tier_val.as_object()
+                                .ok_or_else(|| JsonError::Custom("Tool tier entry must be an object".into()))?;
 
-				let Some(JsonValue::String(equip_type)) = tool_obj.get("equip_type") else { return None; };
+                            let material = tier_obj.get("material")
+                                .and_then(|v| v.as_str())
+                                .ok_or_else(|| JsonError::MissingField("tool tier material is missing or not a string".into()))?;
 
-				let tier = MaterialLevel::from_str(material).unwrap_or(MaterialLevel::from_u8(0)?);
-				let tool_type = ToolType::from_str(equip_type.as_str())?;
-				let tool_data = ToolData::single(tool_type, tier);
-				extended_data = extended_data.with_tool_data(tool_data);
-			},
-			JsonValue::Array(tiers) => {
-				let mut tool_set = ToolSet::new();
-				
-				for tier_val in tiers.iter() {
-					let JsonValue::Object(tier_obj) = tier_val else { return None; };
+                            let equip_type = tier_obj.get("equip_type")
+                                .and_then(|v| v.as_str())
+                                .ok_or_else(|| JsonError::MissingField("tool tier equip_type is missing or not a string".into()))?;
 
-					// Handle single material tool
-					let Some(JsonValue::String(material)) = tier_obj.get("material") else { return None; };
+                            let tier = MaterialLevel::from_str(material)
+                                .ok_or_else(|| JsonError::Custom(format!("Invalid material level: {}", material).into()))?;
+                            let tool_type = ToolType::from_str(equip_type)
+                                .ok_or_else(|| JsonError::Custom(format!("Invalid tool type: {}", equip_type).into()))?;
+                            
+                            tool_set.add_equipment(tool_type, tier);
+                        }
+                        
+                        let tool_data = ToolData::Multiple(tool_set);
+                        extended_data = extended_data.with_tool_data(tool_data);
+                    },
+                    _ => return Err(JsonError::Custom("tool_data must be either an object or array".into())),
+                }
+            },
+            "armor_data" => {
+                // Implement similar pattern for ArmorData
+                return Err(JsonError::Custom("armor_data parsing not yet implemented".into()));
+            },
+            _ => {
+                return Err(JsonError::Custom(format!("This: '{:?}' is not an allowed data type in items.", key).into()));
+            }
+        }
+    }
 
-					let Some(JsonValue::String(equip_type)) = tier_obj.get("equip_type") else { return None; };
-
-					let tier = MaterialLevel::from_str(material).unwrap_or(MaterialLevel::from_u8(0)?);
-					let tool_type = ToolType::from_str(equip_type.as_str())?;
-					tool_set.add_equipment(tool_type, tier);
-				}
-				
-				let tool_data = ToolData::Multiple(tool_set);
-				extended_data = extended_data.with_tool_data(tool_data);
-			},
-			_ => (),
-		}
-	}
-
-	Some(extended_data)
+    Ok(Some(extended_data))
 }

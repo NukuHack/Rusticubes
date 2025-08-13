@@ -454,7 +454,7 @@ impl UIManager {
 
 		let mut storage_items = ItemContainer::new(area.rows, area.columns);
 		let _ = storage_items.update_items(|idx, _|
-			Some(ItemStack::new(ItemStack::lut_by_index(idx).name.into()))
+			Some(ItemStack::new(ItemStack::lut_by_index(idx).name.to_string()))
 		);
 		storage_items
 	}

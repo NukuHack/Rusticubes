@@ -4,6 +4,7 @@ use std::{
 	cmp::PartialEq,
 	marker::PhantomData,
 };
+use crate::utils::string::MutStr;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct ItemFlags(pub u32);
@@ -26,7 +27,7 @@ impl ItemFlags {
 #[derive(Debug, PartialEq, Clone)]
 #[repr(C)] // Ensure predictable layout for better cache performance
 pub struct ItemComp {
-	pub name: &'static str,
+	pub name: MutStr,
 	pub max_stack: u32,
 	pub flags: ItemFlags,
 	// Optional data stored separately to avoid memory overhead when not needed
@@ -34,20 +35,12 @@ pub struct ItemComp {
 }
 
 impl ItemComp {
-	pub const fn copy(&self) -> Self {
-		Self {
-			name: self.name,
-			max_stack: self.max_stack,
-			flags: self.flags,
-			data: None,
-		}
-	}
 	pub const fn error() -> Self {
 		Self::new("0")
 	}
 	pub const fn new(name: &'static str) -> Self {
 		Self {
-			name,
+			name: MutStr::from_str(name),
 			max_stack: 64u32,
 			flags: ItemFlags::empty(),
 			data: None,
@@ -69,25 +62,23 @@ impl ItemComp {
 			..self
 		}
 	}
-	#[inline] pub const fn as_block(self) -> Self { 
-		Self {
-			flags: self.flags.with_flag(ItemFlags::IS_BLOCK),
-			..self
-		}
+
+	#[inline]
+	pub const fn as_block(mut self) -> Self {
+		self.flags = self.flags.with_flag(ItemFlags::IS_BLOCK);
+		self
 	}
-	#[inline] pub const fn as_tool(self, tool_data: ToolData) -> Self {
-		Self { 
-			flags: self.flags.with_flag(ItemFlags::IS_TOOL),
-			data: Some(ItemExtendedData::new().with_tool_data(tool_data)),
-			..self 
-		}
+	#[inline]
+	pub fn as_tool(mut self, tool_data: ToolData) -> Self {
+		self.flags = self.flags.with_flag(ItemFlags::IS_TOOL);
+		self.data = Some(ItemExtendedData::new().with_tool_data(tool_data));
+		self
 	}
-	#[inline] pub const fn as_armor(self, armor_data: ArmorData) -> Self {
-		Self { 
-			flags: self.flags.with_flag(ItemFlags::IS_ARMOR),
-			data: Some(ItemExtendedData::new().with_armor_data(armor_data)),
-			..self 
-		}
+	#[inline]
+	pub fn as_armor(mut self, armor_data: ArmorData) -> Self {
+		self.flags = self.flags.with_flag(ItemFlags::IS_ARMOR);
+		self.data = Some(ItemExtendedData::new().with_armor_data(armor_data));
+		self
 	}
 	
 	#[inline] pub const fn is_block(&self) -> bool { 
@@ -332,204 +323,204 @@ pub type ArmorSet = EquipmentSetStruct<ArmorType, u16, u128>;
 
 // Trait to handle bit operations for different storage types
 pub trait BitStorage: Copy + Clone + PartialEq + Eq {
-    const ZERO: Self;
-    fn set_bit(&mut self, bit: u8);
-    fn clear_bit(&mut self, bit: u8);
-    fn get_bit(&self, bit: u8) -> bool;
+	const ZERO: Self;
+	fn set_bit(&mut self, bit: u8);
+	fn clear_bit(&mut self, bit: u8);
+	fn get_bit(&self, bit: u8) -> bool;
 }
 
 impl BitStorage for u8 {
-    const ZERO: Self = 0;
-    #[inline] fn set_bit(&mut self, bit: u8) { *self |= 1 << bit; }
-    #[inline] fn clear_bit(&mut self, bit: u8) { *self &= !(1 << bit); }
-    #[inline] fn get_bit(&self, bit: u8) -> bool { (*self & (1 << bit)) != 0 }
+	const ZERO: Self = 0;
+	#[inline] fn set_bit(&mut self, bit: u8) { *self |= 1 << bit; }
+	#[inline] fn clear_bit(&mut self, bit: u8) { *self &= !(1 << bit); }
+	#[inline] fn get_bit(&self, bit: u8) -> bool { (*self & (1 << bit)) != 0 }
 }
 
 impl BitStorage for u16 {
-    const ZERO: Self = 0;
-    #[inline] fn set_bit(&mut self, bit: u8) { *self |= 1 << bit; }
-    #[inline] fn clear_bit(&mut self, bit: u8) { *self &= !(1 << bit); }
-    #[inline] fn get_bit(&self, bit: u8) -> bool { (*self & (1 << bit)) != 0 }
+	const ZERO: Self = 0;
+	#[inline] fn set_bit(&mut self, bit: u8) { *self |= 1 << bit; }
+	#[inline] fn clear_bit(&mut self, bit: u8) { *self &= !(1 << bit); }
+	#[inline] fn get_bit(&self, bit: u8) -> bool { (*self & (1 << bit)) != 0 }
 }
 
 // Trait for tier storage operations
 pub trait TierStorage: Copy + Clone + PartialEq + Eq {
-    const ZERO: Self;
-    fn set_tier(&mut self, index: u8, tier: u8);
-    fn get_tier(&self, index: u8) -> u8;
-    fn max_types() -> u8;
+	const ZERO: Self;
+	fn set_tier(&mut self, index: u8, tier: u8);
+	fn get_tier(&self, index: u8) -> u8;
+	fn max_types() -> u8;
 }
 
 impl TierStorage for u64 {
-    const ZERO: Self = 0;
-    #[inline] fn set_tier(&mut self, index: u8, tier: u8) {
-        let shift = index * 8;
-        *self &= !(0xFF << shift); // Clear the existing tier
-        *self |= (tier as u64) << shift; // Set the new tier
-    }
-    #[inline] fn get_tier(&self, index: u8) -> u8 { ((self >> (index * 8)) & 0xFF) as u8 }
-    #[inline] fn max_types() -> u8 { 8 }
+	const ZERO: Self = 0;
+	#[inline] fn set_tier(&mut self, index: u8, tier: u8) {
+		let shift = index * 8;
+		*self &= !(0xFF << shift); // Clear the existing tier
+		*self |= (tier as u64) << shift; // Set the new tier
+	}
+	#[inline] fn get_tier(&self, index: u8) -> u8 { ((self >> (index * 8)) & 0xFF) as u8 }
+	#[inline] fn max_types() -> u8 { 8 }
 }
 
 impl TierStorage for u128 {
-    const ZERO: Self = 0;
-    #[inline] fn set_tier(&mut self, index: u8, tier: u8) {
-        let shift = index * 8;
-        *self &= !(0xFF << shift); // Clear the existing tier
-        *self |= (tier as u128) << shift; // Set the new tier
-    }
-    #[inline] fn get_tier(&self, index: u8) -> u8 { ((self >> (index * 8)) & 0xFF) as u8 }
-    #[inline] fn max_types() -> u8 { 16 }
+	const ZERO: Self = 0;
+	#[inline] fn set_tier(&mut self, index: u8, tier: u8) {
+		let shift = index * 8;
+		*self &= !(0xFF << shift); // Clear the existing tier
+		*self |= (tier as u128) << shift; // Set the new tier
+	}
+	#[inline] fn get_tier(&self, index: u8) -> u8 { ((self >> (index * 8)) & 0xFF) as u8 }
+	#[inline] fn max_types() -> u8 { 16 }
 }
 
 // Renamed to avoid conflict with trait
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct EquipmentSetStruct<T: EquipmentType, S: BitStorage, TS: TierStorage> {
-    // Bits for tracking which types are present
-    pub slots: S,
-    // Packed tiers for each possible type
-    pub tiers: TS,
-    _phantom: PhantomData<T>,
+	// Bits for tracking which types are present
+	pub slots: S,
+	// Packed tiers for each possible type
+	pub tiers: TS,
+	_phantom: PhantomData<T>,
 }
 
 impl<T: EquipmentType + BasicConversion<T>, S: BitStorage, TS: TierStorage> EquipmentSetStruct<T, S, TS> {
-    #[inline] pub const fn new() -> Self {
-        EquipmentSetStruct {
-            slots: S::ZERO,
-            tiers: TS::ZERO,
-            _phantom: PhantomData,
-        }
-    }
-    
-    #[inline] pub fn on_u(&mut self, slot: u8) { 
-        self.slots.set_bit(slot);
-    }
-    
-    #[inline] pub fn off_u(&mut self, slot: u8) { 
-        self.slots.clear_bit(slot);
-    }
-    
-    #[inline] pub fn is_u(&self, slot: u8) -> bool { 
-        self.slots.get_bit(slot)
-    }
-    
-    #[inline] pub fn is_empty(&self) -> bool { 
-        self.slots == S::ZERO
-    }
-    
-    #[inline] pub fn on(&mut self, slot: T) { 
-        self.slots.set_bit(T::TO_U8(slot));
-    }
-    
-    #[inline] pub fn off(&mut self, slot: T) { 
-        self.slots.clear_bit(T::TO_U8(slot));
-    }
-    
-    #[inline] pub fn is(&self, slot: T) -> bool { 
-        self.slots.get_bit(T::TO_U8(slot))
-    }
+	#[inline] pub const fn new() -> Self {
+		EquipmentSetStruct {
+			slots: S::ZERO,
+			tiers: TS::ZERO,
+			_phantom: PhantomData,
+		}
+	}
+	
+	#[inline] pub fn on_u(&mut self, slot: u8) { 
+		self.slots.set_bit(slot);
+	}
+	
+	#[inline] pub fn off_u(&mut self, slot: u8) { 
+		self.slots.clear_bit(slot);
+	}
+	
+	#[inline] pub fn is_u(&self, slot: u8) -> bool { 
+		self.slots.get_bit(slot)
+	}
+	
+	#[inline] pub fn is_empty(&self) -> bool { 
+		self.slots == S::ZERO
+	}
+	
+	#[inline] pub fn on(&mut self, slot: T) { 
+		self.slots.set_bit(T::TO_U8(slot));
+	}
+	
+	#[inline] pub fn off(&mut self, slot: T) { 
+		self.slots.clear_bit(T::TO_U8(slot));
+	}
+	
+	#[inline] pub fn is(&self, slot: T) -> bool { 
+		self.slots.get_bit(T::TO_U8(slot))
+	}
 
-    #[inline] 
-    pub fn add_equipment(&mut self, equip_type: T, tier: MaterialLevel) {
-        if self.has_equipment(equip_type) {
-            panic!("Equipment type already exists");
-        }
-        let index = T::TO_U8(equip_type);
-        self.on_u(index);
-        self.set_tier(index, tier as u8);
-    }
-    
-    #[inline] 
-    pub fn remove_equipment(&mut self, equip_type: T) {
-        if !self.has_equipment(equip_type) {
-            return;
-        }
-        let index = T::TO_U8(equip_type);
-        self.off_u(index);
-        self.set_tier(index, 0);
-    }
-    
-    #[inline] 
-    pub fn has_equipment(&self, equip_type: T) -> bool {
-        self.is(equip_type)
-    }
+	#[inline] 
+	pub fn add_equipment(&mut self, equip_type: T, tier: MaterialLevel) {
+		if self.has_equipment(equip_type) {
+			panic!("Equipment type already exists");
+		}
+		let index = T::TO_U8(equip_type);
+		self.on_u(index);
+		self.set_tier(index, tier as u8);
+	}
+	
+	#[inline] 
+	pub fn remove_equipment(&mut self, equip_type: T) {
+		if !self.has_equipment(equip_type) {
+			return;
+		}
+		let index = T::TO_U8(equip_type);
+		self.off_u(index);
+		self.set_tier(index, 0);
+	}
+	
+	#[inline] 
+	pub fn has_equipment(&self, equip_type: T) -> bool {
+		self.is(equip_type)
+	}
 
-    #[inline] 
-    pub fn get_tier(&self, equip_type: T) -> Option<MaterialLevel> {
-        if !self.has_equipment(equip_type) { return None; };
-        
-        let index = T::TO_U8(equip_type);
-        let value = TS::get_tier(&self.tiers, index);
-        MaterialLevel::from_u8(value)
-    }
+	#[inline] 
+	pub fn get_tier(&self, equip_type: T) -> Option<MaterialLevel> {
+		if !self.has_equipment(equip_type) { return None; };
+		
+		let index = T::TO_U8(equip_type);
+		let value = TS::get_tier(&self.tiers, index);
+		MaterialLevel::from_u8(value)
+	}
 
-    #[inline] 
-    pub fn iter(&self) -> impl Iterator<Item = (T, MaterialLevel)> + '_ {
-        (0..TS::max_types()).filter_map(move |i| {
-            if !self.is_u(i) { return None; }
+	#[inline] 
+	pub fn iter(&self) -> impl Iterator<Item = (T, MaterialLevel)> + '_ {
+		(0..TS::max_types()).filter_map(move |i| {
+			if !self.is_u(i) { return None; }
 
-            let value = TS::get_tier(&self.tiers, i);
-            let (Some(equip_type), Some(tier)) = (T::from_u8(i), MaterialLevel::from_u8(value)) 
-                else { return None; };
-            
-            Some((equip_type, tier))
-        })
-    }
+			let value = TS::get_tier(&self.tiers, i);
+			let (Some(equip_type), Some(tier)) = (T::from_u8(i), MaterialLevel::from_u8(value)) 
+				else { return None; };
+			
+			Some((equip_type, tier))
+		})
+	}
 
-    #[inline] 
-    fn set_tier(&mut self, index: u8, tier: u8) {
-        TS::set_tier(&mut self.tiers, index, tier);
-    }
+	#[inline] 
+	fn set_tier(&mut self, index: u8, tier: u8) {
+		TS::set_tier(&mut self.tiers, index, tier);
+	}
 }
 
 // Trait for equipment sets (renamed to avoid conflict)
 pub trait EquipmentSet<T: EquipmentType> {
-    fn get_tier(&self, equip_type: T) -> Option<MaterialLevel>;
+	fn get_tier(&self, equip_type: T) -> Option<MaterialLevel>;
 }
 
 // Implement EquipmentSet trait for the generic version
 impl<T: EquipmentType + BasicConversion<T>, S: BitStorage, TS: TierStorage> EquipmentSet<T> for EquipmentSetStruct<T, S, TS> {
-    fn get_tier(&self, equip_type: T) -> Option<MaterialLevel> {
-        let index = T::TO_U8(equip_type);
-        if !self.is_u(index) { 
-            return None; 
-        }
-        
-        let value = TS::get_tier(&self.tiers, index);
-        MaterialLevel::from_u8(value)
-    }
+	fn get_tier(&self, equip_type: T) -> Option<MaterialLevel> {
+		let index = T::TO_U8(equip_type);
+		if !self.is_u(index) { 
+			return None; 
+		}
+		
+		let value = TS::get_tier(&self.tiers, index);
+		MaterialLevel::from_u8(value)
+	}
 }
 
 // Generic equipment data enum
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum EquipmentData<T: EquipmentType, S> {
-    Single { equip_type: T, tier: MaterialLevel },
-    Multiple(S),
+	Single { equip_type: T, tier: MaterialLevel },
+	Multiple(S),
 }
 
 impl<T: EquipmentType + PartialEq, S: EquipmentSet<T>> EquipmentData<T, S> {    
-    pub const fn single(equip_type: T, tier: MaterialLevel) -> Self {
-        Self::Single { equip_type, tier }
-    }
-    
-    #[inline]
-    pub const fn is_equipment(&self) -> bool {
-        true
-    }
-    
-    pub fn get_tier(&self, equip_type: T) -> Option<MaterialLevel> {
-        match self {
-            Self::Single { equip_type: t, tier } if *t == equip_type => Some(*tier),
-            Self::Single { .. } => None,
-            Self::Multiple(set) => set.get_tier(equip_type),
-        }
-    }
-    
-    #[inline]
-    pub const fn as_single(&self) -> Option<(T, MaterialLevel)> {
-        match self {
-            Self::Single { equip_type, tier } => Some((*equip_type, *tier)),
-            _ => None,
-        }
-    }
+	pub const fn single(equip_type: T, tier: MaterialLevel) -> Self {
+		Self::Single { equip_type, tier }
+	}
+	
+	#[inline]
+	pub const fn is_equipment(&self) -> bool {
+		true
+	}
+	
+	pub fn get_tier(&self, equip_type: T) -> Option<MaterialLevel> {
+		match self {
+			Self::Single { equip_type: t, tier } if *t == equip_type => Some(*tier),
+			Self::Single { .. } => None,
+			Self::Multiple(set) => set.get_tier(equip_type),
+		}
+	}
+	
+	#[inline]
+	pub const fn as_single(&self) -> Option<(T, MaterialLevel)> {
+		match self {
+			Self::Single { equip_type, tier } => Some((*equip_type, *tier)),
+			_ => None,
+		}
+	}
 }

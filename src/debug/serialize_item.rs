@@ -52,7 +52,7 @@ mod tests {
 	#[test]
 	fn item_comp_serialization() {
 		let apple_item_data = ItemComp::new("poopy_head");
-		let serialized = apple_item_data.copy().to_binary();
+		let serialized = apple_item_data.clone().to_binary();
 		let deserialized = ItemComp::from_binary(&serialized).unwrap();
 		
 		assert_eq!(apple_item_data.max_stack, deserialized.max_stack);

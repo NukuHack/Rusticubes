@@ -474,7 +474,7 @@ impl Inventory {
 	pub fn handle_mclick_press(&mut self, clicked_pos:(u8,u8), area_type: AreaType) {
 		let cursor = self.get_cursor().cloned(); let (c_x, c_y) = clicked_pos;
 		let item = if area_type == AreaType::Storage || area_type == AreaType::Input || area_type == AreaType::Output {
-			let main_item = ItemStack::new(ItemStack::lut_by_index((c_x + 1 * c_y) as usize).name.into()); // TODO : MAKE THIS ACTUALLY WORK AND NOT JUST A BASIC SOLUTION
+			let main_item = ItemStack::new(ItemStack::lut_by_index((c_x + 1 * c_y) as usize).name.to_string()); // TODO : MAKE THIS ACTUALLY WORK AND NOT JUST A BASIC SOLUTION
 			main_item.opt()
 		} else { self.get_area_mut(area_type).get_at(c_x, c_y).cloned() };
 		let armor_in_not_armor_area = area_type == AreaType::Armor && !cursor.clone().map(|item| item.is_armor()).unwrap_or(false);

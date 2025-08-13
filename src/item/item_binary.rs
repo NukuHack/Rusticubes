@@ -316,7 +316,7 @@ impl BinarySerializable for ItemComp {
 		let mut data = Vec::new();
 		
 		// Serialize basic fields
-		data.extend_from_slice(&self.name.to_binary());
+		data.extend_from_slice(&self.name.clone().to_string().to_binary());
 		data.extend_from_slice(&self.max_stack.to_le_bytes());
 		data.extend_from_slice(&self.flags.to_binary());
 		
@@ -360,7 +360,7 @@ impl BinarySerializable for ItemComp {
 		};
 		
 		Some(ItemComp {
-			name,
+			name: name.into(),
 			max_stack,
 			flags,
 			data,
@@ -368,7 +368,7 @@ impl BinarySerializable for ItemComp {
 	}
 	
 	fn binary_size(&self) -> usize {
-		let mut size = self.name.binary_size(); // name
+		let mut size = self.name.clone().to_string().binary_size(); // name
 		size += 4 + 4; // max_stack + flags
 		size += 1; // has_data flag
 		if let Some(data) = &self.data {
