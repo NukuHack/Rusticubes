@@ -164,17 +164,6 @@ impl<'a> crate::State<'a> {
 					self.ui_manager.setup_ui();
 					return true
 				},
-				Key::KeyI => {
-					if !is_pressed { return false; }
-
-					if self.ui_manager.state.clone() == UIState::InGame {
-						self.ui_manager.state = UIState::Inventory(InventoryUIState::str().b());
-						if self.input_system.mouse_captured() { self.toggle_mouse_capture(); }
-					} else { return false; }
-
-					self.ui_manager.setup_ui();
-					return true
-				},
 				Key::KeyO => {
 					if !is_pressed { return false; }
 
@@ -228,6 +217,9 @@ impl<'a> crate::State<'a> {
 	pub fn handle_mouse_input(&mut self, event: &WindowEvent) -> bool {
 		let WindowEvent::MouseInput { button, state, device_id: _ } = event else { return false; };
 
+		// Use the stored current mouse position
+		let (x, y) = convert_mouse_position(self.render_context.size.into(), &self.input_system.previous_mouse);
+
 		match (button, *state) {
 			(MouseButton::Left, ElementState::Pressed) => {
 				self.input_system.mouse_button_state.left = true;
@@ -236,70 +228,46 @@ impl<'a> crate::State<'a> {
 					return true
 				}
 				if self.ui_manager.visibility {
-					// Use the stored current mouse position
-					if let Some(current_position) = self.input_system.previous_mouse {
-						let (x, y) = convert_mouse_position(self.render_context.size.into(), &current_position);
-						self.ui_manager.handle_click(x, y, true);
-					}
+					self.ui_manager.handle_click(x, y, true);
 				}
 				true
 			}
 			(MouseButton::Left, ElementState::Released) => {
 				self.input_system.mouse_button_state.left = false;
 				if self.ui_manager.visibility {
-					// Use the stored current mouse position
-					if let Some(current_position) = self.input_system.previous_mouse {
-						let (x, y) = convert_mouse_position(self.render_context.size.into(), &current_position);
-						self.ui_manager.handle_click(x, y, false);
-					}
+					self.ui_manager.handle_click(x, y, false);
 				}
 				true
 			}
 			(MouseButton::Right, ElementState::Pressed) => {
 				self.input_system.mouse_button_state.right = true;
 				if self.input_system.mouse_captured() {
-					handle_right_click_interaction();
+					self.handle_right_click_interaction();
 					return true
 				}
 				if self.ui_manager.visibility {
-					// Use the stored current mouse position
-					if let Some(current_position) = self.input_system.previous_mouse {
-						let (x, y) = convert_mouse_position(self.render_context.size.into(), &current_position);
-						self.ui_manager.handle_rclick(x, y, true);
-					}
+					self.ui_manager.handle_rclick(x, y, true);
 				}
 				true
 			}
 			(MouseButton::Right, ElementState::Released) => {
 				self.input_system.mouse_button_state.right = false;
 				if self.ui_manager.visibility {
-					// Use the stored current mouse position
-					if let Some(current_position) = self.input_system.previous_mouse {
-						let (x, y) = convert_mouse_position(self.render_context.size.into(), &current_position);
-						self.ui_manager.handle_rclick(x, y, false);
-					}
+					self.ui_manager.handle_rclick(x, y, false);
 				}
 				true
 			}
 			(MouseButton::Middle, ElementState::Pressed) => {
 				self.input_system.mouse_button_state.middle = true;
 				if self.ui_manager.visibility {
-					// Use the stored current mouse position
-					if let Some(current_position) = self.input_system.previous_mouse {
-						let (x, y) = convert_mouse_position(self.render_context.size.into(), &current_position);
-						self.ui_manager.handle_mclick(x, y, true);
-					}
+					self.ui_manager.handle_mclick(x, y, true);
 				}
 				true
 			},
 			(MouseButton::Middle, ElementState::Released) => {
 				self.input_system.mouse_button_state.middle = false;
 				if self.ui_manager.visibility {
-					// Use the stored current mouse position
-					if let Some(current_position) = self.input_system.previous_mouse {
-						let (x, y) = convert_mouse_position(self.render_context.size.into(), &current_position);
-						self.ui_manager.handle_mclick(x, y, false);
-					}
+					self.ui_manager.handle_mclick(x, y, false);
 				}
 				true
 			},
@@ -342,7 +310,7 @@ impl<'a> crate::State<'a> {
 			}
 			// Reset cursor to center
 			self.center_mouse();
-			self.input_system.previous_mouse = Some(winit::dpi::PhysicalPosition::new(center_x, center_y));
+			self.input_system.previous_mouse = winit::dpi::PhysicalPosition::new(center_x, center_y);
 			return true;
 		} else {
 			let (x, y) = convert_mouse_position(self.render_context.size.into(), position);
@@ -350,7 +318,7 @@ impl<'a> crate::State<'a> {
 			if self.ui_manager.visibility {
 				self.ui_manager.handle_mouse_move(x, y, self.input_system.mouse_button_state.left);
 			}
-			self.input_system.previous_mouse = Some(*position);
+			self.input_system.previous_mouse = *position;
 			return true;
 		}
 	}
@@ -369,7 +337,7 @@ impl<'a> crate::State<'a> {
 	}
 
 	pub fn converted_mouse_position(&self) -> (f32, f32) {
-		convert_mouse_position(self.render_context.size.into(), &self.input_system.previous_mouse.unwrap_or(winit::dpi::PhysicalPosition::new(0.0, 0.0)))
+		convert_mouse_position(self.render_context.size.into(), &self.input_system.previous_mouse)
 	}
 
 }
@@ -383,79 +351,82 @@ pub const fn convert_mouse_position(window_size: (u32, u32), mouse_pos: &winit::
 }
 
 
-pub fn handle_right_click_interaction() {
-    use crate::ext::ptr;
-
-    let state = ptr::get_state();
-    if !state.is_world_running {
-        return;
-    }
-
-    let player = &ptr::get_gamestate().player();
-
-    if handle_block_and_item_interaction(player) { 
-        return; 
-    }
-
-    let Some(item) = player.inventory().selected_item() else { return; };
-
-    if item.is_block() {
-        handle_block_placing(player, item);
-        return;
-    }
-    if item.is_consumable() {
-        remove_selected_item_from_inv(); // "consume" the item
-        return;
-    }
-}
-
-/// Places a cube on the face of the block the player is looking at
 use crate::player::Player;
 use crate::item::items::ItemStack;
-fn handle_block_placing(player: &Player, item: &ItemStack) {
-    use crate::block::extra::*;
-    use crate::ext::ptr;
-    use crate::block::math::ChunkCoord;
-    use crate::block::main::{Block, Material};
-    
-    let world = &mut ptr::get_gamestate().world_mut();
+use crate::block::extra::*;
+use crate::block::math::ChunkCoord;
+use crate::block::main::{Block, Material};
+impl<'a> crate::State<'a> {
+	pub fn handle_right_click_interaction(&mut self) {
+		if !self.is_world_running {
+			return;
+		}
 
-    let Some((block_pos, normal)) = raycast_to_block(player.camera(), player, world, REACH) else { return; };
+		let player = &ptr::get_gamestate().player();
 
-    let placement_pos = block_pos + normal;
+		if self.handle_block_and_item_interaction(player) { 
+			self.ui_manager.setup_ui(); // to update the hotbar if changed
+			return;
+		}
 
-    // Simple for loop to find block ID
-    let block_id = get_block_id_from_item_name(item.name());
+		let Some(item) = player.inventory().selected_item() else { return; };
 
-    remove_selected_item_from_inv();
+		if item.is_block() {
+			if self.handle_block_placing(player, item) {
+				self.ui_manager.setup_ui(); // to update the hotbar if changed
+				return;
+			}
+		}
+		if item.is_consumable() {
+			if self.remove_selected_item_from_inv() { // "consume" the item
+				self.ui_manager.setup_ui(); // to update the hotbar if changed
+				return;
+			}
+		}
+	}
 
-    world.set_block(placement_pos, Block::new(Material(block_id)));
-    update_chunk_mesh(world, ChunkCoord::from_world_pos(placement_pos));
-}
+	/// Places a cube on the face of the block the player is looking at
+	fn handle_block_placing(&mut self, player: &Player, item: &ItemStack) -> bool {
+		let world = &mut ptr::get_gamestate().world_mut();
 
-fn handle_block_and_item_interaction(player: &Player) -> bool {
-    use crate::block::extra::*;
-    use crate::ext::ptr;
-    // here handle the block interaction
+		let Some((block_pos, normal)) = raycast_to_block(player.camera(), player, world, REACH) else { return false; };
 
-    let world = &mut ptr::get_gamestate().world_mut();
-    let Some((block_pos, _normal)) = raycast_to_block(player.camera(), player, world, REACH) else { return false; };
-    let Some(storage) = world.get_storage(block_pos) else { return false; };
-    println!("Storage found {:?}", storage);
-    // here we would open the UI for the inventory
-    true
-}
+		let placement_pos = block_pos + normal;
 
-#[inline] 
-fn remove_selected_item_from_inv() {
-    use crate::item::inventory::AreaType;
+		// Simple for loop to find block ID
+		let block_id = get_block_id_from_item_name(item.name());
 
-    let inv_mut = ptr::get_gamestate().player_mut().inventory_mut();
-    let idx = inv_mut.selected_index();
+		if !self.remove_selected_item_from_inv() { return false;};
 
-    let hotbar = inv_mut.get_area_mut(AreaType::Hotbar);
-    let Some(item) = hotbar.remove(idx) else { return; };
-    hotbar.set(idx, item.remove_from_stack(1));
+		world.set_block(placement_pos, Block::new(Material(block_id)));
+		update_chunk_mesh(world, ChunkCoord::from_world_pos(placement_pos));
+		true
+	}
 
-    ptr::get_state().ui_manager.setup_ui(); // to update the hotbar if changed
+	fn handle_block_and_item_interaction(&mut self, player: &Player) -> bool {
+		let world = &mut ptr::get_gamestate().world_mut();
+		let Some((block_pos, _normal)) = raycast_to_block(player.camera(), player, world, REACH) else { return false; };
+		let Some(storage) = world.get_storage(block_pos) else { return false; };
+		//println!("Storage found {:?}", storage);
+
+		if self.ui_manager.state.clone() == UIState::InGame {
+			self.ui_manager.state = UIState::Inventory(InventoryUIState::str().b()); // will have to make this correctly
+			if self.input_system.mouse_captured() { self.toggle_mouse_capture(); }
+		} else { return false; }
+
+		true
+	}
+
+	#[inline] 
+	fn remove_selected_item_from_inv(&self) -> bool {
+		use crate::item::inventory::AreaType;
+
+		let inv_mut = ptr::get_gamestate().player_mut().inventory_mut();
+		let idx = inv_mut.selected_index();
+
+		let hotbar = inv_mut.get_area_mut(AreaType::Hotbar);
+		let Some(item) = hotbar.remove(idx) else { return false; };
+		hotbar.set(idx, item.remove_from_stack(1));
+		true
+	}
 }

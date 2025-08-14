@@ -65,17 +65,12 @@ impl GameState {
 			let state = ptr::get_state();
 			let offset = Vec3::new(0., 1.7, 0.);
 			let pos = Vec3::new(0.5, 0.5, 0.5);
-			let mut player = player::Player::new(
-				CameraConfig::new(offset),
-				pos,
-				state.device(),
-				*state.size(),
-				&state.render_context.layouts[1],
-			);
-			player
-				.inventory_mut()
-				.get_area_mut(AreaType::Hotbar)
-				.add_item(ItemStack::new("brick_grey".to_string().into()).with_stack_size(12));
+			let mut player = player::Player::new(CameraConfig::new(offset), pos, state.device(), *state.size(), &state.render_context.layouts[1]);
+
+			let hotbar = player.inventory_mut().get_area_mut(AreaType::Hotbar);
+			hotbar.add_item(ItemStack::new("brick_grey".to_string().into()).with_stack_size(12));
+			hotbar.add_item(ItemStack::new("plank".to_string().into()).with_stack_size(1));
+
 			player
 		};
 		
@@ -86,13 +81,10 @@ impl GameState {
 
 		make_world(save_path.clone());
 
-		let creation_date:u64 = match world::manager::update_world_data(&save_path) {
-			Ok(data) => data.creation_date.to_unix_timestamp(),
-			Err(e) => {
-				println!("Error updating world data: {}", e);
-				0
-			},
-		};
+		let creation_date: u64 = world::manager::update_world_data(&save_path)
+			.map_err(|e| println!("Error updating world data: {}", e))
+			.map_or(0, |data| data.creation_date.to_unix_timestamp());
+
 		// Combine worldname and creation_date into a seed
 		let world_seed = {
 			// Simple but effective hash function
@@ -112,7 +104,9 @@ impl GameState {
 
 		if let Some(core_count) = std::thread::available_parallelism().ok() {
 			let cpu_cores = core_count.get() as u8;
-			if cpu_cores < 4 { println!("I suggest manual debungging and profiling with not so new hardware"); }
+			if cpu_cores < 4 {
+				println!("I suggest manual debungging and profiling with not so new hardware");
+			}
 
 			world.start_generation_threads((cpu_cores / 2 -1).max(4).min(1) );
 		} else {

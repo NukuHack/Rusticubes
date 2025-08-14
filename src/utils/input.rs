@@ -2,7 +2,7 @@
 use winit::keyboard::ModifiersState;
 
 pub struct InputSystem {
-	pub previous_mouse: Option<winit::dpi::PhysicalPosition<f64>>,
+	pub previous_mouse: winit::dpi::PhysicalPosition<f64>,
 	pub mouse_button_state: MouseButtonState,
 	pub modifiers: ModifiersState,
 	mouse_captured: bool,
@@ -10,7 +10,7 @@ pub struct InputSystem {
 impl InputSystem {
 	#[inline] pub const fn default() -> Self {
 		Self {
-			previous_mouse: None,
+			previous_mouse: winit::dpi::PhysicalPosition::new(0.0, 0.0),
 			mouse_button_state: MouseButtonState::default(),
 			modifiers: ModifiersState::empty(),
 			mouse_captured: false,
