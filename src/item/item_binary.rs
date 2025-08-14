@@ -199,6 +199,10 @@ impl BinarySerializable for PropertyValue {
 			}
 			PropertyValue::Speed(value) => {
 				data.extend_from_slice(&value.to_binary());
+			},
+			PropertyValue::Slot(value) => {
+				data.extend_from_slice(&value.rows().to_binary());
+				data.extend_from_slice(&value.cols().to_binary());
 			}
 		}
 		
@@ -238,6 +242,11 @@ impl BinarySerializable for PropertyValue {
 			PropertyType::Speed => {
 				let value = i16::from_binary(rest_bytes)?;
 				Some(PropertyValue::Speed(value))
+			},
+			PropertyType::Slot => {
+				let row = u8::from_binary(rest_bytes)?;
+				let col = u8::from_binary(rest_bytes)?;
+				Some(PropertyValue::Slot((row, col).into()))
 			}
 		}
 	}
@@ -251,6 +260,7 @@ impl BinarySerializable for PropertyValue {
 			PropertyValue::ArmorValue(_) => i16::BINARY_SIZE,
 			PropertyValue::Damage(_) => i16::BINARY_SIZE,
 			PropertyValue::Speed(_) => i16::BINARY_SIZE,
+			PropertyValue::Slot(_) => u8::BINARY_SIZE * 2,
 		};
 		PropertyType::BINARY_SIZE + size
 	}

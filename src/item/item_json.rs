@@ -1,4 +1,5 @@
 
+use crate::item::inventory::Slot;
 use std::num::NonZeroU32;
 use crate::item::material::{ToolType, ArmorType, MaterialLevel, BasicConversion};
 use crate::item::item_lut::{
@@ -106,7 +107,7 @@ fn parse_extended_data(data_value: &JsonValue) -> Result<Option<ItemExtendedData
 							.ok_or_else(|| JsonError::Custom(format!("Invalid tool type: {}", equip_type).into()))?;
 						
 						let tool_data = ToolData::single(tool_type, tier);
-						extended_data = extended_data.with_tool_data(tool_data);
+						extended_data = extended_data.with_tool(tool_data);
 					},
 					JsonValue::Array(tiers) => {
 						let mut tool_set = ToolSet::new();
@@ -132,7 +133,7 @@ fn parse_extended_data(data_value: &JsonValue) -> Result<Option<ItemExtendedData
 						}
 						
 						let tool_data = ToolData::Multiple(tool_set);
-						extended_data = extended_data.with_tool_data(tool_data);
+						extended_data = extended_data.with_tool(tool_data);
 					},
 					_ => return Err(JsonError::Custom("tool_data must be either an object or array".into())),
 				}
@@ -154,7 +155,7 @@ fn parse_extended_data(data_value: &JsonValue) -> Result<Option<ItemExtendedData
 							.ok_or_else(|| JsonError::Custom(format!("Invalid armor type: {}", equip_type).into()))?;
 						
 						let armor_data = ArmorData::single(armor_type, tier);
-						extended_data = extended_data.with_armor_data(armor_data);
+						extended_data = extended_data.with_equpment(armor_data);
 					},
 					JsonValue::Array(tiers) => {
 						let mut armor_set = ArmorSet::new();
@@ -180,9 +181,31 @@ fn parse_extended_data(data_value: &JsonValue) -> Result<Option<ItemExtendedData
 						}
 						
 						let armor_data = ArmorData::Multiple(armor_set);
-						extended_data = extended_data.with_armor_data(armor_data);
+						extended_data = extended_data.with_equpment(armor_data);
 					},
 					_ => return Err(JsonError::Custom("armor_data must be either an object or array".into())),
+				}
+			},
+			"storage_data" => {
+				match value {
+					JsonValue::Object(slot_obj) => {
+						let rows = slot_obj.get("rows")
+							.and_then(|v| v.as_f64())
+							.map(|n| n as u8)
+							.ok_or_else(|| JsonError::MissingField("storage_data.rows is missing or not a correct u8 value".into()))?;
+
+						let cols = slot_obj.get("cols")
+							.and_then(|v| v.as_f64())
+							.map(|n| n as u8)
+							.ok_or_else(|| JsonError::MissingField("storage_data.cols is missing or not a correct u8 value".into()))?;
+						
+						let slot_data = Slot::custom(rows, cols);
+						extended_data = extended_data.with_slot(slot_data);
+					},
+					JsonValue::Array(_tiers) => {
+						return Err(JsonError::Custom("storage_data for Array is not yet implemented".into()));
+					},
+					_ => return Err(JsonError::Custom("storage_data must be either an object or array".into())),
 				}
 			},
 			_ => {

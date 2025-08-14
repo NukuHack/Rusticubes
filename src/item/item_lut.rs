@@ -4,6 +4,7 @@ use std::{
 	cmp::PartialEq,
 	marker::PhantomData,
 };
+use crate::item::inventory::Slot;
 use crate::utils::string::MutStr;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -36,9 +37,8 @@ pub struct ItemComp {
 }
 
 impl ItemComp {
-	pub const fn error() -> Self {
-		Self::new("0")
-	}
+	#[inline] pub const fn error() -> Self { Self::new("0") }
+	
 	pub const fn new(name: &'static str) -> Self {
 		Self {
 			name: MutStr::from_str(name),
@@ -70,15 +70,30 @@ impl ItemComp {
 		self
 	}
 	#[inline]
-	pub fn as_tool(mut self, tool_data: ToolData) -> Self {
-		self.flags = self.flags.with_flag(ItemFlags::IS_TOOL);
-		self.data = Some(ItemExtendedData::new().with_tool_data(tool_data));
+	pub const fn as_storage(mut self, slot: Slot) -> Self {
+		self.flags = self.flags.with_flag(ItemFlags::IS_STORAGE);
+		self.data = match self.data {
+			Some(existing_data) => Some(existing_data.with_slot(slot)),
+			None => Some(ItemExtendedData::new().with_slot(slot)),
+		};
 		self
 	}
 	#[inline]
-	pub fn as_armor(mut self, armor_data: ArmorData) -> Self {
+	pub const fn as_tool(mut self, tool_data: ToolData) -> Self {
+		self.flags = self.flags.with_flag(ItemFlags::IS_TOOL);
+		self.data = match self.data {
+			Some(existing_data) => Some(existing_data.with_tool(tool_data)),
+			None => Some(ItemExtendedData::new().with_tool(tool_data)),
+		};
+		self
+	}
+	#[inline]
+	pub const fn as_armor(mut self, armor_data: ArmorData) -> Self {
 		self.flags = self.flags.with_flag(ItemFlags::IS_ARMOR);
-		self.data = Some(ItemExtendedData::new().with_armor_data(armor_data));
+		self.data = match self.data {
+			Some(existing_data) => Some(existing_data.with_equpment(armor_data)),
+			None => Some(ItemExtendedData::new().with_equpment(armor_data)),
+		};
 		self
 	}
 	
@@ -115,6 +130,7 @@ pub enum PropertyValue {
 	ArmorValue(i16),
 	Damage(i16),
 	Speed(i16),
+	Slot(Slot),
 }
 impl PropertyValue {
 	/// Returns the variant tag for this property (const-compatible)
@@ -127,6 +143,7 @@ impl PropertyValue {
 			Self::ArmorValue(_) => PropertyType::ArmorValue,
 			Self::Damage(_) => PropertyType::Damage,
 			Self::Speed(_) => PropertyType::Speed,
+			Self::Slot(_) => PropertyType::Slot,
 		}
 	}
 }
@@ -140,6 +157,7 @@ pub enum PropertyType  {
 	ArmorValue,
 	Damage,
 	Speed,
+	Slot,
 }
 // Manually implement PartialEq with const fn
 impl PropertyType {
@@ -153,6 +171,7 @@ impl PropertyType {
 			| (Self::ArmorValue, Self::ArmorValue)
 			| (Self::Damage, Self::Damage)
 			| (Self::Speed, Self::Speed)
+			| (Self::Slot, Self::Slot)
 		)
 	}
 	#[inline] pub const fn from_u8(value: u8) -> Option<Self> {
@@ -189,10 +208,10 @@ impl<const N: usize> ItemExtendedData<N> {
 	#[inline] pub const fn with_durability(self, value: NonZeroU32) -> Self {
 		self.set_property(PropertyValue::Durability(value))
 	}
-	#[inline] pub const fn with_tool_data(self, value: ToolData) -> Self {
+	#[inline] pub const fn with_tool(self, value: ToolData) -> Self {
 		self.set_property(PropertyValue::ToolData(value))
 	}
-	#[inline] pub const fn with_armor_data(self, value: ArmorData) -> Self {
+	#[inline] pub const fn with_equpment(self, value: ArmorData) -> Self {
 		self.set_property(PropertyValue::ArmorData(value))
 	}
 	#[inline] pub const fn with_hunger(self, value: i16) -> Self {
@@ -207,6 +226,11 @@ impl<const N: usize> ItemExtendedData<N> {
 	#[inline] pub const fn with_speed(self, value: i16) -> Self {
 		self.set_property(PropertyValue::Speed(value))
 	}
+	#[inline] pub const fn with_slot(self, value: Slot) -> Self {
+		self.set_property(PropertyValue::Slot(value))
+	}
+
+
 
 	/// Internal method to set or update a property
 	#[inline] pub const fn set_property(mut self, new_value: PropertyValue) -> Self {
@@ -278,6 +302,12 @@ impl<const N: usize> ItemExtendedData<N> {
 	#[inline] pub fn get_speed(&self) -> Option<i16> {
 		self.find_property(|v| match v {
 			PropertyValue::Speed(s) => Some(*s),
+			_ => None,
+		})
+	}
+	#[inline] pub fn get_slot(&self) -> Option<Slot> {
+		self.find_property(|v| match v {
+			PropertyValue::Slot(s) => Some(*s),
 			_ => None,
 		})
 	}

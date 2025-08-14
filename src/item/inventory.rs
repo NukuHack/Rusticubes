@@ -25,6 +25,12 @@ impl Slot {
 	#[inline] pub const fn total(&self) -> usize { self.rows() as usize * self.cols() as usize }
 	#[inline] pub const fn custom(rows: u8, cols: u8) -> Self { Self { rows, cols } }
 }
+impl From<(u8, u8)> for Slot {
+	#[inline]
+	fn from(tupl: (u8, u8)) -> Self {
+		Self::custom(tupl.0, tupl.1)
+	}
+}
 
 // Default inventory sizes - can be upgraded during gameplay
 pub const DEFAULT_ARMOR_SLOTS: u8 = 4;

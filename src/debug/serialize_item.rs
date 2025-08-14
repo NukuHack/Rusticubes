@@ -152,7 +152,7 @@ mod tests {
 			data: Some(
 			ItemExtendedData::new().with_durability(NonZeroU32::new(200).unwrap())
 				.with_damage(10)
-				.with_tool_data(ToolData::Single{ equip_type: ToolType::Stone , tier: MaterialLevel::Calcite })
+				.with_tool(ToolData::Single{ equip_type: ToolType::Stone , tier: MaterialLevel::Calcite })
 			),
 		};
 
@@ -197,7 +197,7 @@ mod tests {
 			data: Some(
 			ItemExtendedData::new().with_durability(NonZeroU32::new(200).unwrap())
 				.with_damage(10)
-				.with_tool_data(ToolData::Multiple(data))
+				.with_tool(ToolData::Multiple(data))
 			),
 		};
 

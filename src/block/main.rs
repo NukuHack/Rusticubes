@@ -1,5 +1,6 @@
 
 use crate::{
+	item::inventory::Slot,
 	item::items::lut_by_name,
 	block::extra::get_item_name_from_block_id,
 	block::math::{self, ChunkCoord, BlockPosition, BlockRotation},
@@ -71,6 +72,12 @@ impl Block {
 		let item_name = get_item_name_from_block_id(self.material.inner());
 		let item = lut_by_name(&item_name);
 		item.is_storage()
+	}
+	#[inline]
+	pub fn get_storage(&self) -> Slot {
+		let item_name = get_item_name_from_block_id(self.material.inner());
+		let item = lut_by_name(&item_name);
+		item.data.expect("Shold check first").get_slot().expect("Shold check the data first")
 	}
 }
 

@@ -118,7 +118,8 @@ impl World {
 		
 		// If placing a new storage block, initialize its storage
 		if block.is_storage() {
-			self.create_storage(world_pos, Vec::new());
+			let slot = block.get_storage();
+			self.create_storage(world_pos, vec![ItemContainer::new(slot.rows(), slot.cols())]);
 		}
 
 		let chunk = self.chunks.get_mut(&chunk_coord).expect("Chunk should exist");
