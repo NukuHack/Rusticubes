@@ -68,6 +68,8 @@ pub mod item {
 	pub mod inventory;
 	/// the rendering part of the inventory and the items
 	pub mod ui_inventory;
+	/// the recipes, for now only for crafting
+	pub mod recipes;
 }
 // Modding related
 pub mod mods {

@@ -428,7 +428,7 @@ impl<'a> crate::State<'a> {
 			inv_mut.add_item_anywhere(ItemStack::new(item_name).with_stack_size(1));
 		}
 		if let Some(storage) = world.get_storage(block_pos) {
-			for (_i, item) in storage.slot_iter() {
+			for item in storage.iter() {
 				let Some(itm) = item else { continue; };
 				inv_mut.add_item_anywhere(itm.clone());
 			}

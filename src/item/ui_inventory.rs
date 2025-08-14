@@ -1,10 +1,11 @@
 
-use glam::Vec2;
 use crate::item::inventory::{Inventory, ItemContainer, AreaType, Slot};
-use crate::ext::ptr;
+use crate::item::recipes::CraftingResult;
 use crate::ui::{manager::{UIManager, UIState, FocusState}, element::UIElement};
 use crate::item::items::ItemStack;
 use crate::utils::color::Solor;
+use crate::ext::ptr;
+use glam::Vec2;
 
 #[derive(PartialEq, Clone, Copy, Debug)]
 pub enum InventoryUIState {
@@ -438,13 +439,26 @@ impl UIManager {
 
 	// New method to handle crafting UI using actual crafting containers
 	fn create_crafting_areas(&mut self, layout: &InventoryLayout, inventory: &Inventory) {
-		for area_type in [AreaType::Input, AreaType::Output] {
-			let Some(area) = layout.areas.iter().find(|a| a.name == area_type) else { continue; };
+		let Some(area) = layout.areas.iter().find(|a| a.name == AreaType::Input) else { return; };
 
-			// Get actual crafting data from world
-			let crafting_items = inventory.get_area(&area.name);
-			self.create_area_slots(&area, &crafting_items);
+		// Get actual crafting data from world
+		let crafting_items = inventory.get_area(&area.name);
+		self.create_area_slots(&area, &crafting_items);
+
+		if let Some(item) = crafting_items.first() {
+			println!("crafting items: {:?}, first item idx {:?}", crafting_items, item.resource_index());
 		}
+		if let Some(result) = crafting_items.find_recipe() {
+			match result {
+				CraftingResult::Single(item_id) => println!("Crafted item: {}", item_id),
+				CraftingResult::Multiple(items) => println!("Crafted multiple items: {:?}", items),
+			}
+		}
+		let Some(area) = layout.areas.iter().find(|a| a.name == AreaType::Output) else { return; };
+
+		// Get actual crafting data from world
+		let crafting_items = inventory.get_area(&AreaType::Output);
+		self.create_area_slots(&area, &crafting_items);
 	}
 	
 	fn add_main_panel(&mut self, layout: &InventoryLayout) {

@@ -2,7 +2,7 @@
 item and related things also the inventory stuff
 
 
-/// item + inventory and related stuffs
+/// Item + Inventory and related stuffs
 pub mod item {
 	// Item and Itemstack body, inventory basics
 	pub mod items;
@@ -18,5 +18,7 @@ pub mod item {
 	pub mod inventory;
 	/// the rendering part of the inventory and the items
 	pub mod ui_inventory;
+	/// the recipes, for now only for crafting
+	pub mod recipes;
 }
 

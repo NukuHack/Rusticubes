@@ -1,10 +1,10 @@
 
 use crate::ext::config::CameraConfig;
-use crate::world::manager::{get_save_path, ensure_save_dir};
+use crate::world::manager::{self, get_save_path, ensure_save_dir};
+use crate::world::main::World;
 use crate::game::player;
-use crate::item::items;
+use crate::item::{items, recipes};
 use crate::ext::ptr;
-use crate::world;
 use std::path::PathBuf;
 use std::sync::atomic::Ordering;
 use glam::Vec3;
@@ -13,7 +13,7 @@ use glam::Vec3;
 pub struct GameState {
 	worldname: String,
 	player: player::Player,
-	world: world::main::World, // lol main data storage :)
+	world: World, // lol main data storage :)
 	save_path: std::path::PathBuf,
 	world_seed: u32,
 	is_running: bool,
@@ -51,6 +51,7 @@ pub fn make_world(save_path: PathBuf) {
 impl GameState {
 	#[inline] pub fn new(worldname: &str) -> Self {
 		items::init_item_lut();
+		recipes::init_recipe_lut();
 
 		#[cfg(test)]
 		let player = {
@@ -82,7 +83,7 @@ impl GameState {
 
 		make_world(save_path.clone());
 
-		let creation_date: u64 = world::manager::update_world_data(&save_path)
+		let creation_date: u64 = manager::update_world_data(&save_path)
 			.map_err(|e| println!("Error updating world data: {}", e))
 			.map_or(0, |data| data.creation_date.to_unix_timestamp());
 
@@ -100,7 +101,7 @@ impl GameState {
 		};
 
 		// world create and spawn thread for chunk gen
-		let mut world = world::main::World::empty();
+		let mut world = World::empty();
 		world.set_seed(world_seed);
 
 		if let Some(core_count) = std::thread::available_parallelism().ok() {
@@ -124,7 +125,7 @@ impl GameState {
 			is_running: false,
 		}
 	}
-	#[inline] pub const fn world_mut(&mut self) -> &mut world::main::World {
+	#[inline] pub const fn world_mut(&mut self) -> &mut World {
 		&mut self.world
 	}
 	#[inline] pub const fn player_mut(&mut self) -> &mut player::Player {
@@ -136,7 +137,7 @@ impl GameState {
 	#[inline] pub const fn player(&self) -> &player::Player {
 		&self.player
 	}
-	#[inline] pub const fn world(&self) -> &world::main::World {
+	#[inline] pub const fn world(&self) -> &World {
 		&self.world
 	}
 	#[inline] pub const fn save_path(&self) -> &std::path::PathBuf {

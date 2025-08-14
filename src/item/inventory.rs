@@ -75,6 +75,11 @@ impl ItemContainer {
 		self.rows() == 1 || self.cols() == 1
 	}
 
+	/// Get the first
+	#[inline] pub fn first(&self) -> Option<&ItemStack> {
+		self.items.get(0)?.as_ref()
+	}
+
 	/// Get an item by linear index
 	#[inline] pub fn get(&self, index: usize) -> Option<&ItemStack> {
 		self.items.get(index)?.as_ref()
@@ -128,33 +133,6 @@ impl ItemContainer {
 		Some((r as usize * self.cols() as usize) + c as usize)
 	}
 
-	/// Returns an iterator over all slots with their indices and items
-	#[inline] pub fn slot_iter(&self) -> impl Iterator<Item = (usize, &Option<ItemStack>)> {
-		self.items.iter().enumerate().take(self.capacity())
-	}
-	
-	/// Returns an iterator over all slots with their indices and items
-	#[inline] pub fn slot_iter_mut(&mut self) -> impl Iterator<Item = (usize, &mut Option<ItemStack>)> {
-		let cap = self.capacity();
-		self.items.iter_mut().enumerate().take(cap)
-	}
-
-	/// Uses the slot iterator to set items based on a predicate
-	/// Returns the number of items set
-	#[inline] pub fn update_items<F>(&mut self, mut predicate: F) -> usize
-	where
-		F: FnMut(usize, &Option<ItemStack>) -> Option<ItemStack>,
-	{
-		let mut count = 0;
-		for (index, slot) in self.slot_iter_mut() {
-			let Some(new_item) = predicate(index, slot) else { continue; };
-
-			*slot = Some(new_item);
-			count += 1;
-		}
-		count
-	}
-
 	/// Find the first empty slot
 	#[inline] pub fn find_empty_slot(&self) -> Option<usize> {
 		self.items.iter().position(|slot| slot.is_none())
@@ -173,7 +151,7 @@ impl ItemContainer {
 	/// Add an item to the first available slot
 	#[inline] pub fn add_item(&mut self, mut new_item: ItemStack) -> bool {
 		// First try to stack with existing items of the same type
-		for (_, slot) in self.slot_iter_mut() {
+		for slot in self.iter_mut() {
 			let Some(existing_item) = slot else { continue; };
 
 			if !existing_item.can_stack_with(&new_item) { continue; }
@@ -204,10 +182,7 @@ impl ItemContainer {
 
 	/// Upgrade the dimensions of this container
 	#[inline] pub fn resize(&mut self, rows: u8, cols: u8) {
-		self.resize_with_dimensions(Slot::custom(rows, cols));
-	}
-	#[inline] pub fn resize_with_dimensions(&mut self, size: Slot) {
-		self.size = size;
+		self.size = Slot::custom(rows, cols);
 		self.resize_to_capacity();
 	}
 
@@ -269,6 +244,7 @@ impl ItemContainer {
 			*slot = None;
 		}
 	}
+
 	#[inline] pub fn iter(&self) -> impl Iterator<Item = &Option<ItemStack>> {
 		self.items.iter()
 	}

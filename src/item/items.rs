@@ -170,17 +170,10 @@ impl ItemStack {
 	
 	/// Gets the index of this item in the resources list
 	#[inline]
-	pub fn resource_index(&self) -> Option<usize> {
+	pub fn resource_index(&self) -> usize {
 		let (resources, target_name) = self.get_resources_and_target();
-		resources.iter().position(|res| *res == target_name)
-	}
-	
-	#[inline] 
-	pub fn lut_by_index(idx: usize) -> ItemComp {
-		item_lut_ref().iter()
-			.nth(idx)
-			.map(|(_key, value)| value.clone())
-			.unwrap_or(DEFAULT_ITEM_COMP.clone())
+		let Some(idx) = resources.iter().position(|res| *res == target_name) else { return 0; };
+		idx
 	}
 
 	///////////////////////////////
@@ -226,7 +219,7 @@ pub const DEFAULT_ITEM_COMP: ItemComp = const { ItemComp::error().as_block() };
 
 
 use std::collections::HashMap;
-use std::sync::{OnceLock, RwLock, RwLockReadGuard, RwLockWriteGuard};
+use std::sync::{OnceLock, RwLock, RwLockReadGuard};
 
 // Global mutable state with RwLock
 static ITEM_LUT: OnceLock<RwLock<HashMap<String, ItemComp>>> = OnceLock::new();
@@ -241,17 +234,8 @@ pub const fn item_lut_ptr() -> *const OnceLock<RwLock<HashMap<String, ItemComp>>
 /// # Panics
 /// Panics if it hasn't been initialized yet.
 #[inline]
-pub fn item_lut() -> &'static RwLock<HashMap<String, ItemComp>> {
+fn item_lut() -> &'static RwLock<HashMap<String, ItemComp>> {
 	ITEM_LUT.get().expect("ItemLut should be initialized")
-}
-
-/// Returns a mutable guard for writing to the item lookup table.
-///
-/// # Panics
-/// Panics if the lock is poisoned or cannot be acquired.
-#[inline]
-pub fn item_lut_mut() -> RwLockWriteGuard<'static, HashMap<String, ItemComp>> {
-	item_lut().write().expect("Failed to acquire write lock for item LUT")
 }
 
 /// Returns an immutable guard for reading from the item lookup table.
@@ -264,7 +248,7 @@ pub fn item_lut_ref() -> RwLockReadGuard<'static, HashMap<String, ItemComp>> {
 }
 
 pub fn clean_item_lut() {
-	item_lut_mut().clear();
+	item_lut().write().expect("Failed to acquire write lock for item LUT").clear();
 }
 
 pub fn init_item_lut() {
@@ -277,7 +261,7 @@ pub fn init_item_lut() {
 	}
 	// Insert items (write lock)
 	{
-		let mut map = item_lut_mut();
+		let mut map = item_lut().write().expect("Failed to acquire write lock for item LUT");
 		map.insert("air".to_string(), ItemComp::new("air").as_block());
 		map.insert("brick_grey".to_string(), ItemComp::new("brick_grey").as_block());
 		map.insert("brick_red".to_string(), ItemComp::new("brick_red").as_block());

@@ -264,7 +264,7 @@ impl UIManager {
 			vertex_buffer,
 			index_buffer,
 			pipeline: ui_pipeline,
-			elements: Vec::new(),
+			elements: Vec::with_capacity(50),
 			focused_element: FocusState::default(),
 			visibility: true,
 			dialogs: dialog::DialogManager::new(),
