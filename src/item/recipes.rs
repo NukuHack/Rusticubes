@@ -1,6 +1,8 @@
-use std::collections::HashSet;
-use ahash::RandomState;
+
+use crate::item::items::ItemStack;
+use std::collections::HashMap;
 use std::sync::{OnceLock, RwLock, RwLockReadGuard};
+use ahash::RandomState;
 use std::hash::{Hash, Hasher};
 
 /// Position relative to the center item in a crafting grid
@@ -154,13 +156,6 @@ pub struct Recipe {
 	output: CraftingResult,
 }
 
-impl Hash for Recipe {
-	fn hash<H: Hasher>(&self, state: &mut H) {
-		// Only hash the input since outputs aren't used for lookups
-		self.input.hash(state);
-	}
-}
-
 impl Recipe {
 	#[inline]
 	pub fn new<T: Into<CraftingInput>, K: Into<CraftingResult>>(input: T, output: K) -> Self {
@@ -170,23 +165,16 @@ impl Recipe {
 		}
 	}
 
-	#[inline]
-	pub fn input(&self) -> &CraftingInput {
-		&self.input
-	}
-
-	#[inline]
-	pub fn output(&self) -> &CraftingResult {
-		&self.output
-	}
+	#[inline] pub fn split(self) -> (CraftingInput, CraftingResult) { (self.input, self.output) }
+	#[inline] pub fn input(&self) -> &CraftingInput { &self.input }
+	#[inline] pub fn output(&self) -> &CraftingResult { &self.output }
 }
 
-// Global recipe registry
-static RECIPE_REGISTRY: OnceLock<RwLock<HashSet<Recipe, RandomState>>> = OnceLock::new();
+// Replace the HashSet with HashMap
+static RECIPE_REGISTRY: OnceLock<RwLock<HashMap<CraftingInput, CraftingResult, RandomState>>> = OnceLock::new();
 
-/// Initializes the recipe registry with default recipes
 pub fn init_recipe_registry() {
-	RECIPE_REGISTRY.get_or_init(|| RwLock::new(HashSet::with_hasher(RandomState::new())));
+	RECIPE_REGISTRY.get_or_init(|| RwLock::new(HashMap::with_hasher(RandomState::new())));
 }
 
 /// Clears all recipes from the registry
@@ -197,55 +185,53 @@ pub fn clear_recipes() {
 }
 
 /// Gets a read-only reference to the recipe registry
-pub fn get_recipes() -> RwLockReadGuard<'static, HashSet<Recipe, RandomState>> {
+pub fn get_recipes() -> RwLockReadGuard<'static, HashMap<CraftingInput, CraftingResult, RandomState>> {
 	RECIPE_REGISTRY.get()
 		.expect("Recipe registry not initialized")
 		.read().expect("Recipe registry poisoned")
 }
 
-/// Initializes the recipe lookup table with default recipes
 pub fn init_recipe_lut() {
 	init_recipe_registry();
-
+	
 	let mut recipes = RECIPE_REGISTRY.get()
 		.expect("Recipe registry not initialized")
 		.write().expect("Recipe registry poisoned");
 
+	let num = ItemStack::from_str("brick_grey").resource_index();
+	let crafting_table = ItemStack::from_str("crafting").resource_index();
+	let o_shape = vec![vec![num,num,num],vec![num,0,num],vec![num,num,num]];
+	
 	recipes.extend([
-		Recipe::new(0, 0),
-		Recipe::new(1, 1),
-		Recipe::new(2, 2),
-		Recipe::new(13, 13), // Add this line for brick_grey
+		Recipe::new(num,num).split(),
+		Recipe::new(o_shape,crafting_table).split(),
 		// other recipes
 	]);
 }
 
-/// Looks up a recipe by input only
 pub fn lookup_recipe(input: &CraftingInput) -> Option<CraftingResult> {
 	let registry = get_recipes();
-	// Create a temporary recipe with dummy output for lookup
-	let lookup_recipe = Recipe {
-		input: input.clone(),
-		output: 0.into(), // dummy value
-	};
-	
-	registry.get(&lookup_recipe).map(|r| r.output().clone())
+	registry.get(input).cloned()
 }
 
-
+pub fn print_all_recipes() {
+	let registry = get_recipes();
+	println!("Registered recipes:");
+	for recipe in registry.iter() {
+		println!("- {:?}", recipe);
+	}
+}
 
 use crate::item::inventory::ItemContainer;
 
 impl ItemContainer {
-	/// Converts the container's contents into a CraftingInput for recipe lookup
-	pub fn to_crafting_input(&self) -> CraftingInput {
+	pub fn to_crafting_input(&self) -> Option<CraftingInput> {  // Changed to return Option
 		let mut requirements = Vec::new();
 		
-		// Calculate center offsets for positioning
+		// Calculate center offsets
 		let y_offset = -(self.rows() as i8 / 2);
 		let x_offset = -(self.cols() as i8 / 2);
 		
-		// Iterate through all slots in row-major order
 		for row in 0..self.rows() {
 			for col in 0..self.cols() {
 				if let Some(item_stack) = self.get_at(row, col) {
@@ -259,16 +245,17 @@ impl ItemContainer {
 		}
 		
 		match requirements.len() {
-			1 => CraftingInput::Single(requirements[0].item_id),
-			_ => CraftingInput::Multiple(requirements),
+			0 => None,
+			1 => Some(CraftingInput::Single(requirements[0].item_id)),
+			_ => Some(CraftingInput::Multiple(requirements)),
 		}
 	}
-	
-	/// Looks up a recipe matching this container's contents
+
 	pub fn find_recipe(&self) -> Option<CraftingResult> {
-		let input = self.to_crafting_input();
-		println!("Crafting input: {:?}", input); // Add this line
-		lookup_recipe(&input)
+		self.to_crafting_input().and_then(|input| {
+			//println!("Valid crafting input: {:?}", input);  // Debug log
+			lookup_recipe(&input)
+		})
 	}
 }
 

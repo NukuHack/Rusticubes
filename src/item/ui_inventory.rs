@@ -1,6 +1,5 @@
 
 use crate::item::inventory::{Inventory, ItemContainer, AreaType, Slot};
-use crate::item::recipes::CraftingResult;
 use crate::ui::{manager::{UIManager, UIState, FocusState}, element::UIElement};
 use crate::item::items::ItemStack;
 use crate::utils::color::Solor;
@@ -78,15 +77,15 @@ pub struct AreaLayout {
 	pub position: (f32, f32), // bottom-left corner of the area
 	pub size: (f32, f32),
 	pub rows: u8,
-	pub columns: u8,
+	pub cols: u8,
 }
 
 impl AreaLayout {
-	#[inline] pub const fn new(rows: u8, columns: u8, center_pos: (f32, f32), name: AreaType) -> Self {
-		let w = (columns as f32 * SLOT) + ((columns.saturating_sub(1)) as f32 * PADDING);
+	#[inline] pub const fn new(rows: u8, cols: u8, center_pos: (f32, f32), name: AreaType) -> Self {
+		let w = (cols as f32 * SLOT) + ((cols.saturating_sub(1)) as f32 * PADDING);
 		let h = (rows as f32 * SLOT) + ((rows.saturating_sub(1)) as f32 * PADDING);
 		Self {
-			name, rows, columns,
+			name, rows, cols,
 			position: (center_pos.0 - w / 2.0, center_pos.1 - h / 2.0),
 			size: (w, h),
 		}
@@ -102,7 +101,7 @@ impl AreaLayout {
 	}
 	
 	#[inline] pub const fn get_slot_position(&self, row: u8, col: u8) -> (f32, f32) {
-		if row >= self.rows || col >= self.columns { 
+		if row >= self.rows || col >= self.cols { 
 			return (self.position.0, self.position.1); // Return area origin as fallback
 		}
 		(
@@ -295,7 +294,7 @@ impl InventoryLayout {
 		let mut max_y = f32::MIN;
 		
 		for area in areas {
-			if area.rows > 0 && area.columns > 0 {
+			if area.rows > 0 && area.cols > 0 {
 				let (left, bottom, right, top) = area.get_bounds();
 				min_x = min_x.min(left);
 				min_y = min_y.min(bottom);
@@ -352,7 +351,7 @@ impl InventoryLayout {
 			if !area.contains_point(x, y) { continue; }
 
 			for row in 0..area.rows {
-				for col in 0..area.columns {
+				for col in 0..area.cols {
 					if !area.slot_contains_point(row, col, x, y) { continue; }
 
 					return ClickResult::SlotClicked { area_type: area.name, slot: (row, col) };
@@ -434,31 +433,24 @@ impl UIManager {
 
 		// Get actual storage data from world
 		let storage_items = inventory.get_area(&storage_area.name);
-		self.create_area_slots(&storage_area, &storage_items);
+		self.create_area_slots(&storage_area);
+		self.create_item_slots(&storage_area, &storage_items);
 	}
 
 	// New method to handle crafting UI using actual crafting containers
 	fn create_crafting_areas(&mut self, layout: &InventoryLayout, inventory: &Inventory) {
-		let Some(area) = layout.areas.iter().find(|a| a.name == AreaType::Input) else { return; };
+		let Some(crafting_area) = layout.areas.iter().find(|a| a.name == AreaType::Input) else { return; };
 
 		// Get actual crafting data from world
-		let crafting_items = inventory.get_area(&area.name);
-		self.create_area_slots(&area, &crafting_items);
+		let crafting_items = inventory.get_area(&AreaType::Input);
+		self.create_area_slots(&crafting_area);
+		self.create_item_slots(&crafting_area, &crafting_items);
 
-		if let Some(item) = crafting_items.first() {
-			println!("crafting items: {:?}, first item idx {:?}", crafting_items, item.resource_index());
-		}
-		if let Some(result) = crafting_items.find_recipe() {
-			match result {
-				CraftingResult::Single(item_id) => println!("Crafted item: {}", item_id),
-				CraftingResult::Multiple(items) => println!("Crafted multiple items: {:?}", items),
-			}
-		}
-		let Some(area) = layout.areas.iter().find(|a| a.name == AreaType::Output) else { return; };
+		let Some(result_area) = layout.areas.iter().find(|a| a.name == AreaType::Output) else { return; };
+		self.create_area_slots(&result_area);
 
-		// Get actual crafting data from world
-		let crafting_items = inventory.get_area(&AreaType::Output);
-		self.create_area_slots(&area, &crafting_items);
+		let Some(result) = inventory.make_result_from_input() else { return; };
+		self.create_item_slots(&result_area, &result);
 	}
 	
 	fn add_main_panel(&mut self, layout: &InventoryLayout) {
@@ -477,7 +469,8 @@ impl UIManager {
 
 		for area in layout.get_areas_for_inv_state(inv_state) {
 			let items = inventory.get_area(&area.name);
-			self.create_area_slots(&area, items);
+			self.create_area_slots(&area);
+			self.create_item_slots(&area, items);
 			
 			// Enhanced hotbar highlighting using actual inventory state
 			if area.name != AreaType::Hotbar || UIState::InGame != self.state.clone() { continue; }
@@ -499,9 +492,9 @@ impl UIManager {
 		let binding = layout.get_areas_for_inv_state(InvState::Hotbar);
 		let Some(area) = binding.first() else { return; };
 
-		let col = selected_index as u8 % area.columns;
-		let row = selected_index as u8 / area.columns;
-		if !(row < area.rows && col < area.columns) { return; };
+		let col = selected_index as u8 % area.cols;
+		let row = selected_index as u8 / area.cols;
+		if !(row < area.rows && col < area.cols) { return; };
 		
 		let (x, y) = area.get_slot_position(row, col);
 
@@ -549,12 +542,12 @@ impl UIManager {
 		self.set_focused_state(FocusState::Item { id });
 	}
 
-	fn create_area_slots(&mut self, area: &AreaLayout, items: &ItemContainer) {
-		if area.rows == 0 || area.columns == 0 { return; }
+	fn create_area_slots(&mut self, area: &AreaLayout) {
+		if area.rows == 0 || area.cols == 0 { return; }
 		let config = &ptr::get_settings();
 		
 		for row in 0..area.rows {
-			for col in 0..area.columns {
+			for col in 0..area.cols {
 				let (x, y) = area.get_slot_position(row, col);
 
 				let slot = UIElement::panel(self.next_id())
@@ -563,8 +556,16 @@ impl UIManager {
 					.with_style(&config.inv_config.get_style(area.name))
 					.with_z_index(5);
 				self.add_element(slot);
-
-				let Some(item) = items.get(row as usize * area.columns as usize + col as usize) else { continue; };
+			}
+		}
+	}
+	fn create_item_slots(&mut self, area: &AreaLayout, items: &ItemContainer) {
+		if area.rows == 0 || area.cols == 0 { return; }
+		
+		for row in 0..area.rows {
+			for col in 0..area.cols {
+				let (x, y) = area.get_slot_position(row, col);
+				let Some(item) = items.get(row as usize * area.cols as usize + col as usize) else { continue; };
 
 				self.create_item_display(x, y, item, 7);
 			}

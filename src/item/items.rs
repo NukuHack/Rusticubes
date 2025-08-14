@@ -29,6 +29,24 @@ impl ItemStack {
 	pub fn from_str(name: &'static str) -> Self {
 		Self::new(name.to_string())
 	}
+	
+	/// Creates an ItemStack from a resource index where the first bit indicates if it's a block (1) or item (0)
+	pub fn from_idx(resource_idx: usize) -> Self {
+		// Extract the is_block flag from the first bit
+		let is_block = (resource_idx & 1) == 1;
+		// The actual index is the remaining bits
+		let actual_idx = resource_idx >> 1;
+		
+		let resource_type = if is_block { "block" } else { "item" };
+		let resources = rs::find_png_resources(resource_type);
+		
+		// Get the resource name or fall back to default if index is out of bounds
+		let resource_name = resources.get(actual_idx)
+			.map(|s| s.trim_start_matches(&format!("{}/", resource_type)).trim_end_matches(".png"))
+			.unwrap_or("0");
+		
+		Self::new(resource_name.to_string())
+	}
 
 	///////////////////////////////
 	// Property Accessors
@@ -173,7 +191,8 @@ impl ItemStack {
 	pub fn resource_index(&self) -> usize {
 		let (resources, target_name) = self.get_resources_and_target();
 		let Some(idx) = resources.iter().position(|res| *res == target_name) else { return 0; };
-		idx
+		let is_block_bit = if self.is_block() { 1 } else { 0 };
+		(idx << 1) | is_block_bit
 	}
 
 	///////////////////////////////
@@ -249,6 +268,24 @@ pub fn item_lut_ref() -> RwLockReadGuard<'static, HashMap<String, ItemComp>> {
 
 pub fn clean_item_lut() {
 	item_lut().write().expect("Failed to acquire write lock for item LUT").clear();
+}
+
+pub fn print_all_items() {
+	let registry = item_lut_ref();
+	println!("Registered items:");
+	let blocks = rs::find_png_resources("block");
+	let items = rs::find_png_resources("item");
+	for (name, item_data) in registry.iter() {
+		let idx:usize = if item_data.is_block() {
+			let target_name = format!("{}/{}.png", "block", item_data.name);
+			blocks.iter().position(|res| *res == target_name).unwrap_or(0)
+		} else {
+			let target_name = format!("{}/{}.png", "item", item_data.name);
+			items.iter().position(|res| *res == target_name).unwrap_or(0)
+		};
+
+		println!("- {:?} ; {:?} ; {:?}", item_data, name, idx);
+	}
 }
 
 pub fn init_item_lut() {

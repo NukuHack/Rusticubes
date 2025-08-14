@@ -1,4 +1,5 @@
 
+use crate::item::recipes::CraftingResult;
 use crate::item::ui_inventory::InventoryLayout;
 use crate::item::items::ItemStack;
 
@@ -392,16 +393,62 @@ impl Inventory {
 		self.armor.is_full() && self.hotbar.is_full() && self.items.is_full()
 	}
 
+	pub fn make_result_from_input(&self) -> Option<ItemContainer> {
+		let crafting_items = self.get_area(&AreaType::Input);
+		let Some(layout) = self.get_layout() else { return None; };
+		let Some(result_area) = layout.areas.iter().find(|a| a.name == AreaType::Output) else { return None; };
 
-	pub fn handle_click_press(&mut self, clicked_pos:(u8,u8), area_type: AreaType) {
+		let Some(result) = crafting_items.find_recipe() else { return None; };
+		let items: Vec<usize> = match result {
+			CraftingResult::Single(item_id) => vec![item_id],
+			CraftingResult::Multiple(items) => items,
+		};
+
+		if items.len() > result_area.rows as usize * result_area.cols as usize { 
+			return None; 
+		};
+
+		// Get actual crafting data from world
+		let items: Vec<ItemStack> = items.into_iter()
+			.map(|idx| ItemStack::from_idx(idx).with_stack_size(1))
+			.collect();
+
+		let mut item_cont = ItemContainer::new(result_area.rows, result_area.cols);
+		for (i, item_slot) in item_cont.iter_mut().enumerate() {
+			let Some(item) = items.get(i) else { continue };
+			*item_slot = Some(item.clone());
+		}
+		Some(item_cont)
+	}
+
+	pub fn handle_click_press(&mut self, clicked_pos: (u8, u8), area_type: AreaType) {
 		let cursor = self.get_cursor().cloned();
-		let area = self.get_area_mut(area_type); let (c_x, c_y) = clicked_pos;
+		let (c_x, c_y) = clicked_pos;
+		
+		if matches!(area_type, AreaType::Output) {
+			if cursor.is_some() { return } // Will make this nicer with stacking checking and stuff
+			// For output area, we need to take the crafting result
+			let Some(result_container) = self.make_result_from_input() else { return };
+			let Some(result_item) = result_container.get_at(c_x, c_y) else { return };
+			
+			// Take the item from output
+			self.set_cursor(Some(result_item.clone()));
+			
+			// Clear the input slots (as we've taken the result)
+			let input_area = self.get_area_mut(AreaType::Input);
+			for item in input_area.iter_mut() {
+				let Some(itm) = item else { continue };
+				*item = itm.clone().remove_from_stack(1);
+			}
+			return
+		}
+		let area = self.get_area_mut(area_type);
 		let armor_in_not_armor_area = area_type == AreaType::Armor && !cursor.clone().map(|item| item.is_armor()).unwrap_or(false);
 
-		match (cursor, area.remove_at(c_x, c_y).clone()) {
+		match (cursor, area.remove_at(c_x, c_y)) {
 			// Case 1: Trying to place an item from cursor
 			(Some(cursor_item), None) => {
-				if armor_in_not_armor_area { return; }
+				if armor_in_not_armor_area { return }
 				area.set_at(c_x, c_y, cursor_item.opt());
 				self.remove_cursor();
 			},
@@ -412,14 +459,12 @@ impl Inventory {
 			},
 			// Case 3: Trying to place an item from cursor into an item
 			(Some(cursor_item), Some(mut item)) => {
-				if armor_in_not_armor_area { return; }
-				if !item.can_stack_with(&cursor_item) { // if can't stack switch
+				if armor_in_not_armor_area { return }
+				if !item.can_stack_with(&cursor_item) {
 					area.set_at(c_x, c_y, cursor_item.opt());
 					self.set_cursor(item.opt());
-					return;
+					return
 				}
-				// else : they can stack -> they are the same type
-				// let the inventory have the "main" item and the cursor will have the remaining
 				let rem = item.add_to_stack(cursor_item.stack);
 				area.set_at(c_x, c_y, item.clone().opt());
 				self.set_cursor(item.with_stack_size(rem).opt());
@@ -428,13 +473,34 @@ impl Inventory {
 			(None, None) => {}
 		}
 	}
-	pub fn handle_rclick_press(&mut self, clicked_pos:(u8,u8), area_type: AreaType) {
+
+	pub fn handle_rclick_press(&mut self, clicked_pos: (u8, u8), area_type: AreaType) {
 		let cursor = self.get_cursor().cloned();
-		let area = self.get_area_mut(area_type); let (c_x, c_y) = clicked_pos;
+		let (c_x, c_y) = clicked_pos;
+		
+		if matches!(area_type, AreaType::Output) {
+			if cursor.is_some() { return } // Will make this nicer with stacking checking and stuff
+			// For right-click on output, take half the stack (if stackable)
+			let Some(result_container) = self.make_result_from_input() else { return };
+			let Some(result_item) = result_container.get_at(c_x, c_y) else { return };
+			
+			let mut item = result_item.clone();
+			let half_stack = item.split_stack();
+			self.set_cursor(half_stack);
+			
+			// Clear the input slots
+			let input_area = self.get_area_mut(AreaType::Input);
+			for item in input_area.iter_mut() {
+				let Some(itm) = item else { continue };
+				*item = itm.clone().remove_from_stack(1);
+			}
+			return
+		}
+		let area = self.get_area_mut(area_type);
 		let armor_in_not_armor_area = area_type == AreaType::Armor && !cursor.clone().map(|item| item.is_armor()).unwrap_or(false);
 
-		match (cursor, area.remove_at(c_x, c_y).clone()) {
-			// Case 1: Trying to place an item from cursor
+		match (cursor, area.remove_at(c_x, c_y)) {
+			// Case 1: Trying to place one item from cursor
 			(Some(cursor_item), None) => {
 				if armor_in_not_armor_area { return; }
 				area.set_at(c_x, c_y, cursor_item.clone().with_stack_size(1).opt());
@@ -445,17 +511,15 @@ impl Inventory {
 				// this is the smaller if the number is odd
 				let half_stack = item.split_stack();
 				area.set_at(c_x, c_y, item.opt());
-				// the "bigger half" will be on the cursor and the smaller side will be left in the inventory
 				self.set_cursor(half_stack);
-				
 			},
-			// Case 3: Trying to place an item from cursor into an item
+			// Case 3: Trying to place one item from cursor into an item
 			(Some(cursor_item), Some(mut item)) => {
-				if armor_in_not_armor_area { return; }
-				if !item.can_stack_with(&cursor_item) { // if can't stack switch
+				if armor_in_not_armor_area { return }
+				if !item.can_stack_with(&cursor_item) {
 					area.set_at(c_x, c_y, cursor_item.opt());
 					self.set_cursor(item.opt());
-					return;
+					return
 				}
 				// else : they can stack -> they are the same type
 				// let the cursor have the "main" item and the inventory will have the remaining
@@ -467,28 +531,45 @@ impl Inventory {
 			(None, None) => {}
 		}
 	}
-	pub fn handle_mclick_press(&mut self, clicked_pos:(u8,u8), area_type: AreaType) {
+
+	pub fn handle_mclick_press(&mut self, clicked_pos: (u8, u8), area_type: AreaType) {
 		let cursor = self.get_cursor().cloned();
-		let area = self.get_area_mut(area_type); let (c_x, c_y) = clicked_pos;
+		let (c_x, c_y) = clicked_pos;
+		
+		if matches!(area_type, AreaType::Output) {
+			if cursor.is_some() { return } // Will make this nicer with stacking checking and stuff
+			// For middle-click on output, take all possible items (max stack)
+			let Some(result_container) = self.make_result_from_input() else { return };
+			let Some(result_item) = result_container.get_at(c_x, c_y) else { return };
+			
+			let mut item = result_item.clone();
+			item.set_to_max_stack();
+			self.set_cursor(Some(item));
+			
+			// Clear the input slots // why remove any ?
+			//let input_area = self.get_area_mut(AreaType::Input);
+			//input_area.clear();
+			return
+		}
+		let area = self.get_area_mut(area_type);
 		let armor_in_not_armor_area = area_type == AreaType::Armor && !cursor.clone().map(|item| item.is_armor()).unwrap_or(false);
 
 		match (cursor, area.get_at(c_x, c_y).cloned()) {
-			// Case 1: 
-			(Some(_cursor_item), None) => {
-				// nothign happens
-			},
-			// Case 2: Clicked on item with empty cursor
+			// Case 1: Cursor has item but slot is empty - nothing happens
+			(Some(_), None) => {},
+			// Case 2: Clicked on item with empty cursor - pick up max stack
 			(None, Some(mut item)) => {
 				item.set_to_max_stack();
+				//area.remove_at(c_x, c_y); // why remove any ?
 				self.set_cursor(Some(item));
 			},
-			// Case 3: Both full, Switch
+			// Case 3: Both full - switch items
 			(Some(cursor_item), Some(item)) => {
-				if armor_in_not_armor_area { return; }
+				if armor_in_not_armor_area { return }
 				area.set_at(c_x, c_y, cursor_item.opt());
 				self.set_cursor(item.opt());
 			},
-			// Case 4: Both empty
+			// Case 4: Both empty - nothing happens
 			(None, None) => {}
 		}
 	}
