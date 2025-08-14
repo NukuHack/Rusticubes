@@ -9,7 +9,7 @@ use crate::{
 	},
 	item::ui_inventory::InventoryUIState
 };
-use winit::keyboard::KeyCode::{self as Key, *};
+use winit::keyboard::KeyCode as Key;
 
 #[derive(PartialEq, Clone, Copy)]
 pub struct UIStateID(u32);
@@ -302,15 +302,6 @@ impl UIManager {
 		let focus_state = self.get_focused_state();
 		if matches!(focus_state, FocusState::Input { .. }) {
 			return self.handle_key_input_on_input_field(key, input_str);
-		} else if matches!(focus_state, FocusState::Simple { .. }) {
-			if key == Escape {
-				let inv = ptr::get_gamestate().player_mut().inventory_mut();
-				let itm = inv.remove_cursor().unwrap();
-				inv.add_item_anywhere(itm);
-				close_pressed();
-				self.setup_ui();
-				return true;
-			}
 		}
 		// we do not handle other kinds because i don't think we need to ...
 
