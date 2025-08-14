@@ -3,17 +3,16 @@ use crate::player::Player;
 use crate::ext::ptr;
 use crate::block::math::ChunkCoord;
 use crate::game::player::Camera;
-use crate::item::inventory::AreaType;
-use crate::block::main::{Block, Chunk, Material};
+use crate::block::main::{Block, Chunk};
 use crate::world::main::World;
 use crate::item::items::ItemStack;
 use glam::{Vec3, IVec3};
 
-const REACH: f32 = 8.0;
+pub const REACH: f32 = 8.0;
 
 /// Helper function to update a chunk mesh after modification
 #[inline]
-fn update_chunk_mesh(world: &mut World, chunk_coord: ChunkCoord) {
+pub fn update_chunk_mesh(world: &mut World, chunk_coord: ChunkCoord) {
 	
 	// Get raw pointer to the world's chunks
 	let world_ptr = world as *mut World;
@@ -129,43 +128,7 @@ pub fn get_item_name_from_block_id(block_id: u16) -> String {
 		.unwrap_or("0".to_string())
 }
 
-/// Places a cube on the face of the block the player is looking at
-#[inline]
-pub fn place_looked_block() {
-	let state = ptr::get_state();
-	if !state.is_world_running {
-		return;
-	}
-	let player = &ptr::get_gamestate().player();
-	let world = &mut ptr::get_gamestate().world_mut();
 
-	let Some((block_pos, normal)) = raycast_to_block(player.camera(), player, world, REACH) else { return; };
-
-	let placement_pos = block_pos + normal;
-
-	// Simple for loop to find block ID
-	let Some(item) = player.inventory().selected_item() else { return; };
-	if !item.is_block() { return; }
-
-	let item_name = item.name();
-	let block_id = get_block_id_from_item_name(&item_name);
-
-	remove_placed_block_from_inv();
-
-	world.set_block(placement_pos, Block::new(Material(block_id)));
-	update_chunk_mesh(world, ChunkCoord::from_world_pos(placement_pos));
-}
-
-#[inline] fn remove_placed_block_from_inv() {
-	let inv_mut = ptr::get_gamestate().player_mut().inventory_mut();
-	let idx = inv_mut.selected_index();
-
-	let hotbar = inv_mut.get_area_mut(AreaType::Hotbar);
-	let Some(item) = hotbar.remove(idx) else { return; };
-	hotbar.set(idx, item.remove_from_stack(1));
-
-	ptr::get_state().ui_manager.setup_ui(); // to update the hotbar if changed
-}
 #[inline] fn add_mined_block_to_inv(block: &Block) {
 	let block_id = block.material.inner();
 	let item_name = get_item_name_from_block_id(block_id);
@@ -175,18 +138,16 @@ pub fn place_looked_block() {
 
 	ptr::get_state().ui_manager.setup_ui(); // to update the hotbar if changed
 }
-
 /// Removes the block the player is looking at
 pub fn remove_targeted_block() {
 	let state = ptr::get_state();
 	if !state.is_world_running {
 		return;
 	}
+	let player = &ptr::get_gamestate().player();
 	let world = &mut ptr::get_gamestate().world_mut();
 
-	let Some((block_pos, _)) = raycast_to_block(
-		ptr::get_gamestate().player().camera(),
-		ptr::get_gamestate().player(), world, REACH) else { return; };
+	let Some((block_pos, _normal)) = raycast_to_block(player.camera(), player, world, REACH) else { return; };
 
 	let block = world.get_block(block_pos);
 	add_mined_block_to_inv(&block);

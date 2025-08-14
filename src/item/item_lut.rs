@@ -70,6 +70,11 @@ impl ItemComp {
 		self
 	}
 	#[inline]
+	pub const fn as_consumable(mut self) -> Self {
+		self.flags = self.flags.with_flag(ItemFlags::IS_CONSUMABLE);
+		self
+	}
+	#[inline]
 	pub const fn as_storage(mut self, slot: Slot) -> Self {
 		self.flags = self.flags.with_flag(ItemFlags::IS_STORAGE);
 		self.data = match self.data {
@@ -88,11 +93,27 @@ impl ItemComp {
 		self
 	}
 	#[inline]
+	pub const fn as_weapon(mut self, value: i16) -> Self {
+		self.flags = self.flags.with_flag(ItemFlags::IS_TOOL);
+		self.data = match self.data {
+			Some(existing_data) => Some(existing_data.with_damage(value)),
+			None => Some(ItemExtendedData::new().with_damage(value)),
+		};
+		self
+	}
+	#[inline]
 	pub const fn as_armor(mut self, armor_data: ArmorData) -> Self {
 		self.flags = self.flags.with_flag(ItemFlags::IS_ARMOR);
 		self.data = match self.data {
 			Some(existing_data) => Some(existing_data.with_equpment(armor_data)),
 			None => Some(ItemExtendedData::new().with_equpment(armor_data)),
+		};
+		self
+	}
+	#[inline] pub const fn with_damage(mut self, value: i16) -> Self {
+		self.data = match self.data {
+			Some(existing_data) => Some(existing_data.with_damage(value)),
+			None => Some(ItemExtendedData::new().with_damage(value)),
 		};
 		self
 	}
@@ -102,6 +123,9 @@ impl ItemComp {
 	}
 	#[inline] pub const fn is_storage(&self) -> bool { 
 		self.flags.contains(ItemFlags::IS_STORAGE) 
+	}
+	#[inline] pub const fn is_consumable(&self) -> bool { 
+		self.flags.contains(ItemFlags::IS_CONSUMABLE) 
 	}
 	#[inline] pub const fn has_durability(&self) -> bool { 
 		self.flags.contains(ItemFlags::IS_TOOL) || self.flags.contains(ItemFlags::IS_ARMOR) 

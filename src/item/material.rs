@@ -14,57 +14,13 @@ impl EquipmentType for ArmorType {
 	const TO_U8: fn(Self) -> u8 = |x| x as u8;
 }
 
-/*
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-#[repr(u8)] // Ensure each variant has a u8 representation, so up to 255 type
-pub enum Material {
-	Wood,
-	Stone,
-	Leather,
-	Copper,
-	Iron,
-	WroughtIron,
-	Gold,
-	Steel,
-	DamascusSteel,
-	StainlessSteel,
-	Titanium,
-	Tungsten,
-	Diamond,
-	Neutronium,
-}
-impl Material {
-	pub fn as_str(&self) -> &'static str {
-		match self {
-			Self::Wood => "Wood",
-			Self::Stone => "Stone",
-			Self::Leather => "Leather",
-			Self::Copper => "Copper",
-			Self::Iron => "Iron",
-			Self::WroughtIron => "WroughtIron",
-			Self::Gold => "Gold",
-			Self::Steel => "Steel",
-			Self::DamascusSteel => "DamascusSteel",
-			Self::StainlessSteel => "StainlessSteel",
-			Self::Titanium => "Titanium",
-			Self::Tungsten => "Tungsten",
-			Self::Diamond => "Diamond",
-			Self::Neutronium => "Neutronium",
-		}
-	}
-	#[inline] pub const fn from_u8(value: u8) -> Option<Self> {
-		unsafe { std::mem::transmute(value) }
-	}
-}
-*/
-
 pub trait BasicConversion<T> {
-    const STRINGS: &'static [&'static str];
-    
-    fn to_u8(&self) -> u8;
-    fn from_u8(value: u8) -> Option<Self> where Self: Sized;
-    fn as_str(&self) -> &'static str;
-    fn from_str(s: &str) -> Option<Self> where Self: Sized;
+	const STRINGS: &'static [&'static str];
+	
+	fn to_u8(&self) -> u8;
+	fn from_u8(value: u8) -> Option<Self> where Self: Sized;
+	fn as_str(&self) -> &'static str;
+	fn from_str(s: &str) -> Option<Self> where Self: Sized;
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -79,39 +35,39 @@ pub enum ToolType {
 	// Add up to 2 more tool types as needed (max 8 total)
 }
 impl BasicConversion<Self> for ToolType {
-    const STRINGS: &'static [&'static str] = &[
-        "Stone",
-        "Wood",
-        "Dirt",
-        "Crop",
-        "String",
-        "Metal",
-    ];
+	const STRINGS: &'static [&'static str] = &[
+		"Stone",
+		"Wood",
+		"Dirt",
+		"Crop",
+		"String",
+		"Metal",
+	];
 
-    #[inline]
-    fn to_u8(&self) -> u8 {
-        *self as u8
-    }
+	#[inline]
+	fn to_u8(&self) -> u8 {
+		*self as u8
+	}
 
-    #[inline]
-    fn from_u8(value: u8) -> Option<Self> {
-        if value < Self::STRINGS.len() as u8 {
-            unsafe { Some(std::mem::transmute(value)) }
-        } else {
-            None
-        }
-    }
+	#[inline]
+	fn from_u8(value: u8) -> Option<Self> {
+		if value < Self::STRINGS.len() as u8 {
+			unsafe { Some(std::mem::transmute(value)) }
+		} else {
+			None
+		}
+	}
 
-    fn as_str(&self) -> &'static str {
-        Self::STRINGS[*self as usize]
-    }
+	fn as_str(&self) -> &'static str {
+		Self::STRINGS[*self as usize]
+	}
 
-    fn from_str(s: &str) -> Option<Self> {
-        Self::STRINGS
-            .iter()
-            .position(|&name| name == s)
-            .and_then(|idx| Self::from_u8(idx as u8))
-    }
+	fn from_str(s: &str) -> Option<Self> {
+		Self::STRINGS
+			.iter()
+			.position(|&name| name == s)
+			.and_then(|idx| Self::from_u8(idx as u8))
+	}
 }
 
 
@@ -138,48 +94,48 @@ pub enum ArmorType {
 	// Add up to 1 more armor types as needed (max 16 total)
 }
 impl BasicConversion<Self> for ArmorType {
-    const STRINGS: &'static [&'static str] = &[
-        "Head",
-        "Torso",
-        "Legs",
-        "Feet",
-        "Arms",
-        "Hands",
-        "Back",
-        "Neck",
-        "Finger",
-        "Shoulders",
-        "Waist",
-        "Eyes",
-        "Face",
-        "Pocket",
-        "Aura",
-    ];
+	const STRINGS: &'static [&'static str] = &[
+		"Head",
+		"Torso",
+		"Legs",
+		"Feet",
+		"Arms",
+		"Hands",
+		"Back",
+		"Neck",
+		"Finger",
+		"Shoulders",
+		"Waist",
+		"Eyes",
+		"Face",
+		"Pocket",
+		"Aura",
+	];
 
-    #[inline]
-    fn to_u8(&self) -> u8 {
-        *self as u8
-    }
+	#[inline]
+	fn to_u8(&self) -> u8 {
+		*self as u8
+	}
 
-    #[inline]
-    fn from_u8(value: u8) -> Option<Self> {
-        if value < Self::STRINGS.len() as u8 {
-            unsafe { Some(std::mem::transmute(value)) }
-        } else {
-            None
-        }
-    }
+	#[inline]
+	fn from_u8(value: u8) -> Option<Self> {
+		if value < Self::STRINGS.len() as u8 {
+			unsafe { Some(std::mem::transmute(value)) }
+		} else {
+			None
+		}
+	}
 
-    fn as_str(&self) -> &'static str {
-        Self::STRINGS[*self as usize]
-    }
+	fn as_str(&self) -> &'static str {
+		Self::STRINGS[*self as usize]
+	}
 
-    fn from_str(s: &str) -> Option<Self> {
-        Self::STRINGS
-            .iter()
-            .position(|&name| name == s)
-            .and_then(|idx| Self::from_u8(idx as u8))
-    }
+	fn from_str(s: &str) -> Option<Self> {
+		Self::STRINGS
+			.iter()
+			.position(|&name| name == s)
+			.and_then(|idx| Self::from_u8(idx as u8))
+	}
 }
 
 
@@ -213,55 +169,55 @@ pub enum MaterialLevel {
 	// Add more tiers as needed (up to 255 total)
 }
 impl BasicConversion<Self> for MaterialLevel {
-    const STRINGS: &'static [&'static str] = &[
-        "Hay",
-        "Wax",
-        "Talc",
-        "Gypsum",
-        "Ice",
-        "Calcite",
-        "Coal",
-        "Fluorite",
-        "Obsidian",
-        "Apatite",
-        "Iron",
-        "Orthoclase",
-        "Quartz",
-        "Steel",
-        "Topaz",
-        "Titanium",
-        "Emerald",
-        "Corundum",
-        "Tungsten carbide",
-        "Diamond",
-        "Boron Nitride",
-        "Graphene",
-        "Carbyne",
-        "Adamantium",
-    ];
+	const STRINGS: &'static [&'static str] = &[
+		"Hay",
+		"Wax",
+		"Talc",
+		"Gypsum",
+		"Ice",
+		"Calcite",
+		"Coal",
+		"Fluorite",
+		"Obsidian",
+		"Apatite",
+		"Iron",
+		"Orthoclase",
+		"Quartz",
+		"Steel",
+		"Topaz",
+		"Titanium",
+		"Emerald",
+		"Corundum",
+		"Tungsten carbide",
+		"Diamond",
+		"Boron Nitride",
+		"Graphene",
+		"Carbyne",
+		"Adamantium",
+	];
 
-    #[inline]
-    fn to_u8(&self) -> u8 {
-        *self as u8
-    }
+	#[inline]
+	fn to_u8(&self) -> u8 {
+		*self as u8
+	}
 
-    #[inline]
-    fn from_u8(value: u8) -> Option<Self> {
-        if value < Self::STRINGS.len() as u8 {
-            unsafe { Some(std::mem::transmute(value)) }
-        } else {
-            None
-        }
-    }
+	#[inline]
+	fn from_u8(value: u8) -> Option<Self> {
+		if value < Self::STRINGS.len() as u8 {
+			unsafe { Some(std::mem::transmute(value)) }
+		} else {
+			None
+		}
+	}
 
-    fn as_str(&self) -> &'static str {
-        Self::STRINGS[*self as usize]
-    }
+	fn as_str(&self) -> &'static str {
+		Self::STRINGS[*self as usize]
+	}
 
-    fn from_str(s: &str) -> Option<Self> {
-        Self::STRINGS
-            .iter()
-            .position(|&name| name == s)
-            .and_then(|idx| Self::from_u8(idx as u8))
-    }
+	fn from_str(s: &str) -> Option<Self> {
+		Self::STRINGS
+			.iter()
+			.position(|&name| name == s)
+			.and_then(|idx| Self::from_u8(idx as u8))
+	}
 }

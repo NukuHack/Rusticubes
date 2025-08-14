@@ -258,7 +258,7 @@ impl<'a> crate::State<'a> {
 			(MouseButton::Right, ElementState::Pressed) => {
 				self.input_system.mouse_button_state.right = true;
 				if self.input_system.mouse_captured() {
-					extra::place_looked_block();
+					handle_right_click_interaction();
 					return true
 				}
 				if self.ui_manager.visibility {
@@ -380,4 +380,82 @@ pub const fn convert_mouse_position(window_size: (u32, u32), mouse_pos: &winit::
 	let (x, y) = (mouse_pos.x as f32, mouse_pos.y as f32);
 	let (width, height) = (window_size.0 as f32, window_size.1 as f32);
 	((2.0 * x / width) - 1.0, (2.0 * (height - y) / height) - 1.0)
+}
+
+
+pub fn handle_right_click_interaction() {
+    use crate::ext::ptr;
+
+    let state = ptr::get_state();
+    if !state.is_world_running {
+        return;
+    }
+
+    let player = &ptr::get_gamestate().player();
+
+    if handle_block_and_item_interaction(player) { 
+        return; 
+    }
+
+    let Some(item) = player.inventory().selected_item() else { return; };
+
+    if item.is_block() {
+        handle_block_placing(player, item);
+        return;
+    }
+    if item.is_consumable() {
+        remove_selected_item_from_inv(); // "consume" the item
+        return;
+    }
+}
+
+/// Places a cube on the face of the block the player is looking at
+use crate::player::Player;
+use crate::item::items::ItemStack;
+fn handle_block_placing(player: &Player, item: &ItemStack) {
+    use crate::block::extra::*;
+    use crate::ext::ptr;
+    use crate::block::math::ChunkCoord;
+    use crate::block::main::{Block, Material};
+    
+    let world = &mut ptr::get_gamestate().world_mut();
+
+    let Some((block_pos, normal)) = raycast_to_block(player.camera(), player, world, REACH) else { return; };
+
+    let placement_pos = block_pos + normal;
+
+    // Simple for loop to find block ID
+    let block_id = get_block_id_from_item_name(item.name());
+
+    remove_selected_item_from_inv();
+
+    world.set_block(placement_pos, Block::new(Material(block_id)));
+    update_chunk_mesh(world, ChunkCoord::from_world_pos(placement_pos));
+}
+
+fn handle_block_and_item_interaction(player: &Player) -> bool {
+    use crate::block::extra::*;
+    use crate::ext::ptr;
+    // here handle the block interaction
+
+    let world = &mut ptr::get_gamestate().world_mut();
+    let Some((block_pos, _normal)) = raycast_to_block(player.camera(), player, world, REACH) else { return false; };
+    let Some(storage) = world.get_storage(block_pos) else { return false; };
+    println!("Storage found {:?}", storage);
+    // here we would open the UI for the inventory
+    true
+}
+
+#[inline] 
+fn remove_selected_item_from_inv() {
+    use crate::item::inventory::AreaType;
+
+    let inv_mut = ptr::get_gamestate().player_mut().inventory_mut();
+    let idx = inv_mut.selected_index();
+
+    let hotbar = inv_mut.get_area_mut(AreaType::Hotbar);
+    let Some(item) = hotbar.remove(idx) else { return; };
+    hotbar.set(idx, item.remove_from_stack(1));
+
+    ptr::get_state().ui_manager.setup_ui(); // to update the hotbar if changed
 }

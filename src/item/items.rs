@@ -1,6 +1,6 @@
 
 use crate::fs::rs;
-use crate::item::item_lut::{ItemFlags, ItemComp};
+use crate::item::item_lut::ItemComp;
 
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -63,6 +63,9 @@ impl ItemStack {
 
 	#[inline] 
 	pub fn is_storage(&self) -> bool { self.lut().is_storage() }
+	
+	#[inline] 
+	pub fn is_consumable(&self) -> bool { self.lut().is_consumable() }
 
 	///////////////////////////////
 	// Stack Manipulation (Mutable)
@@ -90,7 +93,7 @@ impl ItemStack {
 	
 	/// Removes from the stack, returning the new stack if successful
 	pub fn remove_from_stack(mut self, amount: u32) -> Option<Self> {
-		if amount > self.stack { 
+		if amount >= self.stack { 
 			return None; 
 		}
 		self.stack -= amount;
@@ -265,6 +268,9 @@ pub fn clean_item_lut() {
 }
 
 pub fn init_item_lut() {
+	use crate::item::item_lut::{ArmorData, ToolData, };
+	use crate::item::material::{ArmorType, ToolType, MaterialLevel};
+	
 	{
 		// idk how to only specify the init and not get_or_init so yeah
 		let _ = ITEM_LUT.get_or_init(|| RwLock::new(HashMap::new()));
@@ -272,14 +278,15 @@ pub fn init_item_lut() {
 	// Insert items (write lock)
 	{
 		let mut map = item_lut_mut();
-		map.insert("air".to_string(), ItemComp::new("air").with_flag(ItemFlags::new(ItemFlags::IS_BLOCK)));
-		map.insert("brick_grey".to_string(), ItemComp::new("brick_grey").with_flag(ItemFlags::new(ItemFlags::IS_BLOCK)));
-		map.insert("brick_red".to_string(), ItemComp::new("brick_red").with_flag(ItemFlags::new(ItemFlags::IS_BLOCK)));
-		map.insert("bush".to_string(), ItemComp::new("bush").with_flag(ItemFlags::new(ItemFlags::IS_BLOCK)));
-		map.insert("wheat".to_string(), ItemComp::new("wheat").with_flag(ItemFlags::new(ItemFlags::IS_CONSUMABLE)));
-		map.insert("iron_sword".to_string(), ItemComp::new("iron_sword").with_flag(ItemFlags::new(ItemFlags::IS_TOOL)).with_stack(1));
-		map.insert("bow".to_string(), ItemComp::new("bow").with_flag(ItemFlags::new(ItemFlags::IS_TOOL)).with_stack(1));
+		map.insert("air".to_string(), ItemComp::new("air").as_block());
+		map.insert("brick_grey".to_string(), ItemComp::new("brick_grey").as_block());
+		map.insert("brick_red".to_string(), ItemComp::new("brick_red").as_block());
+		map.insert("bush".to_string(), ItemComp::new("bush").as_block());
+		map.insert("wheat".to_string(), ItemComp::new("wheat").as_consumable());
+		map.insert("iron_sword".to_string(), ItemComp::new("iron_sword").as_tool(ToolData::Single{ equip_type:ToolType::String, tier: MaterialLevel::Calcite }).with_damage(5).with_stack(1));
+		map.insert("bow".to_string(), ItemComp::new("bow").with_stack(1));
 		map.insert("arrow".to_string(), ItemComp::new("arrow"));
-		map.insert("coat".to_string(), ItemComp::new("coat").with_flag(ItemFlags::new(ItemFlags::IS_ARMOR)).with_stack(1));
+		map.insert("plank".to_string(), ItemComp::new("plank").as_block().as_storage((5,5).into()));
+		map.insert("coat".to_string(), ItemComp::new("coat").as_armor(ArmorData::Single{ equip_type:ArmorType::Torso, tier: MaterialLevel::Calcite }).with_stack(1));
 	}
 }

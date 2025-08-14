@@ -120,6 +120,7 @@ impl World {
 		if block.is_storage() {
 			let slot = block.get_storage();
 			self.create_storage(world_pos, vec![ItemContainer::new(slot.rows(), slot.cols())]);
+			println!("Slots: {:?}", slot);
 		}
 
 		let chunk = self.chunks.get_mut(&chunk_coord).expect("Chunk should exist");
