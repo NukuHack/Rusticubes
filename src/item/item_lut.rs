@@ -13,6 +13,7 @@ impl ItemFlags {
 	pub const IS_TOOL: u32 = 1 << 1;
 	pub const IS_ARMOR: u32 = 1 << 2;
 	pub const IS_CONSUMABLE: u32 = 1 << 3;
+	pub const IS_STORAGE: u32 = 1 << 4; // for now only impl for blocks
 	// Room for many more flags
 	
 	#[inline] pub const fn empty() -> Self { Self(0) }
@@ -83,6 +84,9 @@ impl ItemComp {
 	
 	#[inline] pub const fn is_block(&self) -> bool { 
 		self.flags.contains(ItemFlags::IS_BLOCK) 
+	}
+	#[inline] pub const fn is_storage(&self) -> bool { 
+		self.flags.contains(ItemFlags::IS_STORAGE) 
 	}
 	#[inline] pub const fn has_durability(&self) -> bool { 
 		self.flags.contains(ItemFlags::IS_TOOL) || self.flags.contains(ItemFlags::IS_ARMOR) 

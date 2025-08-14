@@ -126,7 +126,7 @@ mod tests {
 	#[test]
 	fn chunk_generation() {
 		let coord = ChunkCoord::new(0, 0, 0);
-		let chunk = Chunk::generate(coord, 12345).unwrap();
+		let chunk = Chunk::generate(coord, 12345);
 		
 		// Verify chunk isn't empty
 		assert!(!chunk.is_empty());

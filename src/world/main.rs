@@ -1,9 +1,12 @@
 
-use crate::block::{
-	math::{BlockPosition, ChunkCoord},
-	main::{Block, Chunk},
+use crate::{
+	block::{
+		math::{BlockPosition, ChunkCoord},
+		main::{Block, Chunk},
+	},
+	world::threading::PriorityChunk,
+	item::inventory::ItemContainer,
 };
-use crate::world::threading::PriorityChunk;
 use std::{
 	collections::{BinaryHeap, HashMap, HashSet},
 	hash::BuildHasherDefault,
@@ -20,6 +23,7 @@ type FastMap<K, V> = HashMap<K, V, BuildHasherDefault<AHasher>>;
 #[derive(Debug)]
 pub struct World {
 	pub chunks: FastMap<ChunkCoord, Chunk>,
+	pub storage_blocks: FastMap<IVec3, Vec<ItemContainer>>,
 	pub loaded_chunks: HashSet<ChunkCoord>,
 	
 	// Chunk generation system
@@ -41,6 +45,7 @@ impl World {
 		
 		Self {
 			chunks: FastMap::with_capacity_and_hasher(10_000, BuildHasherDefault::<AHasher>::default()),
+			storage_blocks: FastMap::with_capacity_and_hasher(100, BuildHasherDefault::<AHasher>::default()),
 			loaded_chunks: HashSet::with_capacity(10_000),
 			chunk_generation_queue: Arc::new(Mutex::new(BinaryHeap::with_capacity(100))),
 			generated_chunks_receiver: receiver,
@@ -64,6 +69,23 @@ impl World {
 		self.chunks.get_mut(&coord)
 	}
 
+	/// Creates a storage container at the specified position
+	#[inline] pub fn create_storage(&mut self, position: IVec3, data: Vec<ItemContainer>) {
+		self.storage_blocks.insert(position, data);
+	}
+	/// Removes a storage container
+	#[inline] pub fn remove_storage(&mut self, position: IVec3) -> Option<Vec<ItemContainer>> {
+		self.storage_blocks.remove(&position)
+	}
+	/// Gets a storage container (immutable)
+	#[inline] pub fn get_storage(&self, position: IVec3) -> Option<&Vec<ItemContainer>> {
+		self.storage_blocks.get(&position)
+	}
+	/// Gets a storage container (mutable)
+	#[inline] pub fn get_storage_mut(&mut self, position: IVec3) -> Option<&mut Vec<ItemContainer>> {
+		self.storage_blocks.get_mut(&position)
+	}
+
 	#[inline] pub fn get_block(&self, world_pos: IVec3) -> Block {
 		let chunk_coord = ChunkCoord::from_world_pos(world_pos);
 		let local_pos: BlockPosition = world_pos.into();
@@ -85,13 +107,21 @@ impl World {
 			self.set_chunk(chunk_coord, Chunk::empty());
 		}
 		
-		let chunk = self.chunks.get_mut(&chunk_coord).expect("Chunk should exist");
-		
+		let chunk = self.chunks.get(&chunk_coord).expect("Chunk should exist");
+		let old_block = chunk.get_block(index);
 		// Skip if block is the same
-		if chunk.get_block(index) == block {
-			return;
+		if old_block == block { return; }
+
+		if old_block.is_storage() {
+			self.storage_blocks.remove(&world_pos);
+		}
+		
+		// If placing a new storage block, initialize its storage
+		if block.is_storage() {
+			self.create_storage(world_pos, Vec::new());
 		}
 
+		let chunk = self.chunks.get_mut(&chunk_coord).expect("Chunk should exist");
 		chunk.set_block(index, block);
 		
 		// If this is a border block, mark adjacent chunks as needing mesh update
@@ -114,6 +144,16 @@ impl World {
 	/// Unloads chunks beyond the given radius
 	#[inline] fn unload_distant_chunks(&mut self, center: ChunkCoord, radius_sq: i32) {
 		let (center_x, center_y, center_z) = center.unpack();
+
+		// Unload distant storage blocks
+		self.storage_blocks.retain(|pos, _| {
+			let chunk_coord = ChunkCoord::from_world_pos(*pos);
+			let (x, y, z) = chunk_coord.unpack();
+			let dx = x - center_x;
+			let dy = y - center_y;
+			let dz = z - center_z;
+			dx * dx + dy * dy + dz * dz <= radius_sq
+		});
 		
 		self.loaded_chunks.retain(|&coord| {
 			let (x, y, z) = coord.unpack();

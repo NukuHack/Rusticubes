@@ -61,6 +61,9 @@ impl ItemStack {
 	#[inline] 
 	pub fn is_weapon(&self) -> bool { self.lut().is_weapon() }
 
+	#[inline] 
+	pub fn is_storage(&self) -> bool { self.lut().is_storage() }
+
 	///////////////////////////////
 	// Stack Manipulation (Mutable)
 	///////////////////////////////
@@ -190,8 +193,7 @@ impl ItemStack {
 		(resources, target_name)
 	}
 	
-	#[inline] 
-	fn lut(&self) -> ItemComp {
+	#[inline] fn lut(&self) -> ItemComp {
 		lut_by_name(&self.name)
 	}
 }
@@ -215,7 +217,7 @@ impl CustomData {
 /// I implemented a purple-pink-black "0" block what would represent the "error" .. id 1 is air
 pub const DEFAULT_ITEM_COMP: ItemComp = const { ItemComp::error().as_block() };
 
-#[inline] fn lut_by_name(name: &str) -> ItemComp {
+#[inline] pub fn lut_by_name(name: &str) -> ItemComp {
 	item_lut_ref().get(name).unwrap_or(&DEFAULT_ITEM_COMP).clone()
 }
 

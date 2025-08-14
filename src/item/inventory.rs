@@ -33,7 +33,7 @@ pub const DEFAULT_INV_ROWS: u8 = 3;
 pub const DEFAULT_INV_COLS: u8 = 7;
 
 /// A unified container for items that can handle both 1D and 2D layouts
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct ItemContainer {
 	items: Vec<Option<ItemStack>>,
 	size: Slot,

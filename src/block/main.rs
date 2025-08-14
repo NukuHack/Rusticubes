@@ -1,7 +1,11 @@
 
-use crate::block::math::{self, ChunkCoord, BlockPosition, BlockRotation};
-use crate::utils::math::{Noise};
-use crate::render::meshing::GeometryBuffer;
+use crate::{
+	item::items::lut_by_name,
+	block::extra::get_item_name_from_block_id,
+	block::math::{self, ChunkCoord, BlockPosition, BlockRotation},
+	utils::math::{Noise},
+	render::meshing::GeometryBuffer,
+};
 #[allow(unused_imports)]
 use crate::ext::stopwatch;
 use glam::IVec3;
@@ -60,6 +64,13 @@ impl Block {
 	#[inline]
 	pub fn set_rotation(&mut self, rotation: BlockRotation) {
 		self.rotation = rotation;
+	}
+	/// get the item and check if is storage
+	#[inline]
+	pub fn is_storage(&self) -> bool {
+		let item_name = get_item_name_from_block_id(self.material.inner());
+		let item = lut_by_name(&item_name);
+		item.is_storage()
 	}
 }
 
