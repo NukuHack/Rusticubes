@@ -132,6 +132,7 @@ pub mod world {
 	pub mod manager;
 	pub mod serialize;
 	pub mod handler;
+	pub mod threading;
 }
 /// Main event handler (focused on the user input)
 mod event_handler;
