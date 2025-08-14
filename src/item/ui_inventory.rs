@@ -407,17 +407,16 @@ impl UIManager {
 			
 			match state {
 				InventoryUIState::Player { inv } => {
-					self.add_player_buttons(&layout);
 					self.create_inventory_slots(inv, &inventory);
 				}
 				InventoryUIState::Storage { inv, .. } => {
 					// Create storage area with actual storage data
-					self.create_storage_area(&layout);
+					self.create_storage_area(&layout, &inventory);
 					self.create_inventory_slots(inv, &inventory);
 				}
 				InventoryUIState::Crafting { inv, .. } => {
 					// Create crafting areas with actual crafting data
-					self.create_crafting_areas(&layout);
+					self.create_crafting_areas(&layout, &inventory);
 					self.create_inventory_slots(inv, &inventory);
 				}
 			}
@@ -429,34 +428,23 @@ impl UIManager {
 	}
 
 	// New method to handle storage UI using actual storage container
-	fn create_storage_area(&mut self, layout: &InventoryLayout) {
+	fn create_storage_area(&mut self, layout: &InventoryLayout, inventory: &Inventory) {
 		let Some(storage_area) = layout.areas.iter().find(|a| a.name == AreaType::Storage) else { return; };
 
-		// Get actual storage data from game state (you'll need to implement this)
-		let storage_items = self.get_storage_container(storage_area); // This should return &ItemContainer
+		// Get actual storage data from world
+		let storage_items = inventory.get_area(&storage_area.name);
 		self.create_area_slots(&storage_area, &storage_items);
 	}
 
 	// New method to handle crafting UI using actual crafting containers
-	fn create_crafting_areas(&mut self, layout: &InventoryLayout) {
+	fn create_crafting_areas(&mut self, layout: &InventoryLayout, inventory: &Inventory) {
 		for area_type in [AreaType::Input, AreaType::Output] {
 			let Some(area) = layout.areas.iter().find(|a| a.name == area_type) else { continue; };
 
-			// Get actual crafting data from game state
-			//let crafting_items = self.get_crafting_container(area_type); // This should return &ItemContainer
-			let crafting_items = ItemContainer::new(area.rows, area.columns);
+			// Get actual crafting data from world
+			let crafting_items = inventory.get_area(&area.name);
 			self.create_area_slots(&area, &crafting_items);
 		}
-	}
-	fn get_storage_container(&self, area: &AreaLayout) -> ItemContainer {
-		// Return reference to actual storage container from game state
-		// This is a placeholder - implement based on your storage system
-
-		let mut storage_items = ItemContainer::new(area.rows, area.columns);
-		let _ = storage_items.update_items(|idx, _|
-			Some(ItemStack::new(ItemStack::lut_by_index(idx).name.to_string()))
-		);
-		storage_items
 	}
 	
 	fn add_main_panel(&mut self, layout: &InventoryLayout) {
@@ -467,16 +455,6 @@ impl UIManager {
 			.with_style(&inv_config.panel_bg)
 			.with_z_index(3);
 		self.add_element(panel);
-	}
-	fn add_player_buttons(&mut self, layout: &InventoryLayout) {
-		let theme = &ptr::get_settings().ui_theme;
-		let w = 0.12; let h = SLOT/2.;
-		let version = UIElement::label(self.next_id(), env!("CARGO_PKG_VERSION").into())
-			.with_position(Vec2::new(layout.panel_position.x + layout.panel_size.x - w, layout.panel_position.y - h - PADDING))
-			.with_size(Vec2::new(w, h))
-			.with_style(&theme.labels.extra())
-			.with_z_index(8);
-		self.add_element(version);
 	}
 
 	// Updated method to better utilize inventory data

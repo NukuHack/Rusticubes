@@ -286,7 +286,8 @@ pub fn init_item_lut() {
 		map.insert("iron_sword".to_string(), ItemComp::new("iron_sword").as_tool(ToolData::Single{ equip_type:ToolType::String, tier: MaterialLevel::Calcite }).with_damage(5).with_stack(1));
 		map.insert("bow".to_string(), ItemComp::new("bow").with_stack(1));
 		map.insert("arrow".to_string(), ItemComp::new("arrow"));
-		map.insert("plank".to_string(), ItemComp::new("plank").as_block().as_storage((5,5).into()));
+		map.insert("plank".to_string(), ItemComp::new("plank").as_block().as_storage((5,9).into()));
 		map.insert("coat".to_string(), ItemComp::new("coat").as_armor(ArmorData::Single{ equip_type:ArmorType::Torso, tier: MaterialLevel::Calcite }).with_stack(1));
+		map.insert("crafting".to_string(), ItemComp::new("crafting").as_block().as_storage((3,3).into()));
 	}
 }

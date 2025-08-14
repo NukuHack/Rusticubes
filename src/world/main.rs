@@ -23,7 +23,7 @@ type FastMap<K, V> = HashMap<K, V, BuildHasherDefault<AHasher>>;
 #[derive(Debug)]
 pub struct World {
 	pub chunks: FastMap<ChunkCoord, Chunk>,
-	pub storage_blocks: FastMap<IVec3, Vec<ItemContainer>>,
+	pub storage_blocks: FastMap<IVec3, ItemContainer>,
 	pub loaded_chunks: HashSet<ChunkCoord>,
 	
 	// Chunk generation system
@@ -70,19 +70,19 @@ impl World {
 	}
 
 	/// Creates a storage container at the specified position
-	#[inline] pub fn create_storage(&mut self, position: IVec3, data: Vec<ItemContainer>) {
+	#[inline] pub fn create_storage(&mut self, position: IVec3, data: ItemContainer) {
 		self.storage_blocks.insert(position, data);
 	}
 	/// Removes a storage container
-	#[inline] pub fn remove_storage(&mut self, position: IVec3) -> Option<Vec<ItemContainer>> {
+	#[inline] pub fn remove_storage(&mut self, position: IVec3) -> Option<ItemContainer> {
 		self.storage_blocks.remove(&position)
 	}
 	/// Gets a storage container (immutable)
-	#[inline] pub fn get_storage(&self, position: IVec3) -> Option<&Vec<ItemContainer>> {
+	#[inline] pub fn get_storage(&self, position: IVec3) -> Option<&ItemContainer> {
 		self.storage_blocks.get(&position)
 	}
 	/// Gets a storage container (mutable)
-	#[inline] pub fn get_storage_mut(&mut self, position: IVec3) -> Option<&mut Vec<ItemContainer>> {
+	#[inline] pub fn get_storage_mut(&mut self, position: IVec3) -> Option<&mut ItemContainer> {
 		self.storage_blocks.get_mut(&position)
 	}
 
@@ -119,8 +119,7 @@ impl World {
 		// If placing a new storage block, initialize its storage
 		if block.is_storage() {
 			let slot = block.get_storage();
-			self.create_storage(world_pos, vec![ItemContainer::new(slot.rows(), slot.cols())]);
-			println!("Slots: {:?}", slot);
+			self.create_storage(world_pos, ItemContainer::new(slot.rows(), slot.cols()));
 		}
 
 		let chunk = self.chunks.get_mut(&chunk_coord).expect("Chunk should exist");

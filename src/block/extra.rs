@@ -3,9 +3,8 @@ use crate::player::Player;
 use crate::ext::ptr;
 use crate::block::math::ChunkCoord;
 use crate::game::player::Camera;
-use crate::block::main::{Block, Chunk};
+use crate::block::main::Chunk;
 use crate::world::main::World;
-use crate::item::items::ItemStack;
 use glam::{Vec3, IVec3};
 
 pub const REACH: f32 = 8.0;
@@ -126,34 +125,6 @@ pub fn get_item_name_from_block_id(block_id: u16) -> String {
 		.get(block_id as usize)
 		.map(|s| s.to_string())
 		.unwrap_or("0".to_string())
-}
-
-
-#[inline] fn add_mined_block_to_inv(block: &Block) {
-	let block_id = block.material.inner();
-	let item_name = get_item_name_from_block_id(block_id);
-
-	let inv_mut = ptr::get_gamestate().player_mut().inventory_mut();
-	inv_mut.add_item_anywhere(ItemStack::new(item_name).with_stack_size(1));
-
-	ptr::get_state().ui_manager.setup_ui(); // to update the hotbar if changed
-}
-/// Removes the block the player is looking at
-pub fn remove_targeted_block() {
-	let state = ptr::get_state();
-	if !state.is_world_running {
-		return;
-	}
-	let player = &ptr::get_gamestate().player();
-	let world = &mut ptr::get_gamestate().world_mut();
-
-	let Some((block_pos, _normal)) = raycast_to_block(player.camera(), player, world, REACH) else { return; };
-
-	let block = world.get_block(block_pos);
-	add_mined_block_to_inv(&block);
-
-	world.set_block(block_pos, Block::default());
-	update_chunk_mesh(world, ChunkCoord::from_world_pos(block_pos));
 }
 
 

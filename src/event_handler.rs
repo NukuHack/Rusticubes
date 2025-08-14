@@ -2,7 +2,7 @@
 use crate::ext::{ptr, memory};
 use crate::block::extra;
 use crate::ui::manager::{self, UIState};
-use crate::item::ui_inventory::{InventoryUIState};
+use crate::item::ui_inventory::InventoryUIState;
 use std::iter::Iterator;
 use winit::{
 	event::{ElementState, MouseButton, WindowEvent, MouseScrollDelta},
@@ -164,15 +164,14 @@ impl<'a> crate::State<'a> {
 					self.ui_manager.setup_ui();
 					return true
 				},
-				Key::KeyO => {
+				k if k >= Key::Digit1 && k <= Key::Digit9 => { // nice maching for enums, using them as simple u8
 					if !is_pressed { return false; }
-
-					if self.ui_manager.state.clone() == UIState::InGame {
-						self.ui_manager.state = UIState::Inventory(InventoryUIState::craft().b());
-						if self.input_system.mouse_captured() { self.toggle_mouse_capture(); }
-					} else { return false; }
-
-					self.ui_manager.setup_ui();
+					if self.is_world_running && ptr::get_gamestate().is_running() {
+						let slot = (k as u8 - Key::Digit1 as u8) as isize;
+						let inv_mut = ptr::get_gamestate().player_mut().inventory_mut();
+						inv_mut.select_slot(slot);
+						self.ui_manager.setup_ui();
+					}
 					return true
 				},
 				_ => { },
@@ -224,7 +223,7 @@ impl<'a> crate::State<'a> {
 			(MouseButton::Left, ElementState::Pressed) => {
 				self.input_system.mouse_button_state.left = true;
 				if self.input_system.mouse_captured() {
-					extra::remove_targeted_block();
+					self.handle_lclick_interaction();
 					return true
 				}
 				if self.ui_manager.visibility {
@@ -242,7 +241,7 @@ impl<'a> crate::State<'a> {
 			(MouseButton::Right, ElementState::Pressed) => {
 				self.input_system.mouse_button_state.right = true;
 				if self.input_system.mouse_captured() {
-					self.handle_right_click_interaction();
+					self.handle_rclick_interaction();
 					return true
 				}
 				if self.ui_manager.visibility {
@@ -353,11 +352,13 @@ pub const fn convert_mouse_position(window_size: (u32, u32), mouse_pos: &winit::
 
 use crate::player::Player;
 use crate::item::items::ItemStack;
+use crate::item::inventory::ItemContainer;
 use crate::block::extra::*;
 use crate::block::math::ChunkCoord;
 use crate::block::main::{Block, Material};
+const CRAFTING_BLOCK:&str = "crafting";
 impl<'a> crate::State<'a> {
-	pub fn handle_right_click_interaction(&mut self) {
+	pub fn handle_rclick_interaction(&mut self) {
 		if !self.is_world_running {
 			return;
 		}
@@ -384,6 +385,17 @@ impl<'a> crate::State<'a> {
 			}
 		}
 	}
+	pub fn handle_lclick_interaction(&mut self) {
+		if !self.is_world_running {
+			return;
+		}
+		let player = &ptr::get_gamestate().player();
+
+		if self.handle_block_breaking(player) {
+			self.ui_manager.setup_ui();
+			return;
+		}
+	}
 
 	/// Places a cube on the face of the block the player is looking at
 	fn handle_block_placing(&mut self, player: &Player, item: &ItemStack) -> bool {
@@ -402,23 +414,55 @@ impl<'a> crate::State<'a> {
 		update_chunk_mesh(world, ChunkCoord::from_world_pos(placement_pos));
 		true
 	}
-
-	fn handle_block_and_item_interaction(&mut self, player: &Player) -> bool {
+	fn handle_block_breaking(&mut self, player: &Player) -> bool {
 		let world = &mut ptr::get_gamestate().world_mut();
-		let Some((block_pos, _normal)) = raycast_to_block(player.camera(), player, world, REACH) else { return false; };
-		let Some(storage) = world.get_storage(block_pos) else { return false; };
-		//println!("Storage found {:?}", storage);
 
-		if self.ui_manager.state.clone() == UIState::InGame {
-			self.ui_manager.state = UIState::Inventory(InventoryUIState::str().b()); // will have to make this correctly
-			if self.input_system.mouse_captured() { self.toggle_mouse_capture(); }
-		} else { return false; }
+		let Some((block_pos, _normal)) = raycast_to_block(player.camera(), player, world, REACH) else { return false; };
+
+		let block = world.get_block(block_pos);
+		let inv_mut = ptr::get_gamestate().player_mut().inventory_mut();
+		{
+			let block_id = block.material.inner();
+			let item_name = get_item_name_from_block_id(block_id);
+
+			inv_mut.add_item_anywhere(ItemStack::new(item_name).with_stack_size(1));
+		}
+		if let Some(storage) = world.get_storage(block_pos) {
+			for (_i, item) in storage.slot_iter() {
+				let Some(itm) = item else { continue; };
+				inv_mut.add_item_anywhere(itm.clone());
+			}
+		}
+
+		world.set_block(block_pos, Block::default());
+		update_chunk_mesh(world, ChunkCoord::from_world_pos(block_pos));
 
 		true
 	}
 
-	#[inline] 
-	fn remove_selected_item_from_inv(&self) -> bool {
+	fn handle_block_and_item_interaction(&mut self, player: &Player) -> bool {
+		let game_state = &mut ptr::get_gamestate(); let world = game_state.world_mut();
+		let Some((block_pos, _normal)) = raycast_to_block(player.camera(), player, world, REACH) else { return false; };
+		let block_mat = world.get_block(block_pos).material.inner();
+
+		let Some(storage) = world.get_storage_mut(block_pos) else { return false; };
+		if self.ui_manager.state.clone() == UIState::InGame {
+			if &get_item_name_from_block_id(block_mat) == CRAFTING_BLOCK {
+				self.ui_manager.state = UIState::Inventory(InventoryUIState::craft().input(storage.slots()).b());
+			} else {
+				self.ui_manager.state = UIState::Inventory(InventoryUIState::str().size(storage.slots()).b());
+			}
+			if self.input_system.mouse_captured() { self.toggle_mouse_capture(); }
+		}
+
+		let storage_ptr: *mut ItemContainer = storage;
+		let inv_mut = game_state.player_mut().inventory_mut();
+		inv_mut.storage_ptr = Some(storage_ptr);
+
+		true
+	}
+
+	#[inline] fn remove_selected_item_from_inv(&self) -> bool {
 		use crate::item::inventory::AreaType;
 
 		let inv_mut = ptr::get_gamestate().player_mut().inventory_mut();

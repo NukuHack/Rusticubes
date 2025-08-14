@@ -67,6 +67,7 @@ impl ItemContainer {
 	/// Get dimensions
 	#[inline] pub const fn rows(&self) -> u8 { self.size.rows() }
 	#[inline] pub const fn cols(&self) -> u8 { self.size.cols() }
+	#[inline] pub const fn slots(&self) -> Slot { self.size }
 	#[inline] pub const fn capacity(&self) -> usize { self.rows() as usize * self.cols() as usize }
 
 	/// Check if this is a 1D container (single row or single column)
@@ -289,6 +290,8 @@ pub struct Inventory {
 	cursor_item: Option<ItemStack>,
 	// the payout
 	pub layout: Option<InventoryLayout>,
+
+	pub storage_ptr: Option<*mut ItemContainer>,
 }
 
 impl Inventory {
@@ -310,6 +313,7 @@ impl Inventory {
 			hotbar: ItemContainer::new(1, hotbar_slots),
 			cursor_item: None,
 			layout: None,
+			storage_ptr: None,
 		}
 	}
 	
@@ -367,19 +371,35 @@ impl Inventory {
 			AreaType::Inventory => &self.items,
 			AreaType::Hotbar => &self.hotbar,
 			AreaType::Armor => &self.armor,
-			_ => &self.items, // should return nothing
+			_ => {
+				unsafe {
+					if let Some(ptr) = self.storage_ptr {
+						if !ptr.is_null() {
+							return &mut *ptr;
+						}
+					}
+					panic!("Invalid area type: {:?}", area)
+				}
+			}
 		}
 	}
-	#[inline] pub fn try_get_area_mut(&mut self, area: AreaType) -> Option<&mut ItemContainer> {
+	#[inline] 
+	pub fn get_area_mut(&mut self, area: AreaType) -> &mut ItemContainer {
 		match area {
-			AreaType::Inventory => Some(&mut self.items),
-			AreaType::Hotbar => Some(&mut self.hotbar),
-			AreaType::Armor => Some(&mut self.armor),
-			_ => None, // should return nothing
+			AreaType::Inventory => &mut self.items,
+			AreaType::Hotbar => &mut self.hotbar,
+			AreaType::Armor => &mut self.armor,
+			_ => {
+				unsafe {
+					if let Some(ptr) = self.storage_ptr {
+						if !ptr.is_null() {
+							return &mut *ptr;
+						}
+					}
+					panic!("Invalid area type: {:?}", area)
+				}
+			}
 		}
-	}
-	#[inline] pub fn get_area_mut(&mut self, area: AreaType) -> &mut ItemContainer {
-		self.try_get_area_mut(area).unwrap_or_else(|| panic!("Invalid area type: {:?}", area)) // temporary will make the others work
 	}
 
 	/// Add item to any available slot (tries hotbar first, then inventory, then armor - if is an armor item)
@@ -398,9 +418,6 @@ impl Inventory {
 
 
 	pub fn handle_click_press(&mut self, clicked_pos:(u8,u8), area_type: AreaType) {
-		if area_type == AreaType::Storage || area_type == AreaType::Input || area_type == AreaType::Output { return; } // hotfix for the crash made by these if user clicks
-		 // because we can not get area mutably for these tipes
-
 		let cursor = self.get_cursor().cloned();
 		let area = self.get_area_mut(area_type); let (c_x, c_y) = clicked_pos;
 		let armor_in_not_armor_area = area_type == AreaType::Armor && !cursor.clone().map(|item| item.is_armor()).unwrap_or(false);
@@ -436,9 +453,6 @@ impl Inventory {
 		}
 	}
 	pub fn handle_rclick_press(&mut self, clicked_pos:(u8,u8), area_type: AreaType) {
-		if area_type == AreaType::Storage || area_type == AreaType::Input || area_type == AreaType::Output { return; } // hotfix for the crash made by these if user clicks
-		 // because we can not get area mutably for these tipes
-
 		let cursor = self.get_cursor().cloned();
 		let area = self.get_area_mut(area_type); let (c_x, c_y) = clicked_pos;
 		let armor_in_not_armor_area = area_type == AreaType::Armor && !cursor.clone().map(|item| item.is_armor()).unwrap_or(false);
@@ -478,14 +492,11 @@ impl Inventory {
 		}
 	}
 	pub fn handle_mclick_press(&mut self, clicked_pos:(u8,u8), area_type: AreaType) {
-		let cursor = self.get_cursor().cloned(); let (c_x, c_y) = clicked_pos;
-		let item = if area_type == AreaType::Storage || area_type == AreaType::Input || area_type == AreaType::Output {
-			let main_item = ItemStack::new(ItemStack::lut_by_index((c_x + 1 * c_y) as usize).name.to_string()); // TODO : MAKE THIS ACTUALLY WORK AND NOT JUST A BASIC SOLUTION
-			main_item.opt()
-		} else { self.get_area_mut(area_type).get_at(c_x, c_y).cloned() };
+		let cursor = self.get_cursor().cloned();
+		let area = self.get_area_mut(area_type); let (c_x, c_y) = clicked_pos;
 		let armor_in_not_armor_area = area_type == AreaType::Armor && !cursor.clone().map(|item| item.is_armor()).unwrap_or(false);
 
-		match (cursor, item) {
+		match (cursor, area.get_at(c_x, c_y).cloned()) {
 			// Case 1: 
 			(Some(_cursor_item), None) => {
 				// nothign happens
@@ -494,15 +505,12 @@ impl Inventory {
 			(None, Some(mut item)) => {
 				item.set_to_max_stack();
 				self.set_cursor(Some(item));
-				
 			},
 			// Case 3: Both full, Switch
 			(Some(cursor_item), Some(item)) => {
 				if armor_in_not_armor_area { return; }
+				area.set_at(c_x, c_y, cursor_item.opt());
 				self.set_cursor(item.opt());
-				if area_type == AreaType::Storage || area_type == AreaType::Input || area_type == AreaType::Output { return; }
-				// because we can not get area mutably for these tipes
-				self.get_area_mut(area_type).set_at(c_x, c_y, cursor_item.opt());
 			},
 			// Case 4: Both empty
 			(None, None) => {}

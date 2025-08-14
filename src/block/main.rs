@@ -458,7 +458,6 @@ impl BlockStorage {
 			return idx;
 		}
 		//Made it so the palette can not be "full" it will just transition to the next storage type if reached
-		//println!("Warning: Palette is full, using fallback block");
 
 		let idx = palette.len();
 		palette.push(block);
