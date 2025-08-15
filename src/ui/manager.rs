@@ -127,10 +127,19 @@ pub fn close_pressed() {
 		UIState::ConnectLocal => state.ui_manager.state = UIState::WorldSelection,
 		UIState::Inventory(_) => {
 			let focus_state = state.ui_manager.get_focused_state();
+			let inv = ptr::get_gamestate().player_mut().inventory_mut();
 			if matches!(focus_state, FocusState::Item { .. }) {
-				let inv = ptr::get_gamestate().player_mut().inventory_mut();
-				let itm = inv.remove_cursor().unwrap();
+				let itm = inv.remove_cursor().unwrap(); // already checked
 				inv.add_item_anywhere(itm);
+			}
+			if inv.is_self_pointing() {
+				use crate::item::inventory::ItemContainer;
+				let crafting = inv.get_crafting_mut();
+				let items = std::mem::replace(crafting, ItemContainer::with_dimensions(crafting.slots()));  // Replaces with empty container
+				for item in items.into_iter() {
+					let Some(itm) = item else { continue };
+					inv.add_item_anywhere(itm);
+				}
 			}
 			state.ui_manager.state = UIState::InGame;
 			state.toggle_mouse_capture();

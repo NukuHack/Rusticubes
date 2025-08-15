@@ -198,24 +198,6 @@ static RECIPE_REGISTRY: OnceLock<RwLock<HashMap<CraftingInput, CraftingResult, R
 		.read().expect("Recipe registry poisoned")
 }
 
-pub fn init_recipe_lut() {
-	init_recipe_registry();
-	
-	let mut recipes = RECIPE_REGISTRY.get()
-		.expect("Recipe registry not initialized")
-		.write().expect("Recipe registry poisoned");
-
-	let num = ItemStack::from_str("brick_grey").resource_index();
-	let crafting_table = ItemStack::from_str("crafting").resource_index();
-	let o_shape = vec![vec![num,num,num],vec![num,0,num],vec![num,num,num]];
-	
-	recipes.extend([
-		Recipe::new(num,num).split(),
-		Recipe::new(o_shape,crafting_table).split(),
-		// other recipes
-	]);
-}
-
 #[inline] fn lookup_recipe(input: &CraftingInput) -> Option<CraftingResult> {
 	let registry = get_recipes();
 	
@@ -352,4 +334,30 @@ impl CraftingResult {
 	#[inline] pub fn to_item_vec(&self) -> Vec<ItemStack> {
 		self.to_item_vec_or_none().unwrap_or_default()
 	}
+}
+
+
+
+
+
+pub fn init_recipe_lut() {
+	init_recipe_registry();
+	
+	let mut recipes = RECIPE_REGISTRY.get()
+		.expect("Recipe registry not initialized")
+		.write().expect("Recipe registry poisoned");
+
+	let num = ItemStack::from_str("brick_grey").resource_index();
+	let crafting_table = ItemStack::from_str("crafting").resource_index();
+	let storage = ItemStack::from_str("plank").resource_index();
+	
+	let o_shape = vec![vec![num,num,num],vec![num,0,num],vec![num,num,num]];
+	let two_x_two = vec![vec![num,num],vec![num,num]];
+	
+	recipes.extend([
+		Recipe::new(num,num).split(),
+		Recipe::new(two_x_two,crafting_table).split(),
+		Recipe::new(o_shape,storage).split(),
+		// other recipes
+	]);
 }

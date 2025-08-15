@@ -174,6 +174,29 @@ impl<'a> crate::State<'a> {
 					}
 					return true
 				},
+				Key::KeyR => {
+					if !is_pressed { return false; }
+
+					let game_state = &mut ptr::get_gamestate(); let inv_mut = game_state.player_mut().inventory_mut();
+
+					let storage = inv_mut.get_crafting_mut();
+					match self.ui_manager.state.clone() {
+						UIState::Inventory(_) => {
+							manager::close_pressed();
+							if !self.input_system.mouse_captured() { self.toggle_mouse_capture(); }
+						},
+						UIState::InGame => {
+							self.ui_manager.state = UIState::Inventory(InventoryUIState::craft().input(storage.slots()).b());
+							if self.input_system.mouse_captured() { self.toggle_mouse_capture(); }
+						}
+						_ => return false,
+					}
+					let storage_ptr: *mut ItemContainer = storage;
+					inv_mut.storage_ptr = Some(storage_ptr);
+
+					self.ui_manager.setup_ui();
+					return true
+				},
 				_ => { },
 			};
 		}

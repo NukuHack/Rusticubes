@@ -67,12 +67,12 @@ impl GameState {
 			let offset = Vec3::new(0., 1.7, 0.);
 			let pos = Vec3::new(0.5, 0.5, 0.5);
 			let mut player = player::Player::new(CameraConfig::new(offset), pos, state.device(), *state.size(), &state.render_context.layouts[1]);
-
+			
 			let hotbar = player.inventory_mut().get_area_mut(AreaType::Hotbar);
 			hotbar.add_item(ItemStack::new("brick_grey".into()).with_stack_size(12));
-			hotbar.add_item(ItemStack::new("plank".into()).with_stack_size(1));
-			hotbar.add_item(ItemStack::new("crafting".into()).with_stack_size(1));
-
+			//hotbar.add_item(ItemStack::new("plank".into()).with_stack_size(1));
+			//hotbar.add_item(ItemStack::new("crafting".into()).with_stack_size(1));
+			
 			player
 		};
 		

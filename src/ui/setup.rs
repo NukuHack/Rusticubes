@@ -1,12 +1,12 @@
 
-use crate::network::api;
-use crate::block;
-use glam::Vec2;
-use crate::ext::{ptr, memory};
 use crate::world::{handler, manager};
 use crate::utils::color::Solor;
 use crate::ui::manager::{UIState, close_pressed, UIManager, UIStateID, get_element_str_by_id};
 use crate::ui::element::UIElement;
+use crate::ext::{ptr, memory};
+use crate::network::api;
+use crate::block;
+use glam::Vec2;
 
 impl UIManager {
 	#[inline]
@@ -691,9 +691,9 @@ impl UIManager {
 		let help_texts = [
 			("ALT to lock", 0.1),
 			("L to fill chunk", -0.05),
-			("R to break", -0.2),
-			("F to place", -0.35),
-			("ESC to leave", -0.5)
+			("R to craft", -0.2),
+			("E to inventory", -0.35),
+			("ESC to pause", -0.5)
 		];
 
 		for (_i, (text, y_pos)) in help_texts.iter().enumerate() {

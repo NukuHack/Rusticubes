@@ -44,6 +44,11 @@ pub struct ItemContainer {
 	items: Vec<Option<ItemStack>>,
 	size: Slot,
 }
+impl Default for ItemContainer {
+	fn default() -> Self {
+		Self::new(1,1)
+	}
+}
 
 impl ItemContainer {
 	/// Create a new 2D grid container (like main inventory)
@@ -251,6 +256,11 @@ impl ItemContainer {
 	#[inline] pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut Option<ItemStack>> {
 		self.items.iter_mut()
 	}
+	// New into_iter() that consumes self
+	#[inline] 
+	pub fn into_iter(self) -> impl Iterator<Item = Option<ItemStack>> {
+		self.items.into_iter()  // Requires self (ownership)
+	}
 }
 
 #[derive(Clone, PartialEq)]
@@ -268,6 +278,7 @@ pub struct Inventory {
 	pub layout: Option<InventoryLayout>,
 
 	pub storage_ptr: Option<*mut ItemContainer>,
+	pub crafting_def: ItemContainer,
 }
 
 impl Inventory {
@@ -287,6 +298,7 @@ impl Inventory {
 			armor: ItemContainer::new(armor_slots, 1),
 			items: ItemContainer::new(rows, cols),
 			hotbar: ItemContainer::new(1, hotbar_slots),
+			crafting_def: ItemContainer::new(2,2), // to make the player able to craft the crafting table ...
 			cursor_item: None,
 			layout: None,
 			storage_ptr: None,
@@ -376,6 +388,23 @@ impl Inventory {
 				}
 			}
 		}
+	}
+
+	pub fn is_self_pointing(&self) -> bool {
+		// Get the pointer to our own crafting_def
+		let self_ptr = &self.crafting_def as *const ItemContainer;
+		
+		// Check if storage_ptr matches our self pointer
+		match self.storage_ptr {
+			Some(ptr) if !ptr.is_null() => ptr as *const _ == self_ptr,
+			_ => false
+		}
+	}
+	pub fn get_crafting_mut(&mut self) -> &mut ItemContainer {
+		&mut self.crafting_def
+	}
+	pub fn get_crafting(&self) -> &ItemContainer {
+		&self.crafting_def
 	}
 
 	/// Add item to any available slot (tries hotbar first, then inventory, then armor - if is an armor item)
