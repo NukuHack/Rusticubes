@@ -5,31 +5,12 @@ use crate::{
 		manager::{UIManager, UIState, FocusState},
 		element::{UIElement, UIElementData},
 	},
-	item::{
-		inventory::{Inventory, AreaType},
-		ui_inventory::{ClickResult, InventoryUIState},
-	}
+	item::ui_inventory::{ClickResult, InventoryUIState},
+	utils::click::ClickMode,
 };
 
 impl UIManager {
-	// Common helper for inventory click handling
-	fn handle_inventory_action<F>(&mut self, inv_state: &InventoryUIState, x: f32, y: f32, inventory_action: F) -> bool
-		where F: FnOnce(&mut Inventory, (u8, u8), AreaType) {
-		let inv = ptr::get_gamestate().player_mut().inventory_mut();
-		
-		let Some(inv_lay) = inv.layout.as_ref() else { return false };
-		
-		let ClickResult::SlotClicked { area_type, slot } = inv_lay.handle_click(*inv_state, x, y) else {
-			return false;
-		};
-
-		inventory_action(inv, slot, area_type);
-		self.setup_ui();
-		true
-	}
-
-	fn handle_click_press(&mut self, x: f32, y: f32) -> bool {
-
+	fn handle_click_press(&mut self, x: f32, y: f32) {
 		// Get visible, enabled elements sorted by descending z-index
 		let active_elements: Vec<(usize, i32)> = {
 			let mut temp = self.elements
@@ -44,7 +25,7 @@ impl UIManager {
 
 		for (element_index, _z_index) in active_elements {
 			let element: &mut UIElement = &mut self.elements[element_index];
-			if !element.contains_point(x, y) { continue; }
+			if !element.contains_point(x, y) { continue }
 
 			let focus_state = match element.data {
 				UIElementData::Checkbox { .. } |
@@ -65,26 +46,65 @@ impl UIManager {
 			if focus_state.is_some() {
 				audio::set_fg("click.ogg");
 				self.set_focused_state(focus_state);
-				return true;
+				return
 			}
 		}
-		false
-
 	}
-	fn handle_click_release(&mut self, x: f32, y: f32) -> bool {
-		let Some(element) = self.get_focused_element_mut() else { return false; };
+	#[inline]
+	fn handle_click_release(&mut self, x: f32, y: f32) {
+		let Some(element) = self.get_focused_element_mut() else { return };
 
-		if !element.contains_point(x, y) { return false; };
+		if !element.contains_point(x, y) { return };
 
 		match &element.data {
-            UIElementData::Checkbox { .. } => element.toggle_checked(),
-            UIElementData::MultiStateButton { .. } => element.next_state(),
-            UIElementData::Slider { .. } => element.set_calc_value(x, y),
-            _ => (),
+			UIElementData::Checkbox { .. } => element.toggle_checked(),
+			UIElementData::MultiStateButton { .. } => element.next_state(),
+			UIElementData::Slider { .. } => element.set_calc_value(x, y),
+			_ => (),
 		}
 		element.trigger_callback();
+	}
 
+	// Common helper for inventory click handling
+	#[inline]
+	fn handle_inventory_action(&mut self, inv_state: &InventoryUIState, x: f32, y: f32, shift: bool, mode: ClickMode) -> bool {
+		println!("handle_inventory_action");
+		let inv = ptr::get_gamestate().player_mut().inventory_mut();
+		
+		let Some(inv_lay) = inv.layout.as_ref() else { return false };
+		
+		let ClickResult::SlotClicked { area_type, slot } = inv_lay.handle_click(*inv_state, x, y) else {
+			return false;
+		};
+
+		inv.handle_click_press(slot, shift, area_type, mode);
+		
+		self.setup_ui();
 		true
+	}
+	
+	#[inline]
+	pub fn handle_mouse_click(&mut self, x: f32, y:f32, pressed: bool, shift: bool, mode: ClickMode) {
+		println!("handle_mouse_click");
+		if pressed {
+			if let UIState::Inventory(inv_state) = self.state {
+				self.handle_inventory_action(&inv_state, x, y, shift, mode);
+			}
+			self.clear_focused_element();
+
+			match mode {
+				ClickMode::Left => self.handle_click_press(x, y),
+				ClickMode::Right => {}, // self.handle_rclick_press(x, y),
+				ClickMode::Middle => {}, // self.handle_mclick_press(x, y),
+			}
+			return
+		}
+
+		match mode {
+			ClickMode::Left => self.handle_click_release(x, y),
+			ClickMode::Right => {}, // self.handle_rclick_release(x, y),
+			ClickMode::Middle => {}, // self.handle_mclick_release(x, y),
+		}
 	}
 
 	#[inline]
@@ -96,9 +116,10 @@ impl UIManager {
 
 		// First check the conditions that don't need the element
 		if matches!(self.state, UIState::Inventory(_)) {
-			let inventory = ptr::get_gamestate().player_mut().inventory_mut();
+			let inventory = ptr::get_gamestate().player().inventory();
 			let Some(item) = inventory.get_cursor() else { return; };
 
+			println!("handling cursor_item_display from movement");
 			self.cursor_item_display(x,y,item);
 		}
 		// Then get the element
@@ -122,50 +143,6 @@ impl UIManager {
 				true
 			}
 			_ => false,
-		}
-	}
-	
-	#[inline]
-	pub fn handle_click(&mut self, x: f32, y:f32, pressed: bool) -> bool {
-		if pressed {
-			if let UIState::Inventory(inv_state) = self.state {
-				return self.handle_inventory_action(&inv_state, x, y, Inventory::handle_click_press);
-			}
-			self.clear_focused_element();
-
-			self.handle_click_press(x,y)
-		} else {
-			self.handle_click_release(x, y)
-		}
-	}
-	#[inline]
-	pub fn handle_rclick(&mut self, x: f32, y:f32, pressed: bool) -> bool {
-		if pressed {
-			if let UIState::Inventory(inv_state) = self.state {
-				return self.handle_inventory_action(&inv_state, x, y, Inventory::handle_rclick_press);
-			}
-			self.clear_focused_element();
-
-			//self.handle_rclick_press(x,y)
-			false
-		} else {
-			//self.handle_rclick_release(x, y)
-			false
-		}
-	}
-	#[inline]
-	pub fn handle_mclick(&mut self, x: f32, y:f32, pressed: bool) -> bool {
-		if pressed {
-			if let UIState::Inventory(inv_state) = self.state {
-				return self.handle_inventory_action(&inv_state, x, y, Inventory::handle_mclick_press);
-			}
-			self.clear_focused_element();
-
-			//self.handle_mclick_press(x,y)
-			false
-		} else {
-			//self.handle_mclick_release(x, y)
-			false
 		}
 	}
 }

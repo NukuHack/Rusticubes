@@ -522,6 +522,7 @@ impl UIManager {
 	}
 	// New method to display item being held by cursor
 	pub fn cursor_item_display(&mut self, x:f32, y:f32, cursor_item: &ItemStack) {
+		println!("handling cursor_item_display");
 		// You'll need to get mouse position from your input system
 		let (x,y) = (x - SLOT/2.0, y - SLOT/2.0);
 		let origo = Vec2::new(x , y);
@@ -540,6 +541,7 @@ impl UIManager {
 
 		// If we get here, either no focused element or wrong type
 
+		println!("creating cursor_item_display");
 		let id = self.create_item_display(x, y, cursor_item, 10);
 
 		self.set_focused_state(FocusState::Item { id });

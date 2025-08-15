@@ -9,13 +9,15 @@ pub mod utils {
     pub mod input;
     /// Math utilities (Noise gen, lerping).
     pub mod math;
-	// my custom color struct with quick init
-	pub mod color;
+    // my custom color struct with quick init
+    pub mod color;
     /// String helpers (For compile and runtime strings).
     pub mod string;
     /// Cursor state (cursor change and locking).
     pub mod cursor;
     /// Time formatting is a pretty struct.
     pub mod time;
+    /// Small enum for event handling ease
+    pub mod click;
 }
 

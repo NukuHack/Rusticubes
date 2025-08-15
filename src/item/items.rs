@@ -2,7 +2,6 @@
 use crate::fs::rs;
 use crate::item::item_lut::ItemComp;
 
-
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ItemStack {
 	name: String,

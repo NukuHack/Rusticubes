@@ -8,6 +8,7 @@ use winit::{
 	event::{ElementState, MouseButton, WindowEvent, MouseScrollDelta},
 	keyboard::KeyCode as Key,
 };
+use crate::utils::click::ClickMode;
 
 impl<'a> crate::State<'a> {
 
@@ -116,11 +117,8 @@ impl<'a> crate::State<'a> {
 				return false;
 			},
 		};
-		// let is_pressed: bool = *state == ElementState::Pressed;
-		let is_pressed:bool = match state {
-			ElementState::Pressed => true,
-			_ => false,
-		};
+		let is_pressed = *state == ElementState::Pressed;
+
 		// Handle UI input first if there's a focused element
 		if self.ui_manager.visibility {
 			if let Some(element) = self.ui_manager.get_focused_element() { // if focused you can't press Esc, have to handle them in a custom way
@@ -241,75 +239,52 @@ impl<'a> crate::State<'a> {
 
 		// Use the stored current mouse position
 		let (x, y) = convert_mouse_position(self.render_context.size.into(), &self.input_system.previous_mouse);
+		let mods = self.input_system.modifiers; let shift = mods.shift_key();
 
-		match (button, *state) {
-			(MouseButton::Left, ElementState::Pressed) => {
-				self.input_system.mouse_button_state.left = true;
-				if self.input_system.mouse_captured() {
+		let pressed = *state == ElementState::Pressed;
+		match button {
+			MouseButton::Left => {
+				self.input_system.mouse_button_state.left = pressed;
+				if pressed && self.input_system.mouse_captured() {
 					self.handle_lclick_interaction();
-					return true
+					return true;
 				}
 				if self.ui_manager.visibility {
-					self.ui_manager.handle_click(x, y, true);
+					self.ui_manager.handle_mouse_click(x, y, pressed, shift, ClickMode::Left);
 				}
 				true
 			}
-			(MouseButton::Left, ElementState::Released) => {
-				self.input_system.mouse_button_state.left = false;
-				if self.ui_manager.visibility {
-					self.ui_manager.handle_click(x, y, false);
-				}
-				true
-			}
-			(MouseButton::Right, ElementState::Pressed) => {
-				self.input_system.mouse_button_state.right = true;
-				if self.input_system.mouse_captured() {
+			MouseButton::Right => {
+				self.input_system.mouse_button_state.right = pressed;
+				if pressed && self.input_system.mouse_captured() {
 					self.handle_rclick_interaction();
-					return true
+					return true;
 				}
 				if self.ui_manager.visibility {
-					self.ui_manager.handle_rclick(x, y, true);
+					self.ui_manager.handle_mouse_click(x, y, pressed, shift, ClickMode::Right);
 				}
 				true
 			}
-			(MouseButton::Right, ElementState::Released) => {
-				self.input_system.mouse_button_state.right = false;
+			MouseButton::Middle => {
+				self.input_system.mouse_button_state.middle = pressed;
+				if pressed && self.input_system.mouse_captured() {
+					//self.handle_mclick_interaction(); // will have to make a Middle click interaction too (for picking the block)
+					return true;
+				}
 				if self.ui_manager.visibility {
-					self.ui_manager.handle_rclick(x, y, false);
+					self.ui_manager.handle_mouse_click(x, y, pressed, shift, ClickMode::Middle);
 				}
 				true
 			}
-			(MouseButton::Middle, ElementState::Pressed) => {
-				self.input_system.mouse_button_state.middle = true;
-				if self.ui_manager.visibility {
-					self.ui_manager.handle_mclick(x, y, true);
-				}
+			MouseButton::Back => {
+				self.input_system.mouse_button_state.back = pressed;
 				true
-			},
-			(MouseButton::Middle, ElementState::Released) => {
-				self.input_system.mouse_button_state.middle = false;
-				if self.ui_manager.visibility {
-					self.ui_manager.handle_mclick(x, y, false);
-				}
+			}
+			MouseButton::Forward => {
+				self.input_system.mouse_button_state.forward = pressed;
 				true
-			},
-			(MouseButton::Back, ElementState::Pressed) => {
-				self.input_system.mouse_button_state.back = false;
-				true
-			},
-			(MouseButton::Back, ElementState::Released) => {
-				self.input_system.mouse_button_state.back = false;
-				true
-			},
-			(MouseButton::Forward, ElementState::Pressed)  => {
-				self.input_system.mouse_button_state.forward = false;
-				true
-			},
-			(MouseButton::Forward, ElementState::Released)  => {
-				self.input_system.mouse_button_state.forward = false;
-				true
-			},
-			(MouseButton::Other(_), _) => false, // for now nothing needs this 
+			}
+			MouseButton::Other(_) => false,
 		}
 	}
 	#[inline]
