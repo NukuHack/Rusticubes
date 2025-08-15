@@ -1,4 +1,5 @@
 
+use std::num::NonZeroU16;
 use crate::fs::rs;
 use crate::item::item_lut::ItemComp;
 
@@ -27,6 +28,11 @@ impl ItemStack {
 	#[inline] 
 	pub fn from_str(name: &'static str) -> Self {
 		Self::new(name.to_string())
+	}
+	
+	#[inline] 
+	pub fn create(name: String, stack: u32, data: Option<Box<CustomData>>) -> Self {
+		Self {name, stack, data}
 	}
 	
 	/// Creates an ItemStack from a resource index where the first bit indicates if it's a block (1) or item (0)
@@ -92,6 +98,12 @@ impl ItemStack {
 	#[inline] 
 	pub fn set_stack_size(&mut self, size: u32) { 
 		self.stack = size; 
+	}
+	
+	/// Sets the stack data
+	#[inline] 
+	pub fn set_stack_data(&mut self, data: Option<Box<CustomData>>) { 
+		self.data = data; 
 	}
 	
 	/// Sets the stack size to its maximum
@@ -215,7 +227,7 @@ impl ItemStack {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct CustomData {
 	pub name: Option<String>,
-	pub durability: Option<u16>,
+	pub durability: Option<NonZeroU16>,
 	//pub effects -  // should be reworked later but the stuff what in minecraft gives + health and stuff
 	//pub cosmetics - // stuff that would like make the color change or make the sword be double edged ...
 }

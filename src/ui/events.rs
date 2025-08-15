@@ -131,7 +131,7 @@ impl UIManager {
 
 	#[inline]
 	pub fn handle_scroll(&mut self, delta: f32) -> bool {
-		if matches!(self.state, UIState::Inventory(_)) {
+		if matches!(self.state, UIState::InGame) {
 			let inventory = ptr::get_gamestate().player_mut().inventory_mut();
 			inventory.step_select_slot(delta);
 			self.hotbar_selection_highlight(inventory);

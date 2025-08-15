@@ -118,11 +118,12 @@ impl ItemContainer {
 	}
 
 	/// Helper method to calculate linear index from 2D coordinates
-	#[inline] fn calculate_index(&self, row: u8, col: u8) -> Option<usize> {
+	#[inline(always)]
+	fn calculate_index(&self, row: u8, col: u8) -> Option<usize> {
 		if self.is_linear() {
 			// For linear containers, use whichever coordinate is non-zero
 			let sum = row as usize + col as usize;
-			if sum >= self.capacity() { return None; }
+			if sum > self.capacity() { return None; }
 
 			return Some(sum);
 		}
@@ -284,8 +285,9 @@ pub struct Inventory {
 	cursor_item: Option<ItemStack>,
 	// the payout
 	pub layout: Option<InventoryLayout>,
-
+	// Pointer for the in world Machine / Storage
 	pub storage_ptr: Option<*mut ItemContainer>,
+	// Basic inventory crafting grid to make basic stuff
 	pub crafting_def: ItemContainer,
 }
 

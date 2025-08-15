@@ -1,3 +1,6 @@
+use std::num::NonZeroU16;
+use crate::item::items::CustomData;
+use crate::item::items::ItemStack;
 use std::mem;
 use std::num::NonZeroU32;
 use crate::item::material::{ArmorType, ToolType, MaterialLevel, EquipmentType, BasicConversion};
@@ -388,3 +391,136 @@ impl BinarySerializable for ItemComp {
 	}
 }
 
+impl BinarySerializable for CustomData {
+	fn to_binary(&self) -> Vec<u8> {
+		let mut data = Vec::new();
+		
+		// Serialize name (1 byte flag + optional string)
+		if let Some(name) = &self.name {
+			data.push(1); // Has name flag
+			data.extend_from_slice(&name.to_binary());
+		} else {
+			data.push(0); // No name flag
+		}
+		
+		// Serialize durability (1 byte flag + optional u16)
+		if let Some(durability) = &self.durability {
+			data.push(1); // Has durability flag
+			data.extend_from_slice(&durability.get().to_le_bytes());
+		} else {
+			data.push(0); // No durability flag
+		}
+		
+		data
+	}
+	
+	fn from_binary(bytes: &[u8]) -> Option<Self> {
+		if bytes.len() < 2 { return None; } // Minimum 2 bytes for flags
+		
+		let mut offset = 0;
+		
+		// Deserialize name
+		let has_name = bytes[offset] != 0;
+		offset += 1;
+		let name = if has_name {
+			let name_len = u16::from_le_bytes([bytes[offset], bytes[offset+1]]) as usize;
+			offset += 2;
+			let name = String::from_utf8(bytes[offset..offset+name_len].to_vec()).ok()?;
+			offset += name_len;
+			Some(name)
+		} else {
+			None
+		};
+		
+		// Deserialize durability
+		let has_durability = bytes[offset] != 0;
+		offset += 1;
+		let durability = if has_durability {
+			if bytes.len() < offset + 2 { return None; }
+			let value = u16::from_le_bytes([bytes[offset], bytes[offset+1]]);
+			//offset += 2;
+			NonZeroU16::new(value)
+		} else {
+			None
+		};
+		
+		Some(CustomData {
+			name,
+			durability,
+		})
+	}
+	
+	fn binary_size(&self) -> usize {
+		let mut size = 2; // Flags for name and durability
+		
+		if let Some(name) = &self.name {
+			size += 2 + name.len(); // 2 bytes for length + string bytes
+		}
+		
+		if self.durability.is_some() {
+			size += 2; // u16 for durability
+		}
+		
+		size
+	}
+}
+
+impl BinarySerializable for ItemStack {
+	fn to_binary(&self) -> Vec<u8> {
+		let mut data = Vec::new();
+		
+		// Serialize name (string)
+		data.extend_from_slice(&self.name().to_string().to_binary());
+		
+		// Serialize stack count (1 byte)
+		data.push(self.stack as u8);
+		
+		// Serialize custom data (1 byte flag + optional data)
+		if let Some(custom_data) = &self.data {
+			data.push(1); // Has data flag
+			data.extend_from_slice(&custom_data.to_binary());
+		} else {
+			data.push(0); // No data flag
+		}
+		
+		data
+	}
+	
+	fn from_binary(bytes: &[u8]) -> Option<Self> {
+		if bytes.is_empty() { return None; }
+		
+		let mut offset = 0;
+		
+		// Deserialize name
+		let name_len = u16::from_binary(&bytes[offset..offset+2])? as usize;
+		let name = String::from_binary(&bytes[offset..offset+name_len+2])?;
+		offset += name_len + 2;
+		
+		// Deserialize stack count
+		if offset >= bytes.len() { return None; }
+		let stack = bytes[offset] as u32;
+		offset += 1;
+		
+		// Deserialize custom data
+		if offset >= bytes.len() { return None; }
+		let has_data = bytes[offset] != 0;
+		offset += 1;
+		let data = if has_data {
+			Some(Box::new(CustomData::from_binary(&bytes[offset..])?))
+		} else {
+			None
+		};
+		
+		Some(ItemStack::create(name,stack,data))
+	}
+	
+	fn binary_size(&self) -> usize {
+		let mut size = 2 + self.name().to_string().binary_size(); // name length (2 bytes) + string bytes
+		size += 1; // stack count (1 byte)
+		size += 1; // has_data flag (1 byte)
+		if let Some(data) = &self.data {
+			size += data.binary_size();
+		}
+		size
+	}
+}
