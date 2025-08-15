@@ -309,6 +309,6 @@ pub fn init_item_lut() {
 		map.insert("arrow".to_string(), ItemComp::new("arrow"));
 		map.insert("plank".to_string(), ItemComp::new("plank").as_block().as_storage((5,9).into()));
 		map.insert("coat".to_string(), ItemComp::new("coat").as_armor(ArmorData::Single{ equip_type:ArmorType::Torso, tier: MaterialLevel::Calcite }).with_stack(1));
-		map.insert("crafting".to_string(), ItemComp::new("crafting").as_block().as_storage((3,3).into()));
+		map.insert("crafting".to_string(), ItemComp::new("crafting").as_block().as_storage((5,5).into()));
 	}
 }

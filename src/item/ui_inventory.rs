@@ -95,6 +95,9 @@ impl AreaLayout {
 		(self.position.0, self.position.1, self.position.0 + self.size.0, self.position.1 + self.size.1)
 	}
 	
+	#[inline] pub const fn capacity(&self) -> usize {
+		self.rows as usize * self.cols as usize
+	}
 	#[inline] pub const fn contains_point(&self, x: f32, y: f32) -> bool {
 		let (min_x, min_y, max_x, max_y) = self.get_bounds();
 		x >= min_x && x <= max_x && y >= min_y && y <= max_y

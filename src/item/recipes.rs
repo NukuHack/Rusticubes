@@ -15,19 +15,11 @@ impl GridPosition {
 }
 
 /// Item requirement at a specific grid position
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ItemRequirement {
 	pub item_id: usize,
 	pub position: GridPosition,
 }
-
-impl Hash for ItemRequirement {
-	fn hash<H: Hasher>(&self, state: &mut H) {
-		self.item_id.hash(state);
-		self.position.hash(state);
-	}
-}
-
 impl ItemRequirement {
 	#[inline]
 	pub const fn new(item_id: usize, x: i8, y: i8) -> Self {
@@ -54,6 +46,12 @@ impl Hash for CraftingInput {
 			}
 			CraftingInput::Multiple(items) => {
 				1u8.hash(state); // variant discriminator
+				let mut items = items.clone();
+				// Sort to ensure consistent hashing regardless of order
+				items.sort_by(|a, b| {
+					a.position.y.cmp(&b.position.y)
+						.then(a.position.x.cmp(&b.position.x))
+				});
 				for item in items {
 					item.hash(state);
 				}
@@ -159,10 +157,19 @@ pub struct Recipe {
 impl Recipe {
 	#[inline]
 	pub fn new<T: Into<CraftingInput>, K: Into<CraftingResult>>(input: T, output: K) -> Self {
-		Self {
-			input: input.into(),
-			output: output.into(),
+		let input = input.into();
+		let output = output.into();
+		
+		// Precompute hash for faster lookups
+		if let CraftingInput::Multiple(ref items) = input {
+			let mut items = items.clone();
+			items.sort_by(|a, b| {
+				a.position.y.cmp(&b.position.y)
+					.then(a.position.x.cmp(&b.position.x))
+			});
 		}
+		
+		Self { input, output }
 	}
 
 	#[inline] pub fn split(self) -> (CraftingInput, CraftingResult) { (self.input, self.output) }
@@ -173,19 +180,19 @@ impl Recipe {
 // Replace the HashSet with HashMap
 static RECIPE_REGISTRY: OnceLock<RwLock<HashMap<CraftingInput, CraftingResult, RandomState>>> = OnceLock::new();
 
-pub fn init_recipe_registry() {
+#[inline] pub fn init_recipe_registry() {
 	RECIPE_REGISTRY.get_or_init(|| RwLock::new(HashMap::with_hasher(RandomState::new())));
 }
 
 /// Clears all recipes from the registry
-pub fn clear_recipes() {
+#[inline] pub fn clear_recipes() {
 	if let Some(registry) = RECIPE_REGISTRY.get() {
 		registry.write().expect("Recipe registry poisoned").clear();
 	}
 }
 
 /// Gets a read-only reference to the recipe registry
-pub fn get_recipes() -> RwLockReadGuard<'static, HashMap<CraftingInput, CraftingResult, RandomState>> {
+#[inline] pub fn get_recipes() -> RwLockReadGuard<'static, HashMap<CraftingInput, CraftingResult, RandomState>> {
 	RECIPE_REGISTRY.get()
 		.expect("Recipe registry not initialized")
 		.read().expect("Recipe registry poisoned")
@@ -209,9 +216,67 @@ pub fn init_recipe_lut() {
 	]);
 }
 
-pub fn lookup_recipe(input: &CraftingInput) -> Option<CraftingResult> {
+#[inline] fn lookup_recipe(input: &CraftingInput) -> Option<CraftingResult> {
 	let registry = get_recipes();
-	registry.get(input).cloned()
+	
+	// First try exact match
+	if let Some(result) = registry.get(input).cloned() {
+		return Some(result);
+	}
+	
+	// If no exact match and it's a multiple input, try to find a subset match
+	if let CraftingInput::Multiple(input_items) = input {
+		// Try all possible offsets to see if any subset matches a recipe
+		for (recipe_input, recipe_output) in registry.iter() {
+			if let CraftingInput::Multiple(recipe_items) = recipe_input {
+				if is_subset_recipe(input_items, recipe_items) {
+					return Some(recipe_output.clone());
+				}
+			}
+		}
+	}
+	
+	None
+}
+
+/// Checks if the recipe_items are a subset of input_items at any offset
+fn is_subset_recipe(input_items: &[ItemRequirement], recipe_items: &[ItemRequirement]) -> bool {
+	if recipe_items.is_empty() || input_items.len() < recipe_items.len() {
+		return false;
+	}
+	
+	// Find all possible offsets that could align the recipe with the input
+	for input_item in input_items {
+		for recipe_item in recipe_items {
+			let offset_x = input_item.position.x - recipe_item.position.x;
+			let offset_y = input_item.position.y - recipe_item.position.y;
+			
+			// Check if all recipe items exist in input with this offset
+			let mut all_match = true;
+			for recipe_item in recipe_items {
+				let expected_pos = GridPosition::new(
+					recipe_item.position.x + offset_x,
+					recipe_item.position.y + offset_y,
+				);
+				
+				let found = input_items.iter().any(|input_item| {
+					input_item.item_id == recipe_item.item_id && 
+					input_item.position == expected_pos
+				});
+				
+				if !found {
+					all_match = false;
+					break;
+				}
+			}
+			
+			if all_match {
+				return true;
+			}
+		}
+	}
+	
+	false
 }
 
 pub fn print_all_recipes() {
@@ -223,9 +288,8 @@ pub fn print_all_recipes() {
 }
 
 use crate::item::inventory::ItemContainer;
-
 impl ItemContainer {
-	pub fn to_crafting_input(&self) -> Option<CraftingInput> {  // Changed to return Option
+	fn to_crafting_input(&self) -> Option<CraftingInput> {  // Changed to return Option
 		let mut requirements = Vec::new();
 		
 		// Calculate center offsets
@@ -251,7 +315,7 @@ impl ItemContainer {
 		}
 	}
 
-	pub fn find_recipe(&self) -> Option<CraftingResult> {
+	#[inline] pub fn find_recipe(&self) -> Option<CraftingResult> {
 		self.to_crafting_input().and_then(|input| {
 			//println!("Valid crafting input: {:?}", input);  // Debug log
 			lookup_recipe(&input)
@@ -260,5 +324,32 @@ impl ItemContainer {
 }
 
 impl CraftingResult {
-	// have to impl converting back to ItemContainer or atleast a Vec<> of ItemStack
+	/// Converts the crafting result into a vector of ItemStacks
+	/// Returns None if the result is empty or contains invalid item IDs
+	fn to_item_vec_or_none(&self) -> Option<Vec<ItemStack>> {
+		// Get the item IDs from the enum variant
+		let item_ids: Vec<usize> = match self {
+			Self::Single(item_id) => vec![*item_id],
+			Self::Multiple(items) => items.clone(),
+		};
+
+		// Return None for empty results
+		if item_ids.is_empty() {
+			return None;
+		}
+
+		// Convert each ID to an ItemStack
+		let mut result: Vec<ItemStack> = Vec::with_capacity(item_ids.len());
+		for &id in &item_ids {
+			// Set stack size to 1 (might make recipes store stack sizes)
+			result.push(ItemStack::from_idx(id).with_stack_size(1));
+		}
+
+		Some(result)
+	}
+
+	/// Alternative version that returns empty vec instead of Option
+	#[inline] pub fn to_item_vec(&self) -> Vec<ItemStack> {
+		self.to_item_vec_or_none().unwrap_or_default()
+	}
 }

@@ -1,5 +1,4 @@
 
-use crate::item::recipes::CraftingResult;
 use crate::item::ui_inventory::InventoryLayout;
 use crate::item::items::ItemStack;
 
@@ -399,19 +398,11 @@ impl Inventory {
 		let Some(result_area) = layout.areas.iter().find(|a| a.name == AreaType::Output) else { return None; };
 
 		let Some(result) = crafting_items.find_recipe() else { return None; };
-		let items: Vec<usize> = match result {
-			CraftingResult::Single(item_id) => vec![item_id],
-			CraftingResult::Multiple(items) => items,
-		};
+		let items = result.to_item_vec();
 
-		if items.len() > result_area.rows as usize * result_area.cols as usize { 
+		if items.len() > result_area.capacity() || items.len() == 0 { 
 			return None; 
 		};
-
-		// Get actual crafting data from world
-		let items: Vec<ItemStack> = items.into_iter()
-			.map(|idx| ItemStack::from_idx(idx).with_stack_size(1))
-			.collect();
 
 		let mut item_cont = ItemContainer::new(result_area.rows, result_area.cols);
 		for (i, item_slot) in item_cont.iter_mut().enumerate() {
