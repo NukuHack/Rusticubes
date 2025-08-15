@@ -128,7 +128,7 @@ pub fn close_pressed() {
 		UIState::Inventory(_) => {
 			let focus_state = state.ui_manager.get_focused_state();
 			let inv = ptr::get_gamestate().player_mut().inventory_mut();
-			if matches!(focus_state, FocusState::Item { .. }) {
+			if matches!(focus_state, FocusState::CursorItem { .. }) {
 				let itm = inv.remove_cursor().unwrap(); // already checked
 				inv.add_item_anywhere(itm);
 			}
@@ -159,7 +159,7 @@ pub struct UIManager {
 	pub pipeline: wgpu::RenderPipeline,
 	// main data
 	pub elements: Vec<UIElement>,
-	focused_element: FocusState,
+	focused_state: FocusState,
 	renderer: UIRenderer,
 	// extra for double callbacks
 	pub dialogs: dialog::DialogManager,
@@ -178,8 +178,8 @@ pub enum FocusState {
 		cursor_pos: usize,
 		selection_start: Option<usize>,
 	},
-	// Item as in game inventory
-	Item { id: usize },
+	// CursorItem as in game inventory
+	CursorItem { id: usize },
 	// Simple overlay for hotbar selection
 	HotbarOverlay { id: usize },
 }
@@ -196,7 +196,7 @@ impl FocusState {
 		match self {
 			Self::Simple { id } |
 			Self::Input { id, .. } |
-			Self::Item { id } |
+			Self::CursorItem { id } |
 			Self::HotbarOverlay { id } => *id,
 			Self::None => 0,
 		}
@@ -274,7 +274,7 @@ impl UIManager {
 			index_buffer,
 			pipeline: ui_pipeline,
 			elements: Vec::with_capacity(50),
-			focused_element: FocusState::default(),
+			focused_state: FocusState::default(),
 			visibility: true,
 			dialogs: dialog::DialogManager::new(),
 			renderer,
@@ -340,7 +340,7 @@ impl UIManager {
 		let focus_state = self.get_focused_state();
 		if focus_state.is_some() {
 			if focus_state.id() == element_id {
-				self.clear_focused_element();
+				self.clear_focused_state();
 			}
 		}
 		self.elements.remove(element_id);
@@ -355,18 +355,18 @@ impl UIManager {
 	#[inline] pub fn elements_with_parent(&self, parent: usize) -> Vec<&UIElement> { self.elements.iter().filter(|e| e.parent.is_some() && e.parent.id() == parent).collect() }
 	#[inline] pub fn elements_with_parent_mut(&mut self, parent: usize) -> Vec<&mut UIElement> { self.elements.iter_mut().filter(|e| e.parent.is_some() && e.parent.id() == parent).collect() }
 	 
-	#[inline] pub fn clear_elements(&mut self) { self.elements.clear(); self.clear_focused_element(); self.next_id = 1; }
+	#[inline] pub fn clear_elements(&mut self) { self.elements.clear(); self.clear_focused_state(); self.next_id = 1; }
 		
-	#[inline] pub const fn clear_focused_element(&mut self) { self.focused_element = FocusState::default(); }
+	#[inline] pub const fn clear_focused_state(&mut self) { self.focused_state = FocusState::default(); }
 		
 	#[inline] pub const fn toggle_visibility(&mut self) { self.visibility = !self.visibility; }
-	#[inline] pub const fn focused_is_some(&self) -> bool { if self.focused_element.is_some() { true } else { false } }
+	#[inline] pub const fn focused_is_some(&self) -> bool { if self.focused_state.is_some() { true } else { false } }
 
-	#[inline] pub fn set_focused_state(&mut self, focused_state: FocusState) { self.focused_element = focused_state }
-	#[inline] pub fn get_focused_state(&self) -> &FocusState { &self.focused_element }
+	#[inline] pub fn set_focused_state(&mut self, focused_state: FocusState) { self.focused_state = focused_state }
+	#[inline] pub fn get_focused_state(&self) -> &FocusState { &self.focused_state }
 
-	#[inline] pub fn get_focused_element(&self) -> Option<&UIElement> { if self.focused_element.is_some() { self.get_element(self.focused_element.id()) } else { None } }
-	#[inline] pub fn get_focused_element_mut(&mut self) -> Option<&mut UIElement> { if self.focused_element.is_some() { self.get_element_mut(self.focused_element.id()) } else { None } }
+	#[inline] pub fn get_focused_element(&self) -> Option<&UIElement> { if self.focused_state.is_some() { self.get_element(self.focused_state.id()) } else { None } }
+	#[inline] pub fn get_focused_element_mut(&mut self) -> Option<&mut UIElement> { if self.focused_state.is_some() { self.get_element_mut(self.focused_state.id()) } else { None } }
 
 	#[inline] pub const fn next_id(&mut self) -> usize { let id = self.next_id; self.next_id += 1; id }
 	

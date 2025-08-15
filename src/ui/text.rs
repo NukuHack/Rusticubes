@@ -20,7 +20,7 @@ impl UIManager {
 
 		if !element.is_input() {
 			if key != Escape { return false; }
-			self.clear_focused_element();
+			self.clear_focused_state();
 			return false;
 		}
 		match key {
@@ -31,7 +31,7 @@ impl UIManager {
 
 				text_mut.pop();
 			},
-			Enter | Escape => self.clear_focused_element(),
+			Enter | Escape => self.clear_focused_state(),
 			_ => {
 				let Some(text_mut) = element.get_text_mut() else { return false; };
 				

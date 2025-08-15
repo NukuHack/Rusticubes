@@ -68,7 +68,6 @@ impl UIManager {
 	// Common helper for inventory click handling
 	#[inline]
 	fn handle_inventory_action(&mut self, inv_state: &InventoryUIState, x: f32, y: f32, shift: bool, mode: ClickMode) -> bool {
-		println!("handle_inventory_action");
 		let inv = ptr::get_gamestate().player_mut().inventory_mut();
 		
 		let Some(inv_lay) = inv.layout.as_ref() else { return false };
@@ -85,12 +84,11 @@ impl UIManager {
 	
 	#[inline]
 	pub fn handle_mouse_click(&mut self, x: f32, y:f32, pressed: bool, shift: bool, mode: ClickMode) {
-		println!("handle_mouse_click");
 		if pressed {
 			if let UIState::Inventory(inv_state) = self.state {
-				self.handle_inventory_action(&inv_state, x, y, shift, mode);
+				if self.handle_inventory_action(&inv_state, x, y, shift, mode) { return }
 			}
-			self.clear_focused_element();
+			self.clear_focused_state();
 
 			match mode {
 				ClickMode::Left => self.handle_click_press(x, y),
@@ -119,7 +117,6 @@ impl UIManager {
 			let inventory = ptr::get_gamestate().player().inventory();
 			let Some(item) = inventory.get_cursor() else { return; };
 
-			println!("handling cursor_item_display from movement");
 			self.cursor_item_display(x,y,item);
 		}
 		// Then get the element
@@ -134,15 +131,12 @@ impl UIManager {
 
 	#[inline]
 	pub fn handle_scroll(&mut self, delta: f32) -> bool {
-		match self.state.clone() {
-			UIState::Inventory(_) => true, // item interaction i guess
-			UIState::InGame => {
-				let inventory = ptr::get_gamestate().player_mut().inventory_mut();
-				inventory.step_select_slot(delta);
-				self.hotbar_selection_highlight(inventory);
-				true
-			}
-			_ => false,
+		if matches!(self.state, UIState::Inventory(_)) {
+			let inventory = ptr::get_gamestate().player_mut().inventory_mut();
+			inventory.step_select_slot(delta);
+			self.hotbar_selection_highlight(inventory);
+			return true;
 		}
+		false
 	}
 }

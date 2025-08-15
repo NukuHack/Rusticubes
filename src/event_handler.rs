@@ -58,7 +58,7 @@ impl<'a> crate::State<'a> {
 					if self.is_world_running {
 						ptr::get_gamestate().player_mut().controller().reset_keyboard(); // Temporary workaround
 					}
-					self.ui_manager.clear_focused_element();
+					self.ui_manager.clear_focused_state();
 				} else {
 					if self.is_world_running && ptr::get_gamestate().is_running() {
 						// idk some stuff on focus getting ?
