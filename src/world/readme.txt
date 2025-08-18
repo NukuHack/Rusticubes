@@ -8,5 +8,6 @@ pub mod world {
 	pub mod serialize;
 	pub mod handler;
 	pub mod threading;
+	pub mod region;
 }
 

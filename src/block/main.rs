@@ -3,7 +3,7 @@ use crate::{
 	item::inventory::Slot,
 	item::items::lut_by_name,
 	block::extra::get_item_name_from_block_id,
-	block::math::{self, ChunkCoord, BlockPosition, BlockRotation},
+	block::math::{self, ChunkCoord, LocalPos, BlockRotation},
 	utils::math::{Noise},
 	render::meshing::GeometryBuffer,
 };
@@ -14,10 +14,10 @@ use glam::IVec3;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Material(pub u16);
 impl Material {
-	pub const fn inner(&self) -> u16 {
+	#[inline] pub const fn inner(&self) -> u16 {
 		self.0
 	}
-	pub const fn from(val:u16) -> Self {
+	#[inline] pub const fn from(val:u16) -> Self {
 		Self(val)
 	}
 }
@@ -29,7 +29,6 @@ pub struct Block {
 	pub rotation: BlockRotation, // material, rotation
 }
 
-#[allow(dead_code)]
 impl Block {
 	/// Creates a default empty block
 	#[inline] pub const fn default() -> Self {
@@ -82,13 +81,14 @@ impl Block {
 }
 
 /// Represents a chunk of blocks in the world
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct Chunk {
-	pub storage: BlockStorage,
+	storage: BlockStorage,
 	pub dirty: bool,
 	pub final_mesh: bool,
-	pub mesh: Option<GeometryBuffer>,
-	pub bind_group: Option<wgpu::BindGroup>,
+	finished_gen: bool,
+	mesh: Option<GeometryBuffer>,
+	bind_group: Option<wgpu::BindGroup>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -98,37 +98,32 @@ pub enum BlockStorage {
 		block: Block,
 	},
 	/// 4-bit indices (2 blocks per byte) for palettes with ≤16 blocks
-	/// Uses 2KB for indices + small palette
-	/// Chunk::VOLUME/2 * 1 byte + palette.len() * 3 byte
+	/// Uses a small for indices + small palette
 	Compact {
 		palette: Vec<Block>, // Max 16 entries
-		indices: Box<[u8; Chunk::VOLUME/2]>, // 4096 positions, 2 per byte
+		indices: Box<[u8; Chunk::VOLUME/2]>, // 2 per byte
 	},
 	/// 8-bit indices for larger palettes (up to 256 blocks)
-	/// Uses 4KB for indices + larger palette
-	/// Chunk::VOLUME * 1 byte + palette.len() * 3 byte
+	/// Uses a moderate for indices + big palette
 	Sparse {
 		palette: Vec<Block>, // Max 256 entries
 		indices: Box<[u8; Chunk::VOLUME]>, // Full index array
 	},
 	/// 16-bit indices for very large palettes (up to 4096 blocks)
-	/// Uses 8KB for indices + large palette
-	/// Chunk::VOLUME * 1.5 byte + palette.len() * 3 byte
+	/// Uses a lot for indices + large palette
 	Giant {
 		palette: Vec<Block>, // Max 4K entries
 		indices: Box<[u8; Chunk::VOLUME * 3 / 2]>, // 12-bit indices
 	},
 	/// Direct storage for extremely diverse chunks (no palette)
-	/// Uses 12KB (4096 * 12 bits per Block)
-	/// Chunk::VOLUME * 3 byte
+	/// Uses 3 bytes for each block
 	Zigzag {
 		blocks: Box<[Block; Chunk::VOLUME]>, // Direct block storage
 	},
 	/// RLE compressed, this will be sized depending on the case
-	/// size may wary from 32 byte to 8K bytes
-	/// runs.len() * 2 byte + palette.len() * 3 byte
+	/// size may wary
 	Rle {
-		palette: Vec<Block>, // Max 256 entries
+		palette: Vec<Block>,
 		runs: Vec<(u8, u8)>,
 	},
 }
@@ -156,7 +151,7 @@ impl StorageType {
 			_ => None,
 		}
 	}
-	pub const fn as_u8(self) -> u8 {
+	#[inline] pub const fn as_u8(self) -> u8 {
 		self as u8
 	}
 }
@@ -166,18 +161,18 @@ impl BlockStorage {
 	const MAX_GIANT_PALETTE_SIZE: usize = 4096; // 2^12 = 4096
 
 	/// Creates empty storage (all air blocks)
-	pub const fn empty() -> Self {
+	#[inline] pub const fn empty() -> Self {
 		Self::Uniform {
 			block: Block::default(), // Air block
 		}
 	}
 
 	/// Creates uniform storage with a single block type
-	pub fn uniform(block: Block) -> Self {
+	#[inline] pub fn uniform(block: Block) -> Self {
 		Self::Uniform { block }
 	}
 
-	pub const fn to_type(&self) -> StorageType {
+	#[inline] pub const fn to_type(&self) -> StorageType {
 		match self {
 			Self::Uniform{ .. } => StorageType::Uniform,
 			Self::Compact{ .. } => StorageType::Compact,
@@ -611,7 +606,7 @@ impl BlockStorage {
 	}
 
 	/// Returns the palette (for debugging/inspection)
-	pub fn palette(&self) -> Vec<Block> {
+	#[inline] pub fn palette(&self) -> Vec<Block> {
 		match self {
 			Self::Uniform { block } => vec![*block],
 			Self::Compact { palette, .. } => palette.clone(),
@@ -781,54 +776,51 @@ impl BlockStorage {
 		}
 	}
 }
-impl std::fmt::Debug for Chunk {
-	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		let (memory_usage, storage_type) = self.storage.memory_usage();
-		f.debug_struct("Chunk")
-			.field("dirty", &self.dirty)
-			.field("is_empty", &self.is_empty())
-			.field("has_bind_group", &self.bind_group.is_some())
-			.field("has_mesh", &self.mesh.is_some())
-			.field("storage_type", &storage_type)
-			.field("memory_bytes", &memory_usage)
-			.finish()
-	}
-}
 
-#[allow(dead_code)]
 impl Chunk {
-	pub const SIZE: usize = 16;
+	pub const SIZE: usize = 32;
 	pub const SIZE_I: i32 = Self::SIZE as i32;
 	pub const SIZE_F: f32 = Self::SIZE as f32;
-	pub const VOLUME: usize = Self::SIZE * Self::SIZE * Self::SIZE; // 4096
+	pub const VOLUME: usize = Self::SIZE * Self::SIZE * Self::SIZE; // 32K+
 
 	/// Creates an empty chunk (all blocks are air)
-	#[inline]
-	pub fn empty() -> Self {
+	#[inline] pub fn empty() -> Self {
 		Self {
 			storage: BlockStorage::empty(),
 			dirty: false,
 			final_mesh: false,
+			finished_gen: false,
 			mesh: None,
 			bind_group: None,
 		}
 	}
 
 	/// Creates a new filled chunk (all blocks initialized to `Block::new(<mat>)`)
-	#[inline]
-	pub fn new(mat: u16) -> Self {
+	#[inline] pub fn new(mat: u16) -> Self {
 		let block = Block::new(Material(mat));
 		Self {
 			storage: BlockStorage::uniform(block),
 			dirty: true,
 			final_mesh: false,
+			finished_gen: true,
+			mesh: None,
+			bind_group: None,
+		}
+	}
+
+	#[inline] pub fn from_storage(storage: BlockStorage) -> Self {
+		Self {
+			storage,
+			dirty: true,
+			final_mesh: false,
+			finished_gen: true,
 			mesh: None,
 			bind_group: None,
 		}
 	}
 
 	pub fn generate(coord: ChunkCoord, seed: u32) -> Self {
-		if coord.y() > 8i32 { return Self::empty(); }
+		if coord.y() > 6i32 { return Self::empty(); }
 		if coord.y() <= -2i32 { return Self::new(2u16); }
 		
 		let noise_gen = Noise::new(seed);
@@ -851,18 +843,18 @@ impl Chunk {
 					// If this block is under or in terrain height, make it solid
 					if pos_y <= final_noise as i32 {
 						// Correct block indexing : BlockPosition
-						let idx: BlockPosition = (x, y, z).into();
-						chunk.set_block(idx.into(), block); // Set to solid
+						let idx: LocalPos = LocalPos::from((x, y, z));
+						chunk.set_block(usize::from(idx), block); // Set to solid
 					}
 					// Else leave as air
 				}
 			}
 		}
+		chunk.finished_gen = true;
 		chunk
 	}
 
-	#[inline]
-	pub fn get_block(&self, index: usize) -> Block {
+	#[inline] pub fn get_block(&self, index: usize) -> Block {
 		self.storage.get(index)
 	}
 
@@ -919,7 +911,7 @@ impl Chunk {
 	/// Checks if a block position is empty or outside the chunk
 	#[inline]
 	pub fn is_block_cull(&self, pos: IVec3) -> bool {
-		let idx: usize = BlockPosition::from(pos).into();
+		let idx: usize = usize::from(LocalPos::from(pos));
 		self.get_block(idx).is_empty()
 	}
 
@@ -952,24 +944,38 @@ impl Chunk {
 	}
 
 	/// Returns a reference to the mesh if it exists
-	#[inline]
-	pub const fn mesh(&self) -> Option<&GeometryBuffer> {
+	#[inline] pub const fn mesh(&self) -> Option<&GeometryBuffer> {
 		self.mesh.as_ref()
 	}
-
+	#[inline] pub fn set_mesh(&mut self, gb: Option<GeometryBuffer>) {
+		self.mesh = gb;
+	}
 	/// Returns a reference to the bind group if it exists
-	#[inline]
-	pub const fn bind_group(&self) -> Option<&wgpu::BindGroup> {
+	#[inline] pub const fn bind_group(&self) -> Option<&wgpu::BindGroup> {
 		self.bind_group.as_ref()
+	}
+	#[inline] pub fn set_bind_group(&mut self, bg: Option<wgpu::BindGroup>) {
+		self.bind_group = bg;
+	}
+
+	#[inline] pub const fn finished_gen(&self) -> bool {
+		self.finished_gen
+	}
+
+	#[inline] pub const fn storage(&self) -> &BlockStorage {
+		&self.storage
+	}
+	#[inline] pub fn set_storage(&mut self, storage: BlockStorage) {
+		self.storage = storage;
 	}
 
 	/// Forces storage optimization (useful for debugging or after bulk operations)
-	pub fn optimize_storage(&mut self) {
+	#[inline] pub fn optimize_storage(&mut self) {
 		self.storage.optimize();
 	}
 
 	/// Returns storage type and memory usage for debugging
-	pub fn storage_info(&self) -> (usize, &'static str) {
+	#[inline] pub fn storage_info(&self) -> (usize, &'static str) {
 		self.storage.memory_usage()
 	}
 }

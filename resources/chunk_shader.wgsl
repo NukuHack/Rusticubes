@@ -3,7 +3,7 @@
 @group(2) @binding(0) var<uniform> chunk_pos: u64;
 
 // Assuming CHUNK_SIZE_I is passed as a uniform or constant
-const CHUNK_SIZE_I: i32 = 16i; // Adjust based on your actual chunk size
+const CHUNK_SIZE_I: i32 = 32i;
 
 fn to_world_pos(coord: u64) -> vec3f {
 	// Extract x (26 bits)
@@ -26,11 +26,19 @@ fn to_world_pos(coord: u64) -> vec3f {
 	);
 }
 
+const BLOCK_OFFSET: u32 = 5;
 fn to_chunk_pos(coord: u32) -> vec3f {
     return vec3f(
-        f32((coord >> 0) & 0xF),  // bits 0-3
-        f32((coord >> 4) & 0xF),  // bits 4-7
-        f32((coord >> 8) & 0xF)   // bits 8-11
+        f32((coord >> 0) & 0x1Fu),  // bits 0-5
+        f32((coord >> BLOCK_OFFSET) & 0x1Fu),  // bits 6-10
+        f32((coord >> (BLOCK_OFFSET*2)) & 0x1Fu)   // bits 11-15
+    );
+}
+fn vertex_to_chunk_pos(coord: u32) -> vec3f {
+    return vec3f(
+        f32((coord >> 0) & 0xFu),  // bits 0-4
+        f32((coord >> 4) & 0xFu),  // bits 5-8
+        f32((coord >> 8) & 0xFu)   // bits 9-12
     );
 }
 
@@ -75,12 +83,13 @@ fn vs_main(
 	@builtin(vertex_index) vert_idx: u32
 ) -> VertexOutput {
 	// Unpack vertex position using 4-bit extractor
-	let vertex_pos = to_chunk_pos(vertex_data);
+	let vertex_pos = vertex_to_chunk_pos(vertex_data);
 	// Unpack instance position
 	let instance_pos = to_chunk_pos(instance_data);
+	// 0-15 : pos ; 16-19 : rot ; 19 ... block id
 	
-	// Get normal from instance data (bits 12-15)
-	let normal_idx = (instance_data >> 12u) & 0x7u;
+	// Get normal from instance data (bits 16-19)
+	let normal_idx = (instance_data >> 15u) & 0x7u;
 
 	let model_pos = normal_to_rot(vertex_pos, normal_idx); // Combine vertex and instance positions
 	
@@ -88,7 +97,7 @@ fn vs_main(
 	
 	var output: VertexOutput;
 
-	output.id = (instance_data >> 16u) & 0xFFFu; // (bits 16-32)
+	output.id = instance_data >> 19u; // (bits 19-32) -> no need for masking
 	
 	// Apply chunk position (as translation), then camera view_proj
 	let world_pos = to_world_pos(chunk_pos) + model_pos + instance_pos;

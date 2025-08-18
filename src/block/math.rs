@@ -16,11 +16,10 @@ impl Into<ChunkCoord> for u64 {
 		ChunkCoord(self) // Access the inner u64 value
 	}
 }
-#[allow(dead_code)]
 impl ChunkCoord {
 	pub const ZERO:Self = Self::new(0,0,0);
 	// Use bit shifts that are powers of 2 for better optimization
-	const Z_SHIFT: u8 = 0;
+	//const Z_SHIFT: u8 = 0;
 	const Y_SHIFT: u8 = 26;
 	const X_SHIFT: u8 = 38;
 
@@ -73,7 +72,7 @@ impl ChunkCoord {
 
 	/// Converts to u64 
 	#[inline] pub fn into_u64(self) -> u64 {
-		self.into()
+		u64::from(self)
 	}
 
 	/// Converts to world position (chunk min corner)
@@ -176,25 +175,25 @@ impl std::ops::Add for ChunkCoord {
 /// Compact position within a chunk (0-15 on each axis)
 // 2 ; 4 ; 8 ; 16 ; 32
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct BlockPosition(u16);
+pub struct LocalPos(u16);
 
-impl BlockPosition {
+impl LocalPos {
 	pub const ZERO:Self = Self::new(0,0,0);
 	pub const CORNER:Self = Self::new(Chunk::SIZE as u8 -1, Chunk::SIZE as u8 -1, Chunk::SIZE as u8 -1);
-	pub const OFFSET:u8 = 4;
-    pub const MASK: u16 = (1 << Self::OFFSET) - 1;
+	pub const OFFSET:u8 = 5;
+	pub const MASK: u16 = (1 << Self::OFFSET) - 1;
 
-	/// Creates a new BlockPosition from x,y,z coordinates (0-15)
+	/// Creates a new LocalPos from x,y,z coordinates (0-15)
 	#[inline] pub const fn new(x: u8, y: u8, z: u8) -> Self {
 		Self((x as u16) << Self::OFFSET*0 | ((y as u16) << Self::OFFSET*1) | ((z as u16) << Self::OFFSET*2))
 	}
 
 	/// Universal constructor from any convertible type
 	#[inline]
-	pub fn from<T: Into<BlockPosition>>(value: T) -> Self {
+	pub fn from<T: Into<LocalPos>>(value: T) -> Self {
 		value.into()
 	}
-	/// Creates a new BlockPosition from a linear index (0-4095)
+	/// Creates a new LocalPos from a linear index (0-4095)
 	#[inline] pub const fn from_index(index: u16) -> Self {
 		debug_assert!(index < Chunk::VOLUME as u16, "Index must be 0-Chunk::VOLUME");
 		Self(index)
@@ -230,7 +229,7 @@ impl BlockPosition {
 	}
 
 	/// Returns the 6 directly adjacent block positions within the chunk (no diagonals)
-	#[inline] pub const fn get_adjacent(&self) -> [BlockPosition; 6] {
+	#[inline] pub const fn get_adjacent(&self) -> [LocalPos; 6] {
 		[
 			self.offset(-1, 0, 0), // -X
 			self.offset(1, 0, 0),  // +X
@@ -241,8 +240,16 @@ impl BlockPosition {
 		]
 	}
 
+	#[inline] pub fn to_chunk_coord(&self) -> ChunkCoord {
+		ChunkCoord::new(
+			self.x() as i32,
+			self.y() as i32,
+			self.z() as i32
+		)
+	}
+
 	/// Checks if this position is adjacent to another position
-	#[inline] pub const fn is_adjacent(&self, other: BlockPosition) -> bool {
+	#[inline] pub const fn is_adjacent(&self, other: LocalPos) -> bool {
 		let dx = self.x().abs_diff(other.x());
 		let dy = self.y().abs_diff(other.y());
 		let dz = self.z().abs_diff(other.z());
@@ -250,7 +257,7 @@ impl BlockPosition {
 	}
 
 	/// Returns an iterator over all 26 neighboring positions
-	pub fn neighbors(&self) -> impl Iterator<Item = BlockPosition> {
+	pub fn neighbors(&self) -> impl Iterator<Item = LocalPos> {
 		let pos = *self;
 		(-1..=1).flat_map(move |dx| {
 			(-1..=1).flat_map(move |dy| {
@@ -271,7 +278,7 @@ impl BlockPosition {
 mod conversions {
 	use super::*;
 	
-	impl From<(f32, f32, f32)> for BlockPosition {
+	impl From<(f32, f32, f32)> for LocalPos {
 		#[inline]
 		fn from((x, y, z): (f32, f32, f32)) -> Self {
 			let chunk_size = Chunk::SIZE_I;
@@ -283,28 +290,28 @@ mod conversions {
 		}
 	}
 	// (u8, u8, u8) conversions
-	impl From<(u8, u8, u8)> for BlockPosition {
+	impl From<(u8, u8, u8)> for LocalPos {
 		#[inline]
 		fn from((x, y, z): (u8, u8, u8)) -> Self {
 			Self::new(x, y, z)
 		}
 	}
 	// (usize, usize, usize) conversions
-	impl From<(usize, usize, usize)> for BlockPosition {
+	impl From<(usize, usize, usize)> for LocalPos {
 		#[inline]
 		fn from((x, y, z): (usize, usize, usize)) -> Self {
 			Self::new(x as u8, y as u8, z as u8)
 		}
 	}
-	impl From<BlockPosition> for (u8, u8, u8) {
+	impl From<LocalPos> for (u8, u8, u8) {
 		#[inline]
-		fn from(pos: BlockPosition) -> Self {
+		fn from(pos: LocalPos) -> Self {
 			(pos.x(), pos.y(), pos.z())
 		}
 	}
 
 	// Vec3 conversions
-	impl From<Vec3> for BlockPosition {
+	impl From<Vec3> for LocalPos {
 		#[inline]
 		fn from(vec: Vec3) -> Self {
 			let chunk_size = Chunk::SIZE_I;
@@ -315,19 +322,19 @@ mod conversions {
 			)
 		}
 	}
-	impl From<BlockPosition> for Vec3 {
+	impl From<LocalPos> for Vec3 {
 		#[inline]
-		fn from(pos: BlockPosition) -> Self {
-			Vec3::new(pos.x().into(), pos.y().into(), pos.z().into())
+		fn from(pos: LocalPos) -> Self {
+			Vec3::new(pos.x() as f32, pos.y() as f32, pos.z() as f32)
 		}
 	}
-	impl From<BlockPosition> for IVec3 {
+	impl From<LocalPos> for IVec3 {
 		#[inline]
-		fn from(pos: BlockPosition) -> Self {
-			IVec3::new(pos.x().into(), pos.y().into(), pos.z().into())
+		fn from(pos: LocalPos) -> Self {
+			IVec3::new(pos.x() as i32, pos.y() as i32, pos.z() as i32)
 		}
 	}
-	impl From<IVec3> for BlockPosition {
+	impl From<IVec3> for LocalPos {
 		#[inline]
 		fn from(vec: IVec3) -> Self {
 			let chunk_size = Chunk::SIZE_I;
@@ -340,29 +347,29 @@ mod conversions {
 	}
 
 	// u16 conversions
-	impl From<u16> for BlockPosition {
+	impl From<u16> for LocalPos {
 		#[inline]
 		fn from(index: u16) -> Self {
 			Self::from_index(index)
 		}
 	}
-	impl From<BlockPosition> for u16 {
+	impl From<LocalPos> for u16 {
 		#[inline]
-		fn from(pos: BlockPosition) -> Self {
+		fn from(pos: LocalPos) -> Self {
 			pos.index()
 		}
 	}
 
 	// usize conversions (example of additional type)
-	impl From<usize> for BlockPosition {
+	impl From<usize> for LocalPos {
 		#[inline]
 		fn from(index: usize) -> Self {
 			Self::from_index(index as u16)
 		}
 	}
-	impl From<BlockPosition> for usize {
+	impl From<LocalPos> for usize {
 		#[inline]
-		fn from(pos: BlockPosition) -> Self {
+		fn from(pos: LocalPos) -> Self {
 			pos.index() as usize
 		}
 	}

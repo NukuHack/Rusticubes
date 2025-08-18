@@ -1,10 +1,7 @@
 
-use crate::render::world::NeighboringChunks;
-use crate::block::main::Chunk;
-use crate::block::math::BlockPosition;
+use wgpu::util::DeviceExt;
 use glam::IVec3;
 use std::mem;
-use wgpu::util::DeviceExt;
 
 // =============================================
 // Vertex Definition
@@ -14,12 +11,12 @@ use wgpu::util::DeviceExt;
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable, Default)]
 pub struct Vertex {
-	pub position: u32,  // 5 bits per axis (x,y,z)
+	pub position: u32,  // 4 bits per axis (x,y,z)
 }
 #[repr(C)]
 #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct InstanceRaw {
-	pub packed_data: u32,  // 5 bits per axis (x,y,z) + normal index in bits 16-18
+	pub packed_data: u32,  // 5 bits per axis (x,y,z) + normal index in 3 bits
 }
 
 impl Vertex {
@@ -38,10 +35,8 @@ impl Vertex {
 			],
 		}
 	}
-	pub const fn new(pos: u32) -> Self {
-		Self{
-			position: pos
-		}
+	pub const fn new(position: u32) -> Self {
+		Self{ position }
 	}
 }
 impl InstanceRaw {
@@ -72,69 +67,17 @@ impl ChunkMeshBuilder {
 	/// Creates a new mesh builder with optimized initial capacity
 	#[inline] pub fn new() -> Self {
 		Self { // set the starting capacity smaller because now with all the culling there is chance for a chunk to be invisible
-			instances: Vec::with_capacity(Chunk::SIZE),
+			instances: Vec::new(),
 		}
 	}
 	#[inline] pub fn build(self, device: &wgpu::Device) -> GeometryBuffer {
 		GeometryBuffer::new(device, &self.instances)
 	}
-	// pos is allways 0-15
-	pub fn add_cube(&mut self, pos: IVec3, id: u16, chunk: &Chunk, neighbors: &NeighboringChunks) {
-		for (idx, normal) in CUBE_FACES.iter().enumerate() {
-			let neighbor_pos: IVec3 = pos + *normal;
-			
-			if !self.should_cull_face(neighbor_pos, chunk, &neighbors) {
-				let pos = u16::from(BlockPosition::from(pos)) as u32;
-				self.instances.push(InstanceRaw {
-					packed_data: (pos | (idx as u32) << 12 | (id as u32) << 16)
-				});
-			}
-		}
-	}
-	#[inline] fn should_cull_face(&self, pos: IVec3, chunk: &Chunk, neighbors: &NeighboringChunks) -> bool {    
-		// Check if position is inside current chunk
-		let idx = usize::from(BlockPosition::from(pos));
-		if chunk.contains_position(pos) {
-			return !chunk.get_block(idx).is_empty();
-		}
-		
-		// Position is in neighboring chunk
-		let neighbor_chunk = self.get_neighbor_chunk_and_local_pos(pos, &neighbors);
-		
-		match neighbor_chunk {
-			Some(chunk) => {
-				!chunk.get_block(idx).is_empty()
-			}, 
-			None => true, // No neighbor chunk means not loaded cull for now and reload mesh if it loads in
-		}
-	}
-	#[inline] fn get_neighbor_chunk_and_local_pos<'a>(&self, neighbor_pos: IVec3, neighbors: &NeighboringChunks<'a>) -> Option<&'a Chunk> {
-		// Calculate which neighbor we need to check
-		// The neighbor indices should match the order in CUBE_FACES_F:
-		// [0] = Left (-X), [1] = Right (+X), [2] = Front (-Z), [3] = Back (+Z), [4] = Top (+Y), [5] = Bottom (-Y)
-		// Precompute the bit patterns for comparison (avoids FP math)
-
-		// Chunk boundaries in i32 coordinates
-		const LEFT_EDGE: i32 = -1;
-		const RIGHT_EDGE: i32 = Chunk::SIZE_I;
-		
-		// Check X axis first (most common)
-		if neighbor_pos.x == LEFT_EDGE { return neighbors.left(); }  // -X (Left)
-		if neighbor_pos.x == RIGHT_EDGE { return neighbors.right(); }  // +X (Right)
-		// Then Z axis
-		if neighbor_pos.z == LEFT_EDGE { return neighbors.front(); }  // -Z (Front)
-		if neighbor_pos.z == RIGHT_EDGE { return neighbors.back(); }  // +Z (Back)
-		// Finally Y axis
-		if neighbor_pos.y == RIGHT_EDGE { return neighbors.top(); }  // +Y (Top)
-		if neighbor_pos.y == LEFT_EDGE { return neighbors.bottom(); }   // -Y (Bottom)
-		
-		unreachable!("Position should be outside current chunk");  // Position is inside current chunk
-	}
 }
 
 /// Make sure your CUBE_FACES constant matches the neighbor array order:
 /// Normal vectors for face lookup
-const CUBE_FACES: [IVec3; 6] = [
+pub const CUBE_FACES: [IVec3; 6] = [
 	IVec3::NEG_X, // [0] Left face
 	IVec3::X,     // [1] Right face  
 	IVec3::NEG_Z, // [2] Front face

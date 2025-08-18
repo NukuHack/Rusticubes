@@ -1,5 +1,6 @@
 
-use crate::block::math::{BlockRotation, ChunkCoord};
+use crate::world::region::Region;
+use crate::block::math::{BlockRotation, ChunkCoord, LocalPos};
 use crate::block::main::{Block, Material, StorageType, Chunk, BlockStorage};
 use crate::fs::binary::{BinarySerializable, FixedBinarySerializable};
 
@@ -25,6 +26,40 @@ impl BinarySerializable for ChunkCoord {
 }
 
 impl FixedBinarySerializable for ChunkCoord {
+	const BINARY_SIZE: usize = 8;
+}
+
+impl BinarySerializable for LocalPos {
+	fn to_binary(&self) -> Vec<u8> {
+		self.index().to_binary()
+	}
+	fn from_binary(bytes: &[u8]) -> Option<Self> {
+		let value = u16::from_binary(bytes)?;
+		Some(Self::from_index(value))
+	}
+	fn binary_size(&self) -> usize {
+		Self::BINARY_SIZE
+	}
+}
+
+impl FixedBinarySerializable for LocalPos {
+	const BINARY_SIZE: usize = 2;
+}
+
+impl BinarySerializable for Region {
+	fn to_binary(&self) -> Vec<u8> {
+		self.into_u64().to_binary()
+	}
+	fn from_binary(bytes: &[u8]) -> Option<Self> {
+		let value = u64::from_binary(bytes)?;
+		Some(value.into())
+	}
+	fn binary_size(&self) -> usize {
+		Self::BINARY_SIZE
+	}
+}
+
+impl FixedBinarySerializable for Region {
 	const BINARY_SIZE: usize = 8;
 }
 
@@ -259,21 +294,15 @@ impl BinarySerializable for BlockStorage {
 impl BinarySerializable for Chunk {
 	fn to_binary(&self) -> Vec<u8> {
 		// Since storage now contains the palette, we just serialize the storage
-		self.storage.to_rle().unwrap_or_else(|| self.storage.clone()).to_binary()
+		self.storage().to_rle().unwrap_or_else(|| self.storage().clone()).to_binary()
 	}
 	fn from_binary(bytes: &[u8]) -> Option<Self> {
 		let storage = BlockStorage::from_binary(bytes)?;
 		
-		Some(Chunk {
-			storage,
-			dirty: true,
-			final_mesh: false,
-			mesh: None,
-			bind_group: None,
-		})
+		Some(Chunk::from_storage(storage))
 	}
 	fn binary_size(&self) -> usize {
-		self.storage.binary_size()
+		self.storage().binary_size()
 	}
 }
 

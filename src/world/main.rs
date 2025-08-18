@@ -1,7 +1,7 @@
 
 use crate::{
 	block::{
-		math::{BlockPosition, ChunkCoord},
+		math::{LocalPos, ChunkCoord},
 		main::{Block, Chunk},
 	},
 	world::threading::PriorityChunk,
@@ -88,8 +88,8 @@ impl World {
 
 	#[inline] pub fn get_block(&self, world_pos: IVec3) -> Block {
 		let chunk_coord = ChunkCoord::from_world_pos(world_pos);
-		let local_pos: BlockPosition = world_pos.into();
-		let index: usize = local_pos.into();
+		let local_pos: LocalPos = LocalPos::from(world_pos);
+		let index: usize = usize::from(local_pos);
 
 		self.chunks
 			.get(&chunk_coord)
@@ -99,8 +99,8 @@ impl World {
 
 	#[inline] pub fn set_block(&mut self, world_pos: IVec3, block: Block) {
 		let chunk_coord = ChunkCoord::from_world_pos(world_pos);
-		let local_pos: BlockPosition = world_pos.into();
-		let index: usize = local_pos.into();
+		let local_pos: LocalPos = LocalPos::from(world_pos);
+		let index: usize = usize::from(local_pos);
 		
 		// Check if we need to create a new chunk
 		if !self.chunks.contains_key(&chunk_coord) {
@@ -126,7 +126,7 @@ impl World {
 		chunk.set_block(index, block);
 		
 		// If this is a border block, mark adjacent chunks as needing mesh update
-		if chunk.is_border_block(local_pos.into()) {
+		if chunk.is_border_block(IVec3::from(local_pos)) {
 			self.set_adjacent_un_final(chunk_coord);
 		}
 	}
