@@ -1,7 +1,7 @@
 
 use crate::item::ui_inventory::InventoryLayout;
 use crate::item::items::ItemStack;
-use crate::utils::click::ClickMode;
+use crate::utils::input::ClickMode;
 
 #[derive(PartialEq, Clone, Copy, Debug)]
 pub enum AreaType { 

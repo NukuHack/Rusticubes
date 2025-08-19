@@ -8,7 +8,7 @@ use winit::{
 	event::{ElementState, MouseButton, WindowEvent, MouseScrollDelta},
 	keyboard::KeyCode as Key,
 };
-use crate::utils::click::ClickMode;
+use crate::utils::input::ClickMode;
 
 impl<'a> crate::State<'a> {
 
@@ -68,9 +68,9 @@ impl<'a> crate::State<'a> {
 			},
 			WindowEvent::ModifiersChanged(modifiers) => {
 				let change = self.input_system.compare(&modifiers.state());
-				self.input_system.modifiers = modifiers.state();
+				self.input_system.set_modifiers(modifiers.state());
 				if change.alt_key() {
-					if self.input_system.modifiers.alt_key() {
+					if self.input_system.modifiers().alt_key() {
 						self.toggle_mouse_capture();
 					}
 					self.center_mouse();
@@ -151,11 +151,11 @@ impl<'a> crate::State<'a> {
 					match self.ui_manager.state.clone() {
 						UIState::Inventory(_) => {
 							manager::close_pressed();
-							if !self.input_system.mouse_captured() { self.toggle_mouse_capture(); }
+							if !self.input_system.is_mouse_captured() { self.toggle_mouse_capture(); }
 						},
 						UIState::InGame => {
 							self.ui_manager.state = UIState::Inventory(InventoryUIState::default());
-							if self.input_system.mouse_captured() { self.toggle_mouse_capture(); }
+							if self.input_system.is_mouse_captured() { self.toggle_mouse_capture(); }
 						}
 						_ => return false,
 					}
@@ -181,11 +181,11 @@ impl<'a> crate::State<'a> {
 					match self.ui_manager.state.clone() {
 						UIState::Inventory(_) => {
 							manager::close_pressed();
-							if !self.input_system.mouse_captured() { self.toggle_mouse_capture(); }
+							if !self.input_system.is_mouse_captured() { self.toggle_mouse_capture(); }
 						},
 						UIState::InGame => {
 							self.ui_manager.state = UIState::Inventory(InventoryUIState::craft().input(storage.slots()).b());
-							if self.input_system.mouse_captured() { self.toggle_mouse_capture(); }
+							if self.input_system.is_mouse_captured() { self.toggle_mouse_capture(); }
 						}
 						_ => return false,
 					}
@@ -210,7 +210,7 @@ impl<'a> crate::State<'a> {
 				if !is_pressed { return false; }
 
 				self.ui_manager.toggle_visibility();
-				return true
+				return true;
 			},
 			Key::F11 => {
 				if !is_pressed { return false; }
@@ -238,60 +238,51 @@ impl<'a> crate::State<'a> {
 		let WindowEvent::MouseInput { button, state, device_id: _ } = event else { return false; };
 
 		// Use the stored current mouse position
-		let (x, y) = convert_mouse_position(self.render_context.size.into(), &self.input_system.previous_mouse);
-		let mods = self.input_system.modifiers; let shift = mods.shift_key();
+		let (x, y) = convert_mouse_position(self.render_context.size.into(), &self.input_system.previous_mouse());
+		let mods = self.input_system.modifiers(); let shift = mods.shift_key();
 
 		let pressed = *state == ElementState::Pressed;
+		
+		self.input_system.handle_mouse_event(*button, pressed, *self.input_system.previous_mouse());
 		match button {
 			MouseButton::Left => {
-				self.input_system.mouse_button_state.left = pressed;
-				if pressed && self.input_system.mouse_captured() {
+				if pressed && self.input_system.is_mouse_captured() {
 					self.handle_lclick_interaction();
 					return true;
 				}
 				if self.ui_manager.visibility {
 					self.ui_manager.handle_mouse_click(x, y, pressed, shift, ClickMode::Left);
 				}
-				true
-			}
+			},
 			MouseButton::Right => {
-				self.input_system.mouse_button_state.right = pressed;
-				if pressed && self.input_system.mouse_captured() {
+				if pressed && self.input_system.is_mouse_captured() {
 					self.handle_rclick_interaction();
 					return true;
 				}
 				if self.ui_manager.visibility {
 					self.ui_manager.handle_mouse_click(x, y, pressed, shift, ClickMode::Right);
 				}
-				true
-			}
+			},
 			MouseButton::Middle => {
-				self.input_system.mouse_button_state.middle = pressed;
-				if pressed && self.input_system.mouse_captured() {
+				if pressed && self.input_system.is_mouse_captured() {
 					//self.handle_mclick_interaction(); // will have to make a Middle click interaction too (for picking the block)
 					return true;
 				}
 				if self.ui_manager.visibility {
 					self.ui_manager.handle_mouse_click(x, y, pressed, shift, ClickMode::Middle);
 				}
-				true
-			}
-			MouseButton::Back => {
-				self.input_system.mouse_button_state.back = pressed;
-				true
-			}
-			MouseButton::Forward => {
-				self.input_system.mouse_button_state.forward = pressed;
-				true
-			}
-			MouseButton::Other(_) => false,
+			},
+			MouseButton::Back => {},
+			MouseButton::Forward => {},
+			MouseButton::Other(_) => {},
 		}
+		true
 	}
 	#[inline]
 	pub fn handle_mouse_move(&mut self, event: &WindowEvent) -> bool {
 		let WindowEvent::CursorMoved { position, device_id: _ } = event else { return false; };
 
-		if self.input_system.mouse_captured() {
+		if self.input_system.is_mouse_captured() {
 			// Calculate relative movement from center
 			let size = self.size();
 			let center_x = size.width as f64 / 2.0;
@@ -307,15 +298,15 @@ impl<'a> crate::State<'a> {
 			}
 			// Reset cursor to center
 			self.center_mouse();
-			self.input_system.previous_mouse = winit::dpi::PhysicalPosition::new(center_x, center_y);
+			self.input_system.handle_mouse_move(winit::dpi::PhysicalPosition::new(center_x, center_y));
 			return true;
 		} else {
 			let (x, y) = convert_mouse_position(self.render_context.size.into(), position);
 			// Handle normal mouse movement for UI
 			if self.ui_manager.visibility {
-				self.ui_manager.handle_mouse_move(x, y, self.input_system.mouse_button_state.left);
+				self.ui_manager.handle_mouse_move(x, y, self.input_system.mouse_button_state().left);
 			}
-			self.input_system.previous_mouse = *position;
+			self.input_system.handle_mouse_move(*position);
 			return true;
 		}
 	}
@@ -334,7 +325,7 @@ impl<'a> crate::State<'a> {
 	}
 
 	pub fn converted_mouse_position(&self) -> (f32, f32) {
-		convert_mouse_position(self.render_context.size.into(), &self.input_system.previous_mouse)
+		convert_mouse_position(self.render_context.size.into(), &self.input_system.previous_mouse())
 	}
 
 }
@@ -450,7 +441,7 @@ impl<'a> crate::State<'a> {
 			} else {
 				self.ui_manager.state = UIState::Inventory(InventoryUIState::str().size(storage.slots()).b());
 			}
-			if self.input_system.mouse_captured() { self.toggle_mouse_capture(); }
+			if self.input_system.is_mouse_captured() { self.toggle_mouse_capture(); }
 		}
 
 		let storage_ptr: *mut ItemContainer = storage;

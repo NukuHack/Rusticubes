@@ -17,7 +17,5 @@ pub mod utils {
     pub mod cursor;
     /// Time formatting is a pretty struct.
     pub mod time;
-    /// Small enum for event handling ease
-    pub mod click;
 }
 

@@ -6,7 +6,7 @@ use crate::{
 		element::{UIElement, UIElementData},
 	},
 	item::ui_inventory::{ClickResult, InventoryUIState},
-	utils::click::ClickMode,
+	utils::input::ClickMode,
 };
 
 impl UIManager {

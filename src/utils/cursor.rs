@@ -17,7 +17,7 @@ impl<'a> crate::State<'a> {
 	#[inline]
 	pub fn toggle_mouse_capture(&mut self) {
 		if self.is_world_running  && ptr::get_gamestate().is_running() {
-			if self.input_system.mouse_captured() {
+			if self.input_system.is_mouse_captured() {
 				let player = &mut ptr::get_gamestate().player_mut();
 				player.set_camera_mode(player::CameraMode::Smooth);
 				self.input_system.set_mouse_captured(false);

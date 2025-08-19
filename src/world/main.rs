@@ -125,9 +125,50 @@ impl World {
 		let chunk = self.chunks.get_mut(&chunk_coord).expect("Chunk should exist");
 		chunk.set_block(index, block);
 		
-		// If this is a border block, mark adjacent chunks as needing mesh update
-		if chunk.is_border_block(IVec3::from(local_pos)) {
-			self.set_adjacent_un_final(chunk_coord);
+		self.set_some_un_final(chunk_coord, IVec3::from(local_pos));
+	}
+
+	/// Marks adjacent chunks as needing mesh updates
+	#[inline] pub fn set_adjacent_un_final(&mut self, chunk_coord: ChunkCoord) {
+		for coord in chunk_coord.get_adjacent() {
+			if let Some(neighbor_chunk) = self.get_chunk_mut(coord) {
+				neighbor_chunk.final_mesh = false;
+			}
+		}
+	}
+	/// Marks adjacent chunks as needing mesh updates when border blocks are modified
+	#[inline] 
+	pub fn set_some_un_final(&mut self, chunk_coord: ChunkCoord, local_pos: IVec3) {
+		let chunk_size = Chunk::SIZE_I;
+		// Check each axis independently for maximum speed
+		if local_pos.x == 0 {
+			if let Some(chunk) = self.get_chunk_mut(chunk_coord.offset(-1, 0, 0)) {
+				chunk.final_mesh = false;
+			}
+		} else if local_pos.x == chunk_size - 1 {
+			if let Some(chunk) = self.get_chunk_mut(chunk_coord.offset(1, 0, 0)) {
+				chunk.final_mesh = false;
+			}
+		}
+		
+		if local_pos.y == 0 {
+			if let Some(chunk) = self.get_chunk_mut(chunk_coord.offset(0, -1, 0)) {
+				chunk.final_mesh = false;
+			}
+		} else if local_pos.y == chunk_size - 1 {
+			if let Some(chunk) = self.get_chunk_mut(chunk_coord.offset(0, 1, 0)) {
+				chunk.final_mesh = false;
+			}
+		}
+		
+		if local_pos.z == 0 {
+			if let Some(chunk) = self.get_chunk_mut(chunk_coord.offset(0, 0, -1)) {
+				chunk.final_mesh = false;
+			}
+		} else if local_pos.z == chunk_size - 1 {
+			if let Some(chunk) = self.get_chunk_mut(chunk_coord.offset(0, 0, 1)) {
+				chunk.final_mesh = false;
+			}
 		}
 	}
 
@@ -216,15 +257,6 @@ impl World {
 		// Queue chunks for generation
 		for chunk in chunks_to_load {
 			self.generate_chunk(chunk);
-		}
-	}
-
-	/// Marks adjacent chunks as needing mesh updates
-	#[inline] pub fn set_adjacent_un_final(&mut self, chunk_coord: ChunkCoord) {
-		for coord in chunk_coord.get_adjacent() {
-			if let Some(neighbor_chunk) = self.get_chunk_mut(coord) {
-				neighbor_chunk.final_mesh = false;
-			}
 		}
 	}
 

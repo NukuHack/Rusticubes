@@ -157,8 +157,10 @@ impl StorageType {
 }
 
 impl BlockStorage {
-	const MAX_SPARSE_PALETTE_SIZE: usize = 256;
-	const MAX_GIANT_PALETTE_SIZE: usize = 4096; // 2^12 = 4096
+	const COMPACT_PALETTE_SIZE: usize = 16; // 0xF
+	const SPARSE_PALETTE_SIZE: usize = 256; // 0xFF
+	const GIANT_PALETTE_SIZE: usize = 4096; // 0xFFF
+											// 0xFFFF = 2^16 aka 32K.. what is currently the chunk size so nothing can be more than that
 
 	/// Creates empty storage (all air blocks)
 	#[inline] pub const fn empty() -> Self {
@@ -225,17 +227,17 @@ impl BlockStorage {
 				let mut new_palette = vec![*current_block];
 				let new_block_idx = Self::add_to_palette(&mut new_palette, block) as u8;
 				
-				if new_palette.len() <= 16 {
+				if new_palette.len() <= Self::COMPACT_PALETTE_SIZE {
 					// Convert to compact storage
 					let mut indices = Box::new([0u8; Chunk::VOLUME/2]);
 					Self::set_compact_index(&mut indices, index, new_block_idx);
 					*self = Self::Compact { palette: new_palette, indices };
-				} else if new_palette.len() <= Self::MAX_SPARSE_PALETTE_SIZE {
+				} else if new_palette.len() <= Self::SPARSE_PALETTE_SIZE {
 					// Convert to sparse storage
 					let mut indices = Box::new([0u8; Chunk::VOLUME]);
 					indices[index] = new_block_idx;
 					*self = Self::Sparse { palette: new_palette, indices };
-				} else if new_palette.len() <= Self::MAX_GIANT_PALETTE_SIZE {
+				} else if new_palette.len() <= Self::GIANT_PALETTE_SIZE {
 					// Convert to giant storage
 					let mut indices = Box::new([0u8; Chunk::VOLUME * 3 / 2]);
 					Self::set_giant_index(&mut *indices, index, new_block_idx as u16);
@@ -250,12 +252,10 @@ impl BlockStorage {
 			Self::Compact { palette, indices } => {
 				let block_idx = Self::add_to_palette(palette, block);
 				
-				if palette.len() <= 16 { 
+				if palette.len() <= Self::COMPACT_PALETTE_SIZE { 
 					Self::set_compact_index(indices, index, block_idx as u8);
 					return;
-				}
-
-				if palette.len() <= Self::MAX_SPARSE_PALETTE_SIZE {
+				} else if palette.len() <= Self::SPARSE_PALETTE_SIZE {
 					// Convert to sparse storage
 					let new_palette = palette.clone();
 					let mut new_indices = Box::new([0u8; Chunk::VOLUME]);
@@ -272,7 +272,7 @@ impl BlockStorage {
 					}
 					new_indices[index] = block_idx as u8;
 					*self = Self::Sparse { palette: new_palette, indices: new_indices };
-				} else if palette.len() <= Self::MAX_GIANT_PALETTE_SIZE {
+				} else if palette.len() <= Self::GIANT_PALETTE_SIZE {
 					// Convert to giant storage
 					let new_palette = palette.clone();
 					let mut new_indices = Box::new([0u8; Chunk::VOLUME * 3 / 2]);
@@ -310,35 +310,33 @@ impl BlockStorage {
 			Self::Sparse { palette, indices } => {
 				let block_idx = Self::add_to_palette(palette, block);
 				
-				if palette.len() > Self::MAX_SPARSE_PALETTE_SIZE {
-					if palette.len() <= Self::MAX_GIANT_PALETTE_SIZE {
-						// Convert to giant storage
-						let new_palette = palette.clone();
-						let mut new_indices = Box::new([0u8; Chunk::VOLUME * 3 / 2]);
-						
-						for i in 0..Chunk::VOLUME {
-							Self::set_giant_index(&mut *new_indices, i, indices[i] as u16);
-						}
-						Self::set_giant_index(&mut *new_indices, index, block_idx as u16);
-						*self = Self::Giant { palette: new_palette, indices: new_indices };
-					} else {
-						// Convert to zigzag storage
-						let mut blocks = Box::new([Block::default(); Chunk::VOLUME]);
-						
-						for i in 0..Chunk::VOLUME {
-							blocks[i] = palette[indices[i] as usize];
-						}
-						blocks[index] = block;
-						*self = Self::Zigzag { blocks };
-					}
-				} else {
+				if palette.len() <= Self::SPARSE_PALETTE_SIZE {
 					indices[index] = block_idx as u8;
+				} else if palette.len() <= Self::GIANT_PALETTE_SIZE {
+					// Convert to giant storage
+					let new_palette = palette.clone();
+					let mut new_indices = Box::new([0u8; Chunk::VOLUME * 3 / 2]);
+					
+					for i in 0..Chunk::VOLUME {
+						Self::set_giant_index(&mut *new_indices, i, indices[i] as u16);
+					}
+					Self::set_giant_index(&mut *new_indices, index, block_idx as u16);
+					*self = Self::Giant { palette: new_palette, indices: new_indices };
+				} else {
+					// Convert to zigzag storage
+					let mut blocks = Box::new([Block::default(); Chunk::VOLUME]);
+					
+					for i in 0..Chunk::VOLUME {
+						blocks[i] = palette[indices[i] as usize];
+					}
+					blocks[index] = block;
+					*self = Self::Zigzag { blocks };
 				}
 			},
 			Self::Giant { palette, indices } => {
 				let block_idx = Self::add_to_palette(palette, block);
 				
-				if palette.len() <= Self::MAX_GIANT_PALETTE_SIZE {
+				if palette.len() <= Self::GIANT_PALETTE_SIZE {
 					Self::set_giant_index(&mut **indices, index, block_idx as u16);
 					return;
 				}
@@ -469,7 +467,7 @@ impl BlockStorage {
 					unique_blocks.insert(block);
 				}
 				
-				if unique_blocks.len() <= Self::MAX_SPARSE_PALETTE_SIZE {
+				if unique_blocks.len() <= Self::SPARSE_PALETTE_SIZE {
 					// Can fit in sparse storage
 					let palette: Vec<Block> = unique_blocks.into_iter().collect();
 					let mut indices = Box::new([0u8; Chunk::VOLUME]);
@@ -500,7 +498,7 @@ impl BlockStorage {
 					used_indices.insert(idx);
 				}
 
-				if used_indices.len() <= 16 {
+				if used_indices.len() <= Self::COMPACT_PALETTE_SIZE {
 					let mut new_palette = Vec::new();
 					let mut index_mapping = std::collections::HashMap::new();
 
@@ -518,7 +516,7 @@ impl BlockStorage {
 					}
 
 					*self = Self::Compact { palette: new_palette, indices: new_indices };
-				} else if used_indices.len() <= Self::MAX_SPARSE_PALETTE_SIZE {
+				} else if used_indices.len() <= Self::SPARSE_PALETTE_SIZE {
 					let mut new_palette = Vec::new();
 					let mut index_mapping = std::collections::HashMap::new();
 
@@ -550,7 +548,7 @@ impl BlockStorage {
 					let block_idx = *used_indices.iter().next().unwrap();
 					let block = palette[block_idx as usize];
 					*self = Self::Uniform { block };
-				} else if used_indices.len() <= 16 {
+				} else if used_indices.len() <= Self::COMPACT_PALETTE_SIZE {
 					// Can fit in compact storage
 					let mut new_palette = Vec::new();
 					let mut index_mapping = std::collections::HashMap::new();
@@ -654,125 +652,215 @@ impl BlockStorage {
 		}
 	}
 }
+
 impl BlockStorage {
 	/// Convert to RLE format only if it would save memory
 	pub fn to_rle(&self) -> Option<BlockStorage> {
-		let rle: Self = match self {
+		let rle = match self {
+			BlockStorage::Uniform { block } => {
+				// For uniform storage, create a single run covering the entire chunk
+				Self::Rle { 
+					palette: vec![*block], 
+					runs: vec![(0, (Chunk::VOLUME - 1) as u8)] // (palette_index, count-1)
+				}
+			}
 			BlockStorage::Compact { palette, indices } => {
 				let mut runs = Vec::with_capacity(32);
-				let mut current_block = indices[0] >> 4;
-				let mut count = 0; // Start counting from 0 (stored count = actual - 1)
+				let mut current_block_idx = Self::get_compact_index(&**indices, 0);
+				let mut count = 0u8;
 				
-				// Process first nibble
 				for i in 1..Chunk::VOLUME {
-					let index = if i % 2 == 0 {
-						indices[i/2] >> 4
-					} else {
-						indices[i/2] & 0x0F
-					};
+					let block_idx = Self::get_compact_index(&**indices, i);
 					
-					if index == current_block && count < u8::MAX - 1 { // Leave room for +1
+					if block_idx == current_block_idx && count < u8::MAX {
 						count += 1;
 					} else {
-						runs.push((count, current_block));
-						current_block = index;
+						runs.push((current_block_idx, count));
+						current_block_idx = block_idx;
 						count = 0;
 					}
 				}
 				
 				// Push the last run
-				runs.push((count, current_block));
+				runs.push((current_block_idx, count));
 				
 				Self::Rle { palette: palette.clone(), runs }
 			}
 			BlockStorage::Sparse { palette, indices } => {
 				let mut runs = Vec::with_capacity(32);
-				let mut current_block = indices[0];
-				let mut count = 0; // Start counting from 0 (stored count = actual - 1)
+				let mut current_block_idx = indices[0];
+				let mut count = 0u8;
 				
-				for &block in indices.iter().skip(1) {
-					if block == current_block && count < u8::MAX - 1 { // Leave room for +1
+				for &block_idx in indices.iter().skip(1) {
+					if block_idx == current_block_idx && count < u8::MAX {
 						count += 1;
 					} else {
-						runs.push((count, current_block));
-						current_block = block;
+						runs.push((current_block_idx, count));
+						current_block_idx = block_idx;
 						count = 0;
 					}
 				}
 				
 				// Push the last run
-				runs.push((count, current_block));
+				runs.push((current_block_idx, count));
 				
 				Self::Rle { palette: palette.clone(), runs }
 			}
-			_ => return None,
+			BlockStorage::Giant { palette, indices } => {
+				let mut runs = Vec::with_capacity(32);
+				let mut current_block_idx = Self::get_giant_index(&**indices, 0) as u8;
+				let mut count = 0u8;
+				
+				for i in 1..Chunk::VOLUME {
+					let block_idx = Self::get_giant_index(&**indices, i) as u8;
+					
+					if block_idx == current_block_idx && count < u8::MAX {
+						count += 1;
+					} else {
+						runs.push((current_block_idx, count));
+						current_block_idx = block_idx;
+						count = 0;
+					}
+				}
+				
+				// Push the last run
+				runs.push((current_block_idx, count));
+				
+				Self::Rle { palette: palette.clone(), runs }
+			}
+			BlockStorage::Zigzag { blocks } => {
+				// Build palette from unique blocks
+				let mut palette = Vec::new();
+				let mut block_to_index = std::collections::HashMap::new();
+				
+				for &block in blocks.iter() {
+					if !block_to_index.contains_key(&block) {
+						block_to_index.insert(block, palette.len() as u8);
+						palette.push(block);
+					}
+				}
+				
+				// Create runs
+				let mut runs = Vec::with_capacity(32);
+				let mut current_block_idx = block_to_index[&blocks[0]];
+				let mut count = 0u8;
+				
+				for &block in blocks.iter().skip(1) {
+					let block_idx = block_to_index[&block];
+					
+					if block_idx == current_block_idx && count < u8::MAX {
+						count += 1;
+					} else {
+						runs.push((current_block_idx, count));
+						current_block_idx = block_idx;
+						count = 0;
+					}
+				}
+				
+				// Push the last run
+				runs.push((current_block_idx, count));
+				
+				Self::Rle { palette, runs }
+			}
+			BlockStorage::Rle { .. } => {
+				// Already RLE, return None
+				return None;
+			}
 		};
 
 		// Calculate memory sizes
-		let original_size = self.memory_usage();
-		let rle_size = rle.memory_usage();
+		let original_size = self.memory_usage().0;
+		let rle_size = rle.memory_usage().0;
 
-		// Only return RLE if it's smaller
-		if rle_size < original_size {
+		// Only return RLE if it's significantly smaller (at least 10% savings)
+		if rle_size < original_size * 9 / 10 {
 			Some(rle)
 		} else {
 			None
 		}
 	}
 
-	/// Convert from RLE format to Compact/Sparse storage
+	/// Convert from RLE format to the most appropriate storage format
 	pub fn from_rle(&self) -> Option<Self> {
-		let Self::Rle { palette, runs } = self  else { return None; };
+		let Self::Rle { palette, runs } = self else { return None; };
 
-		// First determine if we should use Compact or Sparse storage
-		// Compact is more efficient when palette size <= 16
-		if palette.len() <= 16 {
+		// Validate that runs cover the entire chunk
+		let total_blocks: usize = runs.iter().map(|(_, count)| *count as usize + 1).sum();
+		if total_blocks != Chunk::VOLUME {
+			println!("RLE runs don't cover entire chunk: {} blocks instead of {}", total_blocks, Chunk::VOLUME);
+			return None;
+		}
+
+		// Determine the best storage format based on palette size
+		if palette.len() == 1 {
+			// Single block type - use uniform
+			Some(BlockStorage::Uniform { block: palette[0] })
+		} else if palette.len() <= Self::COMPACT_PALETTE_SIZE {
+			// Use compact storage
 			let mut indices = Box::new([0u8; Chunk::VOLUME/2]);
-			let mut pos: usize = 0;
+			let mut pos = 0;
 			
-			for &(count, index) in runs {
-				for _ in 0..=count { // =count because stored count is actual-1
+			for &(palette_idx, count) in runs {
+				for _ in 0..=count { // count is stored as actual_count - 1
 					if pos >= Chunk::VOLUME { break; }
-					let nibble_pos = pos / 2;
-					if pos % 2 == 0 {
-						indices[nibble_pos] = ((index << 4) & 0xF0) | (indices[nibble_pos] & 0x0F);
-					} else {
-						indices[nibble_pos] = (indices[nibble_pos] & 0xF0) | (index & 0x0F);
-					}
+					Self::set_compact_index(&mut indices, pos, palette_idx);
 					pos += 1;
 				}
-			}
-			
-			if pos != Chunk::VOLUME {
-				println!("not all blocks filled, only: {}", pos);
-				return None;
 			}
 			
 			Some(BlockStorage::Compact {
-				palette: palette.to_vec(),
+				palette: palette.clone(),
 				indices,
 			})
-		} else {
+		} else if palette.len() <= Self::SPARSE_PALETTE_SIZE {
+			// Use sparse storage
 			let mut indices = Box::new([0u8; Chunk::VOLUME]);
 			let mut pos = 0;
 			
-			for &(count, index) in runs {
-				for _ in 0..=count { // =count because stored count is actual-1
+			for &(palette_idx, count) in runs {
+				for _ in 0..=count { // count is stored as actual_count - 1
 					if pos >= Chunk::VOLUME { break; }
-					indices[pos] = index;
+					indices[pos] = palette_idx;
 					pos += 1;
 				}
 			}
 			
-			if pos != Chunk::VOLUME {
-				println!("not all blocks filled, only: {}", pos);
-				return None;
-			}
-			
 			Some(BlockStorage::Sparse {
-				palette: palette.to_vec(),
+				palette: palette.clone(),
 				indices,
 			})
+		} else if palette.len() <= Self::GIANT_PALETTE_SIZE {
+			// Use giant storage
+			let mut indices = Box::new([0u8; Chunk::VOLUME * 3 / 2]);
+			let mut pos = 0;
+			
+			for &(palette_idx, count) in runs {
+				for _ in 0..=count { // count is stored as actual_count - 1
+					if pos >= Chunk::VOLUME { break; }
+					Self::set_giant_index(&mut *indices, pos, palette_idx as u16);
+					pos += 1;
+				}
+			}
+			
+			Some(BlockStorage::Giant {
+				palette: palette.clone(),
+				indices,
+			})
+		} else {
+			// Too many unique blocks - use zigzag storage
+			let mut blocks = Box::new([Block::default(); Chunk::VOLUME]);
+			let mut pos = 0;
+			
+			for &(palette_idx, count) in runs {
+				let block = palette[palette_idx as usize];
+				for _ in 0..=count { // count is stored as actual_count - 1
+					if pos >= Chunk::VOLUME { break; }
+					blocks[pos] = block;
+					pos += 1;
+				}
+			}
+			
+			Some(BlockStorage::Zigzag { blocks })
 		}
 	}
 }
@@ -934,9 +1022,9 @@ impl Chunk {
 	#[inline]
 	pub const fn is_border_block(&self, pos: IVec3) -> bool {
 		// Check if position barely inside the chunk
-		if pos.x == 0 || pos.x == 15
-			|| pos.y == 0 || pos.y == 15
-			|| pos.z == 0 || pos.z == 15
+		if pos.x == 0 || pos.x == Self::SIZE_I-1
+			|| pos.y == 0 || pos.y == Self::SIZE_I-1
+			|| pos.z == 0 || pos.z == Self::SIZE_I-1
 		{
 			return true;
 		}

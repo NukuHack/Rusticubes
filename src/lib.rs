@@ -127,8 +127,6 @@ pub mod utils {
 	pub mod cursor;
 	/// Time formatting is a pretty struct.
 	pub mod time;
-	/// Small enum for event handling ease
-	pub mod click;
 }
 // World related, tiny bit rendering and game related
 pub mod world {
@@ -343,14 +341,15 @@ impl<'a> State<'a> {
 		network::api::update_network(); // theoretically it should run in other thread so calling it each frame should not be a problem ...
 		
 		if self.is_world_running {
+			let game_state = ptr::get_gamestate();
 			let movement_delta = {
-				let player = &mut ext::ptr::get_gamestate().player_mut();
+				let player = &mut game_state.player_mut();
 				player.update(delta_seconds, self.queue())
 			};
 
 			// Update both player and camera positions in one operation
 			{
-				let player = &mut ext::ptr::get_gamestate().player_mut();
+				let player = &mut game_state.player_mut();
 				player.append_position(movement_delta);
 			}
 		}
