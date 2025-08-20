@@ -7,6 +7,7 @@ use crate::{
 		element::{UIElement, UIElementData, ElementData},
 		render::{UIRenderer, Vertex},
 	},
+	utils::input::Keyboard,
 	item::ui_inventory::InventoryUIState
 };
 
@@ -108,6 +109,7 @@ pub fn close_pressed() {
 		UIState::InGame => {
 			state.ui_manager.state = UIState::Escape;
 			let game_state = ptr::get_gamestate();
+			game_state.player_mut().controller_mut().process_keyboard(&Keyboard::default());
 			*game_state.running() = false;
 			state.toggle_mouse_capture();
 		},
@@ -139,6 +141,7 @@ pub fn close_pressed() {
 					inv.add_item_anywhere(itm);
 				}
 			}
+			inv.storage_ptr = None;
 			state.ui_manager.state = UIState::InGame;
 			state.toggle_mouse_capture();
 		},

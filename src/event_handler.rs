@@ -1,4 +1,5 @@
 
+use crate::utils::input::{Keyboard, ClickMode};
 use crate::ext::{ptr, memory};
 use crate::block::extra;
 use crate::ui::manager::{self, UIState};
@@ -8,7 +9,6 @@ use winit::{
 	event::{ElementState, MouseButton, WindowEvent, MouseScrollDelta},
 	keyboard::KeyCode as Key, dpi::PhysicalPosition
 };
-use crate::utils::input::ClickMode;
 
 impl<'a> crate::State<'a> {
 
@@ -57,7 +57,7 @@ impl<'a> crate::State<'a> {
 					self.input_system.clear();
 					if self.is_world_running {
 						self.input_system.reset_keyboard();
-						ptr::get_gamestate().player_mut().controller().process_keyboard(self.input_system.keyboard()); // Temporary workaround
+						ptr::get_gamestate().player_mut().controller_mut().process_keyboard(self.input_system.keyboard()); // Temporary workaround
 					}
 					self.ui_manager.clear_focused_state();
 				} else {
@@ -127,7 +127,7 @@ impl<'a> crate::State<'a> {
 			if let Some(element) = self.ui_manager.get_focused_element() { // if focused you can't press Esc, have to handle them in a custom way
 				if self.is_world_running && element.is_input() {
 					self.input_system.reset_keyboard();
-					ptr::get_gamestate().player_mut().controller().process_keyboard(self.input_system.keyboard()); // Temporary workaround
+					ptr::get_gamestate().player_mut().controller_mut().process_keyboard(self.input_system.keyboard()); // Temporary workaround
 				}
 				if is_pressed {
 					// Handle keys for UI
@@ -142,7 +142,7 @@ impl<'a> crate::State<'a> {
 		// `state` is of type `ElementState` (Pressed or Released)
 		if self.is_world_running && ptr::get_gamestate().is_running() {
 			if matches!(self.ui_manager.state, UIState::InGame)  {
-				ptr::get_gamestate().player_mut().controller().process_keyboard(self.input_system.keyboard());
+				ptr::get_gamestate().player_mut().controller_mut().process_keyboard(self.input_system.keyboard());
 			} // only handle player movement if not in inventory ...
 			match key {
 				Key::KeyG => {
@@ -160,6 +160,8 @@ impl<'a> crate::State<'a> {
 							if !self.input_system.is_mouse_captured() { self.toggle_mouse_capture(); }
 						},
 						UIState::InGame => {
+							let game_state = &mut ptr::get_gamestate();
+							game_state.player_mut().controller_mut().process_keyboard(&Keyboard::default());
 							self.ui_manager.state = UIState::Inventory(InventoryUIState::default());
 							if self.input_system.is_mouse_captured() { self.toggle_mouse_capture(); }
 						}
@@ -181,22 +183,24 @@ impl<'a> crate::State<'a> {
 				Key::KeyR => {
 					if !is_pressed { return false; }
 
-					let game_state = &mut ptr::get_gamestate(); let inv_mut = game_state.player_mut().inventory_mut();
+					let game_state = &mut ptr::get_gamestate(); let play_mut = game_state.player_mut();
 
-					let storage = inv_mut.get_crafting_mut();
 					match self.ui_manager.state.clone() {
 						UIState::Inventory(_) => {
 							manager::close_pressed();
 							if !self.input_system.is_mouse_captured() { self.toggle_mouse_capture(); }
 						},
 						UIState::InGame => {
+							play_mut.controller_mut().process_keyboard(&Keyboard::default());
+							let storage = play_mut.inventory_mut().get_crafting_mut();
 							self.ui_manager.state = UIState::Inventory(InventoryUIState::craft().input(storage.slots()).b());
 							if self.input_system.is_mouse_captured() { self.toggle_mouse_capture(); }
 						}
 						_ => return false,
 					}
+					let storage = play_mut.inventory_mut().get_crafting_mut();
 					let storage_ptr: *mut ItemContainer = storage;
-					inv_mut.storage_ptr = Some(storage_ptr);
+					play_mut.inventory_mut().storage_ptr = Some(storage_ptr);
 
 					self.ui_manager.setup_ui();
 					return true
@@ -293,7 +297,7 @@ impl<'a> crate::State<'a> {
 			// Process mouse movement for camera control
 			let gamestate = ptr::get_gamestate();
 			if self.is_world_running && gamestate.is_running() {
-				gamestate.player_mut().controller().process_mouse(delta_x, delta_y);
+				gamestate.player_mut().controller_mut().process_mouse(delta_x, delta_y);
 			}
 			// Reset cursor to center
 			self.center_mouse();

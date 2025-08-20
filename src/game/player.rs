@@ -202,7 +202,10 @@ impl Player {
 	#[inline] pub fn append_position(&mut self, offset: Vec3) {
 		self.pos += offset;
 	}
-	#[inline] pub const fn controller(&mut self) -> &mut PlayerController {
+	#[inline] pub const fn controller(&self) -> &PlayerController {
+		&self.controller
+	}
+	#[inline] pub const fn controller_mut(&mut self) -> &mut PlayerController {
 		&mut self.controller
 	}
 	/// Sets the movement mode
@@ -239,7 +242,7 @@ impl Player {
 
 /// Handles player input and movement state
 pub struct PlayerController {
-	movement: MovementInputs,
+	keyboard: Keyboard,
 	input_mapping: InputMapping,
 	mouse_delta: Vec3,     // Raw mouse input for this frame
 	velocity: Vec3,
@@ -249,63 +252,11 @@ pub struct PlayerController {
 	current_pitch: f32,    // Current smoothed pitch angle
 }
 
-/// Tracks movement input states using bit flags
-#[derive(Debug, Clone, Copy)]
-pub struct MovementInputs {
-	// Packed movement state: bits 0-5 for directions, bit 6 for run
-	// Bit 0: Forward, Bit 1: Backward, Bit 2: Left, Bit 3: Right, Bit 4: Up, Bit 5: Down, Bit 6: Run
-	state: u8,
-}
-
-impl MovementInputs {
-	const FORWARD: u8 = 1 << 0;
-	const BACKWARD: u8 = 1 << 1;
-	const LEFT: u8 = 1 << 2;
-	const RIGHT: u8 = 1 << 3;
-	const UP: u8 = 1 << 4;
-	const DOWN: u8 = 1 << 5;
-	const RUN: u8 = 1 << 6;
-
-	#[inline] pub const fn set_forward(&mut self, pressed: bool) {
-		self.set_bit(Self::FORWARD, pressed);
-	}
-	#[inline] pub const fn set_backward(&mut self, pressed: bool) {
-		self.set_bit(Self::BACKWARD, pressed);
-	}
-	#[inline] pub const fn set_left(&mut self, pressed: bool) {
-		self.set_bit(Self::LEFT, pressed);
-	}
-	#[inline] pub const fn set_right(&mut self, pressed: bool) {
-		self.set_bit(Self::RIGHT, pressed);
-	}
-	#[inline] pub const fn set_up(&mut self, pressed: bool) {
-		self.set_bit(Self::UP, pressed);
-	}
-	#[inline] pub const fn set_down(&mut self, pressed: bool) {
-		self.set_bit(Self::DOWN, pressed);
-	}
-	#[inline] pub const fn set_run(&mut self, pressed: bool) {
-		self.set_bit(Self::RUN, pressed);
-	}
-
-	#[inline] pub const fn default() -> Self {
-		Self { state: 0 }
-	}
-
-	#[inline] const fn set_bit(&mut self, bit: u8, value: bool) {
-		if value {
-			self.state |= bit;
-		} else {
-			self.state &= !bit;
-		}
-	}
-}
-
 impl PlayerController {
 	/// Creates a new controller with initial state from camera config
 	#[inline] pub const fn new(config: CameraConfig) -> Self {
 		Self {
-			movement: MovementInputs::default(),
+			keyboard: Keyboard::default(),
 			input_mapping: InputMapping::default(),
 			mouse_delta: Vec3::ZERO,
 			velocity: Vec3::ZERO,
@@ -317,21 +268,26 @@ impl PlayerController {
 	}
 
 	pub fn is_running(&self) -> bool {
-		self.movement.state & MovementInputs::RUN != 0
+		let mapping = &self.input_mapping;
+		let keyboard = &self.keyboard;
+		(mapping.run)(keyboard)
 	}
 
 	pub fn get_direction(&self) -> Vec3 {
-		let x = (self.movement.state & MovementInputs::RIGHT != 0) as i8 - (self.movement.state & MovementInputs::LEFT != 0) as i8;
-		let y = (self.movement.state & MovementInputs::UP != 0) as i8 - (self.movement.state & MovementInputs::DOWN != 0) as i8;
-		let z = (self.movement.state & MovementInputs::FORWARD != 0) as i8 - (self.movement.state & MovementInputs::BACKWARD != 0) as i8;
+		let mapping = &self.input_mapping;
+		let keyboard = &self.keyboard;
+		
+		let x = (mapping.right)(keyboard) as i8 - (mapping.left)(keyboard) as i8;
+		let y = (mapping.up)(keyboard) as i8 - (mapping.down)(keyboard) as i8;
+		let z = (mapping.forward)(keyboard) as i8 - (mapping.backward)(keyboard) as i8;
 		
 		Vec3::new(x as f32, y as f32, z as f32).normalize_or_zero()
 	}
 
 	/// Creates a controller with custom input mapping
-	pub fn with_input_mapping(config: CameraConfig, input_mapping: InputMapping) -> Self {
+	pub const fn with_configs(config: CameraConfig, input_mapping: InputMapping) -> Self {
 		Self {
-			movement: MovementInputs::default(),
+			keyboard: Keyboard::default(),
 			input_mapping,
 			mouse_delta: Vec3::ZERO,
 			velocity: Vec3::ZERO,
@@ -344,15 +300,7 @@ impl PlayerController {
 
 	/// Processes keyboard input using the current input mapping
 	pub fn process_keyboard(&mut self, keyboard: &Keyboard) {
-		let mapping = &self.input_mapping;
-		
-		self.movement.set_forward((mapping.forward)(keyboard));
-		self.movement.set_backward((mapping.backward)(keyboard));
-		self.movement.set_left((mapping.left)(keyboard));
-		self.movement.set_right((mapping.right)(keyboard));
-		self.movement.set_up((mapping.up)(keyboard));
-		self.movement.set_down((mapping.down)(keyboard));
-		self.movement.set_run((mapping.run)(keyboard));
+		self.keyboard = *keyboard;
 	}
 
 	/// Updates the input mapping (useful for key remapping)
