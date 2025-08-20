@@ -34,7 +34,10 @@ impl JsonSerializable for ItemComp {
 
 		// Handle extended data
 		let data = if let Some(data_value) = obj.get("data") {
-			parse_extended_data(data_value)?
+			match parse_extended_data(data_value) {
+				Ok(result) => result ,
+				Err(e) => { println!("Error: {:?}", e); None },
+			}
 		} else {
 			None
 		};
@@ -95,11 +98,11 @@ fn parse_extended_data(data_value: &JsonValue) -> Result<Option<ItemExtendedData
 					JsonValue::Object(tool_obj) => {
 						let material = tool_obj.get("material")
 							.and_then(|v| v.as_str())
-							.ok_or_else(|| JsonError::MissingField("tool_data.material is missing or not a string".into()))?;
+							.ok_or_else(|| JsonError::MissingField("'tool_data.material' is missing or not a string".into()))?;
 
-						let equip_type = tool_obj.get("equip_type")
+						let equip_type = tool_obj.get("type")
 							.and_then(|v| v.as_str())
-							.ok_or_else(|| JsonError::MissingField("tool_data.equip_type is missing or not a string".into()))?;
+							.ok_or_else(|| JsonError::MissingField("'tool_data.equip_type' is missing or not a string".into()))?;
 
 						let tier = MaterialLevel::from_str(material)
 							.ok_or_else(|| JsonError::Custom(format!("Invalid material level: {}", material).into()))?;
@@ -118,11 +121,11 @@ fn parse_extended_data(data_value: &JsonValue) -> Result<Option<ItemExtendedData
 
 							let material = tier_obj.get("material")
 								.and_then(|v| v.as_str())
-								.ok_or_else(|| JsonError::MissingField("tool tier material is missing or not a string".into()))?;
+								.ok_or_else(|| JsonError::MissingField("tool tier 'material' is missing or not a string".into()))?;
 
 							let equip_type = tier_obj.get("type")
 								.and_then(|v| v.as_str())
-								.ok_or_else(|| JsonError::MissingField("tool tier type is missing or not a string".into()))?;
+								.ok_or_else(|| JsonError::MissingField("tool tier 'type' is missing or not a string".into()))?;
 
 							let tier = MaterialLevel::from_str(material)
 								.ok_or_else(|| JsonError::Custom(format!("Invalid material level: {}", material).into()))?;
@@ -143,11 +146,11 @@ fn parse_extended_data(data_value: &JsonValue) -> Result<Option<ItemExtendedData
 					JsonValue::Object(armor_obj) => {
 						let material = armor_obj.get("material")
 							.and_then(|v| v.as_str())
-							.ok_or_else(|| JsonError::MissingField("armor_data.material is missing or not a string".into()))?;
+							.ok_or_else(|| JsonError::MissingField("'armor_data.material' is missing or not a string".into()))?;
 
 						let equip_type = armor_obj.get("type")
 							.and_then(|v| v.as_str())
-							.ok_or_else(|| JsonError::MissingField("armor_data.type is missing or not a string".into()))?;
+							.ok_or_else(|| JsonError::MissingField("'armor_data.type' is missing or not a string".into()))?;
 
 						let tier = MaterialLevel::from_str(material)
 							.ok_or_else(|| JsonError::Custom(format!("Invalid material level: {}", material).into()))?;
@@ -166,11 +169,11 @@ fn parse_extended_data(data_value: &JsonValue) -> Result<Option<ItemExtendedData
 
 							let material = tier_obj.get("material")
 								.and_then(|v| v.as_str())
-								.ok_or_else(|| JsonError::MissingField("armor_data.material is missing or not a string".into()))?;
+								.ok_or_else(|| JsonError::MissingField("armor tier 'material' is missing or not a string".into()))?;
 
 							let equip_type = tier_obj.get("type")
 								.and_then(|v| v.as_str())
-								.ok_or_else(|| JsonError::MissingField("armor_data.type is missing or not a string".into()))?;
+								.ok_or_else(|| JsonError::MissingField("armor tier 'type' is missing or not a string".into()))?;
 
 							let tier = MaterialLevel::from_str(material)
 								.ok_or_else(|| JsonError::Custom(format!("Invalid material level: {}", material).into()))?;

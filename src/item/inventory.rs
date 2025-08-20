@@ -1,4 +1,5 @@
 
+use winit::keyboard::ModifiersState;
 use crate::item::ui_inventory::InventoryLayout;
 use crate::item::items::ItemStack;
 use crate::utils::input::ClickMode;
@@ -6,7 +7,7 @@ use crate::utils::input::ClickMode;
 #[derive(PartialEq, Clone, Copy, Debug)]
 pub enum AreaType { 
 	Panel,  Inventory,  Hotbar, 
-	Armor,  Storage,  Input,  Output 
+	Armor,  Storage, Output 
 }
 
 #[derive(PartialEq, Clone, Copy, Debug)]
@@ -432,7 +433,7 @@ impl Inventory {
 	}
 
 	pub fn make_result_from_input(&self) -> Option<ItemContainer> {
-		let crafting_items = self.get_area(&AreaType::Input);
+		let crafting_items = self.get_area(&AreaType::Storage);
 		let Some(layout) = self.get_layout() else { return None; };
 		let Some(result_area) = layout.areas.iter().find(|a| a.name == AreaType::Output) else { return None; };
 
@@ -454,7 +455,8 @@ impl Inventory {
 
 impl Inventory {
 	/// Handles left click - full item interactions
-	pub fn handle_click_press(&mut self, clicked_pos: (u8, u8), shift: bool, area_type: AreaType, mode: ClickMode) {
+	pub fn handle_click_press(&mut self, clicked_pos: (u8, u8), modifiers: &ModifiersState, do_extra: bool, area_type: AreaType, mode: ClickMode) {
+		let shift = modifiers.shift_key();
 		if matches!(area_type, AreaType::Output) {
 			self.handle_output_click(clicked_pos, shift, mode);
 			return;
@@ -464,7 +466,7 @@ impl Inventory {
 		let (c_x, c_y) = clicked_pos;
 		
 		if shift {
-			self.handle_shift_click(c_x, c_y, area_type);
+			self.handle_shift_click(cursor, c_x, c_y, area_type, mode, do_extra);
 			return;
 		}
 		
@@ -500,24 +502,20 @@ impl Inventory {
 				self.add_item_anywhere(item);
 				amount
 			},
-			
 			(None, ClickMode::Left, false) => {
 				self.set_cursor(result_item.clone().opt());
 				1
 			},
-			
 			(None, ClickMode::Right, false) => {
 				self.set_cursor(result_item.clone().opt());
 				1
 			},
-			
 			(None, ClickMode::Middle, false) => {
 				let mut item = result_item.clone();
 				item.set_to_max_stack();
 				self.set_cursor(item.opt());
 				return; // Don't consume input materials for middle-click
 			},
-			
 			// Handle cursor item stacking with output
 			(Some(mut cursor_item), ClickMode::Left, false) => {
 				// Cursor has item, can't place in output unless it's compatible stacking
@@ -538,18 +536,93 @@ impl Inventory {
 	}
 
 	/// Handles shift-click behavior (move items between areas)
-	fn handle_shift_click(&mut self, c_x: u8, c_y: u8, area_type: AreaType) {
+	fn handle_shift_click(&mut self, cursor: Option<ItemStack>, c_x: u8, c_y: u8, area_type: AreaType, mode: ClickMode, do_extra: bool) {
+		// extra will be used to click into the "non inventory container" like chest / crafting input
 		let area = self.get_area_mut(area_type);
-		let Some(item) = area.remove_at(c_x, c_y) else { return };
 		
-		let target_area = match area_type {
-			AreaType::Inventory => AreaType::Hotbar,
-			_ => AreaType::Inventory,
+		let target_area = {
+			if do_extra && area_type != AreaType::Storage { AreaType::Storage }
+			else if area_type == AreaType::Inventory { AreaType::Hotbar }
+			else { AreaType::Inventory }
 		};
 		
-		if !self.get_area_mut(target_area).add_item(item.clone()) {
-			// If target is full, try to add anywhere
-			self.add_item_anywhere(item);
+		match (cursor, area.remove_at(c_x, c_y)) {
+			// Case 1: some in cursor but non in inventory : do the basic click (like it would without shift)
+			(Some(cursor_item), None) => {
+				let item_to_place = match mode {
+					ClickMode::Right => {
+						let single_item = cursor_item.clone().with_stack_size(1);
+						let remaining = cursor_item.remove_from_stack(1);
+						area.set_at(c_x, c_y, single_item.opt());
+						self.set_cursor(remaining);
+						return;
+					},
+					ClickMode::Left | ClickMode::Middle => cursor_item,
+				};
+				
+				area.set_at(c_x, c_y, item_to_place.opt());
+				self.remove_cursor();
+			},
+			// Case 2: item only in inventory
+			(None, Some(mut item)) => {
+				match mode {
+					ClickMode::Left => {
+						if !self.get_area_mut(target_area).add_item(item.clone()) {
+							// If target is full, try to add anywhere
+							self.add_item_anywhere(item);
+						}
+					},
+					ClickMode::Right => {
+						let half_stack = item.split_stack();
+						area.set_at(c_x, c_y, item.opt());
+						let Some(item) = half_stack else { return };
+						if !self.get_area_mut(target_area).add_item(item.clone()) {
+							// If target is full, try to add anywhere
+							self.add_item_anywhere(item);
+						}
+					},
+					ClickMode::Middle => {
+						area.set_at(c_x, c_y, item.clone().opt());
+						// Don't remove from area for middle-click (creative mode behavior)
+						item.set_to_max_stack();
+						if !self.get_area_mut(target_area).add_item(item.clone()) {
+							// If target is full, try to add anywhere
+							self.add_item_anywhere(item);
+						}
+					},
+				}
+			},
+			// Case 3: both have item -> do case 2
+			(Some(_cursor_item), Some(mut item)) => {
+				match mode {
+					ClickMode::Left => {
+						if !self.get_area_mut(target_area).add_item(item.clone()) {
+							// If target is full, try to add anywhere
+							self.add_item_anywhere(item);
+						}
+					},
+					ClickMode::Right => {
+						let half_stack = item.split_stack();
+						area.set_at(c_x, c_y, item.opt());
+						let Some(item) = half_stack else { return };
+						if !self.get_area_mut(target_area).add_item(item.clone()) {
+							// If target is full, try to add anywhere
+							self.add_item_anywhere(item);
+						}
+					},
+					ClickMode::Middle => {
+						area.set_at(c_x, c_y, item.clone().opt());
+						// Don't remove from area for middle-click (creative mode behavior)
+						item.set_to_max_stack();
+						if !self.get_area_mut(target_area).add_item(item.clone()) {
+							// If target is full, try to add anywhere
+							self.add_item_anywhere(item);
+						}
+					},
+				}
+			},
+			// Case 4: Both empty - do nothing
+			(None, None) => {},
 		}
 	}
 
@@ -566,9 +639,9 @@ impl Inventory {
 			}
 		}
 		
-		match (cursor, area.remove_at(c_x, c_y), mode) {
+		match (cursor, area.remove_at(c_x, c_y)) {
 			// Case 1: Place item from cursor into empty slot
-			(Some(cursor_item), None, mode) => {
+			(Some(cursor_item), None) => {
 				let item_to_place = match mode {
 					ClickMode::Right => {
 						let single_item = cursor_item.clone().with_stack_size(1);
@@ -583,9 +656,8 @@ impl Inventory {
 				area.set_at(c_x, c_y, item_to_place.opt());
 				self.remove_cursor();
 			},
-
 			// Case 2: Pick up item with empty cursor
-			(None, Some(mut item), mode) => {
+			(None, Some(mut item)) => {
 				match mode {
 					ClickMode::Left => {
 						self.set_cursor(item.opt());
@@ -600,48 +672,45 @@ impl Inventory {
 						// Don't remove from area for middle-click (creative mode behavior)
 						item.set_to_max_stack();
 						self.set_cursor(item.opt());
-						return;
 					},
 				}
 			},
-
 			// Case 3: Interact with both cursor and slot having items
-			(Some(cursor_item), Some(mut slot_item), mode) => {
-				if !cursor_item.can_stack_with(&slot_item) {
+			(Some(cursor_item), Some(mut item)) => {
+				if !cursor_item.can_stack_with(&item) {
 					// Items don't stack - swap them
 					area.set_at(c_x, c_y, cursor_item.opt());
-					self.set_cursor(slot_item.opt());
+					self.set_cursor(item.opt());
 				} else {
 					// Items can stack
 					match mode {
 						ClickMode::Left => {
-							let remaining = slot_item.add_to_stack(cursor_item.stack());
-							area.set_at(c_x, c_y, slot_item.opt());
+							let remaining = item.add_to_stack(cursor_item.stack());
+							area.set_at(c_x, c_y, item.opt());
 							self.set_cursor(cursor_item.with_stack_size(remaining).opt());
 						},
 						ClickMode::Right => {
-							let remaining = slot_item.add_to_stack(1);
-							area.set_at(c_x, c_y, slot_item.opt());
+							let remaining = item.add_to_stack(1);
+							area.set_at(c_x, c_y, item.opt());
 							let new_cursor = cursor_item.remove_from_stack(1 - remaining);
 							self.set_cursor(new_cursor);
 						},
 						ClickMode::Middle => {
 							// Swap items for middle-click
 							area.set_at(c_x, c_y, cursor_item.opt());
-							self.set_cursor(slot_item.opt());
+							self.set_cursor(item.opt());
 						},
 					}
 				}
 			},
-
 			// Case 4: Both empty - do nothing
-			(None, None, _) => {},
+			(None, None) => {},
 		}
 	}
 
 	/// Helper to consume crafting materials after taking output
 	fn consume_crafting_materials(&mut self, count: u32) {
-		let input_area = self.get_area_mut(AreaType::Input);
+		let input_area = self.get_area_mut(AreaType::Storage);
 		for item_slot in input_area.iter_mut() {
 			if let Some(item) = item_slot {
 				*item_slot = item.clone().remove_from_stack(count);

@@ -9,7 +9,6 @@ use crate::{
 	},
 	item::ui_inventory::InventoryUIState
 };
-use winit::keyboard::KeyCode as Key;
 
 #[derive(PartialEq, Clone, Copy)]
 pub struct UIStateID(u32);
@@ -109,7 +108,6 @@ pub fn close_pressed() {
 		UIState::InGame => {
 			state.ui_manager.state = UIState::Escape;
 			let game_state = ptr::get_gamestate();
-			game_state.player_mut().controller().reset_keyboard();
 			*game_state.running() = false;
 			state.toggle_mouse_capture();
 		},
@@ -305,16 +303,6 @@ impl UIManager {
 		if !indices.is_empty() {
 			queue.write_buffer(&self.index_buffer, 0, bytemuck::cast_slice(&indices));
 		}
-	}
-
-	pub fn handle_keyboard_input(&mut self, key: Key, input_str: &str) -> bool {
-		let focus_state = self.get_focused_state();
-		if matches!(focus_state, FocusState::Input { .. }) {
-			return self.handle_key_input_on_input_field(key, input_str);
-		}
-		// we do not handle other kinds because i don't think we need to ...
-
-		false
 	}
 	
 	#[inline]

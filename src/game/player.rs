@@ -1,10 +1,11 @@
+
+use crate::utils::input::{Keyboard, InputMapping};
 use crate::ext::config::CameraConfig;
-use glam::{Vec3, Mat4, Quat};
-use winit::keyboard::KeyCode as Key;
-use winit::dpi::PhysicalSize;
-use wgpu::util::DeviceExt;
 use crate::item::inventory;
 use crate::physic::aabb;
+use glam::{Vec3, Mat4, Quat};
+use winit::dpi::PhysicalSize;
+use wgpu::util::DeviceExt;
 
 /// Movement mode enum
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -142,7 +143,7 @@ impl Player {
 
 	/// Calculates movement vector based on current inputs
 	fn calculate_movement(&mut self, dt: f32) -> Vec3 {
-		let run_multiplier = if self.controller.movement.is_running() {
+		let run_multiplier = if self.controller.is_running() {
 			self.config.run_multiplier
 		} else {
 			1.0
@@ -150,7 +151,7 @@ impl Player {
 		let speed = self.config.speed * run_multiplier;
 
 		// Get movement direction from packed input
-		let movement_dir = self.controller.movement.get_direction();
+		let movement_dir = self.controller.get_direction();
 
 		// Calculate target velocity based on movement mode
 		let target_velocity = match self.movement_mode {
@@ -239,6 +240,7 @@ impl Player {
 /// Handles player input and movement state
 pub struct PlayerController {
 	movement: MovementInputs,
+	input_mapping: InputMapping,
 	mouse_delta: Vec3,     // Raw mouse input for this frame
 	velocity: Vec3,
 	target_yaw: f32,       // Target yaw angle
@@ -285,23 +287,6 @@ impl MovementInputs {
 	#[inline] pub const fn set_run(&mut self, pressed: bool) {
 		self.set_bit(Self::RUN, pressed);
 	}
-	#[inline] pub const fn is_running(&self) -> bool {
-		self.state & Self::RUN != 0
-	}
-
-	/// Gets the normalized movement direction vector
-	pub fn get_direction(&self) -> Vec3 {
-		let x = (self.state & Self::RIGHT != 0) as i8 - (self.state & Self::LEFT != 0) as i8;
-		let y = (self.state & Self::UP != 0) as i8 - (self.state & Self::DOWN != 0) as i8;
-		let z = (self.state & Self::FORWARD != 0) as i8 - (self.state & Self::BACKWARD != 0) as i8;
-		
-		Vec3::new(x as f32, y as f32, z as f32).normalize_or_zero()
-	}
-
-	/// Clears all movement inputs
-	#[inline] pub const fn clear(&mut self) {
-		self.state = 0;
-	}
 
 	#[inline] pub const fn default() -> Self {
 		Self { state: 0 }
@@ -321,6 +306,7 @@ impl PlayerController {
 	#[inline] pub const fn new(config: CameraConfig) -> Self {
 		Self {
 			movement: MovementInputs::default(),
+			input_mapping: InputMapping::default(),
 			mouse_delta: Vec3::ZERO,
 			velocity: Vec3::ZERO,
 			target_yaw: config.rotation.y,
@@ -330,24 +316,53 @@ impl PlayerController {
 		}
 	}
 
-	/// Processes keyboard input and returns whether the key was handled
-	#[inline] pub const fn process_keyboard(&mut self, key: &Key, is_pressed: bool) -> bool { 
-		match key {
-			Key::KeyW | Key::ArrowUp => self.movement.set_forward(is_pressed),
-			Key::KeyS | Key::ArrowDown => self.movement.set_backward(is_pressed),
-			Key::KeyA | Key::ArrowLeft => self.movement.set_left(is_pressed),
-			Key::KeyD | Key::ArrowRight => self.movement.set_right(is_pressed),
-			Key::Space => self.movement.set_up(is_pressed),
-			Key::ShiftLeft => self.movement.set_run(is_pressed),
-			Key::ControlLeft => self.movement.set_down(is_pressed),
-			_ => return false,
-		}
-		true
+	pub fn is_running(&self) -> bool {
+		self.movement.state & MovementInputs::RUN != 0
 	}
 
-	/// Resets all keyboard inputs
-	#[inline] pub const fn reset_keyboard(&mut self) {
-		self.movement.clear();
+	pub fn get_direction(&self) -> Vec3 {
+		let x = (self.movement.state & MovementInputs::RIGHT != 0) as i8 - (self.movement.state & MovementInputs::LEFT != 0) as i8;
+		let y = (self.movement.state & MovementInputs::UP != 0) as i8 - (self.movement.state & MovementInputs::DOWN != 0) as i8;
+		let z = (self.movement.state & MovementInputs::FORWARD != 0) as i8 - (self.movement.state & MovementInputs::BACKWARD != 0) as i8;
+		
+		Vec3::new(x as f32, y as f32, z as f32).normalize_or_zero()
+	}
+
+	/// Creates a controller with custom input mapping
+	pub fn with_input_mapping(config: CameraConfig, input_mapping: InputMapping) -> Self {
+		Self {
+			movement: MovementInputs::default(),
+			input_mapping,
+			mouse_delta: Vec3::ZERO,
+			velocity: Vec3::ZERO,
+			target_yaw: config.rotation.y,
+			target_pitch: config.rotation.x,
+			current_yaw: config.rotation.y,
+			current_pitch: config.rotation.x,
+		}
+	}
+
+	/// Processes keyboard input using the current input mapping
+	pub fn process_keyboard(&mut self, keyboard: &Keyboard) {
+		let mapping = &self.input_mapping;
+		
+		self.movement.set_forward((mapping.forward)(keyboard));
+		self.movement.set_backward((mapping.backward)(keyboard));
+		self.movement.set_left((mapping.left)(keyboard));
+		self.movement.set_right((mapping.right)(keyboard));
+		self.movement.set_up((mapping.up)(keyboard));
+		self.movement.set_down((mapping.down)(keyboard));
+		self.movement.set_run((mapping.run)(keyboard));
+	}
+
+	/// Updates the input mapping (useful for key remapping)
+	pub fn set_input_mapping(&mut self, mapping: InputMapping) {
+		self.input_mapping = mapping;
+	}
+
+	/// Gets a reference to the current input mapping
+	pub const fn input_mapping(&self) -> &InputMapping {
+		&self.input_mapping
 	}
 
 	/// Processes mouse movement input
@@ -386,6 +401,7 @@ pub struct CameraSystem {
 	buffer: wgpu::Buffer,
 	bind_group: wgpu::BindGroup,
 }
+
 impl CameraSystem {
 	/// Creates a "dummy" `CameraSystem` with no real functionality.
 	/// All fields are placeholders.

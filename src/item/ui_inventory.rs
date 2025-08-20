@@ -226,14 +226,14 @@ impl InventoryLayout {
 		let positions = calculate_crafting_positions(&input_area, &output_area, &inv_area, &hotbar_area, &armor_area, layout.section_spacing);
 		
 		layout.add_areas(&[
-			(input_area, positions.0, AreaType::Input),
+			(input_area, positions.0, AreaType::Storage),
 			(output_area, positions.1, AreaType::Output),
 			(inv_area, positions.2, AreaType::Inventory),
 			(hotbar_area, positions.3, AreaType::Hotbar),
 			(armor_area, positions.4, AreaType::Armor),
 		]);
 		
-		layout.finalize_layout(inv_state, &[AreaType::Input, AreaType::Output]);
+		layout.finalize_layout(inv_state, &[AreaType::Storage, AreaType::Output]);
 		layout
 	}
 	
@@ -380,7 +380,7 @@ impl InventoryLayout {
 	pub fn get_areas_for_ui_state(&self, inv_state: InventoryUIState) -> Vec<AreaLayout> {
 		self.areas.iter().filter(|area| match (inv_state, area.name) {
 			(InventoryUIState::Storage { inv: _, size: _ } , AreaType::Storage) => true,
-			(InventoryUIState::Crafting { inv: _, size: _, result: _ } , AreaType::Input | AreaType::Output) => true,
+			(InventoryUIState::Crafting { inv: _, size: _, result: _ } , AreaType::Storage | AreaType::Output) => true,
 			//(InventoryUIState::Player { inv: _ } , _) => true,
 			_ => false,
 		}).cloned().collect()  // Clone the areas
@@ -442,10 +442,10 @@ impl UIManager {
 
 	// New method to handle crafting UI using actual crafting containers
 	fn create_crafting_areas(&mut self, layout: &InventoryLayout, inventory: &Inventory) {
-		let Some(crafting_area) = layout.areas.iter().find(|a| a.name == AreaType::Input) else { return; };
+		let Some(crafting_area) = layout.areas.iter().find(|a| a.name == AreaType::Storage) else { return; };
 
 		// Get actual crafting data from world
-		let crafting_items = inventory.get_area(&AreaType::Input);
+		let crafting_items = inventory.get_area(&AreaType::Storage);
 		self.create_area_slots(&crafting_area);
 		self.create_item_slots(&crafting_area, &crafting_items);
 

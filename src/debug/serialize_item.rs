@@ -1,6 +1,7 @@
 
 #[cfg(test)]
 mod tests {
+	use crate::utils::string::MutStr;
 	use crate::fs::json::{JsonParser, JsonSerializable};
 	use std::num::NonZeroU32;
 	use crate::item::material::{ArmorType, ToolType, MaterialLevel, EquipmentType, BasicConversion};
@@ -90,7 +91,7 @@ mod tests {
 	#[test]
 	fn item_test() {
 		let item = ItemComp {
-			name: "apple",
+			name: MutStr::from_str("apple"),
 			max_stack: 64,
 			flags: ItemFlags(1), // IS_BLOCK
 			data: None,
@@ -114,7 +115,7 @@ mod tests {
 	#[test]
 	fn item_test_data() {
 		let item = ItemComp {
-			name: "bread",
+			name: MutStr::from_str("bread"),
 			max_stack: 50,
 			flags: ItemFlags(0),
 			data: Some(
@@ -128,11 +129,9 @@ mod tests {
 			"name":"bread",
 			"max_stack": 50,
 			"flags": 0,
-			"data": {
-				"data" : {
-					"durability" : 200,
-					"damage" : 10
-				}
+			"data" : {
+				"durability" : 200,
+				"damage" : 10
 			}
 		},"#;
 		let mut parser = JsonParser::new(json_data);
@@ -146,7 +145,7 @@ mod tests {
 	#[test]
 	fn item_test_tooldata() {
 		let item = ItemComp {
-			name: "bread",
+			name: MutStr::from_str("bread"),
 			max_stack: 50,
 			flags: ItemFlags(0),
 			data: Some(
@@ -162,13 +161,11 @@ mod tests {
 			"max_stack": 50,
 			"flags": 0,
 			"data": {
-				"data" : {
-					"durability" : 200,
-					"damage" : 10,
-					"tool_data" : {
-						"equip_type" : "Stone",
-						"material" : "Calcite"
-					}
+				"durability" : 200,
+				"damage" : 10,
+				"tool_data" : {
+					"type" : "Stone",
+					"material" : "Calcite"
 				}
 			}
 		},"#;
@@ -191,7 +188,7 @@ mod tests {
 		data.add_equipment(ToolType::from_str("Metal").expect("REASON"), MaterialLevel::from_str("Calcite").expect("REASON"));
 		
 		let item = ItemComp {
-			name: "bread",
+			name: MutStr::from_str("bread"),
 			max_stack: 50,
 			flags: ItemFlags(0),
 			data: Some(
@@ -207,37 +204,35 @@ mod tests {
 			"name":"bread",
 			"max_stack": 50,
 			"flags": 0,
-			"data": {
-				"data" : {
-					"durability" : 200,
-					"damage" : 10,
-					"tool_data" : [
-						{
-							"equip_type" : "Stone",
-							"material" : "Calcite"
-						},
-						{
-							"equip_type" : "Wood",
-							"material" : "Calcite"
-						},
-						{
-							"equip_type" : "Dirt",
-							"material" : "Calcite"
-						},
-						{
-							"equip_type" : "Crop",
-							"material" : "Calcite"
-						},
-						{
-							"equip_type" : "String",
-							"material" : "Calcite"
-						},
-						{
-							"equip_type" : "Metal",
-							"material" : "Calcite"
-						}
-					]
-				}
+			"data" : {
+				"durability" : 200,
+				"damage" : 10,
+				"tool_data" : [
+					{
+						"type" : "Stone",
+						"material" : "Calcite"
+					},
+					{
+						"type" : "Wood",
+						"material" : "Calcite"
+					},
+					{
+						"type" : "Dirt",
+						"material" : "Calcite"
+					},
+					{
+						"type" : "Crop",
+						"material" : "Calcite"
+					},
+					{
+						"type" : "String",
+						"material" : "Calcite"
+					},
+					{
+						"type" : "Metal",
+						"material" : "Calcite"
+					}
+				]
 			}
 		}
 		"#;

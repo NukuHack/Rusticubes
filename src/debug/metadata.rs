@@ -5,7 +5,7 @@ mod tests {
 	use crate::fs::binary::BinarySerializable;
 	use crate::world::manager::{WorldData, get_save_path, load_world_data, save_world_data, update_world_data};
 	use std::io::{self};
-	use crate::hs::time::Time;
+	use crate::utils::time::Time;
 
 	// Test 1: Simple roundtrip serialization/deserialization with perfect data
 	#[test]

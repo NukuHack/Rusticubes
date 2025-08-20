@@ -206,10 +206,30 @@ impl PropertyType {
 const DEFAULT_MAX_PROPERTIES: usize = 4;
 
 /// Ultra-compact storage using a fixed array of N properties
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub struct ItemExtendedData<const N: usize = DEFAULT_MAX_PROPERTIES> where PropertyValue: PartialEq {
 	pub data: [Option<PropertyValue>; N],
 	pub len: u8, // Tracks how many properties are actually set
+}
+impl<const N: usize> PartialEq for ItemExtendedData<N> 
+where
+	PropertyValue: PartialEq,
+{
+	fn eq(&self, other: &Self) -> bool {
+		// Fast path: identical ordering and values
+		if self.data[..self.len()] == other.data[..other.len()] {
+			return true;
+		}
+		
+		// Different lengths means different content
+		if self.len != other.len {
+			return false;
+		}
+		
+		// Check if all properties match regardless of order
+		self.iter().all(|prop| other.contains_property(prop)) && 
+		other.iter().all(|prop| self.contains_property(prop))
+	}
 }
 /*
 // Default size (4)
@@ -229,6 +249,10 @@ impl<const N: usize> ItemExtendedData<N> {
 	}
 
 	// Property setters
+	#[inline] pub const fn with_data(self, value: PropertyValue) -> Self {
+		self.set_property(value)
+	}
+
 	#[inline] pub const fn with_durability(self, value: NonZeroU32) -> Self {
 		self.set_property(PropertyValue::Durability(value))
 	}
@@ -253,8 +277,6 @@ impl<const N: usize> ItemExtendedData<N> {
 	#[inline] pub const fn with_slot(self, value: Slot) -> Self {
 		self.set_property(PropertyValue::Slot(value))
 	}
-
-
 
 	/// Internal method to set or update a property
 	#[inline] pub const fn set_property(mut self, new_value: PropertyValue) -> Self {
@@ -287,6 +309,16 @@ impl<const N: usize> ItemExtendedData<N> {
 	}
 
 	// Property getters
+	#[inline] pub fn get_data(&self, target_type: PropertyType) -> Option<&PropertyValue> {
+		if !self.contains_type(target_type) { return None; }
+		for prop in self.iter() {
+			if prop.to_type() == target_type {
+				return Some(prop);
+			}
+		}
+		None
+	}
+
 	#[inline] pub fn get_durability(&self) -> Option<NonZeroU32> {
 		self.find_property(|v| match v {
 			PropertyValue::Durability(d) => Some(*d),
@@ -362,6 +394,26 @@ impl<const N: usize> ItemExtendedData<N> {
 	/// Returns the maximum capacity of properties
 	#[inline] pub const fn capacity(&self) -> usize {
 		N
+	}
+
+	/// Returns an iterator over the properties
+	#[inline] pub fn iter(&self) -> impl Iterator<Item = &PropertyValue> {
+		self.data.iter()
+			.take(self.len())
+			.filter_map(|slot| slot.as_ref())
+	}
+	
+	/// Helper method to check if a specific property value exists
+	#[inline] pub fn contains_property(&self, target: &PropertyValue) -> bool {
+		self.contains_type(target.to_type())
+	}
+	#[inline] pub fn contains_type(&self, target_type: PropertyType) -> bool {
+		for prop in self.iter() {
+			if prop.to_type() == target_type {
+				return true;
+			}
+		}
+		false
 	}
 }
 

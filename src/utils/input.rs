@@ -1,8 +1,8 @@
-
 use std::collections::HashSet;
 use winit::event::MouseButton;
 use winit::keyboard::ModifiersState;
 use winit::dpi::PhysicalPosition;
+use winit::keyboard::KeyCode as Key;
 use std::time::Instant;
 
 #[derive(Debug, Clone)]
@@ -32,6 +32,7 @@ pub struct InputSystem {
 	previous_mouse: PhysicalPosition<f64>,
 	mouse_button_state: MouseButtonState,
 	modifiers: ModifiersState,
+	keyboard: Keyboard,
 	drag_state: DragState,
 	mouse_captured: bool,
 }
@@ -60,12 +61,14 @@ impl InputSystem {
 	getter_method!(mouse_button_state: MouseButtonState);
 	getter_method!(modifiers: ModifiersState);
 	getter_method!(drag_state: DragState);
+	getter_method!(keyboard: Keyboard);
 
 	#[inline] pub const fn default() -> Self {
 		Self {
 			previous_mouse: PhysicalPosition::new(0.0, 0.0),
 			mouse_button_state: MouseButtonState::default(),
 			modifiers: ModifiersState::empty(),
+			keyboard: Keyboard::default(),
 			drag_state: DragState::NotDragging,
 			mouse_captured: false,
 		}
@@ -75,6 +78,59 @@ impl InputSystem {
 		let is_mouse_captured: bool = self.is_mouse_captured();
 		*self = Self::default();
 		self.set_mouse_captured(is_mouse_captured);
+	}
+
+	pub fn handle_key_input(&mut self, key: Key, is_pressed: bool) {
+		match key {
+			// Movement keys (keeping original)
+			Key::KeyW => self.keyboard.w = is_pressed,
+			Key::KeyA => self.keyboard.a = is_pressed,
+			Key::KeyS => self.keyboard.s = is_pressed,
+			Key::KeyD => self.keyboard.d = is_pressed,
+			
+			// All other English letters
+			Key::KeyQ => self.keyboard.q = is_pressed,
+			Key::KeyE => self.keyboard.e = is_pressed,
+			Key::KeyR => self.keyboard.r = is_pressed,
+			Key::KeyT => self.keyboard.t = is_pressed,
+			Key::KeyY => self.keyboard.y = is_pressed,
+			Key::KeyU => self.keyboard.u = is_pressed,
+			Key::KeyI => self.keyboard.i = is_pressed,
+			Key::KeyO => self.keyboard.o = is_pressed,
+			Key::KeyP => self.keyboard.p = is_pressed,
+			Key::KeyF => self.keyboard.f = is_pressed,
+			Key::KeyG => self.keyboard.g = is_pressed,
+			Key::KeyH => self.keyboard.h = is_pressed,
+			Key::KeyJ => self.keyboard.j = is_pressed,
+			Key::KeyK => self.keyboard.k = is_pressed,
+			Key::KeyL => self.keyboard.l = is_pressed,
+			Key::KeyZ => self.keyboard.z = is_pressed,
+			Key::KeyX => self.keyboard.x = is_pressed,
+			Key::KeyC => self.keyboard.c = is_pressed,
+			Key::KeyV => self.keyboard.v = is_pressed,
+			Key::KeyB => self.keyboard.b = is_pressed,
+			Key::KeyN => self.keyboard.n = is_pressed,
+			Key::KeyM => self.keyboard.m = is_pressed,
+			
+			// Space
+			Key::Space => self.keyboard.space = is_pressed,
+			
+			// Modifier keys
+			Key::ShiftLeft => self.keyboard.shift_left = is_pressed,
+			Key::ShiftRight => self.keyboard.shift_right = is_pressed,
+			Key::ControlLeft => self.keyboard.ctrl_left = is_pressed,
+			Key::ControlRight => self.keyboard.ctrl_right = is_pressed,
+			Key::AltLeft => self.keyboard.alt_left = is_pressed,
+			Key::AltRight => self.keyboard.alt_right = is_pressed,
+			Key::SuperLeft => self.keyboard.super_left = is_pressed,
+			Key::SuperRight => self.keyboard.super_right = is_pressed,
+			
+			_ => {},
+		}
+	}
+	
+	#[inline] pub const fn reset_keyboard(&mut self) {
+		self.keyboard = Keyboard::default();
 	}
 
 	#[inline] pub const fn is_dragging(&self) -> bool {
@@ -232,7 +288,7 @@ pub enum ClickMode {
 }
 
 impl ClickMode {
-	pub const fn from(button: MouseButton) -> Self {
+	#[inline] pub const fn from(button: MouseButton) -> Self {
 		match button {
 			MouseButton::Left => ClickMode::Left,
 			MouseButton::Right => ClickMode::Right,
@@ -254,7 +310,7 @@ pub struct MouseButtonState {
 }
 
 impl MouseButtonState {
-	pub const fn default() -> Self {
+	#[inline] pub const fn default() -> Self {
 		Self {
 			left: false,
 			right: false,
@@ -262,5 +318,129 @@ impl MouseButtonState {
 			back: false,
 			forward: false,
 		}
+	}
+}
+
+
+
+/// Input mapping configuration for flexible key binding
+#[derive(Debug, Clone)]
+pub struct InputMapping {
+	pub forward: fn(&Keyboard) -> bool,
+	pub backward: fn(&Keyboard) -> bool,
+	pub left: fn(&Keyboard) -> bool,
+	pub right: fn(&Keyboard) -> bool,
+	pub up: fn(&Keyboard) -> bool,
+	pub down: fn(&Keyboard) -> bool,
+	pub run: fn(&Keyboard) -> bool,
+}
+impl InputMapping {
+	pub const fn default() -> Self {
+		Self {
+			forward: |kb| kb.w,
+			backward: |kb| kb.s,
+			left: |kb| kb.a,
+			right: |kb| kb.d,
+			up: |kb| kb.space,
+			down: |kb| kb.is_ctrl(),
+			run: |kb| kb.is_shift(),
+		}
+	}
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Keyboard {
+	// All English letters
+	pub w: bool,
+	pub a: bool,
+	pub s: bool,
+	pub d: bool,
+	pub q: bool,
+	pub e: bool,
+	pub r: bool,
+	pub t: bool,
+	pub y: bool,
+	pub u: bool,
+	pub i: bool,
+	pub o: bool,
+	pub p: bool,
+	pub f: bool,
+	pub g: bool,
+	pub h: bool,
+	pub j: bool,
+	pub k: bool,
+	pub l: bool,
+	pub z: bool,
+	pub x: bool,
+	pub c: bool,
+	pub v: bool,
+	pub b: bool,
+	pub n: bool,
+	pub m: bool,
+	
+	// Space
+	pub space: bool,
+	
+	// Modifier keys
+	pub shift_left: bool, pub shift_right: bool,
+	pub ctrl_left: bool, pub ctrl_right: bool,
+	pub alt_left: bool, pub alt_right: bool,
+	pub super_left: bool, pub super_right: bool,  // Windows key / Cmd key
+}
+
+impl Keyboard {
+	#[inline] pub const fn default() -> Self {
+		Self {
+			// All letters
+			w: false,
+			a: false,
+			s: false,
+			d: false,
+			q: false,
+			e: false,
+			r: false,
+			t: false,
+			y: false,
+			u: false,
+			i: false,
+			o: false,
+			p: false,
+			f: false,
+			g: false,
+			h: false,
+			j: false,
+			k: false,
+			l: false,
+			z: false,
+			x: false,
+			c: false,
+			v: false,
+			b: false,
+			n: false,
+			m: false,
+			
+			// Space
+			space: false,
+			
+			// Modifiers
+			shift_left: false, shift_right: false,
+			ctrl_left: false, ctrl_right: false,
+			alt_left: false, alt_right: false,
+			super_left: false, super_right: false,
+		}
+	}
+	
+	// Helper methods for checking modifier combinations
+	#[inline] pub const fn is_shift(&self) -> bool {
+		self.shift_left || self.shift_right
+	}
+	#[inline] pub const fn is_ctrl(&self) -> bool {
+		self.ctrl_left || self.ctrl_right
+	}
+	#[inline] pub const fn is_alt(&self) -> bool {
+		self.alt_left || self.alt_right
+	}
+	#[inline] pub const fn is_super(&self) -> bool {
+		self.super_left || self.super_right
 	}
 }

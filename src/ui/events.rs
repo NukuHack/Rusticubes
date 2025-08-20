@@ -5,11 +5,22 @@ use crate::{
 		manager::{UIManager, UIState, FocusState},
 		element::{UIElement, UIElementData},
 	},
-	item::ui_inventory::{ClickResult, InventoryUIState},
-	utils::input::ClickMode,
+	item::ui_inventory::ClickResult,
+	utils::input::{ClickMode, Keyboard},
 };
+use winit::keyboard::{ModifiersState, KeyCode as Key};
 
 impl UIManager {
+	pub fn handle_keyboard_input(&mut self, key: Key, input_str: &str) -> bool {
+		let focus_state = self.get_focused_state();
+		if matches!(focus_state, FocusState::Input { .. }) {
+			return self.handle_key_input_on_input_field(key, input_str);
+		}
+		// we do not handle other kinds because i don't think we need to ...
+
+		false
+	}
+
 	fn handle_click_press(&mut self, x: f32, y: f32) {
 		// Get visible, enabled elements sorted by descending z-index
 		let active_elements: Vec<(usize, i32)> = {
@@ -64,29 +75,19 @@ impl UIManager {
 		}
 		element.trigger_callback();
 	}
-
-	// Common helper for inventory click handling
-	#[inline]
-	fn handle_inventory_action(&mut self, inv_state: &InventoryUIState, x: f32, y: f32, shift: bool, mode: ClickMode) -> bool {
-		let inv = ptr::get_gamestate().player_mut().inventory_mut();
-		
-		let Some(inv_lay) = inv.layout.as_ref() else { return false };
-		
-		let ClickResult::SlotClicked { area_type, slot } = inv_lay.handle_click(*inv_state, x, y) else {
-			return false;
-		};
-
-		inv.handle_click_press(slot, shift, area_type, mode);
-		
-		self.setup_ui();
-		true
-	}
 	
 	#[inline]
-	pub fn handle_mouse_click(&mut self, x: f32, y:f32, pressed: bool, shift: bool, mode: ClickMode) {
+	pub fn handle_mouse_click(&mut self, x: f32, y:f32, pressed: bool, modifiers: &ModifiersState, keyboard: &Keyboard, mode: ClickMode) {
 		if pressed {
 			if let UIState::Inventory(inv_state) = self.state {
-				if self.handle_inventory_action(&inv_state, x, y, shift, mode) { return }
+				let inv = ptr::get_gamestate().player_mut().inventory_mut();
+				
+				let Some(inv_lay) = inv.layout.as_ref() else { return };
+				let ClickResult::SlotClicked { area_type, slot } = inv_lay.handle_click(inv_state, x, y) else { return };
+				inv.handle_click_press(slot, modifiers, keyboard.w, area_type, mode); // the faslse represents the "W is pressed" variable
+				
+				self.setup_ui();
+				return
 			}
 			self.clear_focused_state();
 

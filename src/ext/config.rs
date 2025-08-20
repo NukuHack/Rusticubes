@@ -140,7 +140,6 @@ pub struct InvConfig {
 	pub hotbar: ElementStyle,
 	pub armor: ElementStyle,
 	pub storage: ElementStyle,
-	pub input: ElementStyle,
 	pub crafting: ElementStyle,
 }
 impl InvConfig {
@@ -150,8 +149,8 @@ impl InvConfig {
 			AreaType::Inventory => &self.inventory,
 			AreaType::Hotbar => &self.hotbar,
 			AreaType::Armor => &self.armor,
+			// will be recalculated for each inv. open so no need to store input and storage separately
 			AreaType::Storage => &self.storage,
-			AreaType::Input => &self.input,
 			AreaType::Output => &self.crafting,
 		}
 	}
@@ -183,11 +182,6 @@ impl InvConfig {
 			border: Border::rgbf(80, 80, 120, 0.005),
 			text_color: None,
 		};
-		let input = ElementStyle{
-			color: Color::rgb(40, 40, 60),
-			border: Border::rgbf(80, 80, 120, 0.005),
-			text_color: None,
-		};
 		let crafting = ElementStyle{
 			color: Color::rgb(60, 80, 60),
 			border: Border::rgbf(80, 120, 80, 0.005),
@@ -205,7 +199,6 @@ impl InvConfig {
 			hotbar,
 			armor,
 			storage,
-			input,
 			crafting,
 		}
 	}

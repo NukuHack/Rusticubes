@@ -6,7 +6,7 @@ use crate::item::ui_inventory::InventoryUIState;
 use std::iter::Iterator;
 use winit::{
 	event::{ElementState, MouseButton, WindowEvent, MouseScrollDelta},
-	keyboard::KeyCode as Key,
+	keyboard::KeyCode as Key, dpi::PhysicalPosition
 };
 use crate::utils::input::ClickMode;
 
@@ -56,7 +56,8 @@ impl<'a> crate::State<'a> {
 				if !focused{
 					self.input_system.clear();
 					if self.is_world_running {
-						ptr::get_gamestate().player_mut().controller().reset_keyboard(); // Temporary workaround
+						self.input_system.reset_keyboard();
+						ptr::get_gamestate().player_mut().controller().process_keyboard(self.input_system.keyboard()); // Temporary workaround
 					}
 					self.ui_manager.clear_focused_state();
 				} else {
@@ -119,11 +120,14 @@ impl<'a> crate::State<'a> {
 		};
 		let is_pressed = *state == ElementState::Pressed;
 
+		self.input_system.handle_key_input(key, is_pressed);
+
 		// Handle UI input first if there's a focused element
 		if self.ui_manager.visibility {
 			if let Some(element) = self.ui_manager.get_focused_element() { // if focused you can't press Esc, have to handle them in a custom way
 				if self.is_world_running && element.is_input() {
-					ptr::get_gamestate().player_mut().controller().reset_keyboard(); // Temporary workaround
+					self.input_system.reset_keyboard();
+					ptr::get_gamestate().player_mut().controller().process_keyboard(self.input_system.keyboard()); // Temporary workaround
 				}
 				if is_pressed {
 					// Handle keys for UI
@@ -137,7 +141,9 @@ impl<'a> crate::State<'a> {
 		// `key` is of type `KeyCode` (e.g., KeyCode::W)
 		// `state` is of type `ElementState` (Pressed or Released)
 		if self.is_world_running && ptr::get_gamestate().is_running() {
-			ptr::get_gamestate().player_mut().controller().process_keyboard(&key, is_pressed);
+			if matches!(self.ui_manager.state, UIState::InGame)  {
+				ptr::get_gamestate().player_mut().controller().process_keyboard(self.input_system.keyboard());
+			} // only handle player movement if not in inventory ...
 			match key {
 				Key::KeyG => {
 					if !is_pressed { return false; }
@@ -239,19 +245,18 @@ impl<'a> crate::State<'a> {
 
 		// Use the stored current mouse position
 		let (x, y) = convert_mouse_position(self.render_context.size.into(), &self.input_system.previous_mouse());
-		let mods = self.input_system.modifiers(); let shift = mods.shift_key();
-
 		let pressed = *state == ElementState::Pressed;
-		
 		self.input_system.handle_mouse_event(*button, pressed, *self.input_system.previous_mouse());
+		let mods = self.input_system.modifiers(); let keyboard = self.input_system.keyboard();
+
+		if self.ui_manager.visibility {
+			self.ui_manager.handle_mouse_click(x, y, pressed, mods, keyboard, ClickMode::from(*button));
+		}
 		match button {
 			MouseButton::Left => {
 				if pressed && self.input_system.is_mouse_captured() {
 					self.handle_lclick_interaction();
 					return true;
-				}
-				if self.ui_manager.visibility {
-					self.ui_manager.handle_mouse_click(x, y, pressed, shift, ClickMode::Left);
 				}
 			},
 			MouseButton::Right => {
@@ -259,17 +264,11 @@ impl<'a> crate::State<'a> {
 					self.handle_rclick_interaction();
 					return true;
 				}
-				if self.ui_manager.visibility {
-					self.ui_manager.handle_mouse_click(x, y, pressed, shift, ClickMode::Right);
-				}
 			},
 			MouseButton::Middle => {
 				if pressed && self.input_system.is_mouse_captured() {
 					//self.handle_mclick_interaction(); // will have to make a Middle click interaction too (for picking the block)
 					return true;
-				}
-				if self.ui_manager.visibility {
-					self.ui_manager.handle_mouse_click(x, y, pressed, shift, ClickMode::Middle);
 				}
 			},
 			MouseButton::Back => {},
@@ -298,7 +297,7 @@ impl<'a> crate::State<'a> {
 			}
 			// Reset cursor to center
 			self.center_mouse();
-			self.input_system.handle_mouse_move(winit::dpi::PhysicalPosition::new(center_x, center_y));
+			self.input_system.handle_mouse_move(PhysicalPosition::new(center_x, center_y));
 			return true;
 		} else {
 			let (x, y) = convert_mouse_position(self.render_context.size.into(), position);
@@ -332,7 +331,7 @@ impl<'a> crate::State<'a> {
 
 
 #[inline]
-pub const fn convert_mouse_position(window_size: (u32, u32), mouse_pos: &winit::dpi::PhysicalPosition<f64>) -> (f32, f32) {
+pub const fn convert_mouse_position(window_size: (u32, u32), mouse_pos: &PhysicalPosition<f64>) -> (f32, f32) {
 	let (x, y) = (mouse_pos.x as f32, mouse_pos.y as f32);
 	let (width, height) = (window_size.0 as f32, window_size.1 as f32);
 	((2.0 * x / width) - 1.0, (2.0 * (height - y) / height) - 1.0)

@@ -165,7 +165,7 @@ impl ItemStack {
 		let result = self.clone();
 		self.set_stack_size(half);
 		result.remove_from_stack(half)
-	}
+	} // this returns an option but will allways return some ... because this is the bigger half ...
 
 	///////////////////////////////
 	// Conversion and Utility
