@@ -156,26 +156,32 @@ impl ItemContainer {
 		self.find_empty_slot().is_none()
 	}
 
-	/// Add an item to the first available slot
-	#[inline] pub fn add_item(&mut self, mut new_item: ItemStack) -> bool {
-		// First try to stack with existing items of the same type
+	// In your sub-container implementation:
+	#[inline]
+	pub fn add_item(&mut self, item: &mut ItemStack) -> bool {
+		if item.stack == 0 { return true; }
+		// First try to stack with existing items
 		for slot in self.iter_mut() {
 			let Some(existing_item) = slot else { continue; };
 
-			if !existing_item.can_stack_with(&new_item) { continue; }
+			if !existing_item.can_stack_with(item) { continue; }
 
-			let remaining = existing_item.add_to_stack(new_item.stack);
-			if remaining == 0 { return true; }// Fully stacked the new item
-
-			// Partially stacked, continue with remaining stack
-			new_item.set_stack_size(remaining);
+			let remaining = existing_item.add_to_stack(item.stack);
+			item.stack = remaining;
+			
+			if item.stack == 0 { return true; } // Fully placed
 		}
 
-		// If we still have items left, try to find an empty slot
-		let Some(index) = self.find_empty_slot() else { return false; };
-
-		self.set(index, Some(new_item));
-		return true;
+		// Try to find an empty slot
+		if let Some(index) = self.find_empty_slot() {
+			let mut new_item = item.clone();
+			new_item.set_stack_size(item.stack.min(new_item.max_stack_size()));
+			self.set(index, Some(new_item.clone()));
+			item.stack -= new_item.stack;
+			return true;
+		}
+		
+		false
 	}
 
 	/// Remove an item at the specified linear index
@@ -418,11 +424,29 @@ impl Inventory {
 	}
 
 	/// Add item to any available slot (tries hotbar first, then inventory, then armor - if is an armor item)
-	#[inline] pub fn add_item_anywhere(&mut self, item: ItemStack) -> bool {
-		self.hotbar.add_item(item.clone()) ||
-		self.items.add_item(item.clone()) ||
-		(item.is_armor() && self.armor.add_item(item))
+	#[inline]
+	pub fn add_item_anywhere(&mut self, item: &mut ItemStack) -> bool {
+		let initial_stack = item.stack;
+		
+		// Try to add to hotbar first
+		if self.hotbar.add_item(item) {
+			return true;
+		}
+		
+		// Try inventory
+		if self.items.add_item(item) {
+			return true;
+		}
+		
+		// Try armor if applicable
+		if item.is_armor() && self.armor.add_item(item) {
+			return true;
+		}
+		
+		// Return true if any items were placed, false if none
+		item.stack < initial_stack
 	}
+
 	/// Count total items across all containers
 	#[inline] pub fn total_count(&self) -> usize {
 		self.armor.count_items() + self.hotbar.count_items() + self.items.count_items()
@@ -492,8 +516,8 @@ impl Inventory {
 			};
 			
 			if count == 0 { return; }
-			let item = result_item.clone().with_stack_size(count);
-			if self.add_item_anywhere(item) && click_type != ClickMode::Middle {
+			let mut item = result_item.clone().with_stack_size(count);
+			if self.add_item_anywhere(&mut item) && click_type != ClickMode::Middle {
 				self.consume_crafting_materials(count);
 			}
 			return;
@@ -582,27 +606,27 @@ impl Inventory {
 			(None, Some(mut item)) => {
 				match mode {
 					ClickMode::Left => {
-						if !self.get_area_mut(target_area).add_item(item.clone()) {
+						if !self.get_area_mut(target_area).add_item(&mut item) {
 							// If target is full, try to add anywhere
-							self.add_item_anywhere(item);
+							self.add_item_anywhere(&mut item);
 						}
 					},
 					ClickMode::Right => {
 						let half_stack = item.split_stack();
 						area.set_at(c_x, c_y, item.opt());
-						let Some(item) = half_stack else { return };
-						if !self.get_area_mut(target_area).add_item(item.clone()) {
+						let Some(mut item) = half_stack else { return };
+						if !self.get_area_mut(target_area).add_item(&mut item) {
 							// If target is full, try to add anywhere
-							self.add_item_anywhere(item);
+							self.add_item_anywhere(&mut item);
 						}
 					},
 					ClickMode::Middle => {
 						area.set_at(c_x, c_y, item.clone().opt());
 						// Don't remove from area for middle-click (creative mode behavior)
 						item.set_to_max_stack();
-						if !self.get_area_mut(target_area).add_item(item.clone()) {
+						if !self.get_area_mut(target_area).add_item(&mut item) {
 							// If target is full, try to add anywhere
-							self.add_item_anywhere(item);
+							self.add_item_anywhere(&mut item);
 						}
 					},
 				}
@@ -611,27 +635,27 @@ impl Inventory {
 			(Some(_cursor_item), Some(mut item)) => {
 				match mode {
 					ClickMode::Left => {
-						if !self.get_area_mut(target_area).add_item(item.clone()) {
+						if !self.get_area_mut(target_area).add_item(&mut item) {
 							// If target is full, try to add anywhere
-							self.add_item_anywhere(item);
+							self.add_item_anywhere(&mut item);
 						}
 					},
 					ClickMode::Right => {
 						let half_stack = item.split_stack();
 						area.set_at(c_x, c_y, item.opt());
-						let Some(item) = half_stack else { return };
-						if !self.get_area_mut(target_area).add_item(item.clone()) {
+						let Some(mut item) = half_stack else { return };
+						if !self.get_area_mut(target_area).add_item(&mut item) {
 							// If target is full, try to add anywhere
-							self.add_item_anywhere(item);
+							self.add_item_anywhere(&mut item);
 						}
 					},
 					ClickMode::Middle => {
 						area.set_at(c_x, c_y, item.clone().opt());
 						// Don't remove from area for middle-click (creative mode behavior)
 						item.set_to_max_stack();
-						if !self.get_area_mut(target_area).add_item(item.clone()) {
+						if !self.get_area_mut(target_area).add_item(&mut item) {
 							// If target is full, try to add anywhere
-							self.add_item_anywhere(item);
+							self.add_item_anywhere(&mut item);
 						}
 					},
 				}

@@ -417,12 +417,12 @@ impl<'a> crate::State<'a> {
 			let block_id = block.material.inner();
 			let item_name = get_item_name_from_block_id(block_id);
 
-			inv_mut.add_item_anywhere(ItemStack::new(item_name).with_stack_size(1));
+			inv_mut.add_item_anywhere(&mut ItemStack::new(item_name).with_stack_size(1));
 		}
 		if let Some(storage) = world.get_storage(block_pos) {
 			for item in storage.iter() {
-				let Some(itm) = item else { continue; };
-				inv_mut.add_item_anywhere(itm.clone());
+				let Some(itm) = item.clone() else { continue; };
+				inv_mut.add_item_anywhere(&mut itm.clone());
 			}
 		}
 
