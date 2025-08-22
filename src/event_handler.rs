@@ -6,22 +6,22 @@ use crate::ui::manager::{self, UIState};
 use crate::item::ui_inventory::InventoryUIState;
 use std::iter::Iterator;
 use winit::{
-	event::{ElementState, MouseButton, WindowEvent, MouseScrollDelta},
+	event::{ElementState, MouseButton, WindowEvent, DeviceEvent, MouseScrollDelta},
 	keyboard::KeyCode as Key, dpi::PhysicalPosition
 };
 
 impl<'a> crate::State<'a> {
-	#[inline] pub fn handle_events(&mut self, event: &WindowEvent) -> bool{
-
-		// should rework this like this :
-			// send the entire event to "window event handler"
-		// if not processed 
-			// send the entire event to "UI event handler"
-		// if not processed again
-			// send the entire event to "world event handler"
-
-		// if not processed then basically it's an event what should not be processed entirely so probably log it or idk 
-
+	pub fn handle_device_events(&mut self, event: &DeviceEvent) -> bool {
+		if !self.window().has_focus() { return false }
+		match event {
+	        DeviceEvent::MouseMotion { delta } => {
+	        	println!("Mouse: {:?}", delta);
+	        	true
+	        }
+	        _ => false
+		}
+	}
+	pub fn handle_events(&mut self, event: &WindowEvent) -> bool{
 		match event {
 			WindowEvent::CloseRequested => {ptr::close_app(); true},
 			WindowEvent::Resized(physical_size) => self.resize(*physical_size),
@@ -298,9 +298,8 @@ impl<'a> crate::State<'a> {
 				gamestate.player_mut().controller_mut().process_mouse(delta_x, delta_y);
 			}
 			// Reset cursor to center
-			self.center_mouse();
+			//self.center_mouse();
 			self.input_system.handle_mouse_move(PhysicalPosition::new(center_x, center_y));
-			return true;
 		} else {
 			let (x, y) = convert_mouse_position(self.render_context.size.into(), position);
 			// Handle normal mouse movement for UI
@@ -308,8 +307,8 @@ impl<'a> crate::State<'a> {
 				self.ui_manager.handle_mouse_move(x, y, self.input_system.mouse_button_state().left);
 			}
 			self.input_system.handle_mouse_move(*position);
-			return true;
 		}
+		true
 	}
 	#[inline]
 	pub fn handle_mouse_scroll(&mut self, event: &WindowEvent) -> bool {

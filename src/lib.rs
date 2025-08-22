@@ -428,12 +428,13 @@ pub async fn run() {
 			return;
 		}
 		let state = ext::ptr::get_state();
-		let Event::WindowEvent { event, window_id } = &event else { return; };
-		//let Event::DeviceEvent { event, device_id } = &event else { return; };
-
-		if *window_id != state.window().id() { return; };
-
-		state.handle_events(event);
+		if let Event::WindowEvent { event, window_id } = &event {
+			if *window_id != state.window().id() { return; };
+			state.handle_events(event);
+		}
+		if let Event::DeviceEvent { event, device_id:_ } = &event {
+			state.handle_device_events(event);
+		}
 
 		if state.is_world_running {
 			block::extra::update_full_world();

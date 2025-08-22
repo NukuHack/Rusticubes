@@ -46,6 +46,7 @@ pub struct Player {
 
 const MOUSE_TO_SCREEN: f32 = 0.0056789;
 const SAFE_FRAC_PI_2: f32 = std::f32::consts::FRAC_PI_2 - 0.0001;
+const PLAYER_SIZE: Vec3 = Vec3::new(0.8,1.8,0.8);
 
 #[allow(dead_code)]
 impl Player {
@@ -57,14 +58,14 @@ impl Player {
 		size: PhysicalSize<u32>,
 		bind_group_layout: &wgpu::BindGroupLayout,
 	) -> Self {
-		let aabb = aabb::AABB::from_pos(pos, Vec3::new(0.8,1.8,0.8));
+		let aabb = aabb::AABB::from_pos(pos, PLAYER_SIZE);
 		
 		Self {
 			pos,
 			config,
 			controller: PlayerController::new(config),
 			movement_mode: MovementMode::Flat,
-			camera_mode: CameraMode::Smooth,
+			camera_mode: CameraMode::Instant,
 			inventory: inventory::Inventory::default(),
 			body: aabb::PhysicsBody::new(aabb),
 			camera_system: CameraSystem::new(device, size, config, bind_group_layout),
@@ -79,7 +80,7 @@ impl Player {
 			config,
 			controller: PlayerController::new(config),
 			movement_mode: MovementMode::Flat,
-			camera_mode: CameraMode::Smooth,
+			camera_mode: CameraMode::Instant,
 			inventory: inventory::Inventory::default(),
 			body: aabb::PhysicsBody::new(aabb),
 			camera_system: CameraSystem::dummy(),
@@ -87,7 +88,7 @@ impl Player {
 	}
 
 	/// Updates player state and returns movement delta
-	pub fn update(&mut self, delta_time: f32, queue: &wgpu::Queue) -> Vec3 {
+	#[inline] pub fn update(&mut self, delta_time: f32, queue: &wgpu::Queue) -> Vec3 {
 		// Clamp delta time to prevent physics issues with large frame times
 		let dt = delta_time.min(0.01);
 
@@ -190,53 +191,30 @@ impl Player {
 	}
 
 	/// Gets the player's current position
-	#[inline] pub const fn pos(&self) -> Vec3 {
-		self.pos
-	}
+	#[inline] pub const fn pos(&self) -> Vec3 { self.pos }
 	#[inline] pub const fn cam_pos(&self) -> Vec3 {
 		let pos = self.pos(); let off = self.config.offset;
 		Vec3::new(pos.x + off.x, pos.y + off.y, pos.z + off.z)
 	}
-	/// Appends position to both player and camera
-	#[inline] pub fn append_position(&mut self, offset: Vec3) {
-		self.pos += offset;
-	}
-	#[inline] pub const fn controller(&self) -> &PlayerController {
-		&self.controller
-	}
-	#[inline] pub const fn controller_mut(&mut self) -> &mut PlayerController {
-		&mut self.controller
-	}
-	/// Sets the movement mode
-	#[inline] pub const fn set_movement_mode(&mut self, mode: MovementMode) {
-		self.movement_mode = mode;
-	}
-	/// Sets the camera mode
-	#[inline] pub const fn set_camera_mode(&mut self, mode: CameraMode) {
-		self.camera_mode = mode;
-	}
+
 	/// Resizes the camera projection
-	#[inline] pub fn resize(&mut self, new_size: PhysicalSize<u32>) {
-		self.camera_system.resize(new_size);
-	}
+	#[inline] pub fn append_position(&mut self, offset: Vec3) { self.pos += offset; }
+	#[inline] pub fn resize(&mut self, new_size: PhysicalSize<u32>) { self.camera_system.resize(new_size); }
+
+	/// Appends position to both player and camera
+	#[inline] pub const fn controller(&self) -> &PlayerController { &self.controller }
+	#[inline] pub const fn controller_mut(&mut self) -> &mut PlayerController { &mut self.controller }
+
+	/// Sets the movement mode
+	#[inline] pub const fn set_movement_mode(&mut self, mode: MovementMode) { self.movement_mode = mode; }
+	#[inline] pub const fn set_camera_mode(&mut self, mode: CameraMode) { self.camera_mode = mode; }
+
 	/// Handles zooming via mouse scroll
-	#[inline] pub const fn camera(&self) -> &Camera {
-		&self.camera_system.camera
-	}
-	/// Gets the camera system for rendering
-	#[inline] pub const fn camera_system(&self) -> &CameraSystem {
-		&self.camera_system
-	}
-	/// Gets the camera system mutably
-	#[inline] pub const fn camera_system_mut(&mut self) -> &mut CameraSystem {
-		&mut self.camera_system
-	}
-	#[inline] pub const fn inventory(&self) -> &inventory::Inventory {
-		&self.inventory
-	}
-	#[inline] pub const fn inventory_mut(&mut self) -> &mut inventory::Inventory {
-		&mut self.inventory
-	}
+	#[inline] pub const fn camera(&self) -> &Camera { &self.camera_system.camera }
+	#[inline] pub const fn camera_system(&self) -> &CameraSystem { &self.camera_system }
+	#[inline] pub const fn camera_system_mut(&mut self) -> &mut CameraSystem { &mut self.camera_system }
+	#[inline] pub const fn inventory(&self) -> &inventory::Inventory { &self.inventory }
+	#[inline] pub const fn inventory_mut(&mut self) -> &mut inventory::Inventory { &mut self.inventory }
 }
 
 /// Handles player input and movement state
