@@ -31,6 +31,7 @@ impl<'a> crate::State<'a> {
 			self.input_system.set_mouse_captured(false);
 			// Show cursor and release
 			//self.window().set_cursor_icon(winit::window::CursorIcon::Default);
+			self.center_mouse(); // to set it correctly 
 			self.window().set_cursor_visible(true);
 			self.window().set_cursor_grab(CursorGrabMode::None).unwrap();
 		}

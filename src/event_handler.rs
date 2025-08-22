@@ -15,7 +15,23 @@ impl<'a> crate::State<'a> {
 		if !self.window().has_focus() { return false }
 		match event {
 	        DeviceEvent::MouseMotion { delta } => {
-	        	println!("Mouse: {:?}", delta);
+	        	//println!("Mouse: {:?}", delta);
+	        	/*
+	        	if self.input_system.is_mouse_captured() {
+					// Calculate relative movement from center
+					let pos = self.input_system.previous_mouse();
+					
+					let new_x = pos.x + delta.0;
+					let new_y = pos.y + delta.1;
+					
+					// Process mouse movement for camera control
+					let gamestate = ptr::get_gamestate();
+					if self.is_world_running && gamestate.is_running() {
+						gamestate.player_mut().controller_mut().process_mouse(delta.0 as f32, delta.1 as f32);
+					}
+					self.input_system.handle_mouse_move(PhysicalPosition::new(new_x, new_y));
+				}
+				*/
 	        	true
 	        }
 	        _ => false
@@ -298,7 +314,7 @@ impl<'a> crate::State<'a> {
 				gamestate.player_mut().controller_mut().process_mouse(delta_x, delta_y);
 			}
 			// Reset cursor to center
-			//self.center_mouse();
+			self.center_mouse();
 			self.input_system.handle_mouse_move(PhysicalPosition::new(center_x, center_y));
 		} else {
 			let (x, y) = convert_mouse_position(self.render_context.size.into(), position);
