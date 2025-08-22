@@ -1,3 +1,7 @@
+
+use crate::block::math::ChunkCoord;
+use crate::block::main::Chunk;
+use crate::utils::vec3;
 use glam::{Vec3, IVec3};
 
 /// Default gravity constant (Earth gravity: 9.8 m/s²)
@@ -13,80 +17,82 @@ pub struct AABB {
 
 impl AABB {
 	/// Creates a new AABB from minimum and maximum coordinates
-	#[inline]
-	pub const fn new(min: Vec3, max: Vec3) -> Self {
+	#[inline] pub const fn new(min: Vec3, max: Vec3) -> Self {
 		Self { min, max }
 	}
 
 	/// Creates a new AABB from position and size coordinates
-	#[inline]
-	pub const fn from_pos(pos: Vec3, size: Vec3) -> Self {
+	#[inline] pub const fn from_pos(pos: Vec3, size: Vec3) -> Self {
 		let min = Vec3::new(pos.x-size.x,pos.y,pos.z-size.z);
 		let max = Vec3::new(pos.x+size.x,pos.y+size.y,pos.z+size.z);
 		Self { min, max }
 	}
 	
 	/// Creates an AABB from center position and half-extents
-	#[inline]
-	pub fn from_center(center: Vec3, half_extents: Vec3) -> Self {
+	#[inline] pub const fn from_center(center: Vec3, half_extents: Vec3) -> Self {
 		Self {
-			min: center - half_extents,
-			max: center + half_extents,
+			min: vec3::const_sub(center, half_extents),
+			max: vec3::const_add(center, half_extents),
 		}
 	}
 	
 	/// Creates an AABB from integer coordinates (useful for voxel/grid systems)
-	#[inline]
-	pub fn from_ivec(min: IVec3, max: IVec3) -> Self {
+	#[inline] pub const fn from_ivec(min: IVec3, max: IVec3) -> Self {
 		Self {
-			min: min.as_vec3(),
-			max: max.as_vec3(),
+			min: Vec3::new(min.x as f32, min.y as f32, min.z as f32),
+			max: Vec3::new(max.x as f32, max.y as f32, max.z as f32),
 		}
+	}
+
+	// Create AABB for a chunk at given coordinates with chunk size
+	#[inline] pub const fn from_chunk_coord(chunk_coord: &ChunkCoord) -> Self {
+		let chunk_size = Chunk::SIZE_F;
+		let min = Vec3::new(
+			chunk_coord.x() as f32 * chunk_size,
+			chunk_coord.y() as f32 * chunk_size,
+			chunk_coord.z() as f32 * chunk_size,
+		);
+		let max = Vec3::new(min.x + chunk_size, min.y + chunk_size, min.z + chunk_size);
+		Self { min, max }
 	}
 	
 	/// Creates an AABB with the given size centered at the origin
-	#[inline]
-	pub fn from_size(size: Vec3) -> Self {
-		let half_size = size * 0.5;
+	#[inline] pub const fn from_size(size: Vec3) -> Self {
+		let half_size = vec3::const_mul_s(size, 0.5);
 		Self::from_center(Vec3::ZERO, half_size)
 	}
 
 
 	/// Returns the dimensions (width, height, depth) of the AABB
-	#[inline]
-	pub fn dimensions(&self) -> Vec3 {
-		self.max - self.min
+	#[inline] pub const fn dimensions(&self) -> Vec3 {
+		Vec3::new(self.max.x - self.min.x , self.max.y - self.min.y ,self.max.z - self.min.z)
 	}
 	
 	/// Returns the center position of the AABB
-	#[inline]
-	pub fn center(&self) -> Vec3 {
-		(self.min + self.max) * 0.5
+	#[inline] pub const fn center(&self) -> Vec3 {
+		Vec3::new((self.max.x + self.min.x)*0.5, (self.max.y + self.min.y)*0.5, (self.max.z + self.min.z)*0.5)
 	}
 	
 	/// Returns the half-extents of the AABB
-	#[inline]
-	pub fn half_extents(&self) -> Vec3 {
-		self.dimensions() * 0.5
+	#[inline] pub const fn extents(&self) -> Vec3 {
+		let dim = self.dimensions();
+		Vec3::new(dim.x*0.5,dim.y*0.5,dim.z*0.5)
 	}
 	
 	/// Returns the surface area of the AABB
-	#[inline]
-	pub fn surface_area(&self) -> f32 {
+	#[inline] pub const fn surface_area(&self) -> f32 {
 		let dims = self.dimensions();
 		2.0 * (dims.x * dims.y + dims.y * dims.z + dims.z * dims.x)
 	}
 	
 	/// Returns the volume of the AABB
-	#[inline]
-	pub fn volume(&self) -> f32 {
+	#[inline] pub const fn volume(&self) -> f32 {
 		let dims = self.dimensions();
 		dims.x * dims.y * dims.z
 	}
 	
 	/// Checks if the AABB is valid (min <= max for all axes)
-	#[inline]
-	pub fn is_valid(&self) -> bool {
+	#[inline] pub const fn is_valid(&self) -> bool {
 		self.min.x <= self.max.x && 
 		self.min.y <= self.max.y && 
 		self.min.z <= self.max.z
@@ -94,8 +100,7 @@ impl AABB {
 
 
 	/// Checks if this AABB overlaps with another AABB
-	#[inline]
-	pub const fn intersects(&self, other: &Self) -> bool {
+	#[inline] pub const fn intersects(&self, other: &Self) -> bool {
 		self.min.x <= other.max.x &&
 		self.max.x >= other.min.x &&
 		self.min.y <= other.max.y &&
@@ -105,23 +110,21 @@ impl AABB {
 	}
 	
 	/// Checks if a point is inside the AABB (inclusive)
-	#[inline]
-	pub const fn contains_point(&self, point: Vec3) -> bool {
+	#[inline] pub const fn contains_point(&self, point: Vec3) -> bool {
 		point.x >= self.min.x && point.x <= self.max.x &&
 		point.y >= self.min.y && point.y <= self.max.y &&
 		point.z >= self.min.z && point.z <= self.max.z
 	}
 	
 	/// Checks if this AABB completely contains another AABB
-	#[inline]
-	pub const fn contains(&self, other: &Self) -> bool {
+	#[inline] pub const fn contains(&self, other: &Self) -> bool {
 		self.min.x <= other.min.x && self.max.x >= other.max.x &&
 		self.min.y <= other.min.y && self.max.y >= other.max.y &&
 		self.min.z <= other.min.z && self.max.z >= other.max.z
 	}
 	
 	/// Returns the distance squared from a point to this AABB (0 if point is inside)
-	pub fn distance_squared_to_point(&self, point: Vec3) -> f32 {
+	#[inline] pub const fn distance_squared_to_point(&self, point: Vec3) -> f32 {
 		let dx = (point.x - self.max.x).max(0.0).max(self.min.x - point.x);
 		let dy = (point.y - self.max.y).max(0.0).max(self.min.y - point.y);
 		let dz = (point.z - self.max.z).max(0.0).max(self.min.z - point.z);
@@ -130,55 +133,48 @@ impl AABB {
 
 
 	/// Returns a new AABB translated by the given vector
-	#[inline]
-	pub fn translate(&self, translation: Vec3) -> Self {
+	#[inline] pub const fn translate(&self, translation: Vec3) -> Self {
 		Self {
-			min: self.min + translation,
-			max: self.max + translation,
+			min: vec3::const_add(self.min, translation),
+			max: vec3::const_add(self.max, translation),
 		}
 	}
 	
 	/// Returns the smallest AABB that contains both this and another AABB
-	#[inline]
-	pub fn union(&self, other: &Self) -> Self {
+	#[inline] pub const fn union(&self, other: &Self) -> Self {
 		Self {
-			min: self.min.min(other.min),
-			max: self.max.max(other.max),
+			min: vec3::const_min(self.min, other.min),
+			max: vec3::const_max(self.max, other.max),
 		}
 	}
 	
 	/// Returns the intersection of this AABB with another, or None if they don't intersect
-	pub fn intersection(&self, other: &Self) -> Option<Self> {
-		if !self.intersects(other) {
-			return None;
-		}
+	#[inline] pub const fn intersection(&self, other: &Self) -> Option<Self> {
+		if !self.intersects(other) { return None; }
 		
 		Some(Self {
-			min: self.min.max(other.min),
-			max: self.max.min(other.max),
+			min: vec3::const_max(self.min, other.min),
+			max: vec3::const_min(self.max, other.max),
 		})
 	}
 	
 	/// Returns an AABB expanded by the given amount in all directions
-	#[inline]
-	pub fn expanded(&self, amount: Vec3) -> Self {
+	#[inline] pub const fn expanded(&self, amount: Vec3) -> Self {
 		Self {
-			min: self.min - amount,
-			max: self.max + amount,
+			min: vec3::const_sub(self.min, amount),
+			max: vec3::const_add(self.max, amount),
 		}
 	}
 	
 	/// Returns an AABB expanded by the given scalar in all directions
-	#[inline]
-	pub fn expanded_uniform(&self, amount: f32) -> Self {
+	#[inline] pub const fn expanded_uniform(&self, amount: f32) -> Self {
 		self.expanded(Vec3::splat(amount))
 	}
 	
 	/// Returns an AABB scaled from its center
-	#[inline]
-	pub fn scaled(&self, scale: f32) -> Self {
+	#[inline] pub const fn scaled(&self, scale: f32) -> Self {
 		let center = self.center();
-		let half_extents = self.half_extents() * scale;
+		let half_extents = vec3::const_mul_s(self.extents(), scale);
 		Self::from_center(center, half_extents)
 	}
 }

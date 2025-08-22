@@ -123,6 +123,10 @@ pub mod utils {
 	pub mod color;
 	/// String helpers (For compile and runtime strings).
 	pub mod string;
+	/// Random Number Generator
+	pub mod rng;
+	/// stuff for glam::Vec3 ... in const
+	pub mod vec3;
 	/// Cursor state (cursor change and locking).
 	pub mod cursor;
 	/// Time formatting is a pretty struct.

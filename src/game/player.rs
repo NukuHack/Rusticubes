@@ -1,5 +1,8 @@
 
+use crate::utils::math;
+use crate::physic::aabb::AABB;
 use crate::utils::input::{Keyboard, InputMapping};
+use crate::utils::vec3;
 use crate::ext::config::CameraConfig;
 use crate::item::inventory;
 use crate::physic::aabb;
@@ -112,12 +115,12 @@ impl Player {
 			CameraMode::Smooth => {
 				// Smooth rotation interpolation
 				let smooth_factor = 1.0 - (-self.config.smoothness * dt).exp();
-				self.controller.current_yaw = lerp_angle(
+				self.controller.current_yaw = math::lerp_angle(
 					self.controller.current_yaw,
 					self.controller.target_yaw,
 					smooth_factor
 				);
-				self.controller.current_pitch = lerp_f32(
+				self.controller.current_pitch = math::lerp_f32(
 					self.controller.current_pitch,
 					self.controller.target_pitch,
 					smooth_factor
@@ -131,11 +134,7 @@ impl Player {
 		}
 
 		// Apply rotation to camera
-		self.camera_system.camera_mut().set_rotation(Vec3::new(
-			self.controller.current_pitch,
-			self.controller.current_yaw,
-			0.0
-		));
+		self.camera_system.camera_mut().set_rotation(Vec3::new(self.controller.current_pitch, self.controller.current_yaw, 0.));
 		
 		// Reset mouse delta for next frame
 		self.controller.mouse_delta = Vec3::ZERO;
@@ -267,7 +266,7 @@ impl PlayerController {
 		}
 	}
 
-	pub fn is_running(&self) -> bool {
+	#[inline] pub fn is_running(&self) -> bool {
 		let mapping = &self.input_mapping;
 		let keyboard = &self.keyboard;
 		(mapping.run)(keyboard)
@@ -299,23 +298,23 @@ impl PlayerController {
 	}
 
 	/// Processes keyboard input using the current input mapping
-	pub fn process_keyboard(&mut self, keyboard: &Keyboard) {
+	#[inline] pub const fn process_keyboard(&mut self, keyboard: &Keyboard) {
 		self.keyboard = *keyboard;
 	}
 
 	/// Updates the input mapping (useful for key remapping)
-	pub fn set_input_mapping(&mut self, mapping: InputMapping) {
+	#[inline] pub const fn set_input_mapping(&mut self, mapping: InputMapping) {
 		self.input_mapping = mapping;
 	}
 
 	/// Gets a reference to the current input mapping
-	pub const fn input_mapping(&self) -> &InputMapping {
+	#[inline] pub const fn input_mapping(&self) -> &InputMapping {
 		&self.input_mapping
 	}
 
 	/// Processes mouse movement input
-	#[inline] pub fn process_mouse(&mut self, delta_x: f32, delta_y: f32) {
-		self.mouse_delta = Vec3::new(delta_x, delta_y, 0.0);
+	#[inline] pub const fn process_mouse(&mut self, delta_x: f32, delta_y: f32) {
+		self.mouse_delta = Vec3::new(delta_x, delta_y, 0.);
 	}
 }
 
@@ -334,10 +333,8 @@ impl CameraUniform {
 			position: [0.0; 4],
 		}
 	}
-
-	#[inline] pub fn update_view_proj(&mut self, camera: &Camera, pos: Vec3, projection: &Projection) {
-		self.view_proj = (projection.matrix() * camera.view_matrix(pos)).to_cols_array_2d();
-		self.position = pos.extend(0.0).into();
+	#[inline] pub const fn to_pos_vec3(&self) -> Vec3 {
+		Vec3::new(self.position[0], self.position[1], self.position[2])
 	}
 }
 
@@ -346,6 +343,7 @@ pub struct CameraSystem {
 	camera: Camera,
 	projection: Projection,
 	uniform: CameraUniform,
+	frustum: Frustum,
 	buffer: wgpu::Buffer,
 	bind_group: wgpu::BindGroup,
 }
@@ -361,20 +359,17 @@ impl CameraSystem {
 			camera: Camera::default(),
 			projection: Projection::default(),
 			uniform: CameraUniform::default(),
+			frustum: Frustum::default(),
 			buffer: MaybeUninit::uninit().assume_init(),
 			bind_group: MaybeUninit::uninit().assume_init(),
 		}
 	}}
 
-	pub fn new(
-		device: &wgpu::Device,
-		size: PhysicalSize<u32>,
-		config: CameraConfig,
-		bind_group_layout: &wgpu::BindGroupLayout,
-	) -> Self {
+	pub fn new(device: &wgpu::Device, size: PhysicalSize<u32>, config: CameraConfig, bind_group_layout: &wgpu::BindGroupLayout) -> Self {
 		let camera = Camera::new(config.rotation);
 		let projection = Projection::new(size, config.fovy, config.znear, config.zfar);
 		let uniform = CameraUniform::default();
+		let frustum = Frustum::default();
 		
 		let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
 			label: Some("Camera Buffer"),
@@ -395,13 +390,20 @@ impl CameraSystem {
 			camera,
 			projection,
 			uniform,
+			frustum,
 			buffer,
 			bind_group,
 		}
 	}
 
-	#[inline] pub fn update(&mut self, queue: &wgpu::Queue, pos: Vec3) {
-		self.uniform.update_view_proj(&self.camera, pos, &self.projection);
+	pub fn update(&mut self, queue: &wgpu::Queue, pos: Vec3) {
+		let view_proj_mat = self.projection.matrix() * self.camera.view_matrix(pos);
+		self.uniform.view_proj = view_proj_mat.to_cols_array_2d();
+		self.uniform.position = pos.extend(0.0).into();
+		
+		// More efficient frustum update - directly from matrices instead of recalculating
+		self.frustum = Frustum::from_view_proj_matrix(view_proj_mat);
+		
 		queue.write_buffer(&self.buffer, 0, bytemuck::cast_slice(&[self.uniform]));
 	}
 
@@ -410,7 +412,10 @@ impl CameraSystem {
 	}
 
 	// Getters
+	
+	#[inline] pub const fn frustum(&self) -> &Frustum { &self.frustum }
 	#[inline] pub const fn camera(&self) -> &Camera { &self.camera }
+	#[inline] pub const fn uniform(&self) -> &CameraUniform { &self.uniform }
 	#[inline] pub const fn camera_mut(&mut self) -> &mut Camera { &mut self.camera }
 	#[inline] pub const fn projection(&self) -> &Projection { &self.projection }
 	#[inline] pub const fn projection_mut(&mut self) -> &mut Projection { &mut self.projection }
@@ -475,6 +480,148 @@ impl Camera {
 	#[inline] pub const fn set_rotation(&mut self, rotation: Vec3) { self.rotation = rotation; }
 }
 
+/// Frustum plane indices for better code readability
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FrustumPlane {
+	Left = 0,
+	Right = 1,
+	Bottom = 2,
+	Top = 3,
+	Near = 4,
+	Far = 5,
+}
+
+impl FrustumPlane {
+	pub const ALL: [FrustumPlane; 6] = [
+		FrustumPlane::Left,
+		FrustumPlane::Right,
+		FrustumPlane::Bottom,
+		FrustumPlane::Top,
+		FrustumPlane::Near,
+		FrustumPlane::Far,
+	];
+}
+
+// Represents a plane in 3D space using the equation ax + by + cz + d = 0
+#[derive(Debug, Clone, Copy)]
+pub struct Plane {
+	pub normal: Vec3,
+	pub distance: f32,
+}
+
+impl Plane {
+	#[inline] pub const fn default() -> Self {
+		Self {
+			normal: Vec3::ZERO,
+			distance: 0.,
+		}
+	}
+
+	// Create normalized plane from 4 coefficients (a, b, c, d) where ax + by + cz + d = 0
+	#[inline] pub const fn from_coefficients(a: f32, b: f32, c: f32, d: f32) -> Self {
+		let normal = Vec3::new(a, b, c);
+		let length = vec3::const_length(normal);
+		if length > 0.0 {
+			Self {
+				normal: vec3::const_div_s(normal, length),
+				distance: d / length,
+			}
+		} else {
+			Self::default()
+		}
+	}
+
+	// Distance from point to plane (positive = in front, negative = behind)
+	#[inline] pub const fn distance_to_point(&self, point: Vec3) -> f32 {
+		vec3::const_dot(self.normal, point) + self.distance
+	}
+}
+
+// Enhanced view frustum with better performance and usability
+pub struct Frustum {
+	planes: [Plane; 6]
+}
+
+// Macro to test a single plane
+macro_rules! test_plane {
+	($plane:expr, $center:expr, $extents:expr, $fully_inside:ident) => {
+		{
+			let distance = $plane.distance_to_point($center);
+			let radius = $extents.x * $plane.normal.x.abs() +
+						 $extents.y * $plane.normal.y.abs() +
+						 $extents.z * $plane.normal.z.abs();
+			
+			if distance + radius < 0.0 { return None; }
+			if distance - radius < 0.0 { $fully_inside = false; }
+		}
+	};
+}
+macro_rules! create_plane {
+	($matrix:ident $op:tt $row:expr) => {
+		Plane::from_coefficients(
+			$matrix[3][0] $op $matrix[$row][0],
+			$matrix[3][1] $op $matrix[$row][1],
+			$matrix[3][2] $op $matrix[$row][2],
+			$matrix[3][3] $op $matrix[$row][3]
+		)
+	};
+}
+impl Frustum {
+	#[inline] pub const fn default() -> Self {
+		Self {
+			planes: [Plane::default(); 6]
+		}
+	}
+
+	/// Extract frustum planes and corners from view-projection matrix
+	pub const fn from_view_proj_matrix(view_proj: Mat4) -> Self {
+		let m = view_proj.to_cols_array_2d();
+
+		// Extract the 6 frustum planes from the view-projection matrix
+
+		// Usage:
+		let planes = [
+			// Left plane: m[3] + m[0]
+			create_plane!(m + 0),
+			// Right plane: m[3] - m[0]
+			create_plane!(m - 0),
+			// Bottom plane: m[3] + m[1]
+			create_plane!(m + 1),
+			// Top plane: m[3] - m[1]
+			create_plane!(m - 1),
+			// Near plane: m[3] + m[2]
+			create_plane!(m + 2),
+			// Far plane: m[3] - m[2]
+			create_plane!(m - 2),
+		];
+
+		Self { planes }
+	}
+
+	/// Test if AABB is inside or intersecting the frustum (optimized version)
+	#[inline] pub const fn contains_aabb(&self, aabb: &AABB) -> bool {
+		self.intersects_aabb(aabb).is_some()
+	}
+
+	/// More detailed AABB intersection test with early exit optimization
+	/// Returns Some(true) if fully inside, Some(false) if intersecting, None if outside
+	#[inline] pub const fn intersects_aabb(&self, aabb: &AABB) -> Option<bool> {
+		let center = aabb.center();
+		let extents = aabb.extents();
+		let mut fully_inside = true;
+
+		// Test all 6 planes using the macro
+		test_plane!(self.planes[0], center, extents, fully_inside);
+		test_plane!(self.planes[1], center, extents, fully_inside);
+		test_plane!(self.planes[2], center, extents, fully_inside);
+		test_plane!(self.planes[3], center, extents, fully_inside);
+		test_plane!(self.planes[4], center, extents, fully_inside);
+		test_plane!(self.planes[5], center, extents, fully_inside);
+
+		Some(fully_inside)
+	}
+}
+
 // Projection representation
 pub struct Projection {
 	aspect: f32,
@@ -495,13 +642,13 @@ impl Projection {
 			matrix: Mat4::perspective_rh(fovy, aspect, znear, zfar),
 		}
 	}
-	#[cfg(test)]
+
 	pub fn default() -> Self {
 		Self {
 			aspect: 1.,
 			fovy: 30.,
-			znear: 1.,
-			zfar: 100.,
+			znear: 0.5,
+			zfar: 1000.,
 			matrix: Mat4::perspective_rh(30., 1., 1., 100.),
 		}
 	}
@@ -526,17 +673,4 @@ impl Projection {
 	#[inline] pub const fn fovy(&self) -> f32 { self.fovy }
 	#[inline] pub const fn znear(&self) -> f32 { self.znear }
 	#[inline] pub const fn zfar(&self) -> f32 { self.zfar }
-}
-
-/// Helper function to interpolate between two angles, handling wraparound
-#[inline] 
-const fn lerp_angle(from: f32, to: f32, t: f32) -> f32 {
-	let diff = ((to - from + std::f32::consts::PI) % (2.0 * std::f32::consts::PI)) - std::f32::consts::PI;
-	from + diff * t
-}
-
-/// Helper function to linearly interpolate between two f32 values
-#[inline] 
-const fn lerp_f32(from: f32, to: f32, t: f32) -> f32 {
-	from + (to - from) * t
 }

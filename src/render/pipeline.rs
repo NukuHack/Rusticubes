@@ -1,10 +1,11 @@
 
+use crate::block::extra::RENDER_DISTANCE;
 use crate::ext::ptr;
-use wgpu::util::DeviceExt;
-use crate::State;
 use crate::render::meshing::{Vertex, InstanceRaw, VERTICES};
 use crate::render::texture;
 use crate::get_string;
+use crate::State;
+use wgpu::util::DeviceExt;
 use wgpu;
 
 /// Struct holding all render pipelines and their associated shaders
@@ -20,13 +21,6 @@ impl Pipeline {
 	/// Creates all render pipelines with proper configuration
 	#[inline]
 	pub fn new(device: &wgpu::Device, config: &wgpu::SurfaceConfiguration, layouts: &[wgpu::BindGroupLayout]) -> Self {
-	/*layouts = [
-		&texture_manager.bind_group_layout(),
-		&camera_system.bind_group_layout(),
-		&chunk_bind_group_layout,
-		&skybox_bind_group_layout
-		&post_bind_group_layout
-	];*/
 		// Create shaders
 		let shaders = Shaders::new(device);
 
@@ -209,16 +203,8 @@ fn depth_stencil_state() -> wgpu::DepthStencilState {
 #[inline]
 pub fn render_all(current_state: &mut State) -> Result<(), wgpu::SurfaceError> {
 	let output = current_state.surface().get_current_texture()?;
-	let view = output
-		.texture
-		.create_view(&wgpu::TextureViewDescriptor::default());
-	let mut encoder =
-		current_state
-			.device()
-			.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-				label: Some("Render Encoder"),
-			});
-
+	let view = output.texture.create_view(&wgpu::TextureViewDescriptor::default());
+	let mut encoder = current_state.device().create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("Render Encoder") });
 
 	// 3D pass
 	if current_state.is_world_running {
@@ -246,7 +232,7 @@ pub fn render_all(current_state: &mut State) -> Result<(), wgpu::SurfaceError> {
 			
 			//sky_pass.set_bind_group(0, current_state.texture_manager().bind_group(), &[]);
 			sky_pass.set_bind_group(1, game_state.player().camera_system().bind_group(), &[]);
-			sky_pass.draw(0..36, 0..1);
+			sky_pass.draw(0..36, 0..1); // 36 = 6 (side) * 6 (2 triangles)
 		}
 		{
 			let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -274,22 +260,15 @@ pub fn render_all(current_state: &mut State) -> Result<(), wgpu::SurfaceError> {
 			// Render chunks
 			rpass.set_pipeline(&current_state.pipeline().chunk_pipeline);
 			rpass.set_bind_group(0, current_state.texture_manager().bind_group(), &[]);
-			rpass.set_bind_group(1, game_state.player().camera_system().bind_group(), &[]);
+			let cam_sys = game_state.player().camera_system();
+			rpass.set_bind_group(1, cam_sys.bind_group(), &[]);
 			{
 				// Create vertex buffer
 				let vertex_buffer = current_state.device().create_buffer_init(&wgpu::util::BufferInitDescriptor {
 					label: Some("Vertex Buffer"), contents: bytemuck::cast_slice(&VERTICES), usage: wgpu::BufferUsages::VERTEX });
 				rpass.set_vertex_buffer(0, vertex_buffer.slice(..));
-
-				//let indices = vec![0, 1, 2, 2, 3, 0]; // Two triangles forming a quad
-				/*let index_buffer = current_state.device().create_buffer_init(&wgpu::util::BufferInitDescriptor {
-					label: Some("Index Buffer"),
-					contents: bytemuck::cast_slice(&indices),
-					usage: wgpu::BufferUsages::INDEX,
-				});*/
-				//rpass.set_index_buffer(index_buffer.slice(..), wgpu::IndexFormat::Uint16);
 			}
-			ptr::get_gamestate().world().render_chunks(&mut rpass);
+			ptr::get_gamestate().world().render_chunks_with_culling(&mut rpass, cam_sys, RENDER_DISTANCE);
 		}
 	}
 

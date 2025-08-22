@@ -1,5 +1,5 @@
 use crate::ptr::get_settings;
-use crate::utils::math;
+use crate::utils::rng;
 use rodio::{Sink, Decoder, OutputStream, source::Source};
 use std::io::{Cursor, Write};
 use std::sync::atomic::{AtomicPtr, Ordering};
@@ -170,7 +170,7 @@ fn try_play_fg_sound(
 #[inline]
 fn calculate_playback_speed(base_speed: f32, use_random: bool, random_value: f32) -> f32 {
 	if use_random {
-		let random_factor = math::random_float(1.0 - random_value, 1.0 + random_value);
+		let random_factor = rng::random_float(1.0 - random_value, 1.0 + random_value);
 		base_speed * random_factor
 	} else {
 		base_speed

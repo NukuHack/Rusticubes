@@ -1,10 +1,9 @@
 
-use crate::render::meshing::CUBE_FACES;
-use crate::render::meshing::InstanceRaw;
-use crate::block::main::Block;
-use crate::render::meshing::{ChunkMeshBuilder, GeometryBuffer};
+use crate::physic::aabb::AABB;
+use crate::render::meshing::{CUBE_FACES, InstanceRaw, ChunkMeshBuilder, GeometryBuffer};
 use crate::block::math::{ChunkCoord, LocalPos};
-use crate::block::main::{Chunk, BlockStorage};
+use crate::block::main::{Block, Chunk, BlockStorage};
+use crate::player::CameraSystem;
 use crate::world::main::World;
 use crate::ext::ptr;
 use wgpu::util::DeviceExt;
@@ -335,18 +334,32 @@ impl World {
 		])
 	}
 
-	pub fn render_chunks<'a>(&'a self, render_pass: &mut wgpu::RenderPass<'a>) {
-		for (_chunk_coord, chunk) in self.chunks.iter() {
-			// Skip empty chunks entirely - no mesh or bind group needed
+	// Improved rendering function with better culling
+	pub fn render_chunks_with_culling<'a>(&'a self, render_pass: &mut wgpu::RenderPass<'a>, cam_sys: &CameraSystem, max_render_distance: f32) {
+		let frustum = cam_sys.frustum();
+		let camera_pos = cam_sys.uniform().to_pos_vec3();
+		
+		// Pre-calculate max_render_distance_squared for faster comparisons
+		let max_render_distance_squared = max_render_distance * max_render_distance;
+		
+		for (chunk_coord, chunk) in self.chunks.iter() {
 			if chunk.is_empty() { continue; }
-			let (Some(mesh), Some(bind_group)) = (&chunk.mesh(), &chunk.bind_group()) else { continue; };
+			let (Some(mesh), Some(bind_group)) = (&chunk.mesh(), &chunk.bind_group()) else { continue };
+			if mesh.num_instances == 0 { continue }
+			
+			let chunk_aabb = AABB::from_chunk_coord(&chunk_coord);
+			
+			// Distance culling first (cheaper) - using squared distance to avoid sqrt
+			let chunk_center = chunk_aabb.center();
+			let distance_squared_to_camera = (chunk_center - camera_pos).length_squared();
+			if distance_squared_to_camera > max_render_distance_squared { continue }
+			
+			// Enhanced frustum culling with detailed intersection info
+			if !frustum.contains_aabb(&chunk_aabb) { continue }
 
-			// Skip if mesh has no indices (shouldn't happen but good to check)
-			if mesh.num_instances == 0 { continue; }
-
+			// Inside or intersecting frustum - render it
 			render_pass.set_bind_group(2, *bind_group, &[]);
 			render_pass.set_vertex_buffer(1, mesh.instance_buffer.slice(..));
-
 			render_pass.draw(0..6, 0..mesh.num_instances as u32);
 		}
 	}

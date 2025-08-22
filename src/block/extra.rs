@@ -7,7 +7,8 @@ use crate::block::main::Chunk;
 use crate::world::main::World;
 use glam::{Vec3, IVec3};
 
-pub const REACH: f32 = 8.0;
+pub const REACH: f32 = 8.;
+pub const RENDER_DISTANCE: f32 = 120.;
 
 /// Helper function to update a chunk mesh after modification
 #[inline]

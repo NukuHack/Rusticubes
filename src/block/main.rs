@@ -4,7 +4,7 @@ use crate::{
 	item::items::lut_by_name,
 	block::extra::get_item_name_from_block_id,
 	block::math::{self, ChunkCoord, LocalPos, BlockRotation},
-	utils::math::{Noise},
+	utils::rng::{Noise},
 	render::meshing::GeometryBuffer,
 };
 #[allow(unused_imports)]

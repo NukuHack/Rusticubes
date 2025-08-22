@@ -11,9 +11,7 @@ use winit::{
 };
 
 impl<'a> crate::State<'a> {
-
-	#[inline]
-	pub fn handle_events(&mut self, event: &WindowEvent) -> bool{
+	#[inline] pub fn handle_events(&mut self, event: &WindowEvent) -> bool{
 
 		// should rework this like this :
 			// send the entire event to "window event handler"

@@ -26,7 +26,7 @@ mod tests {
 		
 		assert_eq!(aabb.dimensions(), vec3(4.0, 6.0, 6.0));
 		assert_eq!(aabb.center(), vec3(3.0, 5.0, 6.0));
-		assert_eq!(aabb.half_extents(), vec3(2.0, 3.0, 3.0));
+		assert_eq!(aabb.extents(), vec3(2.0, 3.0, 3.0));
 		
 		let expected_surface_area = 2.0 * (4.0 * 6.0 + 6.0 * 6.0 + 6.0 * 4.0);
 		assert!((aabb.surface_area() - expected_surface_area).abs() < f32::EPSILON);
@@ -127,9 +127,9 @@ mod tests {
 		// Scaling
 		let scaled = a.scaled(2.0);
 		let expected_center = a.center();
-		let expected_half_extents = a.half_extents() * 2.0;
+		let expected_half_extents = a.extents() * 2.0;
 		assert_eq!(scaled.center(), expected_center);
-		assert_eq!(scaled.half_extents(), expected_half_extents);
+		assert_eq!(scaled.extents(), expected_half_extents);
 	}
 
 	// Penetration Vector Tests
