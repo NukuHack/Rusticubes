@@ -11,76 +11,42 @@ use winit::{
 };
 
 impl<'a> crate::State<'a> {
-	/*
-	pub fn handle_device_events(&mut self, event: &DeviceEvent) -> bool {
-		if !self.window().has_focus() { return false }
+	#[inline] pub fn handle_events(&mut self, event: &WindowEvent) {
 		match event {
-	        DeviceEvent::MouseMotion { delta } => {
-	        	//println!("Mouse: {:?}", delta);
-	        	/*
-	        	if self.input_system.is_mouse_captured() {
-					let pos = self.input_system.previous_mouse();
-					
-					let new_x = pos.x + delta.0;
-					let new_y = pos.y + delta.1;
-					
-					// Process mouse movement for camera control
-					let gamestate = ptr::get_gamestate();
-					if self.is_world_running && gamestate.is_running() {
-						gamestate.player_mut().controller_mut().process_mouse(delta.0 as f32, delta.1 as f32);
-					}
-					self.input_system.handle_mouse_move(PhysicalPosition::new(new_x, new_y));
-				}
-				*/
-	        	true
-	        }
-	        _ => false
-		}
-	}
-	*/
-	pub fn handle_events(&mut self, event: &WindowEvent) -> bool{
-		match event {
-			WindowEvent::CloseRequested => {ptr::close_app(); true},
-			WindowEvent::Resized(physical_size) => self.resize(*physical_size),
+			WindowEvent::CloseRequested => { ptr::close_app(); },
+			WindowEvent::Resized(physical_size) => { self.resize(*physical_size); },
 			WindowEvent::Occluded(is_hidden) => {
-				if !is_hidden {return true;}
+				if !is_hidden { return }
 				// here it should clean up stuff, and also make the rendering basically non existant
 				memory::light_trim();
 				memory::hard_clean(Some(ptr::get_state().device()));
-				true
 			},
 			WindowEvent::RedrawRequested => {
 				self.window().request_redraw();
 				self.update();
 				match self.render() {
-					Ok(_) => true,
+					Ok(_) => {},
 					Err(wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated) => {
-						self.resize(*self.size())
+						self.resize(*self.size());
 					},
 					Err(wgpu::SurfaceError::OutOfMemory | wgpu::SurfaceError::Other) => {
 						println!("Surface error");
-						ptr::close_app(); true
+						ptr::close_app();
 					}
 					Err(wgpu::SurfaceError::Timeout) => {
 						println!("Surface timeout");
-						true
 					},
 				}
 			},
 			WindowEvent::Focused(focused) => {
-				if !focused{
+				if !focused {
 					self.input_system.clear();
 					if self.is_world_running {
 						self.input_system.reset_keyboard();
 						ptr::get_gamestate().player_mut().controller_mut().process_keyboard(self.input_system.keyboard()); // Temporary workaround
 					}
 					self.ui_manager.clear_focused_state();
-				} else {
-					if self.is_world_running && ptr::get_gamestate().is_running() {
-						// idk some stuff on focus getting ?
-					}
 				}
-				true
 			},
 			WindowEvent::ModifiersChanged(modifiers) => {
 				let change = self.input_system.compare(&modifiers.state());
@@ -91,26 +57,45 @@ impl<'a> crate::State<'a> {
 					}
 					self.center_mouse();
 				}
-				true
 			},
 			WindowEvent::KeyboardInput { is_synthetic, .. } => {
-				if *is_synthetic { return true; }
+				if *is_synthetic { return }
 				self.handle_key_input(event);
-				true
 			},
 			WindowEvent::MouseInput { .. } => {
 				self.handle_mouse_input(event);
-				true
 			},
-			WindowEvent::CursorMoved { .. } => {
-				self.handle_mouse_move(event);
-				true
+			WindowEvent::CursorMoved { position, device_id: _ } => {
+				if !self.input_system.is_mouse_captured() {
+					let (x, y) = convert_mouse_position(self.render_context.size.into(), position);
+					// Handle normal mouse movement for UI
+					if self.ui_manager.visibility {
+						self.ui_manager.handle_mouse_move(x, y, self.input_system.mouse_button_state().left);
+					}
+					self.input_system.handle_mouse_move(*position);
+					return;
+				}
+
+				// Calculate relative movement from center
+				let size = self.size();
+				let center_x = size.width as f64 / 2.0;
+				let center_y = size.height as f64 / 2.0;
+				
+				let delta_x = (position.x - center_x) as f32;
+				let delta_y = (position.y - center_y) as f32;
+				
+				// Process mouse movement for camera control
+				if self.is_world_running && ptr::get_gamestate().is_running() {
+					ptr::get_gamestate().player_mut().controller_mut().process_mouse(delta_x, delta_y);
+				}
+				// Reset cursor to center
+				self.center_mouse();
+				self.input_system.handle_mouse_move(PhysicalPosition::new(center_x, center_y));
 			},
 			WindowEvent::MouseWheel { .. } => {
 				self.handle_mouse_scroll(event);
-				true
 			},
-			_ => false,
+			_ => {},
 		}
 	}
 	#[inline]
@@ -293,49 +278,6 @@ impl<'a> crate::State<'a> {
 			MouseButton::Back => {},
 			MouseButton::Forward => {},
 			MouseButton::Other(_) => {},
-		}
-		true
-	}
-	#[inline]
-	pub fn handle_mouse_move(&mut self, event: &WindowEvent) -> bool {
-		let WindowEvent::CursorMoved { position, device_id: _ } = event else { return false; };
-
-		if !self.input_system.is_mouse_captured() {
-			let (x, y) = convert_mouse_position(self.render_context.size.into(), position);
-			// Handle normal mouse movement for UI
-			if self.ui_manager.visibility {
-				self.ui_manager.handle_mouse_move(x, y, self.input_system.mouse_button_state().left);
-			}
-			self.input_system.handle_mouse_move(*position);
-		} else {
-			let pos = self.input_system.previous_mouse();
-			let new_x = (position.x - pos.x) as f32;
-			let new_y = (position.y - pos.y) as f32;
-			
-			// Process mouse movement for camera control
-			let gamestate = ptr::get_gamestate();
-			if self.is_world_running && gamestate.is_running() {
-				gamestate.player_mut().controller_mut().process_mouse(new_x, new_y);
-			}
-			self.input_system.handle_mouse_move(*position);
-			/*
-			// Calculate relative movement from center
-			let size = self.size();
-			let center_x = size.width as f64 / 2.0;
-			let center_y = size.height as f64 / 2.0;
-			
-			let delta_x = (position.x - center_x) as f32;
-			let delta_y = (position.y - center_y) as f32;
-			
-			// Process mouse movement for camera control
-			let gamestate = ptr::get_gamestate();
-			if self.is_world_running && gamestate.is_running() {
-				gamestate.player_mut().controller_mut().process_mouse(delta_x, delta_y);
-			}
-			// Reset cursor to center
-			//self.center_mouse();
-			self.input_system.handle_mouse_move(PhysicalPosition::new(center_x, center_y));
-			*/
 		}
 		true
 	}

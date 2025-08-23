@@ -36,7 +36,6 @@ impl<'a> crate::State<'a> {
 			self.window().set_cursor_grab(CursorGrabMode::None).unwrap();
 		}
 	}
-
 }
 
 
