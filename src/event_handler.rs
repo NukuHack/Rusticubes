@@ -7,7 +7,7 @@ use crate::item::ui_inventory::InventoryUIState;
 use std::iter::Iterator;
 use winit::{
 	event::{ElementState, MouseButton, WindowEvent, MouseScrollDelta},
-	keyboard::KeyCode as Key, dpi::PhysicalPosition
+	keyboard::KeyCode as Key, dpi::{PhysicalPosition, PhysicalSize}
 };
 
 impl<'a> crate::State<'a> {
@@ -62,38 +62,14 @@ impl<'a> crate::State<'a> {
 				if *is_synthetic { return }
 				self.handle_key_input(event);
 			},
-			WindowEvent::MouseInput { .. } => {
-				self.handle_mouse_input(event);
+			WindowEvent::MouseInput { button, state, device_id: _ } => {
+				self.handle_mouse_input(button, state);
 			},
 			WindowEvent::CursorMoved { position, device_id: _ } => {
-				if !self.input_system.is_mouse_captured() {
-					let (x, y) = convert_mouse_position(self.render_context.size.into(), position);
-					// Handle normal mouse movement for UI
-					if self.ui_manager.visibility {
-						self.ui_manager.handle_mouse_move(x, y, self.input_system.mouse_button_state().left);
-					}
-					self.input_system.handle_mouse_move(*position);
-					return;
-				}
-
-				// Calculate relative movement from center
-				let size = self.size();
-				let center_x = size.width as f64 / 2.0;
-				let center_y = size.height as f64 / 2.0;
-				
-				let delta_x = (position.x - center_x) as f32;
-				let delta_y = (position.y - center_y) as f32;
-				
-				// Process mouse movement for camera control
-				if self.is_world_running && ptr::get_gamestate().is_running() {
-					ptr::get_gamestate().player_mut().controller_mut().process_mouse(delta_x, delta_y);
-				}
-				// Reset cursor to center
-				self.center_mouse();
-				self.input_system.handle_mouse_move(PhysicalPosition::new(center_x, center_y));
+			    self.handle_mouse_movement(position);
 			},
-			WindowEvent::MouseWheel { .. } => {
-				self.handle_mouse_scroll(event);
+			WindowEvent::MouseWheel { delta, phase: _, device_id: _ } => {
+				self.handle_mouse_scroll(delta);
 			},
 			_ => {},
 		}
@@ -243,12 +219,41 @@ impl<'a> crate::State<'a> {
 			_ => false,
 		}
 	}
-	#[inline]
-	pub fn handle_mouse_input(&mut self, event: &WindowEvent) -> bool {
-		let WindowEvent::MouseInput { button, state, device_id: _ } = event else { return false; };
+    /// Handles mouse movement and returns whether it was successfully processed
+    #[inline]
+    pub fn handle_mouse_movement(&mut self, position: &PhysicalPosition<f64>) -> bool {
+        if !self.input_system.is_mouse_captured() {
+            let (x, y) = convert_mouse_position(self.size(), position);
+            
+            // Handle normal mouse movement for UI
+            if self.ui_manager.visibility {
+                self.ui_manager.handle_mouse_move(x, y, self.input_system.mouse_button_state().left);
+            }
+            
+            self.input_system.handle_mouse_move(*position);
+            return true;
+        }
+        
+        // Reset cursor to center for captured mouse
+        self.center_mouse();
 
+        // Calculate relative movement from center
+        let pos = self.input_system.previous_mouse();
+        
+        let delta_x = (position.x - pos.x) as f32;
+        let delta_y = (position.y - pos.y) as f32;
+        
+        // Process mouse movement for camera control if world is running
+        if self.is_world_running && ptr::get_gamestate().is_running() {
+            ptr::get_gamestate().player_mut().controller_mut().process_mouse(delta_x, delta_y);
+        }
+        
+        true
+    }
+	#[inline]
+	pub fn handle_mouse_input(&mut self, button: &MouseButton, state: &ElementState) -> bool {
 		// Use the stored current mouse position
-		let (x, y) = convert_mouse_position(self.render_context.size.into(), &self.input_system.previous_mouse());
+		let (x, y) = convert_mouse_position(self.size(), &self.input_system.previous_mouse());
 		let pressed = *state == ElementState::Pressed;
 		self.input_system.handle_mouse_event(*button, pressed, *self.input_system.previous_mouse());
 		let mods = self.input_system.modifiers(); let keyboard = self.input_system.keyboard();
@@ -282,9 +287,7 @@ impl<'a> crate::State<'a> {
 		true
 	}
 	#[inline]
-	pub fn handle_mouse_scroll(&mut self, event: &WindowEvent) -> bool {
-		let WindowEvent::MouseWheel { delta, phase: _, device_id: _ } = event else { return false; };
-
+	pub fn handle_mouse_scroll(&mut self, delta: &MouseScrollDelta) -> bool {
 		if self.is_world_running && ptr::get_gamestate().is_running() {
 			let delta = match delta {
 				MouseScrollDelta::LineDelta(_, y) => y * -0.5,
@@ -295,17 +298,16 @@ impl<'a> crate::State<'a> {
 		true
 	}
 
-	pub fn converted_mouse_position(&self) -> (f32, f32) {
-		convert_mouse_position(self.render_context.size.into(), &self.input_system.previous_mouse())
+	#[inline] pub fn converted_mouse_position(&self) -> (f32, f32) {
+		convert_mouse_position(self.size(), &self.input_system.previous_mouse())
 	}
 
 }
 
 
-#[inline]
-pub const fn convert_mouse_position(window_size: (u32, u32), mouse_pos: &PhysicalPosition<f64>) -> (f32, f32) {
+#[inline] pub const fn convert_mouse_position(window_size: &PhysicalSize<u32>, mouse_pos: &PhysicalPosition<f64>) -> (f32, f32) {
 	let (x, y) = (mouse_pos.x as f32, mouse_pos.y as f32);
-	let (width, height) = (window_size.0 as f32, window_size.1 as f32);
+	let (width, height) = (window_size.width as f32, window_size.height as f32);
 	((2.0 * x / width) - 1.0, (2.0 * (height - y) / height) - 1.0)
 }
 

@@ -56,6 +56,7 @@ macro_rules! getter_method {
 impl InputSystem {
 	setter_method!(set_modifiers, modifiers: ModifiersState);
 	setter_method!(set_mouse_captured, mouse_captured: bool);
+	setter_method!(set_previous_mouse, previous_mouse: PhysicalPosition<f64>);
 
 	getter_method!(previous_mouse: PhysicalPosition<f64>);
 	getter_method!(mouse_button_state: MouseButtonState);
