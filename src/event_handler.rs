@@ -7,13 +7,13 @@ use crate::item::ui_inventory::InventoryUIState;
 use std::iter::Iterator;
 use winit::{
 	event::{ElementState, MouseButton, WindowEvent, MouseScrollDelta},
-	keyboard::KeyCode as Key, dpi::{PhysicalPosition, PhysicalSize}
+	keyboard::KeyCode, dpi::{PhysicalPosition, PhysicalSize}
 };
 
 impl<'a> crate::State<'a> {
-	#[inline] pub fn handle_events(&mut self, event: &WindowEvent) {
+	pub fn handle_events(&mut self, event: &WindowEvent) {
 		match event {
-			WindowEvent::CloseRequested => { ptr::close_app(); },
+			WindowEvent::CloseRequested => ptr::close_app(),
 			WindowEvent::Resized(physical_size) => { self.resize(*physical_size); },
 			WindowEvent::Occluded(is_hidden) => {
 				if !is_hidden { return }
@@ -58,44 +58,23 @@ impl<'a> crate::State<'a> {
 					self.center_mouse();
 				}
 			},
-			WindowEvent::KeyboardInput { is_synthetic, .. } => {
+			WindowEvent::KeyboardInput { is_synthetic, event: winit::event::KeyEvent {
+					physical_key, state, // ElementState::Released or ElementState::Pressed
+					logical_key, text: _, location: _, repeat: _, .. }, device_id: _ } => {
 				if *is_synthetic { return }
-				self.handle_key_input(event);
+				
+				let winit::keyboard::PhysicalKey::Code(key) = physical_key else { println!("-WindowEvent-KeyboardInput error : no keyboard input"); return };
+				let is_pressed = *state == ElementState::Pressed;
+				let input_str = logical_key.to_text().unwrap_or("");
+				self.handle_key_input(*key, is_pressed, input_str);
 			},
-			WindowEvent::MouseInput { button, state, device_id: _ } => {
-				self.handle_mouse_input(button, state);
-			},
-			WindowEvent::CursorMoved { position, device_id: _ } => {
-			    self.handle_mouse_movement(position);
-			},
-			WindowEvent::MouseWheel { delta, phase: _, device_id: _ } => {
-				self.handle_mouse_scroll(delta);
-			},
+			WindowEvent::MouseInput { button, state, device_id: _ } => self.handle_mouse_input(button, state),
+			WindowEvent::CursorMoved { position, device_id: _ } => self.handle_mouse_movement(position),
+			WindowEvent::MouseWheel { delta, phase: _, device_id: _ } => self.handle_mouse_scroll(delta),
 			_ => {},
 		}
 	}
-	#[inline]
-	pub fn handle_key_input(&mut self, event: &WindowEvent) -> bool {
-		let WindowEvent::KeyboardInput {
-			event: winit::event::KeyEvent {
-				physical_key,
-				state, // ElementState::Released or ElementState::Pressed
-				/*rest of the booring stuff*/ logical_key, text: _, location: _, repeat: _, ..}, device_id: _, is_synthetic 
-			} = event else { return false; };
-
-		let input_str = logical_key.to_text().unwrap_or("");
-
-		if *is_synthetic { return true; }
-			
-		let key:Key = match physical_key {
-			winit::keyboard::PhysicalKey::Code(code) => *code,
-			_ => {
-				println!("You called a function that can only be called with a keyboard input ... without a keyboard input ... FF"); 
-				return false;
-			},
-		};
-		let is_pressed = *state == ElementState::Pressed;
-
+	#[inline] pub fn handle_key_input(&mut self, key: KeyCode, is_pressed: bool, input_str: &str) {
 		self.input_system.handle_key_input(key, is_pressed);
 
 		// Handle UI input first if there's a focused element
@@ -108,7 +87,7 @@ impl<'a> crate::State<'a> {
 				if is_pressed {
 					// Handle keys for UI
 					if self.ui_manager.handle_keyboard_input(key, input_str) {
-						return true;
+						return
 					}
 				}
 			}
@@ -121,14 +100,14 @@ impl<'a> crate::State<'a> {
 				ptr::get_gamestate().player_mut().controller_mut().process_keyboard(self.input_system.keyboard());
 			} // only handle player movement if not in inventory ...
 			match key {
-				Key::KeyG => {
-					if !is_pressed { return false; }
+				KeyCode::KeyG => {
+					if !is_pressed { return }
 
 					extra::add_full_chunk();
-					return true
+					return
 				},
-				Key::KeyE => {
-					if !is_pressed { return false; }
+				KeyCode::KeyE => {
+					if !is_pressed { return }
 
 					match self.ui_manager.state.clone() {
 						UIState::Inventory(_) => {
@@ -141,23 +120,23 @@ impl<'a> crate::State<'a> {
 							self.ui_manager.state = UIState::Inventory(InventoryUIState::default());
 							if self.input_system.is_mouse_captured() { self.toggle_mouse_capture(); }
 						}
-						_ => return false,
+						_ => return,
 					}
 					self.ui_manager.setup_ui();
-					return true
+					return
 				},
-				k if k >= Key::Digit1 && k <= Key::Digit9 => { // nice maching for enums, using them as simple u8
-					if !is_pressed { return false; }
+				k if k >= KeyCode::Digit1 && k <= KeyCode::Digit9 => { // nice maching for enums, using them as simple u8
+					if !is_pressed { return }
 					if self.is_world_running && ptr::get_gamestate().is_running() {
-						let slot = (k as u8 - Key::Digit1 as u8) as isize;
+						let slot = (k as u8 - KeyCode::Digit1 as u8) as isize;
 						let inv_mut = ptr::get_gamestate().player_mut().inventory_mut();
 						inv_mut.select_slot(slot);
 						self.ui_manager.setup_ui();
 					}
-					return true
+					return
 				},
-				Key::KeyR => {
-					if !is_pressed { return false; }
+				KeyCode::KeyR => {
+					if !is_pressed { return }
 
 					let game_state = &mut ptr::get_gamestate(); let play_mut = game_state.player_mut();
 
@@ -172,34 +151,34 @@ impl<'a> crate::State<'a> {
 							self.ui_manager.state = UIState::Inventory(InventoryUIState::craft().input(storage.slots()).b());
 							if self.input_system.is_mouse_captured() { self.toggle_mouse_capture(); }
 						}
-						_ => return false,
+						_ => return,
 					}
 					let storage = play_mut.inventory_mut().get_crafting_mut();
 					let storage_ptr: *mut ItemContainer = storage;
 					play_mut.inventory_mut().storage_ptr = Some(storage_ptr);
 
 					self.ui_manager.setup_ui();
-					return true
+					return
 				},
 				_ => { },
 			};
 		}
 		match key {
 			// handling alt and shift block interaction is considered a "modifier button change" so it should be in the input system
-			Key::Escape => {
-				if !is_pressed { return false; }
+			KeyCode::Escape => {
+				if !is_pressed { return }
 
 				manager::close_pressed();
-				return true;
+				return
 			},
-			Key::F1 => {
-				if !is_pressed { return false; }
+			KeyCode::F1 => {
+				if !is_pressed { return }
 
 				self.ui_manager.toggle_visibility();
-				return true;
+				return
 			},
-			Key::F11 => {
-				if !is_pressed { return false; }
+			KeyCode::F11 => {
+				if !is_pressed { return }
 
 				let window = self.window();
 				
@@ -214,44 +193,40 @@ impl<'a> crate::State<'a> {
 					
 					window.set_fullscreen(Some(winit::window::Fullscreen::Borderless(Some(current_monitor))));
 				}
-				return true;
+				return
 			},
-			_ => false,
+			_ => {},
 		}
 	}
-    /// Handles mouse movement and returns whether it was successfully processed
-    #[inline]
-    pub fn handle_mouse_movement(&mut self, position: &PhysicalPosition<f64>) -> bool {
-        if !self.input_system.is_mouse_captured() {
-            let (x, y) = convert_mouse_position(self.size(), position);
-            
-            // Handle normal mouse movement for UI
-            if self.ui_manager.visibility {
-                self.ui_manager.handle_mouse_move(x, y, self.input_system.mouse_button_state().left);
-            }
-            
-            self.input_system.handle_mouse_move(*position);
-            return true;
-        }
-        
-        // Reset cursor to center for captured mouse
-        self.center_mouse();
+	/// Handles mouse movement and returns whether it was successfully processed
+	#[inline] pub fn handle_mouse_movement(&mut self, position: &PhysicalPosition<f64>) {
+		if !self.input_system.is_mouse_captured() {
+			let (x, y) = convert_mouse_position(self.size(), position);
+			
+			// Handle normal mouse movement for UI
+			if self.ui_manager.visibility {
+				self.ui_manager.handle_mouse_move(x, y, self.input_system.mouse_button_state().left);
+			}
+			
+			self.input_system.handle_mouse_move(*position);
+			return
+		}
+		
+		// Reset cursor to center for captured mouse
+		self.center_mouse();
 
-        // Calculate relative movement from center
-        let pos = self.input_system.previous_mouse();
-        
-        let delta_x = (position.x - pos.x) as f32;
-        let delta_y = (position.y - pos.y) as f32;
-        
-        // Process mouse movement for camera control if world is running
-        if self.is_world_running && ptr::get_gamestate().is_running() {
-            ptr::get_gamestate().player_mut().controller_mut().process_mouse(delta_x, delta_y);
-        }
-        
-        true
-    }
-	#[inline]
-	pub fn handle_mouse_input(&mut self, button: &MouseButton, state: &ElementState) -> bool {
+		// Calculate relative movement from center
+		let pos = self.input_system.previous_mouse();
+		
+		let delta_x = (position.x - pos.x) as f32;
+		let delta_y = (position.y - pos.y) as f32;
+		
+		// Process mouse movement for camera control if world is running
+		if self.is_world_running && ptr::get_gamestate().is_running() {
+			ptr::get_gamestate().player_mut().controller_mut().process_mouse(delta_x, delta_y);
+		}
+	}
+	#[inline] pub fn handle_mouse_input(&mut self, button: &MouseButton, state: &ElementState) {
 		// Use the stored current mouse position
 		let (x, y) = convert_mouse_position(self.size(), &self.input_system.previous_mouse());
 		let pressed = *state == ElementState::Pressed;
@@ -265,29 +240,27 @@ impl<'a> crate::State<'a> {
 			MouseButton::Left => {
 				if pressed && self.input_system.is_mouse_captured() {
 					self.handle_lclick_interaction();
-					return true;
+					return
 				}
 			},
 			MouseButton::Right => {
 				if pressed && self.input_system.is_mouse_captured() {
 					self.handle_rclick_interaction();
-					return true;
+					return
 				}
 			},
 			MouseButton::Middle => {
 				if pressed && self.input_system.is_mouse_captured() {
 					//self.handle_mclick_interaction(); // will have to make a Middle click interaction too (for picking the block)
-					return true;
+					return
 				}
 			},
 			MouseButton::Back => {},
 			MouseButton::Forward => {},
 			MouseButton::Other(_) => {},
 		}
-		true
 	}
-	#[inline]
-	pub fn handle_mouse_scroll(&mut self, delta: &MouseScrollDelta) -> bool {
+	#[inline] pub fn handle_mouse_scroll(&mut self, delta: &MouseScrollDelta) {
 		if self.is_world_running && ptr::get_gamestate().is_running() {
 			let delta = match delta {
 				MouseScrollDelta::LineDelta(_, y) => y * -0.5,
@@ -295,7 +268,6 @@ impl<'a> crate::State<'a> {
 			}; // delta is reversed for some reason ... might need to look into it more (maybe it's different for platforms so yeah)
 			self.ui_manager.handle_scroll(delta);
 		}
-		true
 	}
 
 	#[inline] pub fn converted_mouse_position(&self) -> (f32, f32) {
