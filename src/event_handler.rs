@@ -163,7 +163,28 @@ impl<'a> crate::State<'a> {
 			KeyCode::F1 => {
 				if !is_pressed { return }
 
-				self.ui_manager.toggle_visibility();
+				match self.ui_manager.state.clone() {
+					UIState::Inventory(_) | 
+					UIState::InGame => self.ui_manager.toggle_visibility(),
+					_ => {},
+				}
+				return
+			},
+			KeyCode::Enter => {
+				if !is_pressed || matches!(self.ui_manager.state, UIState::InGame) { return }
+
+				if self.ui_manager.visibility {
+					self.ui_manager.trigger_click_on_focused_element();
+					self.ui_manager.setup_ui();
+				}
+				return
+			},
+			KeyCode::Tab => {
+				if !is_pressed || matches!(self.ui_manager.state, UIState::InGame) { return }
+
+				if self.ui_manager.visibility {
+					self.ui_manager.select_next_element();
+				}
 				return
 			},
 			KeyCode::F11 => {
@@ -181,6 +202,14 @@ impl<'a> crate::State<'a> {
 					});
 					
 					window.set_fullscreen(Some(winit::window::Fullscreen::Borderless(Some(current_monitor))));
+				}
+				return
+			},
+			KeyCode::F4 => { // auto implemented 'Alt + F4' closing ...
+				if !is_pressed { return }
+
+				if self.input_system.modifiers().alt_key() {
+					ptr::close_app();
 				}
 				return
 			},

@@ -21,6 +21,30 @@ impl UIManager {
 		false
 	}
 
+	#[inline] pub fn select_next_element(&mut self) {
+		if let Some(foc) = self.get_focused_element_mut() {
+			foc.update_hover_state(false);
+		}
+		let mut id = self.get_focused_state().id() + 1;
+		let mut temp_element = self.get_element(id);
+		let mut f = 0;
+		while temp_element.is_none() || !temp_element.unwrap().should_handle_hover() {
+			if id + 1 >= self.elements.len() { id = 1; f += 1; } else { id += 1; }
+			temp_element = self.get_element(id);
+			if f > 5 { self.set_focused_state(FocusState::None); return }
+		}
+		self.set_focused_state(FocusState::Simple{ id });
+		{
+			let Some(foc) = self.get_focused_element_mut() else { return };
+			foc.update_hover_state(true);
+		}
+	}
+	#[inline] pub fn trigger_click_on_focused_element(&mut self) {
+		let Some(foc) = self.get_focused_element() else { return };
+		let (x,y) = foc.center();
+		self.handle_click_release(x,y);
+	}
+
 	fn handle_click_press(&mut self, x: f32, y: f32) {
 		// Get visible, enabled elements sorted by descending z-index
 		let active_elements: Vec<(usize, i32)> = {

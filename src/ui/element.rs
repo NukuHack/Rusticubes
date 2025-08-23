@@ -1,13 +1,14 @@
 
 use crate::utils::color::{Color, Border};
-use std::{cell::RefCell, sync::Arc };
 use crate::ext::config::ElementStyle;
-use glam::Vec2;
 use crate::utils::string::MutStr;
+use crate::utils::vec2;
+use std::{cell::RefCell, sync::Arc };
+use glam::Vec2;
 
 type Callback = Arc<RefCell<dyn FnMut() + 'static>>;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum UIElementData {
 	Panel,
 	Label { text: MutStr },
@@ -25,7 +26,7 @@ pub enum UIElementData {
 impl UIElementData {
 	#[inline] pub const fn default() -> Self { UIElementData::Panel }
 }
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum ElementData {
 	Text(String),
 	Number(f32),
@@ -43,6 +44,46 @@ impl ElementData {
 			ElementData::Number(s) => Some(*s),
 			_ => None,
 		}
+	}
+}
+impl std::fmt::Debug for UIElement {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		let mut debug_struct = f.debug_struct("UIElement");
+		
+		debug_struct.field("id", &self.id);
+		debug_struct.field("parent", &self.parent);
+		
+		// Layout - concise format
+		debug_struct.field("position", &format_args!("({:.1}, {:.1})", self.position.x, self.position.y));
+		debug_struct.field("size", &format_args!("({:.1}, {:.1})", self.size.x, self.size.y));
+		debug_struct.field("vertical", &self.vertical);
+		debug_struct.field("z_index", &self.z_index);
+		
+		// Appearance - simplified color representation
+		debug_struct.field("color", &format_args!("{:?}", self.color));
+		debug_struct.field("border", &self.border);
+		debug_struct.field("ext_color", &format_args!("{:?}", self.ext_color));
+		
+		// State - only show true values for cleaner output
+		if self.hovered {
+			debug_struct.field("hovered", &true);
+		}
+		if !self.visible {
+			debug_struct.field("visible", &false);
+		}
+		if !self.enabled {
+			debug_struct.field("enabled", &false);
+		}
+		
+		// Behavior - show if event handler exists
+		if self.event_handler.is_some() {
+			debug_struct.field("event_handler", &"Some(Callback)");
+		}
+		
+		// Content - delegate to UIElementData's debug
+		debug_struct.field("data", &self.data);
+		
+		debug_struct.finish()
 	}
 }
 #[derive(Clone)]
@@ -271,11 +312,15 @@ impl UIElement {
 	}
 			
 	// Utility methods
-	#[inline] pub fn get_bounds(&self) -> (f32, f32, f32, f32) {
-		let corner = self.position + self.size;
+	#[inline] pub const fn get_bounds(&self) -> (f32, f32, f32, f32) {
+		let corner = vec2::const_add(self.position, self.size);
 		(self.position.x, self.position.y, corner.x, corner.y)
 	}
-	#[inline] pub fn contains_point(&self, x: f32, y: f32) -> bool {
+	#[inline] pub const fn center(&self) -> (f32, f32) {
+		let center = vec2::const_add(self.position, vec2::const_mul_s(self.size, 0.5) );
+		(center.x, center.y)
+	}
+	#[inline] pub const fn contains_point(&self, x: f32, y: f32) -> bool {
 		if !self.visible || !self.enabled { return false; }
 		let (min_x, min_y, max_x, max_y) = self.get_bounds();
 		x >= min_x && x <= max_x && y >= min_y && y <= max_y
@@ -284,17 +329,14 @@ impl UIElement {
 
 	#[inline] pub const fn update_hover_state(&mut self, is_hovered: bool) {
 		self.hovered = is_hovered && self.enabled;
-		match self.data {
-			UIElementData::Button { .. } | UIElementData::InputField { .. } | UIElementData::Slider { .. } | UIElementData::MultiStateButton { .. } => {
-				self.color.a = if self.hovered && self.enabled {
-					Color::HOVER_ALPHA
-				} else if !self.enabled {
-					Color::HOVER_ALPHA / 2
-				} else {
-					Color::DEF_ALPHA
-				};
-			},
-			_ => { },
+		if self.should_handle_hover() {
+			self.color.a = if self.hovered && self.enabled {
+				Color::HOVER_ALPHA
+			} else if !self.enabled {
+				Color::HOVER_ALPHA / 2
+			} else {
+				Color::DEF_ALPHA
+			};
 		}
 	}
 	#[inline] pub fn get_text_mut(&mut self) -> Option<&mut String> {
@@ -306,6 +348,18 @@ impl UIElement {
 				Some(text.get_mut())
 			},
 			_ => None,
+		}
+	}
+
+	#[inline] pub const fn should_handle_hover(&self) -> bool {
+		match &self.data {
+			UIElementData::Button { .. } |
+			UIElementData::InputField { .. } |
+			UIElementData::Slider { .. } |
+			UIElementData::MultiStateButton { .. } => {
+				true
+			},
+			_ => false,
 		}
 	}
 

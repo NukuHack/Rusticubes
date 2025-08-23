@@ -296,6 +296,12 @@ pub struct Inventory {
 	pub storage_ptr: Option<*mut ItemContainer>,
 	// Basic inventory crafting grid to make basic stuff
 	pub crafting_def: ItemContainer,
+
+	/*
+	// Consider:
+	use std::rc::{Rc, Weak};
+	use std::cell::RefCell;
+	*/
 }
 
 impl Inventory {

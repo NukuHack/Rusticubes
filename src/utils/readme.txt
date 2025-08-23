@@ -17,6 +17,8 @@ pub mod utils {
 	pub mod rng;
 	/// stuff for glam::Vec3 ... in const
 	pub mod vec3;
+	/// stuff for glam::Vec2 ... in const
+	pub mod vec2;
 	/// Cursor state (cursor change and locking).
 	pub mod cursor;
 	/// Time formatting is a pretty struct.
