@@ -8,6 +8,10 @@ pub mod block {
 	pub mod math;
 	/// block & chunk interaction and world modification
 	pub mod extra;
+	/// block storage
+	pub mod storage;
+	// Block entity
+	pub mod entity;
 }
 /// Debug, test related
 #[cfg(test)]
@@ -422,23 +426,29 @@ pub async fn run() {
 	ext::memory::hard_clean(Some(ext::ptr::get_state().device()));
 
 	event_loop.run(move |event, control_flow| {
+
 		if ext::ptr::is_closed() {
 			ext::ptr::cleanup_resources();
 			control_flow.exit();
 			return;
 		}
+
 		let state = ext::ptr::get_state();
+
 		if let Event::WindowEvent { event, window_id } = &event {
 			if *window_id != state.window().id() { return; };
 			state.handle_events(event);
 		}
-		if let Event::DeviceEvent { event, device_id:_ } = &event {
-			state.handle_device_events(event);
-		}
+		
+		//if let Event::DeviceEvent { event, device_id:_ } = &event {
+		//	state.handle_device_events(event);
+		//}
+		
 
 		if state.is_world_running {
 			block::extra::update_full_world();
 		}
+
 	}).expect("Event loop error");
 }
 

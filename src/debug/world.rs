@@ -3,7 +3,8 @@
 mod tests {
 	use crate::{
 		block::{
-			main::{Block, StorageType, BlockStorage, Chunk, Material},
+			main::{Block, Chunk, Material},
+			storage::{StorageType, BlockStorage},
 			math::{LocalPos, BlockRotation, ChunkCoord},
 		},
 		fs::binary::BinarySerializable,

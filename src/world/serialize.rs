@@ -1,7 +1,8 @@
 
 use crate::world::region::Region;
 use crate::block::math::{BlockRotation, ChunkCoord, LocalPos};
-use crate::block::main::{Block, Material, StorageType, Chunk, BlockStorage};
+use crate::block::main::{Block, Material, Chunk};
+use crate::block::storage::{StorageType, BlockStorage};
 use crate::fs::binary::{BinarySerializable, FixedBinarySerializable};
 
 

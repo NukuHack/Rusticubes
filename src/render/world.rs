@@ -2,7 +2,8 @@
 use crate::physic::aabb::AABB;
 use crate::render::meshing::{CUBE_FACES, InstanceRaw, ChunkMeshBuilder, GeometryBuffer};
 use crate::block::math::{ChunkCoord, LocalPos};
-use crate::block::main::{Block, Chunk, BlockStorage};
+use crate::block::main::{Block, Chunk};
+use crate::block::storage::BlockStorage;
 use crate::player::CameraSystem;
 use crate::world::main::World;
 use crate::ext::ptr;

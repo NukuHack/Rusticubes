@@ -6,11 +6,12 @@ use crate::ui::manager::{self, UIState};
 use crate::item::ui_inventory::InventoryUIState;
 use std::iter::Iterator;
 use winit::{
-	event::{ElementState, MouseButton, WindowEvent, DeviceEvent, MouseScrollDelta},
+	event::{ElementState, MouseButton, WindowEvent, MouseScrollDelta},
 	keyboard::KeyCode as Key, dpi::PhysicalPosition
 };
 
 impl<'a> crate::State<'a> {
+	/*
 	pub fn handle_device_events(&mut self, event: &DeviceEvent) -> bool {
 		if !self.window().has_focus() { return false }
 		match event {
@@ -18,7 +19,6 @@ impl<'a> crate::State<'a> {
 	        	//println!("Mouse: {:?}", delta);
 	        	/*
 	        	if self.input_system.is_mouse_captured() {
-					// Calculate relative movement from center
 					let pos = self.input_system.previous_mouse();
 					
 					let new_x = pos.x + delta.0;
@@ -37,6 +37,7 @@ impl<'a> crate::State<'a> {
 	        _ => false
 		}
 	}
+	*/
 	pub fn handle_events(&mut self, event: &WindowEvent) -> bool{
 		match event {
 			WindowEvent::CloseRequested => {ptr::close_app(); true},
@@ -299,7 +300,25 @@ impl<'a> crate::State<'a> {
 	pub fn handle_mouse_move(&mut self, event: &WindowEvent) -> bool {
 		let WindowEvent::CursorMoved { position, device_id: _ } = event else { return false; };
 
-		if self.input_system.is_mouse_captured() {
+		if !self.input_system.is_mouse_captured() {
+			let (x, y) = convert_mouse_position(self.render_context.size.into(), position);
+			// Handle normal mouse movement for UI
+			if self.ui_manager.visibility {
+				self.ui_manager.handle_mouse_move(x, y, self.input_system.mouse_button_state().left);
+			}
+			self.input_system.handle_mouse_move(*position);
+		} else {
+			let pos = self.input_system.previous_mouse();
+			let new_x = (position.x - pos.x) as f32;
+			let new_y = (position.y - pos.y) as f32;
+			
+			// Process mouse movement for camera control
+			let gamestate = ptr::get_gamestate();
+			if self.is_world_running && gamestate.is_running() {
+				gamestate.player_mut().controller_mut().process_mouse(new_x, new_y);
+			}
+			self.input_system.handle_mouse_move(*position);
+			/*
 			// Calculate relative movement from center
 			let size = self.size();
 			let center_x = size.width as f64 / 2.0;
@@ -314,15 +333,9 @@ impl<'a> crate::State<'a> {
 				gamestate.player_mut().controller_mut().process_mouse(delta_x, delta_y);
 			}
 			// Reset cursor to center
-			self.center_mouse();
+			//self.center_mouse();
 			self.input_system.handle_mouse_move(PhysicalPosition::new(center_x, center_y));
-		} else {
-			let (x, y) = convert_mouse_position(self.render_context.size.into(), position);
-			// Handle normal mouse movement for UI
-			if self.ui_manager.visibility {
-				self.ui_manager.handle_mouse_move(x, y, self.input_system.mouse_button_state().left);
-			}
-			self.input_system.handle_mouse_move(*position);
+			*/
 		}
 		true
 	}

@@ -1,7 +1,9 @@
 
 use crate::{
 	block::{
-		main::{Chunk, BlockStorage}, math::{ChunkCoord, LocalPos},
+		main::Chunk,
+		math::{ChunkCoord, LocalPos},
+		storage::BlockStorage
 	},
 	ext::ptr, world::main::World,
 	utils::time::Time,
@@ -449,7 +451,7 @@ fn read_local_coord(bytes: &[u8], cursor: &mut usize) -> Result<LocalPos> {
 /// Decompresses chunk storage if needed
 fn maybe_decompress_chunk(mut chunk: Chunk) -> Result<Chunk> {
 	if let Some(storage) = BlockStorage::from_rle(&chunk.storage()) {
-		chunk.set_storage(storage);
+		*chunk.storage_mut() = storage;
 	}
 	Ok(chunk)
 }
