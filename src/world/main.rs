@@ -3,7 +3,7 @@ use crate::{
 	block::{
 		math::{LocalPos, ChunkCoord},
 		main::{Block, Chunk},
-	},
+	}, ptr,
 	world::threading::PriorityChunk,
 	item::inventory::ItemContainer,
 };
@@ -124,6 +124,14 @@ impl World {
 
 		let chunk = self.chunks.get_mut(&chunk_coord).expect("Chunk should exist");
 		chunk.set_block(index, block);
+
+		let inv_mut = ptr::get_gamestate().player_mut().inventory_mut();
+		if let Some(storage) = self.get_storage(world_pos) {
+			for item in storage.iter() {
+				let Some(itm) = item.clone() else { continue; };
+				inv_mut.add_item_anywhere(&mut itm.clone());
+			}
+		}
 		
 		self.set_some_un_final(chunk_coord, IVec3::from(local_pos));
 	}

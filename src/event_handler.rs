@@ -74,6 +74,9 @@ impl<'a> crate::State<'a> {
 			_ => {},
 		}
 	}
+	#[inline] fn can_handle_game_input(&self) -> bool {
+		self.is_world_running && ptr::get_gamestate().is_running()
+	}
 	#[inline] pub fn handle_key_input(&mut self, key: KeyCode, is_pressed: bool, input_str: &str) {
 		self.input_system.handle_key_input(key, is_pressed);
 
@@ -95,7 +98,7 @@ impl<'a> crate::State<'a> {
 		// Handle game controls if no UI element is focused
 		// `key` is of type `KeyCode` (e.g., KeyCode::W)
 		// `state` is of type `ElementState` (Pressed or Released)
-		if self.is_world_running && ptr::get_gamestate().is_running() {
+		if self.can_handle_game_input() {
 			if matches!(self.ui_manager.state, UIState::InGame)  {
 				ptr::get_gamestate().player_mut().controller_mut().process_keyboard(self.input_system.keyboard());
 			} // only handle player movement if not in inventory ...
@@ -106,33 +109,24 @@ impl<'a> crate::State<'a> {
 					extra::add_full_chunk();
 					return
 				},
+				k if k >= KeyCode::Digit1 && k <= KeyCode::Digit9 => {
+					if !is_pressed || !self.can_handle_game_input() { return }
+					
+					let slot = (k as u8 - KeyCode::Digit1 as u8) as isize;
+					ptr::get_gamestate().player_mut().inventory_mut().select_slot(slot);
+					self.ui_manager.setup_ui();
+				},
 				KeyCode::KeyE => {
 					if !is_pressed { return }
 
 					match self.ui_manager.state.clone() {
-						UIState::Inventory(_) => {
-							manager::close_pressed();
-							if !self.input_system.is_mouse_captured() { self.toggle_mouse_capture(); }
-						},
+						UIState::Inventory(_) => self.close_inventory(),
 						UIState::InGame => {
-							let game_state = &mut ptr::get_gamestate();
-							game_state.player_mut().controller_mut().process_keyboard(&Keyboard::default());
-							self.ui_manager.state = UIState::Inventory(InventoryUIState::default());
-							if self.input_system.is_mouse_captured() { self.toggle_mouse_capture(); }
+							self.transition_inventory_state(InventoryUIState::default());
 						}
 						_ => return,
 					}
 					self.ui_manager.setup_ui();
-					return
-				},
-				k if k >= KeyCode::Digit1 && k <= KeyCode::Digit9 => { // nice maching for enums, using them as simple u8
-					if !is_pressed { return }
-					if self.is_world_running && ptr::get_gamestate().is_running() {
-						let slot = (k as u8 - KeyCode::Digit1 as u8) as isize;
-						let inv_mut = ptr::get_gamestate().player_mut().inventory_mut();
-						inv_mut.select_slot(slot);
-						self.ui_manager.setup_ui();
-					}
 					return
 				},
 				KeyCode::KeyR => {
@@ -141,15 +135,10 @@ impl<'a> crate::State<'a> {
 					let game_state = &mut ptr::get_gamestate(); let play_mut = game_state.player_mut();
 
 					match self.ui_manager.state.clone() {
-						UIState::Inventory(_) => {
-							manager::close_pressed();
-							if !self.input_system.is_mouse_captured() { self.toggle_mouse_capture(); }
-						},
+						UIState::Inventory(_) => self.close_inventory(),
 						UIState::InGame => {
-							play_mut.controller_mut().process_keyboard(&Keyboard::default());
-							let storage = play_mut.inventory_mut().get_crafting_mut();
-							self.ui_manager.state = UIState::Inventory(InventoryUIState::craft().input(storage.slots()).b());
-							if self.input_system.is_mouse_captured() { self.toggle_mouse_capture(); }
+							let slots = play_mut.inventory().get_crafting().slots();
+							self.transition_inventory_state(InventoryUIState::craft().input(slots).b());
 						}
 						_ => return,
 					}
@@ -222,7 +211,7 @@ impl<'a> crate::State<'a> {
 		let delta_y = (position.y - pos.y) as f32;
 		
 		// Process mouse movement for camera control if world is running
-		if self.is_world_running && ptr::get_gamestate().is_running() {
+		if self.can_handle_game_input() {
 			ptr::get_gamestate().player_mut().controller_mut().process_mouse(delta_x, delta_y);
 		}
 	}
@@ -261,12 +250,29 @@ impl<'a> crate::State<'a> {
 		}
 	}
 	#[inline] pub fn handle_mouse_scroll(&mut self, delta: &MouseScrollDelta) {
-		if self.is_world_running && ptr::get_gamestate().is_running() {
+		if self.can_handle_game_input() {
 			let delta = match delta {
 				MouseScrollDelta::LineDelta(_, y) => y * -0.5,
 				MouseScrollDelta::PixelDelta(pos) => pos.y as f32 * -0.01,
 			}; // delta is reversed for some reason ... might need to look into it more (maybe it's different for platforms so yeah)
 			self.ui_manager.handle_scroll(delta);
+		}
+	}
+
+	#[inline] fn transition_inventory_state(&mut self, new_state: InventoryUIState) {
+		let game_state = ptr::get_gamestate();
+		game_state.player_mut().controller_mut().process_keyboard(&Keyboard::default());
+		
+		self.ui_manager.state = UIState::Inventory(new_state);
+		
+		if self.input_system.is_mouse_captured() { 
+			self.toggle_mouse_capture(); 
+		}
+	}
+	#[inline] fn close_inventory(&mut self) {
+		manager::close_pressed();
+		if !self.input_system.is_mouse_captured() { 
+			self.toggle_mouse_capture(); 
 		}
 	}
 
@@ -293,13 +299,11 @@ use crate::block::main::{Block, Material};
 const CRAFTING_BLOCK:&str = "crafting";
 impl<'a> crate::State<'a> {
 	pub fn handle_rclick_interaction(&mut self) {
-		if !self.is_world_running {
-			return;
-		}
+		if !self.can_handle_game_input() { return }
 
 		let player = &ptr::get_gamestate().player();
 
-		if self.handle_block_and_item_interaction(player) { 
+		if matches!(self.ui_manager.state, UIState::InGame) && self.handle_block_and_item_interaction(player) { 
 			self.ui_manager.setup_ui(); // to update the hotbar if changed
 			return;
 		}
@@ -320,9 +324,7 @@ impl<'a> crate::State<'a> {
 		}
 	}
 	pub fn handle_lclick_interaction(&mut self) {
-		if !self.is_world_running {
-			return;
-		}
+		if !self.can_handle_game_input() { return }
 		let player = &ptr::get_gamestate().player();
 
 		if self.handle_block_breaking(player) {
@@ -361,12 +363,6 @@ impl<'a> crate::State<'a> {
 
 			inv_mut.add_item_anywhere(&mut ItemStack::new(item_name).with_stack_size(1));
 		}
-		if let Some(storage) = world.get_storage(block_pos) {
-			for item in storage.iter() {
-				let Some(itm) = item.clone() else { continue; };
-				inv_mut.add_item_anywhere(&mut itm.clone());
-			}
-		}
 
 		world.set_block(block_pos, Block::default());
 		update_chunk_mesh(world, ChunkCoord::from_world_pos(block_pos));
@@ -380,14 +376,8 @@ impl<'a> crate::State<'a> {
 		let block_mat = world.get_block(block_pos).material.inner();
 
 		let Some(storage) = world.get_storage_mut(block_pos) else { return false; };
-		if self.ui_manager.state.clone() == UIState::InGame {
-			if &get_item_name_from_block_id(block_mat) == CRAFTING_BLOCK {
-				self.ui_manager.state = UIState::Inventory(InventoryUIState::craft().input(storage.slots()).b());
-			} else {
-				self.ui_manager.state = UIState::Inventory(InventoryUIState::str().size(storage.slots()).b());
-			}
-			if self.input_system.is_mouse_captured() { self.toggle_mouse_capture(); }
-		}
+		self.transition_inventory_state(if &get_item_name_from_block_id(block_mat) == CRAFTING_BLOCK { 
+			InventoryUIState::craft().input(storage.slots()).b() } else { InventoryUIState::str().size(storage.slots()).b() });
 
 		let storage_ptr: *mut ItemContainer = storage;
 		let inv_mut = game_state.player_mut().inventory_mut();
