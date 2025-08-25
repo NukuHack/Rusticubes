@@ -18,7 +18,7 @@ pub fn update_chunk_mesh(world: &mut World, chunk_coord: ChunkCoord) {
 	let world_ptr = world as *mut World;
 	
 	// Get mutable reference to our chunk
-	let Some(chunk) = world.get_chunk_mut(chunk_coord) else { return; };
+	let Some(chunk) = world.get_chunk_mut(&chunk_coord) else { return; };
 
 	let state = ptr::get_state();
 	

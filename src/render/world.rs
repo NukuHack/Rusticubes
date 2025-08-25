@@ -326,12 +326,12 @@ impl World {
 		//self.chunks.get(&chunk_coord);
 		let neigh = chunk_coord.get_adjacent();
 		NeighboringChunks::new([
-			self.get_chunk(neigh[0]),  // Left
-			self.get_chunk(neigh[1]), // Right
-			self.get_chunk(neigh[2]),   // Front
-			self.get_chunk(neigh[3]), // Back
-			self.get_chunk(neigh[4]), // Top
-			self.get_chunk(neigh[5]),   // Bottom
+			self.get_chunk(&neigh[0]),  // Left
+			self.get_chunk(&neigh[1]), // Right
+			self.get_chunk(&neigh[2]),   // Front
+			self.get_chunk(&neigh[3]), // Back
+			self.get_chunk(&neigh[4]), // Top
+			self.get_chunk(&neigh[5]),   // Bottom
 		])
 	}
 
@@ -367,7 +367,7 @@ impl World {
 
 	pub fn create_bind_group(&mut self, chunk_coord: ChunkCoord) {
 		if !self.loaded_chunks.contains(&chunk_coord) { return; }
-		let Some(c) = self.get_chunk_mut(chunk_coord) else { return; };
+		let Some(c) = self.get_chunk_mut(&chunk_coord) else { return; };
 		
 		c.create_bind_group(chunk_coord);
 	}

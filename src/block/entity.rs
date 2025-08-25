@@ -1,13 +1,18 @@
 // Block entity
+use crate::item::inventory::ItemContainer;
 use crate::block::math::LocalPos;
-use std::collections::HashMap;
 use crate::block::main::Chunk;
+use std::collections::HashMap;
+use std::hash::BuildHasherDefault;
+use ahash::AHasher;
+
+type FastMap<K, V> = HashMap<K, V, BuildHasherDefault<AHasher>>;
 
 #[derive(Clone, PartialEq, Debug)]
 pub enum EntityStorage {
 	Empty, // 1 byte
-	Sparse(HashMap<LocalPos, BlockEntity>), // small storage
-	Dense(Box<[Option<BlockEntity>; Chunk::SIZE]>), // For >25% density
+	Sparse(FastMap<LocalPos, ItemContainer>), // small storage
+	Dense(Box<[Option<ItemContainer>; Chunk::VOLUME]>), // For >25% density
 }
 
 impl EntityStorage {
@@ -15,17 +20,17 @@ impl EntityStorage {
 	pub fn default() -> Self { EntityStorage::Empty }
 
 	/// Adds an entity at the given position
-	pub fn add(&mut self, pos: LocalPos, entity: BlockEntity) {
+	pub fn add(&mut self, pos: LocalPos, entity: ItemContainer) {
 		match self {
 			EntityStorage::Empty => {
-				let mut map = HashMap::new();
+				let mut map = FastMap::with_capacity_and_hasher(5, BuildHasherDefault::<AHasher>::default());
 				map.insert(pos, entity);
 				*self = EntityStorage::Sparse(map);
 			},
 			EntityStorage::Sparse(map) => {
 				map.insert(pos, entity);
 				// Auto-upgrade to dense if density exceeds threshold
-				if map.len() > Chunk::SIZE / 4 {
+				if map.len() > Chunk::VOLUME / 4 {
 					self.upgrade_to_dense();
 				}
 			},
@@ -36,7 +41,7 @@ impl EntityStorage {
 	}
 
 	/// Removes an entity at the given position
-	pub fn remove(&mut self, pos: LocalPos) -> Option<BlockEntity> {
+	pub fn remove(&mut self, pos: LocalPos) -> Option<ItemContainer> {
 		match self {
 			EntityStorage::Empty => None,
 			EntityStorage::Sparse(map) => {
@@ -49,7 +54,7 @@ impl EntityStorage {
 			EntityStorage::Dense(array) => {
 				let removed = array[pos.index() as usize].take();
 				// Downgrade to sparse if density is low enough
-				if array.len() < Chunk::SIZE / 8 {
+				if array.len() < Chunk::VOLUME / 8 {
 					self.downgrade_to_sparse();
 				}
 				removed
@@ -58,7 +63,7 @@ impl EntityStorage {
 	}
 
 	/// Gets a reference to an entity at the given position
-	pub fn get(&self, pos: LocalPos) -> Option<&BlockEntity> {
+	pub fn get(&self, pos: LocalPos) -> Option<&ItemContainer> {
 		match self {
 			EntityStorage::Empty => None,
 			EntityStorage::Sparse(map) => map.get(&pos),
@@ -66,7 +71,7 @@ impl EntityStorage {
 		}
 	}
 	/// Gets a mutable reference to an entity at the given position
-	pub fn get_mut(&mut self, pos: LocalPos) -> Option<&mut BlockEntity> {
+	pub fn get_mut(&mut self, pos: LocalPos) -> Option<&mut ItemContainer> {
 		match self {
 			EntityStorage::Empty => None,
 			EntityStorage::Sparse(map) => map.get_mut(&pos),
@@ -109,14 +114,14 @@ impl EntityStorage {
 			EntityStorage::Sparse(map) => {
 				if map.is_empty() {
 					*self = EntityStorage::Empty;
-				} else if map.len() > Chunk::SIZE / 4 {
+				} else if map.len() > Chunk::VOLUME / 4 {
 					self.upgrade_to_dense();
 				}
 			},
 			EntityStorage::Dense(_array) => {
 				if self.is_empty() {
 					*self = EntityStorage::Empty;
-				} else if self.len() < Chunk::SIZE / 8 {
+				} else if self.len() < Chunk::VOLUME / 8 {
 					self.downgrade_to_sparse();
 				}
 			},
@@ -125,7 +130,7 @@ impl EntityStorage {
 	}
 
 	/// Iterates over all entities with their positions
-	pub fn iter(&self) -> Box<dyn Iterator<Item = (LocalPos, &BlockEntity)> + '_> {
+	pub fn iter(&self) -> Box<dyn Iterator<Item = (LocalPos, &ItemContainer)> + '_> {
 		match self {
 			EntityStorage::Empty => Box::new(std::iter::empty()),
 			EntityStorage::Sparse(map) => Box::new(map.iter().map(|(pos, entity)| (*pos, entity))),
@@ -139,7 +144,7 @@ impl EntityStorage {
 		}
 	}
 	/// Iterates over all entities mutably with their positions
-	pub fn iter_mut(&mut self) -> Box<dyn Iterator<Item = (LocalPos, &mut BlockEntity)> + '_> {
+	pub fn iter_mut(&mut self) -> Box<dyn Iterator<Item = (LocalPos, &mut ItemContainer)> + '_> {
 		match self {
 			EntityStorage::Empty => Box::new(std::iter::empty()),
 			EntityStorage::Sparse(map) => Box::new(map.iter_mut().map(|(pos, entity)| (*pos, entity))),
@@ -159,18 +164,18 @@ impl EntityStorage {
 			EntityStorage::Empty => std::mem::size_of::<Self>(),
 			EntityStorage::Sparse(map) => {
 				std::mem::size_of::<Self>() + 
-				map.capacity() * (std::mem::size_of::<LocalPos>() + std::mem::size_of::<BlockEntity>())
+				map.capacity() * (std::mem::size_of::<LocalPos>() + std::mem::size_of::<ItemContainer>())
 			}
 			EntityStorage::Dense(_) => {
 				std::mem::size_of::<Self>() + 
-				Chunk::SIZE * std::mem::size_of::<Option<BlockEntity>>()
+				Chunk::VOLUME * std::mem::size_of::<Option<ItemContainer>>()
 			}
 		}
 	}
 	// Private helper methods
 	fn upgrade_to_dense(&mut self) {
 		if let EntityStorage::Sparse(map) = self {
-			let mut dense = Box::new([None; Chunk::SIZE]);
+			let mut dense = Box::new([const { None }; Chunk::VOLUME]);
 			for (pos, entity) in map.drain() {
 				dense[pos.index() as usize] = Some(entity);
 			}
@@ -179,7 +184,7 @@ impl EntityStorage {
 	}
 	fn downgrade_to_sparse(&mut self) {
 		if let EntityStorage::Dense(array) = self {
-			let mut map = HashMap::new();
+			let mut map = FastMap::with_capacity_and_hasher(array.len() / 2, BuildHasherDefault::<AHasher>::default());
 			for (i, entity) in array.iter().enumerate() {
 				if let Some(entity) = entity {
 					map.insert(LocalPos::from_index(i as u16), entity.clone());
@@ -198,25 +203,25 @@ impl EntityStorage {
 impl Chunk {
 	/// Adds an entity at the given position
 	#[inline]
-	pub fn add_entity(&mut self, pos: LocalPos, entity: BlockEntity) {
+	pub fn add_entity(&mut self, pos: LocalPos, entity: ItemContainer) {
 		self.entities_mut().add(pos, entity);
 	}
 
 	/// Removes an entity at the given position
 	#[inline]
-	pub fn remove_entity(&mut self, pos: LocalPos) -> Option<BlockEntity> {
+	pub fn remove_entity(&mut self, pos: LocalPos) -> Option<ItemContainer> {
 		self.entities_mut().remove(pos)
 	}
 
 	/// Gets a reference to an entity at the given position
 	#[inline]
-	pub fn get_entity(&self, pos: LocalPos) -> Option<&BlockEntity> {
+	pub fn get_entity(&self, pos: LocalPos) -> Option<&ItemContainer> {
 		self.entities().get(pos)
 	}
 
 	/// Gets a mutable reference to an entity at the given position
 	#[inline]
-	pub fn get_entity_mut(&mut self, pos: LocalPos) -> Option<&mut BlockEntity> {
+	pub fn get_entity_mut(&mut self, pos: LocalPos) -> Option<&mut ItemContainer> {
 		self.entities_mut().get_mut(pos)
 	}
 
@@ -231,10 +236,4 @@ impl Chunk {
 	pub fn entity_count(&self) -> usize {
 		self.entities().len()
 	}
-}
-
-
-#[derive(PartialEq, Clone, Copy, Debug)]
-pub struct BlockEntity{
-	pub apple: u16
 }

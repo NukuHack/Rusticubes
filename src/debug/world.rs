@@ -25,9 +25,9 @@ mod tests {
 		assert!(chunk.dirty);
 
 		// Test block rotation
-		let rotated_block = Block::from(Material(2), BlockRotation::XminusYplus);
+		let rotated_block = Block::from(Material(2), BlockRotation::XMINUS_YPLUS);
 		chunk.set_block(idx, rotated_block);
-		assert_eq!(chunk.get_block(idx).get_rotation(), BlockRotation::XminusYplus);
+		assert_eq!(chunk.get_block(idx).get_rotation(), BlockRotation::XMINUS_YPLUS);
 	}
 
 	#[test]

@@ -38,7 +38,7 @@ impl Block {
 	}
 	/// Creates a new simple block with default material
 	#[inline] pub const fn new(material: Material) -> Self {
-		Self { material, rotation: BlockRotation::XplusYplus }
+		Self { material, rotation: BlockRotation::XPLUS_YPLUS }
 	}
 	#[inline] pub const fn from(material: Material, rotation:BlockRotation) -> Self {
 		Self { material, rotation }
@@ -222,6 +222,11 @@ impl Chunk {
 
 	/// Sets a block at the given index
 	pub fn set_block(&mut self, index: usize, block: Block) {
+		let old_block = self.get_block(index);
+		if old_block.is_storage() {
+			self.remove_entity(index.into());
+		}
+
 		self.storage.set(index, block);
 		self.dirty = true;
 

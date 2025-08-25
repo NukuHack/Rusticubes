@@ -392,6 +392,12 @@ impl<'a> crate::State<'a> {
 
 			inv_mut.add_item_anywhere(&mut ItemStack::new(item_name).with_stack_size(1));
 		}
+		if block.is_storage() { if let Some(storage) = world.get_storage_mut(block_pos) {
+			for item in storage.iter_mut() {
+				let Some(itm) = item else { continue };
+				inv_mut.add_item_anywhere(itm);
+			}
+		}}
 
 		world.set_block(block_pos, Block::default());
 		update_chunk_mesh(world, ChunkCoord::from_world_pos(block_pos));

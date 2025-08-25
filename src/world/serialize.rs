@@ -64,28 +64,20 @@ impl FixedBinarySerializable for Region {
 	const BINARY_SIZE: usize = 8;
 }
 
-
-// Implement BinarySerializable for BlockRotation
-impl BlockRotation {
-	/// Maps `u8` values (0..23) back to `BlockRotation`.
-	const BYTE_TO_ROTATION: [BlockRotation; 24] = [
-		BlockRotation::XplusYplus, BlockRotation::XplusYminus, BlockRotation::XplusZplus, BlockRotation::XplusZminus,
-		BlockRotation::XminusYplus, BlockRotation::XminusYminus, BlockRotation::XminusZplus, BlockRotation::XminusZminus,
-		BlockRotation::YplusXplus, BlockRotation::YplusXminus, BlockRotation::YplusZplus, BlockRotation::YplusZminus,
-		BlockRotation::YminusXplus, BlockRotation::YminusXminus, BlockRotation::YminusZplus, BlockRotation::YminusZminus,
-		BlockRotation::ZplusXplus, BlockRotation::ZplusXminus, BlockRotation::ZplusYplus, BlockRotation::ZplusYminus,
-		BlockRotation::ZminusXplus, BlockRotation::ZminusXminus, BlockRotation::ZminusYplus, BlockRotation::ZminusYminus,
-	];
-	fn as_u8(&self) -> u8 {
-		*self as u8
+impl BinarySerializable for BlockRotation {
+	fn to_binary(&self) -> Vec<u8> {
+		self.as_u8().to_binary()
 	}
-	fn from_u8(byte: u8) -> Option<Self> {
-		if byte < Self::BYTE_TO_ROTATION.len() as u8 {
-			Some(Self::BYTE_TO_ROTATION[byte as usize])
-		} else {
-			None
-		}
+	fn from_binary(bytes: &[u8]) -> Option<Self> {
+		let value = u8::from_binary(bytes)?;
+		Self::from_u8(value)
 	}
+	fn binary_size(&self) -> usize {
+		Self::BINARY_SIZE
+	}
+}
+impl FixedBinarySerializable for BlockRotation {
+	const BINARY_SIZE: usize = 1;
 }
 
 
@@ -110,7 +102,7 @@ impl BinarySerializable for Block {
 	fn to_binary(&self) -> Vec<u8> {
 		let mut data = Vec::with_capacity(Self::binary_size(self));
 		data.extend_from_slice(&self.material.to_binary());
-		data.push(self.rotation.as_u8());
+		data.extend_from_slice(&self.rotation.to_binary());
 		data
 	}
 	fn from_binary(bytes: &[u8]) -> Option<Self> {
@@ -118,7 +110,7 @@ impl BinarySerializable for Block {
 			return None;
 		}
 		let material = Material::from_binary(&bytes[0..Material::BINARY_SIZE])?;
-		let rotation = BlockRotation::from_u8(bytes[Material::BINARY_SIZE])?;
+		let rotation = BlockRotation::from_binary(&bytes[Material::BINARY_SIZE..Material::BINARY_SIZE+BlockRotation::BINARY_SIZE])?;
 		
 		Some(Block::from(material, rotation))
 	}
@@ -127,7 +119,7 @@ impl BinarySerializable for Block {
 	}
 }
 impl FixedBinarySerializable for Block {
-	const BINARY_SIZE: usize = Material::BINARY_SIZE + 1; // Material + BLock Rotation
+	const BINARY_SIZE: usize = Material::BINARY_SIZE + BlockRotation::BINARY_SIZE; // Material + BLock Rotation
 }
 
 

@@ -23,7 +23,6 @@ type FastMap<K, V> = HashMap<K, V, BuildHasherDefault<AHasher>>;
 #[derive(Debug)]
 pub struct World {
 	pub chunks: FastMap<ChunkCoord, Chunk>,
-	pub storage_blocks: FastMap<IVec3, ItemContainer>,
 	pub loaded_chunks: HashSet<ChunkCoord>,
 	
 	// Chunk generation system
@@ -45,7 +44,6 @@ impl World {
 		
 		Self {
 			chunks: FastMap::with_capacity_and_hasher(10_000, BuildHasherDefault::<AHasher>::default()),
-			storage_blocks: FastMap::with_capacity_and_hasher(100, BuildHasherDefault::<AHasher>::default()),
 			loaded_chunks: HashSet::with_capacity(10_000),
 			chunk_generation_queue: Arc::new(Mutex::new(BinaryHeap::with_capacity(100))),
 			generated_chunks_receiver: receiver,
@@ -61,29 +59,42 @@ impl World {
 	#[inline] pub fn set_seed(&mut self, seed:u32) { self.seed = seed }
 	#[inline] pub fn set_thread_count(&mut self, thread_count:u8) { self.thread_count = thread_count }
 
-	#[inline] pub fn get_chunk(&self, coord: ChunkCoord) -> Option<&Chunk> {
-		self.chunks.get(&coord)
+	#[inline] pub fn get_chunk(&self, coord: &ChunkCoord) -> Option<&Chunk> {
+		self.chunks.get(coord)
+	}
+	#[inline] pub fn get_chunk_mut(&mut self, coord: &ChunkCoord) -> Option<&mut Chunk> {
+		self.chunks.get_mut(coord)
 	}
 
-	#[inline] pub fn get_chunk_mut(&mut self, coord: ChunkCoord) -> Option<&mut Chunk> {
-		self.chunks.get_mut(&coord)
-	}
+	#[inline] pub fn remove_storage(&mut self, world_pos: IVec3) -> Option<ItemContainer> {
+		let chunk_coord = ChunkCoord::from_world_pos(world_pos);
+		let local_pos: LocalPos = LocalPos::from(world_pos);
 
-	/// Creates a storage container at the specified position
-	#[inline] pub fn create_storage(&mut self, position: IVec3, data: ItemContainer) {
-		self.storage_blocks.insert(position, data);
+		let Some(chunk) = self.get_chunk_mut(&chunk_coord) else { return None; };
+		chunk.remove_entity(local_pos)
 	}
-	/// Removes a storage container
-	#[inline] pub fn remove_storage(&mut self, position: IVec3) -> Option<ItemContainer> {
-		self.storage_blocks.remove(&position)
+	#[inline] pub fn create_storage(&mut self, world_pos: IVec3, inv: ItemContainer) {
+		let chunk_coord = ChunkCoord::from_world_pos(world_pos);
+		let local_pos: LocalPos = LocalPos::from(world_pos);
+
+		let Some(chunk) = self.get_chunk_mut(&chunk_coord) else { return; };
+		chunk.add_entity(local_pos, inv)
 	}
 	/// Gets a storage container (immutable)
-	#[inline] pub fn get_storage(&self, position: IVec3) -> Option<&ItemContainer> {
-		self.storage_blocks.get(&position)
+	#[inline] pub fn get_storage(&self, world_pos: IVec3) -> Option<&ItemContainer> {
+		let chunk_coord = ChunkCoord::from_world_pos(world_pos);
+		let local_pos: LocalPos = LocalPos::from(world_pos);
+
+		let Some(chunk) = self.get_chunk(&chunk_coord) else { return None; };
+		chunk.get_entity(local_pos)
 	}
 	/// Gets a storage container (mutable)
-	#[inline] pub fn get_storage_mut(&mut self, position: IVec3) -> Option<&mut ItemContainer> {
-		self.storage_blocks.get_mut(&position)
+	#[inline] pub fn get_storage_mut(&mut self, world_pos: IVec3) -> Option<&mut ItemContainer> {
+		let chunk_coord = ChunkCoord::from_world_pos(world_pos);
+		let local_pos: LocalPos = LocalPos::from(world_pos);
+
+		let Some(chunk) = self.get_chunk_mut(&chunk_coord) else { return None; };
+		chunk.get_entity_mut(local_pos)
 	}
 
 	#[inline] pub fn get_block(&self, world_pos: IVec3) -> Block {
@@ -107,14 +118,10 @@ impl World {
 			self.set_chunk(chunk_coord, Chunk::empty());
 		}
 		
-		let chunk = self.chunks.get(&chunk_coord).expect("Chunk should exist");
+		let chunk = self.get_chunk_mut(&chunk_coord).expect("Chunk should exist");
 		let old_block = chunk.get_block(index);
 		// Skip if block is the same
 		if old_block == block { return; }
-
-		if old_block.is_storage() {
-			self.storage_blocks.remove(&world_pos);
-		}
 		
 		// If placing a new storage block, initialize its storage
 		if block.is_storage() {
@@ -139,7 +146,7 @@ impl World {
 	/// Marks adjacent chunks as needing mesh updates
 	#[inline] pub fn set_adjacent_un_final(&mut self, chunk_coord: ChunkCoord) {
 		for coord in chunk_coord.get_adjacent() {
-			if let Some(neighbor_chunk) = self.get_chunk_mut(coord) {
+			if let Some(neighbor_chunk) = self.get_chunk_mut(&coord) {
 				neighbor_chunk.final_mesh = false;
 			}
 		}
@@ -150,31 +157,31 @@ impl World {
 		let chunk_size = Chunk::SIZE_I;
 		// Check each axis independently for maximum speed
 		if local_pos.x == 0 {
-			if let Some(chunk) = self.get_chunk_mut(chunk_coord.offset(-1, 0, 0)) {
+			if let Some(chunk) = self.get_chunk_mut(&chunk_coord.offset(-1, 0, 0)) {
 				chunk.final_mesh = false;
 			}
 		} else if local_pos.x == chunk_size - 1 {
-			if let Some(chunk) = self.get_chunk_mut(chunk_coord.offset(1, 0, 0)) {
+			if let Some(chunk) = self.get_chunk_mut(&chunk_coord.offset(1, 0, 0)) {
 				chunk.final_mesh = false;
 			}
 		}
 		
 		if local_pos.y == 0 {
-			if let Some(chunk) = self.get_chunk_mut(chunk_coord.offset(0, -1, 0)) {
+			if let Some(chunk) = self.get_chunk_mut(&chunk_coord.offset(0, -1, 0)) {
 				chunk.final_mesh = false;
 			}
 		} else if local_pos.y == chunk_size - 1 {
-			if let Some(chunk) = self.get_chunk_mut(chunk_coord.offset(0, 1, 0)) {
+			if let Some(chunk) = self.get_chunk_mut(&chunk_coord.offset(0, 1, 0)) {
 				chunk.final_mesh = false;
 			}
 		}
 		
 		if local_pos.z == 0 {
-			if let Some(chunk) = self.get_chunk_mut(chunk_coord.offset(0, 0, -1)) {
+			if let Some(chunk) = self.get_chunk_mut(&chunk_coord.offset(0, 0, -1)) {
 				chunk.final_mesh = false;
 			}
 		} else if local_pos.z == chunk_size - 1 {
-			if let Some(chunk) = self.get_chunk_mut(chunk_coord.offset(0, 0, 1)) {
+			if let Some(chunk) = self.get_chunk_mut(&chunk_coord.offset(0, 0, 1)) {
 				chunk.final_mesh = false;
 			}
 		}
@@ -194,16 +201,6 @@ impl World {
 	/// Unloads chunks beyond the given radius
 	#[inline] fn unload_distant_chunks(&mut self, center: ChunkCoord, radius_sq: i32) {
 		let (center_x, center_y, center_z) = center.unpack();
-
-		// Unload distant storage blocks
-		self.storage_blocks.retain(|pos, _| {
-			let chunk_coord = ChunkCoord::from_world_pos(*pos);
-			let (x, y, z) = chunk_coord.unpack();
-			let dx = x - center_x;
-			let dy = y - center_y;
-			let dz = z - center_z;
-			dx * dx + dy * dy + dz * dz <= radius_sq
-		});
 		
 		self.loaded_chunks.retain(|&coord| {
 			let (x, y, z) = coord.unpack();

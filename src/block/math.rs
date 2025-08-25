@@ -375,165 +375,237 @@ mod conversions {
 	}
 }
 
+
 /// Axis enumeration for rotation
-#[allow(dead_code)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AxisBasic {
 	X,
 	Y,
 	Z,
 }
+impl AxisBasic {
+	/// Constant-time equality check
+	#[inline]
+	pub const fn eq(self, other: Self) -> bool {
+		matches!(
+			(self, other),
+			(AxisBasic::X, AxisBasic::X) |
+			(AxisBasic::Y, AxisBasic::Y) |
+			(AxisBasic::Z, AxisBasic::Z)
+		)
+	}
+}
 
 /// Axis enumeration with positive/negative variants
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
 pub enum Axis {
-	Xplus,
-	Xminus,
-	Yplus,
-	Yminus,
-	Zplus,
-	Zminus,
+	Xplus = 0,
+	Xminus = 1,
+	Yplus = 2,
+	Yminus = 3,
+	Zplus = 4,
+	Zminus = 5,
 }
 
-/// All 24 possible block rotations (6 faces × 4 orientations each).
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-#[repr(u8)] // Ensures `as u8` is safe
-pub enum BlockRotation {
-	XplusYplus, XplusYminus, XplusZplus, XplusZminus,
-	XminusYplus, XminusYminus, XminusZplus, XminusZminus,
-	YplusXplus, YplusXminus, YplusZplus, YplusZminus,
-	YminusXplus, YminusXminus, YminusZplus, YminusZminus,
-	ZplusXplus, ZplusXminus, ZplusYplus, ZplusYminus,
-	ZminusXplus, ZminusXminus, ZminusYplus, ZminusYminus,
+impl Axis {
+	/// Convert from u8 value
+	pub const fn from_u8(value: u8) -> Option<Self> {
+		match value {
+			0 => Some(Axis::Xplus),
+			1 => Some(Axis::Xminus),
+			2 => Some(Axis::Yplus),
+			3 => Some(Axis::Yminus),
+			4 => Some(Axis::Zplus),
+			5 => Some(Axis::Zminus),
+			_ => None,
+		}
+	}
+	
+	/// Convert to u8
+	pub const fn to_u8(self) -> u8 {
+		self as u8
+	}
+
+	// Helper functions
+	pub const fn to_vec(&self) -> (i8, i8, i8) {
+		match self {
+			Axis::Xplus => (1, 0, 0),
+			Axis::Xminus => (-1, 0, 0),
+			Axis::Yplus => (0, 1, 0),
+			Axis::Yminus => (0, -1, 0),
+			Axis::Zplus => (0, 0, 1),
+			Axis::Zminus => (0, 0, -1),
+		}
+	}
+	
+	pub const fn from_vec((x, y, z): (i8, i8, i8)) -> Self {
+		match (x, y, z) {
+			(1, 0, 0) => Axis::Xplus,
+			(-1, 0, 0) => Axis::Xminus,
+			(0, 1, 0) => Axis::Yplus,
+			(0, -1, 0) => Axis::Yminus,
+			(0, 0, 1) => Axis::Zplus,
+			(0, 0, -1) => Axis::Zminus,
+			_ => panic!("Invalid axis vector"),
+		}
+	}
+	
+	/// Get the basic axis (ignoring direction)
+	pub const fn basic(self) -> AxisBasic {
+		match self {
+			Axis::Xplus | Axis::Xminus => AxisBasic::X,
+			Axis::Yplus | Axis::Yminus => AxisBasic::Y,
+			Axis::Zplus | Axis::Zminus => AxisBasic::Z,
+		}
+	}
+	
+	/// Get the opposite axis
+	pub const fn opposite(self) -> Self {
+		match self {
+			Axis::Xplus => Axis::Xminus,
+			Axis::Xminus => Axis::Xplus,
+			Axis::Yplus => Axis::Yminus,
+			Axis::Yminus => Axis::Yplus,
+			Axis::Zplus => Axis::Zminus,
+			Axis::Zminus => Axis::Zplus,
+		}
+	}
+	
+	/// Check if two axes are compatible (not the same or opposite)
+	pub const fn is_compatible_with(self, other: Axis) -> bool {
+		!self.basic().eq(other.basic())
+	}
 }
+
+/// Compact block rotation representation using only 1 byte
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[repr(transparent)] // Same representation as u8
+pub struct BlockRotation(u8);
 
 impl BlockRotation {
-
-	/// Returns the primary axis of this rotation
-	#[inline] pub const fn primary_axis(self) -> Axis {
-		match self {
-			BlockRotation::XplusYplus | BlockRotation::XplusYminus |
-			BlockRotation::XplusZplus | BlockRotation::XplusZminus => Axis::Xplus,
-			
-			BlockRotation::XminusYplus | BlockRotation::XminusYminus |
-			BlockRotation::XminusZplus | BlockRotation::XminusZminus => Axis::Xminus,
-			
-			BlockRotation::YplusXplus | BlockRotation::YplusXminus |
-			BlockRotation::YplusZplus | BlockRotation::YplusZminus => Axis::Yplus,
-			
-			BlockRotation::YminusXplus | BlockRotation::YminusXminus |
-			BlockRotation::YminusZplus | BlockRotation::YminusZminus => Axis::Yminus,
-			
-			BlockRotation::ZplusXplus | BlockRotation::ZplusXminus |
-			BlockRotation::ZplusYplus | BlockRotation::ZplusYminus => Axis::Zplus,
-			
-			BlockRotation::ZminusXplus | BlockRotation::ZminusXminus |
-			BlockRotation::ZminusYplus | BlockRotation::ZminusYminus => Axis::Zminus,
+	/// Create a new BlockRotation from primary and secondary axes
+	#[inline]
+	pub const fn new(primary: Axis, secondary: Axis) -> Self {
+		assert!(primary.is_compatible_with(secondary), "Primary and secondary axes must be different");
+		// Store primary in lower 3 bits, secondary in upper 3 bits
+		let value = (secondary.to_u8() << 3) | primary.to_u8();
+		Self(value)
+	}
+	
+	/// Get the primary axis (facing direction)
+	#[inline]
+	pub const fn primary_axis(self) -> Axis {
+		// Safe because we validate during construction
+		Axis::from_u8(self.0 & 0b111).unwrap()
+	}
+	#[inline]
+	pub const fn secondary_axis(self) -> Axis {
+		// Safe because we validate during construction
+		Axis::from_u8((self.0 >> 3) & 0b111).unwrap()
+	}
+	
+	#[inline]
+	pub const fn as_u8(self) -> u8 {
+		self.0
+	}
+	#[inline]
+	pub const fn from_u8(value: u8) -> Option<Self> {
+		let primary_bits = value & 0b111;
+		let secondary_bits = (value >> 3) & 0b111;
+		
+		// Validate both axis values
+		let Some(primary) = Axis::from_u8(primary_bits) else { return None; };
+		let Some(secondary) = Axis::from_u8(secondary_bits) else { return None; };
+		// Validate that axes are compatible (not the same or opposite)
+		if !primary.is_compatible_with(secondary) { return None; }
+		
+		return Some(Self(value));
+	}
+	
+	/// Rotate the block around an axis by 90° steps (1 step = 90° clockwise)
+	pub const fn rotate(self, axis: AxisBasic, steps: u8) -> Self {
+		if steps % 4 == 0 { return self; }
+		
+		let primary = self.primary_axis();
+		let secondary = self.secondary_axis();
+		
+		// Convert axes to vectors for easier rotation
+		let primary_vec = primary.to_vec();
+		let secondary_vec = secondary.to_vec();
+		
+		// Rotate both vectors around the specified axis
+		let new_primary_vec = Self::rotate_vector(primary_vec, axis, steps%4);
+		let new_secondary_vec = Self::rotate_vector(secondary_vec, axis, steps%4);
+		
+		// Convert back to axes
+		let new_primary = Axis::from_vec(new_primary_vec);
+		let new_secondary = Axis::from_vec(new_secondary_vec);
+		
+		Self::new(new_primary, new_secondary)
+	}
+	
+	
+	const fn rotate_vector((x, y, z): (i8, i8, i8), axis: AxisBasic, steps: u8) -> (i8, i8, i8) {
+		// Since steps is guaranteed to be 1, 2, or 3, we can use a match
+		match steps {
+			1 => {
+				match axis {
+					AxisBasic::X => (x, -z, y),    // Rotate around X: (y, z) → (-z, y)
+					AxisBasic::Y => (z, y, -x),    // Rotate around Y: (x, z) → (z, -x)
+					AxisBasic::Z => (-y, x, z),    // Rotate around Z: (x, y) → (-y, x)
+				}
+			}
+			2 => {
+				// Two rotations = 180 degrees
+				match axis {
+					AxisBasic::X => (x, -y, -z),   // Rotate around X twice: (y, z) → (-y, -z)
+					AxisBasic::Y => (-x, y, -z),   // Rotate around Y twice: (x, z) → (-x, -z)
+					AxisBasic::Z => (-x, -y, z),   // Rotate around Z twice: (x, y) → (-x, -y)
+				}
+			}
+			3 => {
+				// Three rotations = 270 degrees (equivalent to -90 degrees)
+				match axis {
+					AxisBasic::X => (x, z, -y),    // Rotate around X: (y, z) → (z, -y)
+					AxisBasic::Y => (-z, y, x),    // Rotate around Y: (x, z) → (-z, x)
+					AxisBasic::Z => (y, -x, z),    // Rotate around Z: (x, y) → (y, -x)
+				}
+			}
+			_ => (x, y, z), // Should never happen if steps is guaranteed to be 1-3
 		}
 	}
+}
 
-	/// Returns the secondary axis of this rotation
-	#[inline] pub const fn secondary_axis(self) -> Axis {
-		match self {
-			BlockRotation::XplusYplus | BlockRotation::XminusYplus |
-			BlockRotation::YplusXplus | BlockRotation::YminusXplus  => Axis::Xplus,
-			
-			BlockRotation::YplusXminus | BlockRotation::YminusXminus |
-			BlockRotation::ZplusXminus | BlockRotation::ZminusXminus => Axis::Xminus,
-			
-			BlockRotation::XplusZplus | BlockRotation::XminusZplus |
-			BlockRotation::YplusZplus | BlockRotation::YminusZplus  => Axis::Zplus,
-			
-			BlockRotation::XplusZminus | BlockRotation::XminusZminus |
-			BlockRotation::YplusZminus | BlockRotation::YminusZminus  => Axis::Zminus,
-			
-			BlockRotation::XplusYminus | BlockRotation::XminusYminus |
-			BlockRotation::ZplusYminus | BlockRotation::ZminusYminus => Axis:: Yminus,
-
-			_ => Axis::Zplus, // Remaining cases are Z variants
-		}
-	}
-
-	/// Rotates the block around an axis by 90° steps (1 step = 90° clockwise)
-	pub fn rotate(self, axis: AxisBasic, steps: u8) -> Self {
-		let steps = steps % 4; // Normalize to 0-3
-		if steps == 0 {
-			return self;
-		}
-
-		let (primary, secondary) = match axis {
-			AxisBasic::X => {
-				// When rotating around X, Y and Z axes change
-				let y_axis = match self.secondary_axis() {
-					Axis::Yplus | Axis::Yminus => self.secondary_axis(),
-					_ => Axis::Yplus, // Default if not Y
-				};
-				let z_axis = match self.secondary_axis() {
-					Axis::Zplus | Axis::Zminus => self.secondary_axis(),
-					_ => Axis::Zplus, // Default if not Z
-				};
-				(self.primary_axis(), if steps % 2 == 1 { z_axis } else { y_axis })
-			},
-			AxisBasic::Y => {
-				// When rotating around Y, X and Z axes change
-				let x_axis = match self.secondary_axis() {
-					Axis::Xplus | Axis::Xminus => self.secondary_axis(),
-					_ => Axis::Xplus,
-				};
-				let z_axis = match self.secondary_axis() {
-					Axis::Zplus | Axis::Zminus => self.secondary_axis(),
-					_ => Axis::Zplus,
-				};
-				(self.primary_axis(), if steps % 2 == 1 { x_axis } else { z_axis })
-			},
-			AxisBasic::Z => {
-				// When rotating around Z, X and Y axes change
-				let x_axis = match self.secondary_axis() {
-					Axis::Xplus | Axis::Xminus => self.secondary_axis(),
-					_ => Axis::Xplus,
-				};
-				let y_axis = match self.secondary_axis() {
-					Axis::Yplus | Axis::Yminus => self.secondary_axis(),
-					_ => Axis::Yplus,
-				};
-				(self.primary_axis(), if steps % 2 == 1 { y_axis } else { x_axis })
-			},
-		};
-
-		// Reconstruct the new rotation based on primary and secondary axes
-		match (primary, secondary) {
-			(Axis::Xplus, Axis::Yplus) => BlockRotation::XplusYplus,
-			(Axis::Xplus, Axis::Yminus) => BlockRotation::XplusYminus,
-			(Axis::Xplus, Axis::Zplus) => BlockRotation::XplusZplus,
-			(Axis::Xplus, Axis::Zminus) => BlockRotation::XplusZminus,
-			
-			(Axis::Xminus, Axis::Yplus) => BlockRotation::XminusYplus,
-			(Axis::Xminus, Axis::Yminus) => BlockRotation::XminusYminus,
-			(Axis::Xminus, Axis::Zplus) => BlockRotation::XminusZplus,
-			(Axis::Xminus, Axis::Zminus) => BlockRotation::XminusZminus,
-			
-			(Axis::Yplus, Axis::Xplus) => BlockRotation::YplusXplus,
-			(Axis::Yplus, Axis::Xminus) => BlockRotation::YplusXminus,
-			(Axis::Yplus, Axis::Zplus) => BlockRotation::YplusZplus,
-			(Axis::Yplus, Axis::Zminus) => BlockRotation::YplusZminus,
-			
-			(Axis::Yminus, Axis::Xplus) => BlockRotation::YminusXplus,
-			(Axis::Yminus, Axis::Xminus) => BlockRotation::YminusXminus,
-			(Axis::Yminus, Axis::Zplus) => BlockRotation::YminusZplus,
-			(Axis::Yminus, Axis::Zminus) => BlockRotation::YminusZminus,
-			
-			(Axis::Zplus, Axis::Xplus) => BlockRotation::ZplusXplus,
-			(Axis::Zplus, Axis::Xminus) => BlockRotation::ZplusXminus,
-			(Axis::Zplus, Axis::Yplus) => BlockRotation::ZplusYplus,
-			(Axis::Zplus, Axis::Yminus) => BlockRotation::ZplusYminus,
-			
-			(Axis::Zminus, Axis::Xplus) => BlockRotation::ZminusXplus,
-			(Axis::Zminus, Axis::Xminus) => BlockRotation::ZminusXminus,
-			(Axis::Zminus, Axis::Yplus) => BlockRotation::ZminusYplus,
-			(Axis::Zminus, Axis::Yminus) => BlockRotation::ZminusYminus,
-
-			_ => panic!("The rotation is incorrect"),
-		}
-	}
-
+// Example usage and constants for all 24 rotations
+impl BlockRotation {
+	pub const XPLUS_YPLUS: Self = Self::new(Axis::Xplus, Axis::Yplus);
+	pub const XPLUS_YMINUS: Self = Self::new(Axis::Xplus, Axis::Yminus);
+	pub const XPLUS_ZPLUS: Self = Self::new(Axis::Xplus, Axis::Zplus);
+	pub const XPLUS_ZMINUS: Self = Self::new(Axis::Xplus, Axis::Zminus);
+	
+	pub const XMINUS_YPLUS: Self = Self::new(Axis::Xminus, Axis::Yplus);
+	pub const XMINUS_YMINUS: Self = Self::new(Axis::Xminus, Axis::Yminus);
+	pub const XMINUS_ZPLUS: Self = Self::new(Axis::Xminus, Axis::Zplus);
+	pub const XMINUS_ZMINUS: Self = Self::new(Axis::Xminus, Axis::Zminus);
+	
+	pub const YPLUS_XPLUS: Self = Self::new(Axis::Yplus, Axis::Xplus);
+	pub const YPLUS_XMINUS: Self = Self::new(Axis::Yplus, Axis::Xminus);
+	pub const YPLUS_ZPLUS: Self = Self::new(Axis::Yplus, Axis::Zplus);
+	pub const YPLUS_ZMINUS: Self = Self::new(Axis::Yplus, Axis::Zminus);
+	
+	pub const YMINUS_XPLUS: Self = Self::new(Axis::Yminus, Axis::Xplus);
+	pub const YMINUS_XMINUS: Self = Self::new(Axis::Yminus, Axis::Xminus);
+	pub const YMINUS_ZPLUS: Self = Self::new(Axis::Yminus, Axis::Zplus);
+	pub const YMINUS_ZMINUS: Self = Self::new(Axis::Yminus, Axis::Zminus);
+	
+	pub const ZPLUS_XPLUS: Self = Self::new(Axis::Zplus, Axis::Xplus);
+	pub const ZPLUS_XMINUS: Self = Self::new(Axis::Zplus, Axis::Xminus);
+	pub const ZPLUS_YPLUS: Self = Self::new(Axis::Zplus, Axis::Yplus);
+	pub const ZPLUS_YMINUS: Self = Self::new(Axis::Zplus, Axis::Yminus);
+	
+	pub const ZMINUS_XPLUS: Self = Self::new(Axis::Zminus, Axis::Xplus);
+	pub const ZMINUS_XMINUS: Self = Self::new(Axis::Zminus, Axis::Xminus);
+	pub const ZMINUS_YPLUS: Self = Self::new(Axis::Zminus, Axis::Yplus);
+	pub const ZMINUS_YMINUS: Self = Self::new(Axis::Zminus, Axis::Yminus);
 }
