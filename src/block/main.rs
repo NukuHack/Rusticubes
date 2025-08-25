@@ -83,7 +83,7 @@ impl Block {
 }
 
 /// Represents a chunk of blocks in the world
-#[derive(Clone, PartialEq, Debug)]
+#[derive(PartialEq, Debug)]
 pub struct Chunk {
 	storage: BlockStorage,
 	entities: EntityStorage,
@@ -95,7 +95,22 @@ pub struct Chunk {
 	mesh: Option<GeometryBuffer>,
 	bind_group: Option<wgpu::BindGroup>,
 }
-
+impl Clone for Chunk {
+	fn clone(&self) -> Self {
+		Self {
+			storage: self.storage.clone(),
+			entities: self.entities.clone(),
+			
+			dirty: self.dirty,
+			final_mesh: self.final_mesh,
+			finished_gen: self.finished_gen,
+			
+			// These are typically not cloned as they're GPU resources
+			mesh: None,
+			bind_group: None,
+		}
+	}
+}
 impl Chunk {
 	pub const SIZE: usize = 32;
 	pub const SIZE_I: i32 = Self::SIZE as i32;

@@ -6,25 +6,24 @@ use crate::item::item_lut::{
 	ItemComp, ItemFlags, ItemExtendedData, PropertyValue, PropertyType,
 	ToolData, ArmorData, EquipmentData, EquipmentSetStruct, BitStorage, TierStorage
 };
-use crate::fs::binary::{BinarySerializable, FixedBinarySerializable};
+use crate::fs::binary::{BinarySerializable, FixedBinarySerializable, BINARY_SIZE_STRING};
 use std::num::{NonZeroU16, NonZeroU32};
-use std::mem;
 
 impl BinarySerializable for ItemFlags {
 	fn to_binary(&self) -> Vec<u8> {
 		self.inner().to_le_bytes().to_vec()
 	}
 	fn from_binary(bytes: &[u8]) -> Option<Self> {
-		if bytes.len() < 4 { return None; }
-		let result = u32::from_binary(&bytes[0..4])?;
+		if bytes.len() < u32::BINARY_SIZE { return None; }
+		let result = u32::from_binary(&bytes[0..u32::BINARY_SIZE])?;
 		Some(Self::new(result))
 	}
 	fn binary_size(&self) -> usize {
-		mem::size_of::<u32>()
+		Self::BINARY_SIZE
 	}
 }
 impl FixedBinarySerializable for ItemFlags {
-	const BINARY_SIZE: usize = 4;
+	const BINARY_SIZE: usize = u32::BINARY_SIZE;
 }
 
 // MaterialLevel serialization
@@ -36,7 +35,7 @@ impl BinarySerializable for MaterialLevel {
 		Self::from_u8(*bytes.first()?)
 	}
 	fn binary_size(&self) -> usize {
-		1
+		Self::BINARY_SIZE
 	}
 }
 impl FixedBinarySerializable for MaterialLevel {
@@ -51,7 +50,7 @@ impl BinarySerializable for ToolType {
 		Self::from_u8(*bytes.first()?)
 	}
 	fn binary_size(&self) -> usize {
-		1
+		Self::BINARY_SIZE
 	}
 }
 impl FixedBinarySerializable for ToolType {
@@ -65,7 +64,7 @@ impl BinarySerializable for ArmorType {
 		Self::from_u8(*bytes.first()?)
 	}
 	fn binary_size(&self) -> usize {
-		1
+		Self::BINARY_SIZE
 	}
 }
 impl FixedBinarySerializable for ArmorType {
@@ -80,7 +79,7 @@ impl BinarySerializable for PropertyType {
 		Self::from_u8(*bytes.first()?)
 	}
 	fn binary_size(&self) -> usize {
-		1
+		Self::BINARY_SIZE
 	}
 }
 impl FixedBinarySerializable for PropertyType {
@@ -204,8 +203,8 @@ impl BinarySerializable for PropertyValue {
 				data.extend_from_slice(&value.to_binary());
 			},
 			PropertyValue::Slot(value) => {
-				data.extend_from_slice(&value.rows().to_binary());
-				data.extend_from_slice(&value.cols().to_binary());
+				data.push(value.rows());
+				data.push(value.cols());
 			}
 		}
 		
@@ -247,8 +246,8 @@ impl BinarySerializable for PropertyValue {
 				Some(PropertyValue::Speed(value))
 			},
 			PropertyType::Slot => {
-				let row = u8::from_binary(rest_bytes)?;
-				let col = u8::from_binary(rest_bytes)?;
+				let row = rest_bytes[0];
+				let col = rest_bytes[1];
 				Some(PropertyValue::Slot((row, col).into()))
 			}
 		}
@@ -322,15 +321,14 @@ impl<const N: usize> BinarySerializable for ItemExtendedData<N> {
 }
 
 // ItemComp serialization (excluding the name field since it's a static reference)
-type StatString = &'static str;
-const BINARY_SIZE_STAT_STRING: usize = 2;
+
 impl BinarySerializable for ItemComp {
 	fn to_binary(&self) -> Vec<u8> {
 		let mut data = Vec::new();
 		
 		// Serialize basic fields
 		data.extend_from_slice(&self.name.clone().to_string().to_binary());
-		data.extend_from_slice(&self.max_stack.to_le_bytes());
+		data.extend_from_slice(&self.max_stack.to_binary());
 		data.extend_from_slice(&self.flags.to_binary());
 		
 		// Serialize extended data
@@ -348,20 +346,20 @@ impl BinarySerializable for ItemComp {
 	}
 	
 	fn from_binary(bytes: &[u8]) -> Option<Self> {
-		if bytes.len() < 13 { return None; } // Minimum size
+		if bytes.len() < 10 { return None; } // Minimum size
 		let mut offset = 0;
 		
 		// Deserialize name
-		let name_len = u16::from_binary(&bytes[offset..offset+BINARY_SIZE_STAT_STRING])? as usize;
-		let name:StatString = StatString::from_binary(&bytes[offset..offset+BINARY_SIZE_STAT_STRING+name_len])?;
-		offset += BINARY_SIZE_STAT_STRING + name_len;
+		let name_len = u16::from_binary(&bytes[offset..offset+BINARY_SIZE_STRING])? as usize;
+		let name = <&'static str>::from_binary(&bytes[offset..offset+BINARY_SIZE_STRING+name_len])?;
+		offset += BINARY_SIZE_STRING + name_len;
 
 		// Deserialize max_stack (4 bytes)
-		let max_stack = u32::from_binary(&bytes[offset..offset+4])?;
-		offset += 4;
+		let max_stack = u32::from_binary(&bytes[offset..offset+u32::BINARY_SIZE])?;
+		offset += u32::BINARY_SIZE;
 		// Deserialize flags (2 bytes)
-		let flags = ItemFlags::from_binary(&bytes[offset..offset+4])?;
-		offset += 4;
+		let flags = ItemFlags::from_binary(&bytes[offset..offset+ItemFlags::BINARY_SIZE])?;
+		offset += ItemFlags::BINARY_SIZE;
 
 		// Deserialize extended data
 		let has_data = bytes[offset] != 0;
@@ -382,7 +380,7 @@ impl BinarySerializable for ItemComp {
 	
 	fn binary_size(&self) -> usize {
 		let mut size = self.name.clone().to_string().binary_size(); // name
-		size += 4 + 4; // max_stack + flags
+		size += u32::BINARY_SIZE + ItemFlags::BINARY_SIZE; // max_stack + flags
 		size += 1; // has_data flag
 		if let Some(data) = &self.data {
 			size += data.binary_size();
@@ -497,8 +495,8 @@ impl BinarySerializable for ItemStack {
 		
 		// Deserialize stack count
 		if offset >= bytes.len() { return None; }
-		let stack = u32::from_binary(&bytes[offset..offset+4])?;
-		offset += 4;
+		let stack = u32::from_binary(&bytes[offset..offset+u32::BINARY_SIZE])?;
+		offset += u32::BINARY_SIZE;
 		
 		// Deserialize custom data
 		if offset >= bytes.len() { return None; }
@@ -515,7 +513,7 @@ impl BinarySerializable for ItemStack {
 	
 	fn binary_size(&self) -> usize {
 		let mut size = self.name().to_string().binary_size(); // string bytes
-		size += 4; // stack count
+		size += u32::BINARY_SIZE; // stack count
 		size += 1; // has_data flag (1 byte)
 		if let Some(data) = &self.data {
 			size += data.binary_size();
@@ -607,8 +605,8 @@ impl BinarySerializable for ItemContainer {
 		
 		// Deserialize item count
 		if offset >= bytes.len() { return None; }
-		let item_count = usize::from_binary(&bytes[offset..offset + 8])?;
-		offset += 8;
+		let item_count = usize::from_binary(&bytes[offset..offset + usize::BINARY_SIZE])?;
+		offset += usize::BINARY_SIZE;
 		
 		// Check if we have enough bytes
 		if bytes.len() < offset + item_count { return None; }
@@ -636,7 +634,7 @@ impl BinarySerializable for ItemContainer {
 	
 	fn binary_size(&self) -> usize {
 		let mut size = Slot::BINARY_SIZE; // size
-		size += 4; // item count (u32)
+		size += usize::BINARY_SIZE; // item count
 		
 		for item in self.iter() {
 			size += 1; // has_item flag

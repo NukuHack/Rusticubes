@@ -214,7 +214,7 @@ impl BinarySerializable for StatString {
 		string_binary_size(self)
 	}
 }
-const BINARY_SIZE_STRING: usize = 2;
+pub const BINARY_SIZE_STRING: usize = 2;
 
 fn string_to_binary(s: &str) -> Vec<u8> {
 	let mut data = Vec::with_capacity(BINARY_SIZE_STRING + s.len()); // Use 2 bytes for length to handle longer strings

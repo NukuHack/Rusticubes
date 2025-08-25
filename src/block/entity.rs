@@ -19,6 +19,8 @@ impl EntityStorage {
 	/// Creates a new empty storage
 	pub fn default() -> Self { EntityStorage::Empty }
 
+	pub fn is_some(&self) -> bool { !matches!(self, EntityStorage::Empty) }
+
 	/// Adds an entity at the given position
 	pub fn add(&mut self, pos: LocalPos, entity: ItemContainer) {
 		match self {

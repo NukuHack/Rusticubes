@@ -201,8 +201,6 @@ impl BinarySerializable for WorldData {
 }
 
 
-
-
 // 
 // Main world Save - Load functions
 // will have to rework them a bit, because the giant world size
@@ -213,6 +211,17 @@ impl BinarySerializable for WorldData {
 
 // Constants should be at module level and use consistent naming
 const TEMP_FILE_SUFFIX: &str = ".tmp";
+
+use crossbeam::thread;
+use std::sync::mpsc;
+
+// Add this structure to track save operations
+#[derive(Clone)]
+pub struct SaveOperation {
+	region_coord: Region,
+	chunk_data: Vec<(ChunkCoord, Vec<u8>)>, // Serialized chunk data instead of cloned chunks
+	file_path: PathBuf,
+}
 
 /// Saves the entire world to disk, organizing chunks into region files
 pub fn save_entire_world(world_path: &Path) -> Result<()> {
@@ -231,16 +240,182 @@ pub fn save_entire_world(world_path: &Path) -> Result<()> {
 	let region_dir = world_path.join("region");
 	fs::create_dir_all(&region_dir)?;
 	
-	// Save each region with error handling
+	// Prepare save operations (serialize data instead of cloning chunks)
+	let mut save_operations = Vec::new();
+	
 	for (region_coord, chunks) in regions {
-		if let Err(e) = save_region(&region_dir, region_coord, chunks) {
-			eprintln!("Failed to save region {:?}: {}", region_coord, e);
-			// Continue saving other regions
+		// Serialize chunks instead of cloning them to avoid stack overflow
+		let mut chunk_data = Vec::new();
+		
+		for (coord, chunk) in chunks {
+			if chunk.finished_gen() {
+				// Serialize the chunk to bytes instead of cloning
+				chunk_data.push((coord, chunk.to_binary()));
+			}
+		}
+		
+		if !chunk_data.is_empty() {
+			let file_path = region_file_path(&region_dir, region_coord);
+			save_operations.push(SaveOperation {
+				region_coord,
+				chunk_data,
+				file_path,
+			});
 		}
 	}
 	
+	// Use crossbeam's scoped threads for safe borrowing
+	thread::scope(|s| {
+		let (sender, receiver) = mpsc::channel();
+		
+		// Spawn worker threads
+		let num_workers = std::cmp::min(save_operations.len(), 4); // Limit to 4 threads
+		let operations_per_worker = (save_operations.len() + num_workers - 1) / num_workers;
+		
+		for chunk in save_operations.chunks(operations_per_worker) {
+			let sender = sender.clone();
+			let operations = chunk.to_vec();
+			
+			s.spawn(move |_| {
+				for operation in operations {
+					let result = save_region_threaded(operation);
+					if sender.send(result).is_err() {
+						break; // Main thread dropped receiver
+					}
+				}
+			});
+		}
+		
+		// Drop the original sender so receiver knows when all threads are done
+		drop(sender);
+		
+		// Collect results from worker threads
+		let mut errors = Vec::new();
+		for result in receiver {
+			if let Err(e) = result {
+				errors.push(e);
+			}
+		}
+		
+		// Report any errors (but don't fail the entire operation)
+		for error in errors {
+			println!("Save error: {}", error);
+		}
+	}).unwrap();
+	
 	Ok(())
 }
+
+/// Thread-safe version of save_region that owns its data
+fn save_region_threaded(operation: SaveOperation) -> Result<()> {
+	let SaveOperation { region_coord, chunk_data, file_path } = operation;
+	
+	let temp_path = file_path.with_extension(TEMP_FILE_SUFFIX);
+	
+	// Load existing chunks first (if any)
+	let existing_chunks = if file_path.exists() {
+		match load_existing_chunks(&file_path, region_coord) {
+			Ok(chunks) => chunks,
+			Err(e) => {
+				println!("Failed to load existing chunks, starting fresh: {}", e);
+				Vec::new()
+			}
+		}
+	} else {
+		Vec::new()
+	};
+	
+	// Merge chunks (new chunks overwrite existing ones)
+	let mut merged: HashMap<ChunkCoord, Vec<u8>> = HashMap::new();
+	
+	// Add existing chunks (as serialized data)
+	for (coord, chunk) in existing_chunks {
+		merged.insert(coord, chunk.to_binary());
+	}
+	
+	// Add/overwrite with new chunks
+	for (coord, data) in chunk_data {
+		merged.insert(coord, data);
+	}
+	
+	// Convert to vec for serialization
+	let final_chunks: Vec<(ChunkCoord, Vec<u8>)> = merged.into_iter().collect();
+	
+	// Serialize and write atomically
+	let data = serialize_region_data(&final_chunks, region_coord)?;
+	write_atomic(&temp_path, &file_path, &data)?;
+	
+	Ok(())
+}
+
+/// Serializes region data to binary format using pre-serialized chunk data
+fn serialize_region_data(chunks: &[(ChunkCoord, Vec<u8>)], region_coord: Region) -> Result<Vec<u8>> {
+	let mut data = Vec::with_capacity(1024 * chunks.len()); // Better capacity estimation
+	
+	// Write chunk count
+	data.extend_from_slice(&chunks.len().to_binary());
+	/// Converts global chunk coordinate to local coordinate within region
+	fn coord_to_local(global_coord: ChunkCoord, region_coord: Region) -> (u8,u8,u8) {
+		let region_origin = region_coord.to_chunk_coord();
+		(
+			(global_coord.x() - region_origin.x()) as u8,
+			(global_coord.y() - region_origin.y()) as u8,
+			(global_coord.z() - region_origin.z()) as u8,
+		)
+	}
+	// Write each chunk
+	for (coord, chunk_data) in chunks {
+		let local_coord = coord_to_local(*coord, region_coord);
+		let packed_coord = LocalPos::from(local_coord);
+		data.extend_from_slice(&packed_coord.to_binary());
+		data.extend_from_slice(chunk_data);
+	}
+	
+	Ok(data)
+}
+
+// The rest of your functions remain mostly the same, but here are the key changes:
+
+/// Loads existing chunks from a region file (optimized to avoid deep cloning)
+fn load_existing_chunks(path: &Path, region_coord: Region) -> Result<Vec<(ChunkCoord, Chunk)>> {
+	let bytes = fs::read(path)?;
+	let mut chunks = Vec::new();
+	
+	if bytes.len() < 8 {
+		return Ok(chunks); // Empty file or invalid
+	}
+	
+	let chunk_count = usize::from_binary(&bytes[0..8])
+		.ok_or_else(|| Error::new(ErrorKind::InvalidData, "Invalid usize data"))?;
+	let mut cursor = 8;
+	
+	for _ in 0..chunk_count {
+		if cursor >= bytes.len() {
+			break; // Prevent out-of-bounds access
+		}
+		
+		if let Ok((coord, chunk)) = load_chunk(&bytes, &mut cursor, region_coord) {
+			chunks.push((coord, chunk));
+		} else {
+			break;
+		}
+	}
+	
+	Ok(chunks)
+}
+
+/// Groups chunks by their containing region coordinates (borrows instead of cloning)
+fn group_chunks_by_region(chunks: &FastMap<ChunkCoord, Chunk>) -> HashMap<Region, Vec<(ChunkCoord, &Chunk)>> {
+	let mut regions: HashMap<Region, Vec<(ChunkCoord, &Chunk)>> = HashMap::new();
+	
+	for (coord, chunk) in chunks {
+		let region_coord = Region::from_chunk_coord(*coord);
+		regions.entry(region_coord).or_default().push((*coord, chunk));
+	}
+	
+	regions
+}
+
 
 /// Loads the entire world from disk
 pub fn load_entire_world(world_path: &Path) -> Result<()> {
@@ -265,40 +440,18 @@ pub fn load_entire_world(world_path: &Path) -> Result<()> {
 		}
 		
 		if let Err(e) = load_region_file(&path, &mut loaded_world) {
-			eprintln!("Failed to load region file {:?}: {}", path, e);
+			println!("Failed to load region file {:?}: {}", path, e);
 		}
 	}
 	
-	finalize_world_loading(loaded_world);
-	Ok(())
-}
-
-/// Groups chunks by their containing region coordinates
-fn group_chunks_by_region(chunks: &FastMap<ChunkCoord, Chunk>) -> HashMap<Region, Vec<(ChunkCoord, Chunk)>> {
-	let mut regions: HashMap<Region, Vec<(ChunkCoord, Chunk)>> = HashMap::new();
+	let game_world = ptr::get_gamestate().world_mut();
 	
-	for (&coord, chunk) in chunks {
-		let region_coord = Region::from_chunk_coord(coord);
-		regions.entry(region_coord)
-			.or_default()
-			.push((coord, chunk.clone()));
+	// Transfer loaded chunks
+	for (coord, chunk) in loaded_world.chunks {
+		game_world.chunks.insert(coord, chunk);
+		game_world.loaded_chunks.insert(coord);
+		game_world.create_bind_group(coord); // might want to create this in off-thread or atleast not at once...
 	}
-	
-	regions
-}
-
-/// Saves a single region file
-fn save_region(region_dir: &Path, region_coord: Region, chunks: Vec<(ChunkCoord, Chunk)>) -> Result<()> {
-	let file_path = region_file_path(region_dir, region_coord);
-	let temp_path = file_path.with_extension(TEMP_FILE_SUFFIX);
-	
-	// Merge with existing chunks if file exists
-	let final_chunks = merge_with_existing_chunks(&file_path, region_coord, chunks)?;
-	
-	// Serialize and write atomically
-	let data = serialize_region(&final_chunks, region_coord)?;
-	write_atomic(&temp_path, &file_path, &data)?;
-	
 	Ok(())
 }
 
@@ -315,34 +468,6 @@ fn is_valid_region_filename(path: &Path) -> bool {
 		.and_then(|n| n.to_str())
 		.map(|name| name.starts_with(Region::PREFIX) && name.ends_with(Region::SUFFIX))
 		.unwrap_or(false)
-}
-
-/// Serializes region data to binary format
-fn serialize_region(chunks: &[(ChunkCoord, Chunk)], region_coord: Region) -> Result<Vec<u8>> {
-	let mut data = Vec::with_capacity(1024); // Initial capacity
-	
-	// Write chunk count
-	data.extend_from_slice(&chunks.len().to_binary());
-	
-	// Write each chunk
-	for (coord, chunk) in chunks {
-		let local_coord = coord_to_local(*coord, region_coord);
-		let packed_coord = LocalPos::from(local_coord);
-		data.extend_from_slice(&packed_coord.to_binary());
-		data.extend_from_slice(&chunk.to_binary());
-	}
-	
-	Ok(data)
-}
-
-/// Converts global chunk coordinate to local coordinate within region
-fn coord_to_local(global_coord: ChunkCoord, region_coord: Region) -> (u8,u8,u8) {
-	let region_origin = region_coord.to_chunk_coord();
-	(
-		(global_coord.x() - region_origin.x()) as u8,
-		(global_coord.y() - region_origin.y()) as u8,
-		(global_coord.z() - region_origin.z()) as u8,
-	)
 }
 
 /// Writes data to a file atomically using a temporary file
@@ -398,19 +523,27 @@ fn parse_region_filename(path: &Path) -> Result<Region> {
 
 /// Loads chunks from binary region data
 fn load_chunks_from_bytes(bytes: &[u8], region_coord: Region, world: &mut World) -> Result<()> {
+	if bytes.len() < 8 {
+		return Err(Error::new(ErrorKind::InvalidData, "Region file too small"));
+	}
 	
 	// Read chunk count
-	let chunk_count = usize::from_binary(&bytes).ok_or_else(|| Error::new(ErrorKind::InvalidData, "Invalid usize data"))?;
+	let chunk_count = usize::from_binary(&bytes[0..8])
+		.ok_or_else(|| Error::new(ErrorKind::InvalidData, "Invalid chunk count"))?;
 	let mut cursor = 8;
 	
-	// Read each chunk
+	// Read each chunk iteratively
 	for _ in 0..chunk_count {
+		if cursor >= bytes.len() {
+			break; // Prevent out-of-bounds access
+		}
+		
 		match load_chunk(bytes, &mut cursor, region_coord) {
 			Ok((coord, chunk)) => {
 				world.chunks.insert(coord, chunk);
 			}
 			Err(e) => {
-				eprintln!("Failed to load chunk: {}", e);
+				println!("Failed to load chunk at cursor {}: {}", cursor, e);
 				break;
 			}
 		}
@@ -422,95 +555,22 @@ fn load_chunks_from_bytes(bytes: &[u8], region_coord: Region, world: &mut World)
 /// Loads a single chunk from binary data
 fn load_chunk(bytes: &[u8], cursor: &mut usize, region_coord: Region) -> Result<(ChunkCoord, Chunk)> {
 	// Read local coordinates
-	let local_coord = read_local_coord(bytes, cursor)?;
+	if *cursor + 2 > bytes.len() {
+		return Err(Error::new(ErrorKind::InvalidData, "Insufficient data for coordinates"));
+	}
+	let local_coord = LocalPos::from_binary(&bytes[*cursor..*cursor + 2]).ok_or_else(|| Error::new(ErrorKind::InvalidData, "Invalid coordinate data"))?;
+	*cursor += 2;
 	let global_coord = region_coord.to_chunk_coord() + local_coord.to_chunk_coord();
 	
 	// Read chunk data
-	let chunk = Chunk::from_binary(&bytes[*cursor..]).ok_or_else(|| Error::new(ErrorKind::InvalidData, "Invalid chunk data"))?;
+	let mut chunk = Chunk::from_binary(&bytes[*cursor..]).ok_or_else(|| Error::new(ErrorKind::InvalidData, "Invalid chunk data"))?;
 	
 	*cursor += chunk.binary_size();
 	
 	// Handle compression if needed
-	let chunk = maybe_decompress_chunk(chunk)?;
-	
-	Ok((global_coord, chunk))
-}
-
-/// Reads and unpacks local coordinates
-fn read_local_coord(bytes: &[u8], cursor: &mut usize) -> Result<LocalPos> {
-	if *cursor + 2 > bytes.len() {
-		return Err(Error::new(ErrorKind::InvalidData, "Insufficient data for coordinates"));
-	}
-	
-	let pos = LocalPos::from_binary(&bytes[*cursor..*cursor + 2]).ok_or_else(|| Error::new(ErrorKind::InvalidData, "Invalid coordinate data"))?;
-	*cursor += 2;
-	
-	Ok(pos)
-}
-
-/// Decompresses chunk storage if needed
-fn maybe_decompress_chunk(mut chunk: Chunk) -> Result<Chunk> {
 	if let Some(storage) = BlockStorage::from_rle(&chunk.storage()) {
 		*chunk.storage_mut() = storage;
 	}
-	Ok(chunk)
-}
-
-/// Finalizes world loading process
-fn finalize_world_loading(world: World) {
-	#[allow(unused_mut)]
-	let mut game_world = ptr::get_gamestate().world_mut();
 	
-	// Transfer loaded chunks
-	for (coord, chunk) in world.chunks {
-		game_world.chunks.insert(coord, chunk);
-		game_world.loaded_chunks.insert(coord);
-		game_world.create_bind_group(coord); // might want to create this in off-thread or atleast not at once...
-	}
-}
-
-/// Merges new chunks with existing chunks from disk
-fn merge_with_existing_chunks(path: &Path, region_coord: Region, new_chunks: Vec<(ChunkCoord, Chunk)>) -> Result<Vec<(ChunkCoord, Chunk)>> {
-	if !path.exists() {
-		return Ok(new_chunks);
-	}
-	
-	let existing_chunks = match load_existing_chunks(path, region_coord) {
-		Ok(chunks) => chunks,
-		Err(e) => {
-			eprintln!("Failed to load existing chunks: {}", e);
-			return Ok(new_chunks);
-		}
-	};
-	
-	// Use a map to handle duplicates (new chunks take precedence)
-	let mut merged = HashMap::new();
-	for (coord, chunk) in existing_chunks {
-		merged.insert(coord, chunk);
-	}
-	for (coord, chunk) in new_chunks {
-		if !chunk.finished_gen() { continue } // only save chunks that are sure to finished generating
-		merged.insert(coord, chunk);
-	}
-	
-	Ok(merged.into_iter().collect())
-}
-
-/// Loads existing chunks from a region file
-fn load_existing_chunks(path: &Path, region_coord: Region) -> Result<Vec<(ChunkCoord, Chunk)>> {
-	let bytes = fs::read(path)?;
-	let mut chunks = Vec::new();
-	
-	let chunk_count = usize::from_binary(&bytes).ok_or_else(|| Error::new(ErrorKind::InvalidData, "Invalid usize data"))?;
-	let mut cursor = 8;
-	
-	for _ in 0..chunk_count {
-		if let Ok((coord, chunk)) = load_chunk(&bytes, &mut cursor, region_coord) {
-			chunks.push((coord, chunk));
-		} else {
-			break;
-		}
-	}
-	
-	Ok(chunks)
+	Ok((global_coord, chunk))
 }
