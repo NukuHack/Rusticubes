@@ -372,7 +372,6 @@ impl<'a> State<'a> {
 	}
 }
 
-//#[cfg_attr(target_arch = "wasm32", wasm_bindgen(start))]
 #[inline]
 pub async fn run() {
 	let event_loop: winit::event_loop::EventLoop<()> = winit::event_loop::EventLoop::new().unwrap();
@@ -386,7 +385,6 @@ pub async fn run() {
 	// Initialize once at startup
 	ext::audio::init_audio().expect("Failed to initialize audio");
 	ext::audio::set_bg(settings.music_settings.bg_music);
-
 	
 	let config = &settings.window_config;
 	let window_raw: Window = winit::window::WindowBuilder::new()
@@ -433,12 +431,11 @@ pub async fn run() {
 			return;
 		}
 		let state = ext::ptr::get_state();
-		let Event::WindowEvent { event, window_id } = &event else { return; };
-		//let Event::DeviceEvent { event, device_id } = &event else { return; };
 
-		if *window_id != state.window().id() { return; };
-
-		state.handle_events(event);
+		let Event::WindowEvent { ref event, window_id } = event else { return; };
+		
+		if window_id != state.window().id() { return; };
+		state.handle_events(&event);
 
 		if state.is_world_running {
 			block::extra::update_full_world();

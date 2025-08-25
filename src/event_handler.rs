@@ -15,6 +15,9 @@ impl<'a> crate::State<'a> {
 		match event {
 			WindowEvent::CloseRequested => ptr::close_app(),
 			WindowEvent::Resized(physical_size) => { self.resize(*physical_size); },
+			WindowEvent::ScaleFactorChanged { .. } => {
+				// Handle DPI change
+			},
 			WindowEvent::Occluded(is_hidden) => {
 				if !is_hidden { return }
 				// here it should clean up stuff, and also make the rendering basically non existant
