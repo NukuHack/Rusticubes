@@ -1,7 +1,6 @@
 
 use crate::item::inventory::ItemContainer;
 use crate::block::entity::EntityStorage;
-use crate::world::region::Region;
 use crate::block::math::{BlockRotation, ChunkCoord, LocalPos};
 use crate::block::main::{Block, Material, Chunk};
 use crate::block::storage::{StorageType, BlockStorage};
@@ -52,23 +51,6 @@ impl BinarySerializable for LocalPos {
 
 impl FixedBinarySerializable for LocalPos {
 	const BINARY_SIZE: usize = u16::BINARY_SIZE;
-}
-
-impl BinarySerializable for Region {
-	fn to_binary(&self) -> Vec<u8> {
-		self.into_u64().to_binary()
-	}
-	fn from_binary(bytes: &[u8]) -> Option<Self> {
-		let value = u64::from_binary(bytes)?;
-		Some(value.into())
-	}
-	fn binary_size(&self) -> usize {
-		Self::BINARY_SIZE
-	}
-}
-
-impl FixedBinarySerializable for Region {
-	const BINARY_SIZE: usize = u64::BINARY_SIZE;
 }
 
 impl BinarySerializable for BlockRotation {

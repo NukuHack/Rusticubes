@@ -2,6 +2,14 @@
 use glam::{Vec3, IVec3};
 use crate::block::main::Chunk;
 
+
+pub const PREFIX: &str = "r.";
+pub const SUFFIX: &str = ".dat";
+pub const REGION_SIZE: usize = 32;
+pub const REGION_SIZE_I: i32 = REGION_SIZE as i32;
+pub const REGION_SIZE_U: u8 = REGION_SIZE as u8;
+pub const REGION_SIZE_F: f32 = REGION_SIZE as f32;
+
 /// Compact chunk coordinate representation (64 bits)
 /// Format: [X:26 (signed), Y:12 (signed), Z:26 (signed)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -51,9 +59,9 @@ impl ChunkCoord {
 
 	/// Extracts X coordinate with sign extension
 	#[inline] pub const fn x(self) -> i32 {
-		((self.0 >> Self::X_SHIFT) as i32)
-			.wrapping_shl(6)
-			.wrapping_shr(6)
+		let raw = (self.0 >> Self::X_SHIFT) as i32;
+		// Sign extend from 26 bits
+		(raw << 6) >> 6
 	}
 
 	/// Extracts Y coordinate with sign extension
@@ -65,9 +73,9 @@ impl ChunkCoord {
 
 	/// Extracts Z coordinate with sign extension
 	#[inline] pub const fn z(self) -> i32 {
-		(self.0 as i32 & Self::Z_MASK as i32)
-			.wrapping_shl(6)
-			.wrapping_shr(6)
+		let raw = self.0 as i32;
+		// Sign extend from 26 bits
+		(raw << 6) >> 6
 	}
 
 	/// Converts to u64 
@@ -100,6 +108,24 @@ impl ChunkCoord {
 			world_pos.x.div_euclid(chunk_size as f32) as i32,
 			world_pos.y.div_euclid(chunk_size as f32) as i32,
 			world_pos.z.div_euclid(chunk_size as f32) as i32,
+		)
+	}
+
+
+	#[inline]
+	pub const fn from_region_step(self) -> Self {
+		Self::new(
+			self.x() * REGION_SIZE_I,
+			self.y() * REGION_SIZE_I,
+			self.z() * REGION_SIZE_I,
+		)
+	}
+	#[inline]
+	pub const fn to_region_step(chunk_coord: Self) -> Self {
+		Self::new(
+			chunk_coord.x().div_euclid(REGION_SIZE_I),
+			chunk_coord.y().div_euclid(REGION_SIZE_I),
+			chunk_coord.z().div_euclid(REGION_SIZE_I),
 		)
 	}
 

@@ -247,7 +247,10 @@ impl UIManager {
 					ptr::get_state().ui_manager.dialogs.ask_with_callback(
 						"Delete world?",
 						move |confirmed| {
-							if confirmed { manager::del_world(&name_clone); }
+							if confirmed { 
+								if let Err(e) = manager::del_world(&name_clone) {
+									println!("Deleting world failed: {:?}", e);
+								} }
 						}
 					);
 				});
@@ -613,7 +616,7 @@ impl UIManager {
 			.with_callback(|| {
 				let save_path = ptr::get_gamestate().save_path();
 				if let Err(e) = manager::save_entire_world(save_path) {
-					println!("Error: {}", e);
+					println!("Error saving world: {}", e);
 				}
 			});
 		self.add_element(save_button);
@@ -626,7 +629,7 @@ impl UIManager {
 			.with_callback(|| {
 				let save_path = ptr::get_gamestate().save_path();
 				if let Err(e) = manager::load_entire_world(save_path) {
-					println!("Error: {}", e);
+					println!("Error loading world: {}", e);
 				}
 			});
 		self.add_element(load_button);

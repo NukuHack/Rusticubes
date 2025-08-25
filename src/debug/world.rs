@@ -85,12 +85,12 @@ mod tests {
 		
 		// Convert to RLE
 		if let Some(rle_storage) = chunk.storage().to_rle() {
-			chunk.set_storage(rle_storage);
+			*chunk.storage_mut() = rle_storage;
 			assert!(matches!(chunk.storage(), BlockStorage::Rle { .. }));
 			
 			// Verify we can convert back
 			if let Some(original_storage) = chunk.storage().from_rle() {
-				chunk.set_storage(original_storage);
+				*chunk.storage_mut() = original_storage;
 				assert!(!matches!(chunk.storage(), BlockStorage::Rle { .. }));
 				
 				// Verify all blocks are preserved
@@ -556,7 +556,7 @@ mod tests {
 		expected.fill(block(1));
 		
 		// Randomly set blocks and verify
-		let mut rng = crate::utils::math::Rand::from_time();
+		let mut rng = crate::utils::rng::Rand::from_time();
 		for _ in 0..1000 {
 			let pos = rng.range(0..Chunk::VOLUME);
 			let block = block(rng.range_inc(1..=100) as u16);
