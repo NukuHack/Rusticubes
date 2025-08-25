@@ -146,6 +146,19 @@ impl Chunk {
 			bind_group: None,
 		}
 	}
+	#[inline] pub fn from_storage_and_entities(storage: BlockStorage, entities: EntityStorage) -> Self {
+		Self {
+			storage,
+			entities,
+
+			dirty: true,
+			final_mesh: false,
+			finished_gen: true,
+
+			mesh: None,
+			bind_group: None,
+		}
+	}
 
 	pub fn generate(coord: ChunkCoord, seed: u32) -> Self {
 		if coord.y() > 6i32 { return Self::empty(); }

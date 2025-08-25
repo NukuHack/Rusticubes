@@ -214,27 +214,27 @@ impl BinarySerializable for StatString {
 		string_binary_size(self)
 	}
 }
-const BINARY_SIZE_STAT_STRING: usize = 2;
+const BINARY_SIZE_STRING: usize = 2;
 
 fn string_to_binary(s: &str) -> Vec<u8> {
-	let mut data = Vec::with_capacity(BINARY_SIZE_STAT_STRING + s.len()); // Use 2 bytes for length to handle longer strings
+	let mut data = Vec::with_capacity(BINARY_SIZE_STRING + s.len()); // Use 2 bytes for length to handle longer strings
 	data.extend_from_slice(&(s.len() as u16).to_binary());
 	data.extend_from_slice(s.as_bytes());
 	data
 }
 fn string_from_binary(bytes: &[u8]) -> Option<&str> {
-	if bytes.len() < BINARY_SIZE_STAT_STRING {
+	if bytes.len() < BINARY_SIZE_STRING {
 		return None;
 	}
 	let len = u16::from_binary(&bytes[0..u16::BINARY_SIZE])? as usize;
-	if bytes.len() < BINARY_SIZE_STAT_STRING + len {
+	if bytes.len() < BINARY_SIZE_STRING + len {
 		return None;
 	}
 	
-	std::str::from_utf8(&bytes[BINARY_SIZE_STAT_STRING..BINARY_SIZE_STAT_STRING + len]).ok()
+	std::str::from_utf8(&bytes[BINARY_SIZE_STRING..BINARY_SIZE_STRING + len]).ok()
 }
 fn string_binary_size(s: &str) -> usize {
-	BINARY_SIZE_STAT_STRING + s.len() // 2 bytes for length + string bytes
+	BINARY_SIZE_STRING + s.len() // 2 bytes for length + string bytes
 }
 
 

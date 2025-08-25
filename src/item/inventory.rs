@@ -46,13 +46,10 @@ pub struct ItemContainer {
 	items: Vec<Option<ItemStack>>,
 	size: Slot,
 }
-impl Default for ItemContainer {
-	fn default() -> Self {
+impl ItemContainer {
+	#[inline] pub fn default() -> Self {
 		Self::new(1,1)
 	}
-}
-
-impl ItemContainer {
 	/// Create a new 2D grid container (like main inventory)
 	#[inline] pub fn new(rows: u8, cols: u8) -> Self {
 		Self::with_dimensions(Slot::custom(rows, cols))
@@ -63,6 +60,15 @@ impl ItemContainer {
 			size,
 		};
 		container.resize_to_capacity();
+		container
+	}
+	#[inline] pub fn from_raw(size: Slot, items: Vec<Option<ItemStack>>) -> Self {
+		let to_resize = if size.total() > items.len() { true } else { false };
+		let mut container = Self {
+			items,
+			size,
+		};
+		if to_resize { container.resize_to_capacity(); }
 		container
 	}
 
@@ -249,10 +255,8 @@ impl ItemContainer {
 		}
 	}
 
-	// Bulk operations
-	#[inline] pub fn items(&self) -> &[Option<ItemStack>] {
-		&self.items
-	}
+	#[inline] pub fn items(&self) -> &[Option<ItemStack>] { &self.items }
+	#[inline] pub fn size(&self) -> &Slot { &self.size }
 	#[inline] pub fn clear(&mut self) {
 		for slot in &mut self.items {
 			*slot = None;
@@ -325,6 +329,20 @@ impl Inventory {
 			cursor_item: None,
 			layout: None,
 			storage_ptr: None,
+		}
+	}
+
+	/// Create a new inventory with custom dimensions
+	#[inline] pub fn from_raw(armor: ItemContainer, items: ItemContainer, hotbar: ItemContainer, crafting_def: ItemContainer, storage_ptr: Option<*mut ItemContainer>) -> Self {
+		Self {
+			selected_slot: 0,
+			armor,
+			items,
+			hotbar,
+			crafting_def,
+			cursor_item: None,
+			layout: None,
+			storage_ptr,
 		}
 	}
 	

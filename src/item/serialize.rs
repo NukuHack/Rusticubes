@@ -1,14 +1,14 @@
-use std::num::NonZeroU16;
-use crate::item::items::CustomData;
-use crate::item::items::ItemStack;
-use std::mem;
-use std::num::NonZeroU32;
+
+use crate::item::items::{ItemStack, CustomData};
+use crate::item::inventory::{Inventory, ItemContainer, Slot, AreaType};
 use crate::item::material::{ArmorType, ToolType, MaterialLevel, EquipmentType, BasicConversion};
 use crate::item::item_lut::{
 	ItemComp, ItemFlags, ItemExtendedData, PropertyValue, PropertyType,
 	ToolData, ArmorData, EquipmentData, EquipmentSetStruct, BitStorage, TierStorage
 };
 use crate::fs::binary::{BinarySerializable, FixedBinarySerializable};
+use std::num::{NonZeroU16, NonZeroU32};
+use std::mem;
 
 impl BinarySerializable for ItemFlags {
 	fn to_binary(&self) -> Vec<u8> {
@@ -406,7 +406,7 @@ impl BinarySerializable for CustomData {
 		// Serialize durability (1 byte flag + optional u16)
 		if let Some(durability) = &self.durability {
 			data.push(1); // Has durability flag
-			data.extend_from_slice(&durability.get().to_le_bytes());
+			data.extend_from_slice(&durability.get().to_binary());
 		} else {
 			data.push(0); // No durability flag
 		}
@@ -423,10 +423,9 @@ impl BinarySerializable for CustomData {
 		let has_name = bytes[offset] != 0;
 		offset += 1;
 		let name = if has_name {
-			let name_len = u16::from_le_bytes([bytes[offset], bytes[offset+1]]) as usize;
-			offset += 2;
-			let name = String::from_utf8(bytes[offset..offset+name_len].to_vec()).ok()?;
-			offset += name_len;
+			let name_len = u16::from_binary(&bytes[offset..offset+2])? as usize;
+			let name = String::from_binary(&bytes[offset..offset+name_len+2])?;
+			offset += name_len + 2;
 			Some(name)
 		} else {
 			None
@@ -437,7 +436,7 @@ impl BinarySerializable for CustomData {
 		offset += 1;
 		let durability = if has_durability {
 			if bytes.len() < offset + 2 { return None; }
-			let value = u16::from_le_bytes([bytes[offset], bytes[offset+1]]);
+			let value = u16::from_binary(&bytes[offset..offset+2])?;
 			//offset += 2;
 			NonZeroU16::new(value)
 		} else {
@@ -472,8 +471,8 @@ impl BinarySerializable for ItemStack {
 		// Serialize name (string)
 		data.extend_from_slice(&self.name().to_string().to_binary());
 		
-		// Serialize stack count (1 byte)
-		data.push(self.stack as u8);
+		// Serialize stack count (4 bytes)
+		data.extend_from_slice(&self.stack.to_binary());
 		
 		// Serialize custom data (1 byte flag + optional data)
 		if let Some(custom_data) = &self.data {
@@ -498,8 +497,8 @@ impl BinarySerializable for ItemStack {
 		
 		// Deserialize stack count
 		if offset >= bytes.len() { return None; }
-		let stack = bytes[offset] as u32;
-		offset += 1;
+		let stack = u32::from_binary(&bytes[offset..offset+4])?;
+		offset += 4;
 		
 		// Deserialize custom data
 		if offset >= bytes.len() { return None; }
@@ -515,12 +514,216 @@ impl BinarySerializable for ItemStack {
 	}
 	
 	fn binary_size(&self) -> usize {
-		let mut size = 2 + self.name().to_string().binary_size(); // name length (2 bytes) + string bytes
-		size += 1; // stack count (1 byte)
+		let mut size = self.name().to_string().binary_size(); // string bytes
+		size += 4; // stack count
 		size += 1; // has_data flag (1 byte)
 		if let Some(data) = &self.data {
 			size += data.binary_size();
 		}
+		size
+	}
+}
+
+
+// Implement BinarySerializable for Slot
+impl BinarySerializable for Slot {
+	fn to_binary(&self) -> Vec<u8> {
+		let mut data = Vec::new();
+		data.push(self.rows());
+		data.push(self.cols());
+		data
+	}
+	
+	fn from_binary(bytes: &[u8]) -> Option<Self> {
+		if bytes.len() < 2 { return None; }
+		Some(Slot::custom(bytes[0],bytes[1]))
+	}
+	
+	fn binary_size(&self) -> usize {
+		Self::BINARY_SIZE
+	}
+}
+
+impl FixedBinarySerializable for Slot {
+	const BINARY_SIZE: usize = 2; // rows (1 byte) + cols (1 byte)
+}
+
+// Implement BinarySerializable for AreaType
+impl BinarySerializable for AreaType {
+	fn to_binary(&self) -> Vec<u8> {
+		vec![*self as u8]
+	}
+	
+	fn from_binary(bytes: &[u8]) -> Option<Self> {
+		match bytes.first()? {
+			0 => Some(AreaType::Panel),
+			1 => Some(AreaType::Inventory),
+			2 => Some(AreaType::Hotbar),
+			3 => Some(AreaType::Armor),
+			4 => Some(AreaType::Storage),
+			5 => Some(AreaType::Output),
+			_ => None,
+		}
+	}
+	
+	fn binary_size(&self) -> usize {
+		1
+	}
+}
+
+impl FixedBinarySerializable for AreaType {
+	const BINARY_SIZE: usize = 1;
+}
+
+// Implement BinarySerializable for ItemContainer
+impl BinarySerializable for ItemContainer {
+	fn to_binary(&self) -> Vec<u8> {
+		let mut data = Vec::new();
+		
+		// Serialize dimensions
+		data.extend_from_slice(&self.size().to_binary());
+		
+		// Serialize items
+		data.extend_from_slice(&self.items().len().to_binary());
+		for item in self.iter() {
+			if let Some(item_stack) = item {
+				data.push(1); // Has item flag
+				data.extend_from_slice(&item_stack.to_binary());
+			} else {
+				data.push(0); // Empty slot flag
+			}
+		}
+		
+		data
+	}
+	
+	fn from_binary(bytes: &[u8]) -> Option<Self> {
+		if bytes.is_empty() { return None; }
+		let mut offset = 0;
+		
+		// Deserialize dimensions
+		let size = Slot::from_binary(&bytes[offset..offset + Slot::BINARY_SIZE])?;
+		offset += Slot::BINARY_SIZE;
+		
+		// Deserialize item count
+		if offset >= bytes.len() { return None; }
+		let item_count = usize::from_binary(&bytes[offset..offset + 8])?;
+		offset += 8;
+		
+		// Check if we have enough bytes
+		if bytes.len() < offset + item_count { return None; }
+		
+		let mut items = Vec::with_capacity(item_count);
+		
+		// Deserialize items
+		for _ in 0..item_count {
+			if offset >= bytes.len() { return None; }
+			
+			let has_item = bytes[offset] != 0;
+			offset += 1;
+			
+			if has_item {
+				let item_stack = ItemStack::from_binary(&bytes[offset..])?;
+				offset += item_stack.binary_size();
+				items.push(Some(item_stack));
+			} else {
+				items.push(None);
+			}
+		}
+		
+		Some(ItemContainer::from_raw(size, items))
+	}
+	
+	fn binary_size(&self) -> usize {
+		let mut size = Slot::BINARY_SIZE; // size
+		size += 4; // item count (u32)
+		
+		for item in self.iter() {
+			size += 1; // has_item flag
+			if let Some(item_stack) = item {
+				size += item_stack.binary_size();
+			}
+		}
+		
+		size
+	}
+}
+
+// Implement BinarySerializable for Inventory
+impl BinarySerializable for Inventory {
+	fn to_binary(&self) -> Vec<u8> {
+		let mut data = Vec::new();
+				
+		// Serialize containers
+		data.extend_from_slice(&self.armor().to_binary());
+		data.extend_from_slice(&self.inv().to_binary());
+		data.extend_from_slice(&self.hotbar().to_binary());
+		data.extend_from_slice(&self.crafting_def.to_binary());
+		
+		// Serialize layout (skip for now as it's complex UI data)
+		data.push(0); // Layout flag (not serialized)
+		
+		// Serialize storage pointer (we can't serialize raw pointers, so we'll use a marker)
+		data.push(if self.storage_ptr.is_some() { 1 } else { 0 });
+		
+		data
+	}
+	
+	fn from_binary(bytes: &[u8]) -> Option<Self> {
+		if bytes.is_empty() { return None; }
+		let mut offset = 0;
+		
+		// Deserialize containers
+		let armor = ItemContainer::from_binary(&bytes[offset..])?;
+		offset += armor.binary_size();
+		
+		if offset >= bytes.len() { return None; }
+		let items = ItemContainer::from_binary(&bytes[offset..])?;
+		offset += items.binary_size();
+		
+		if offset >= bytes.len() { return None; }
+		let hotbar = ItemContainer::from_binary(&bytes[offset..])?;
+		offset += hotbar.binary_size();
+		
+		if offset >= bytes.len() { return None; }
+		let crafting_def = ItemContainer::from_binary(&bytes[offset..])?;
+		offset += crafting_def.binary_size();
+				
+		// Skip layout (1 byte flag)
+		if offset >= bytes.len() { return None; }
+		offset += 1;
+		
+		// Deserialize storage pointer flag
+		if offset >= bytes.len() { return None; }
+		let has_storage_ptr = bytes[offset] != 0;
+		//offset += 1;
+		
+		Some(Inventory::from_raw(
+			armor,
+			items,
+			hotbar,
+			crafting_def,
+			if has_storage_ptr {
+				// We can't reconstruct the pointer, so we'll set it to null
+				// In a real implementation, you might want to handle this differently
+				Some(std::ptr::null_mut())
+			} else {
+				None
+			}
+		))
+	}
+	
+	fn binary_size(&self) -> usize {
+		let mut size = 0;
+		
+		size += self.armor().binary_size();
+		size += self.inv().binary_size();
+		size += self.hotbar().binary_size();
+		size += self.crafting_def.binary_size();
+		
+		size += 1; // layout flag (not serialized)
+		size += 1; // storage pointer flag
+		
 		size
 	}
 }

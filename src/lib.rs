@@ -63,7 +63,7 @@ pub mod item {
 	/// Item related things what will not change at runtime
 	pub mod item_lut;
 	/// Binary serialization and de-serialization for items
-	pub mod item_binary;
+	pub mod serialize;
 	/// Json de-serialization for items
 	pub mod item_json;
 	/// Basic corner-stone of the item system
