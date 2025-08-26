@@ -1,7 +1,8 @@
 
 use crate::ext::config::CameraConfig;
-use crate::world::manager::{self, get_save_path, ensure_save_dir};
+use crate::world::manager::{get_save_path, ensure_save_dir};
 use crate::world::main::World;
+use crate::world::data;
 use crate::game::player;
 use crate::item::{items, recipes};
 use crate::ext::ptr;
@@ -83,7 +84,7 @@ impl GameState {
 
 		make_world(save_path.clone());
 
-		let creation_date: u64 = manager::update_world_data(&save_path)
+		let creation_date: u64 = data::update_world_data(&save_path)
 			.map_err(|e| println!("Error updating world data: {}", e))
 			.map_or(0, |data| data.creation_date.to_unix_timestamp());
 
