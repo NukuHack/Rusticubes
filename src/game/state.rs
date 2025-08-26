@@ -6,6 +6,7 @@ use crate::world::data;
 use crate::game::player;
 use crate::item::{items, recipes};
 use crate::ext::ptr;
+use crate::render::debug;
 use std::path::PathBuf;
 use std::sync::atomic::Ordering;
 use glam::Vec3;
@@ -17,6 +18,7 @@ pub struct GameState {
 	world: World, // lol main data storage :)
 	save_path: std::path::PathBuf,
 	world_seed: u32,
+	debug: debug::DebugLines,
 	is_running: bool,
 }
 
@@ -116,11 +118,18 @@ impl GameState {
 			world.start_generation_threads(0);
 		}
 
+		let debug = debug::DebugLines::new(ptr::get_state().device(),
+			vec![
+				debug::Line::new(Vec3::new(0.,0.,0.), Vec3::new(13.,11.,-7.)),
+				debug::Line::new(Vec3::new(0.,0.,0.), Vec3::new(-13.,-11.,7.)),
+				]
+			);
 
 		Self {
 			worldname: worldname.to_string(),
 			player,
 			world,
+			debug,
 			save_path,
 			world_seed,
 			is_running: false,
@@ -149,6 +158,9 @@ impl GameState {
 	}
 	#[inline] pub const fn running(&mut self) -> &mut bool {
 		&mut self.is_running
+	}
+	#[inline] pub const fn debug(&mut self) -> &mut debug::DebugLines {
+		&mut self.debug
 	}
 	#[inline] pub const fn seed(&self) -> &u32 {
 		&self.world_seed

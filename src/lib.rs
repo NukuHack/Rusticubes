@@ -104,6 +104,7 @@ pub mod render {
 	pub mod texture;
 	pub mod pipeline;
 	pub mod world;
+	pub mod debug;
 	pub mod skybox;
 }
 // Ui and related
@@ -242,13 +243,6 @@ impl<'a> State<'a> {
 		surface.configure(&device, &surface_config);
 
 		let layouts = make_layout(&device);
-		/*
-		&texture_bind_group_layout,
-		&camera_bind_group_layout,
-		&chunk_bind_group_layout,
-		&skybox_bind_group_layout,
-		&post_bind_group_layout,
-		*/
 
 		let texture_manager = render::texture::TextureManager::new(&device, &queue, &surface_config, &layouts[0], &layouts[4]);
 
@@ -493,7 +487,6 @@ fn make_layout(device: &wgpu::Device) -> Box<[wgpu::BindGroupLayout]> {
 			},
 		],
 	});
-
 	let chunk_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
 		label: Some("chunk_bind_group_layout"),
 		entries: &[wgpu::BindGroupLayoutEntry {
@@ -541,6 +534,21 @@ fn make_layout(device: &wgpu::Device) -> Box<[wgpu::BindGroupLayout]> {
 			count: None,
 		}],
 	});
+	let debug_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+		label: Some("debug_bind_group_layout"),
+		entries: &[
+			wgpu::BindGroupLayoutEntry {
+				binding: 0,
+				visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
+				ty: wgpu::BindingType::Buffer {
+					ty: wgpu::BufferBindingType::Storage { read_only: true },
+					has_dynamic_offset: false,
+					min_binding_size: None,
+				},
+				count: None,
+		},],
+	});
+
 	//wgpu::BindGroupLayout
 	let layouts = [
 		texture_bind_group_layout,
@@ -548,6 +556,7 @@ fn make_layout(device: &wgpu::Device) -> Box<[wgpu::BindGroupLayout]> {
 		chunk_bind_group_layout,
 		skybox_bind_group_layout,
 		post_bind_group_layout,
+		debug_bind_group_layout,
 	];
 
 	Box::new(layouts)

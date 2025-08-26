@@ -497,15 +497,9 @@ impl Plane {
 
 	// Create normalized plane from 4 coefficients (a, b, c, d) where ax + by + cz + d = 0
 	#[inline] pub const fn from_coefficients(a: f32, b: f32, c: f32, d: f32) -> Self {
-		let normal = Vec3::new(a, b, c);
-		let length = vec3::const_length(normal);
-		if length > 0.0 {
-			Self {
-				normal: vec3::const_div_s(normal, length),
-				distance: d / length,
-			}
-		} else {
-			Self::default()
+		Self {
+			normal: Vec3::new(a, b, c),
+			distance: d,
 		}
 	}
 
@@ -534,16 +528,6 @@ macro_rules! test_plane {
 		}
 	};
 }
-macro_rules! create_plane {
-	($matrix:ident $op:tt $row:expr) => {
-		Plane::from_coefficients(
-			$matrix[3][0] $op $matrix[$row][0],
-			$matrix[3][1] $op $matrix[$row][1],
-			$matrix[3][2] $op $matrix[$row][2],
-			$matrix[3][3] $op $matrix[$row][3]
-		)
-	};
-}
 impl Frustum {
 	#[inline] pub const fn default() -> Self {
 		Self {
@@ -554,26 +538,72 @@ impl Frustum {
 	/// Extract frustum planes and corners from view-projection matrix
 	pub const fn from_view_proj_matrix(view_proj: Mat4) -> Self {
 		let m = view_proj.to_cols_array_2d();
-
-		// Extract the 6 frustum planes from the view-projection matrix
-
-		// Usage:
-		let planes = [
-			// Left plane: m[3] + m[0]
-			create_plane!(m + 0),
-			// Right plane: m[3] - m[0]
-			create_plane!(m - 0),
-			// Bottom plane: m[3] + m[1]
-			create_plane!(m + 1),
-			// Top plane: m[3] - m[1]
-			create_plane!(m - 1),
-			// Near plane: m[3] + m[2]
-			create_plane!(m + 2),
-			// Far plane: m[3] - m[2]
-			create_plane!(m - 2),
-		];
+		
+		// Extract and normalize the 6 frustum planes
+		let mut planes = [Plane::default(); 6];
+		
+		// Left plane: m[3] + m[0]
+		planes[0] = Self::normalize_plane(Plane::from_coefficients(
+			m[3][0] + m[0][0],
+			m[3][1] + m[0][1],
+			m[3][2] + m[0][2],
+			m[3][3] + m[0][3]
+		));
+		
+		// Right plane: m[3] - m[0]
+		planes[1] = Self::normalize_plane(Plane::from_coefficients(
+			m[3][0] - m[0][0],
+			m[3][1] - m[0][1],
+			m[3][2] - m[0][2],
+			m[3][3] - m[0][3]
+		));
+		
+		// Bottom plane: m[3] + m[1]
+		planes[2] = Self::normalize_plane(Plane::from_coefficients(
+			m[3][0] + m[1][0],
+			m[3][1] + m[1][1],
+			m[3][2] + m[1][2],
+			m[3][3] + m[1][3]
+		));
+		
+		// Top plane: m[3] - m[1]
+		planes[3] = Self::normalize_plane(Plane::from_coefficients(
+			m[3][0] - m[1][0],
+			m[3][1] - m[1][1],
+			m[3][2] - m[1][2],
+			m[3][3] - m[1][3]
+		));
+		
+		// Near plane: m[3] + m[2]
+		planes[4] = Self::normalize_plane(Plane::from_coefficients(
+			m[3][0] + m[2][0],
+			m[3][1] + m[2][1],
+			m[3][2] + m[2][2],
+			m[3][3] + m[2][3]
+		));
+		
+		// Far plane: m[3] - m[2]
+		planes[5] = Self::normalize_plane(Plane::from_coefficients(
+			m[3][0] - m[2][0],
+			m[3][1] - m[2][1],
+			m[3][2] - m[2][2],
+			m[3][3] - m[2][3]
+		));
 
 		Self { planes }
+	}
+
+	/// Helper function to normalize a plane
+	const fn normalize_plane(plane: Plane) -> Plane {
+		let length = vec3::const_length(plane.normal);
+		if length > 0.001 {
+			Plane {
+				normal: vec3::const_div_s(plane.normal, length),
+				distance: plane.distance / length,
+			}
+		} else {
+			plane
+		}
 	}
 
 	/// Test if AABB is inside or intersecting the frustum (optimized version)

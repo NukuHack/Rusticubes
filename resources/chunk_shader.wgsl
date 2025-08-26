@@ -1,5 +1,16 @@
 
 @group(1) @binding(0) var<uniform> camera_proj: mat4x4f;
+/*
+
+// Camera uniform usual type ... yeah
+struct CameraUniform {
+	view_proj: mat4x4f,
+	view: mat4x4f,
+	projection: mat4x4f,
+	position: vec3f,
+}
+
+*/
 @group(2) @binding(0) var<uniform> chunk_pos: u64;
 
 // Assuming CHUNK_SIZE_I is passed as a uniform or constant
@@ -129,6 +140,9 @@ fn vs_main(
 
 @fragment
 fn fs_main(vertex: VertexOutput) -> @location(0) vec4f {
+	let texture_color = textureSample(t_diffuse, s_diffuse, vertex.uv, vertex.id);
+	if texture_color.a < 0.1 { discard; }
+	
 	let light_dir = normalize(vec3f(0.5, 1.0, 0.5));
 	let up = vec3f(0.0, 1.0, 0.0);
 	
@@ -137,7 +151,6 @@ fn fs_main(vertex: VertexOutput) -> @location(0) vec4f {
 	let hemi = 0.5 + 0.5 * dot(vertex.world_normal, up);
 	let final_light = mix(0.35 + 0.55 * directional, hemi, 0.3);
 	
-	let texture_color = textureSample(t_diffuse, s_diffuse, vertex.uv, vertex.id);
 	return vec4f(texture_color.rgb * final_light, texture_color.a);
 }
 

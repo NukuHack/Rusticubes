@@ -150,6 +150,11 @@ pub fn close_pressed() {
 	state.ui_manager.setup_ui();
 }
 
+#[allow(dead_code)]
+fn call_function<F: Fn()>(func: F) {
+	func();
+}
+
 pub struct UIManager {
 	//basic stuff
 	pub state: UIState,
