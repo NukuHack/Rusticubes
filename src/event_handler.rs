@@ -335,9 +335,10 @@ impl<'a> crate::State<'a> {
 
 		let player = &ptr::get_gamestate().player();
 
-		if matches!(self.ui_manager.state, UIState::InGame) && self.handle_block_and_item_interaction(player) { 
+		if matches!(self.ui_manager.state, UIState::InGame) {
+			let f = self.handle_block_and_item_interaction(player);
 			self.ui_manager.setup_ui(); // to update the hotbar if changed
-			return;
+			if f { return; }
 		}
 
 		let Some(item) = player.inventory().selected_item() else { return; };
