@@ -152,6 +152,15 @@ fn create_chunk_pipeline(
 		"Chunk Render Pipeline",
 	)
 }
+/*
+pub enum PrimitiveTopology {
+    PointList,        // Individual points
+    LineList,         // Separate lines (2 vertices per line)
+    LineStrip,        // Connected lines (n+1 vertices for n lines)
+    TriangleList,     // Separate triangles (3 vertices per triangle) ← YOU USE THIS
+    TriangleStrip,    // Connected triangles (n+2 vertices for n triangles)
+}
+*/
 #[inline]
 fn create_debug_pipeline(
 	device: &Device,
