@@ -34,7 +34,7 @@ pub mod ext {
 	// all the pointers and stuff for globar variables
 	pub mod ptr;
 	// basic struct used for debugging and profiling
-	pub mod stopwatch;
+	pub mod timer;
 	// memory management mainly focusing on memory clean up
 	pub mod memory;
 }
@@ -169,6 +169,7 @@ pub struct State<'a> {
 	pipeline: render::pipeline::Pipeline,
 	ui_manager: ui::manager::UIManager,
 	texture_manager: render::texture::TextureManager,
+	fps: ext::timer::FPSCounter,
 	is_world_running: bool,
 }
 
@@ -271,6 +272,7 @@ impl<'a> State<'a> {
 			pipeline,
 			texture_manager,
 			ui_manager,
+			fps: ext::timer::FPSCounter::default(),
 			is_world_running: false,
 		}
 	}
@@ -316,6 +318,10 @@ impl<'a> State<'a> {
 	#[inline]
 	pub fn skybox(&self) -> &render::skybox::Skybox {
 		&self.render_context.skybox
+	}
+	#[inline]
+	pub fn fps(&self) -> f64 {
+		self.fps.fps()
 	}
 
 
@@ -363,6 +369,9 @@ impl<'a> State<'a> {
 	}
 	#[inline]
 	pub fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
+		self.fps.update();
+		
+		// Actual rendering
 		render::pipeline::render_all(self)
 	}
 }
@@ -430,7 +439,6 @@ pub async fn run() {
 			return;
 		}
 		let state = ext::ptr::get_state();
-
 		
 		// Fixed timestep world update
 		let now = std::time::Instant::now();
@@ -438,7 +446,6 @@ pub async fn run() {
 		if elapsed >= tick_iterval && state.is_world_running {
 			last_tick = now;
 			block::extra::update_full_world();
-			//println!("1/20 th of a second passed"); // correct
 			/*
 			// Handle potential multiple ticks if we're behind
 			let mut accumulated_time = elapsed;
@@ -447,6 +454,7 @@ pub async fn run() {
 				last_tick += tick_iterval;
 			}
 			*/
+			let fps = state.fps(); if fps < 20.0 { println!("Fps: {:?}", fps); }
 		}
 
 		let Event::WindowEvent { ref event, window_id } = event else { return; };

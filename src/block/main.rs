@@ -9,8 +9,6 @@ use crate::{
 	utils::rng::{Noise},
 	render::meshing::GeometryBuffer,
 };
-#[allow(unused_imports)]
-use crate::ext::stopwatch;
 use glam::IVec3;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
