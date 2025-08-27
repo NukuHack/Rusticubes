@@ -219,7 +219,7 @@ impl ItemStack {
 		(resources, target_name)
 	}
 	
-	#[inline] fn lut(&self) -> ItemComp {
+	#[inline] pub fn lut(&self) -> ItemComp {
 		lut_by_name(&self.name)
 	}
 }
@@ -244,19 +244,26 @@ impl CustomData {
 pub const DEFAULT_ITEM_COMP: ItemComp = const { ItemComp::error().as_block() };
 
 #[inline] pub fn lut_by_name(name: &str) -> ItemComp {
-	item_lut_ref().get(name).unwrap_or(&DEFAULT_ITEM_COMP).clone()
+	if let Some(itm) = item_lut_ref().get(name) {
+		itm.copy()
+	} else {
+		DEFAULT_ITEM_COMP
+	}
 }
 
-
-use std::collections::HashMap;
+use std::{collections::HashMap, hash::BuildHasherDefault};
+use ahash::AHasher;
 use std::sync::{OnceLock, RwLock, RwLockReadGuard};
 
+// Type aliases for better readability
+type FastMap<K, V> = HashMap<K, V, BuildHasherDefault<AHasher>>;
+
 // Global mutable state with RwLock
-static ITEM_LUT: OnceLock<RwLock<HashMap<String, ItemComp>>> = OnceLock::new();
+static ITEM_LUT: OnceLock<RwLock<FastMap<String, ItemComp>>> = OnceLock::new();
 
 /// Returns a raw pointer to the OnceLock's storage location.
 /// This is safe because it's just an address calculation.
-pub const fn item_lut_ptr() -> *const OnceLock<RwLock<HashMap<String, ItemComp>>> {
+pub const fn item_lut_ptr() -> *const OnceLock<RwLock<FastMap<String, ItemComp>>> {
 	&ITEM_LUT as *const _
 }
 
@@ -264,7 +271,7 @@ pub const fn item_lut_ptr() -> *const OnceLock<RwLock<HashMap<String, ItemComp>>
 /// # Panics
 /// Panics if it hasn't been initialized yet.
 #[inline]
-fn item_lut() -> &'static RwLock<HashMap<String, ItemComp>> {
+fn item_lut() -> &'static RwLock<FastMap<String, ItemComp>> {
 	ITEM_LUT.get().expect("ItemLut should be initialized")
 }
 
@@ -273,7 +280,7 @@ fn item_lut() -> &'static RwLock<HashMap<String, ItemComp>> {
 /// # Panics
 /// Panics if the lock is poisoned or cannot be acquired.
 #[inline]
-pub fn item_lut_ref() -> RwLockReadGuard<'static, HashMap<String, ItemComp>> {
+pub fn item_lut_ref() -> RwLockReadGuard<'static, FastMap<String, ItemComp>> {
 	item_lut().read().expect("Failed to acquire read lock for item LUT")
 }
 
@@ -305,7 +312,7 @@ pub fn init_item_lut() {
 	
 	{
 		// idk how to only specify the init and not get_or_init so yeah
-		let _ = ITEM_LUT.get_or_init(|| RwLock::new(HashMap::new()));
+		let _ = ITEM_LUT.get_or_init(|| RwLock::new( FastMap::with_capacity_and_hasher(100, BuildHasherDefault::<AHasher>::default()) ));
 	}
 	// Insert items (write lock)
 	{

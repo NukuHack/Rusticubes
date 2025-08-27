@@ -19,6 +19,13 @@ impl MutStr {
 	pub const fn default() -> Self {
 		Self::Static("")
 	}
+
+	pub fn copy(&self) -> Self {
+		match self {
+			MutStr::Static(s) => MutStr::Static(s),
+			MutStr::Dynamic(s) => MutStr::Dynamic(s.clone()),
+		}
+	}
 	
 	// Conversion
 	pub fn to_string(self) -> String {
@@ -186,10 +193,10 @@ impl std::fmt::Display for MutStr {
 }
 
 impl PartialEq for MutStr {
-    fn eq(&self, other: &Self) -> bool {
-        // Convert both to string slices and compare
-        self.to_str() == other.to_str()
-    }
+	fn eq(&self, other: &Self) -> bool {
+		// Convert both to string slices and compare
+		self.to_str() == other.to_str()
+	}
 }
 
 // Since we're implementing PartialEq, we should also implement Eq

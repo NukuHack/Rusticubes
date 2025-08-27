@@ -415,6 +415,10 @@ pub async fn run() {
 		}
 	}
 
+	let mut last_tick = std::time::Instant::now();
+	const TICK_RATE: f32 = 20.0; // 20 ticks per second
+	let tick_iterval: std::time::Duration = std::time::Duration::from_secs_f32(1.0 / TICK_RATE as f32);
+
 	// Post-init cleanup
 	ext::memory::light_trim();
 	ext::memory::hard_clean(Some(ext::ptr::get_state().device()));
@@ -427,14 +431,28 @@ pub async fn run() {
 		}
 		let state = ext::ptr::get_state();
 
+		
+		// Fixed timestep world update
+		let now = std::time::Instant::now();
+		let elapsed = now - last_tick;
+		if elapsed >= tick_iterval && state.is_world_running {
+			last_tick = now;
+			block::extra::update_full_world();
+			//println!("1/20 th of a second passed"); // correct
+			/*
+			// Handle potential multiple ticks if we're behind
+			let mut accumulated_time = elapsed;
+			while accumulated_time >= tick_iterval && state.is_world_running {
+				accumulated_time -= tick_iterval;
+				last_tick += tick_iterval;
+			}
+			*/
+		}
+
 		let Event::WindowEvent { ref event, window_id } = event else { return; };
 		
 		if window_id != state.window().id() { return; };
 		state.handle_events(&event);
-
-		if state.is_world_running {
-			block::extra::update_full_world();
-		}
 	}).expect("Event loop error");
 }
 

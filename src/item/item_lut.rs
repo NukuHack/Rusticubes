@@ -27,7 +27,6 @@ impl ItemFlags {
 }
 
 #[derive(Debug, PartialEq, Clone)]
-#[repr(C)] // Ensure predictable layout for better cache performance
 pub struct ItemComp {
 	pub name: MutStr,
 	pub max_stack: u32,
@@ -35,8 +34,18 @@ pub struct ItemComp {
 	// Optional data stored separately to avoid memory overhead when not needed
 	pub data: Option<ItemExtendedData>,
 }
+// Manual Copy implementation if needed (though derive should work)
 
 impl ItemComp {
+	pub fn copy(&self) -> Self {
+		Self {
+			name: self.name.copy(),
+			max_stack: self.max_stack,
+			flags: self.flags,
+			data: self.data,
+		}
+	}
+
 	#[inline] pub const fn error() -> Self { Self::new("0") }
 	
 	pub const fn new(name: &'static str) -> Self {
@@ -145,7 +154,7 @@ impl ItemComp {
 
 
 /// All possible property types an item can have
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum PropertyValue {
 	Durability(NonZeroU32),
 	ToolData(ToolData),
@@ -206,7 +215,7 @@ impl PropertyType {
 const DEFAULT_MAX_PROPERTIES: usize = 4;
 
 /// Ultra-compact storage using a fixed array of N properties
-#[derive(Debug, Clone)]
+#[derive(Debug, Copy, Clone)]
 pub struct ItemExtendedData<const N: usize = DEFAULT_MAX_PROPERTIES> where PropertyValue: PartialEq {
 	pub data: [Option<PropertyValue>; N],
 	pub len: u8, // Tracks how many properties are actually set
@@ -602,7 +611,7 @@ impl<T: EquipmentType + BasicConversion<T>, S: BitStorage, TS: TierStorage> Equi
 }
 
 // Generic equipment data enum
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum EquipmentData<T: EquipmentType, S> {
 	Single { equip_type: T, tier: MaterialLevel },
 	Multiple(S),

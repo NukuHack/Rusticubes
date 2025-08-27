@@ -78,7 +78,7 @@ impl Block {
 	pub fn get_storage(&self) -> Slot {
 		let item_name = get_item_name_from_block_id(self.material.inner());
 		let item = lut_by_name(&item_name);
-		item.data.expect("Shold check first").get_slot().expect("Shold check the data first")
+		item.data.clone().expect("Shold check first").get_slot().expect("Shold check the data first")
 	}
 }
 

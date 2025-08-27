@@ -1,7 +1,41 @@
+#include <winver.h>
+
 #define IDI_ICON 0x101
 
 IDI_ICON ICON "rusticubes.ico"
 
 #define RT_MANIFEST 24
+#define CREATEPROCESS_MANIFEST_RESOURCE_ID 1
+CREATEPROCESS_MANIFEST_RESOURCE_ID RT_MANIFEST "rusticubes.manifest"
 
-1 RT_MANIFEST "rusticubes.manifest"
+
+
+VS_VERSION_INFO VERSIONINFO
+	FILEVERSION     0,4,9,0    // Version of the file (major, minor, build, revision)
+	PRODUCTVERSION  0,4,9,0    // Version of the product
+	FILEFLAGSMASK   0x3fL
+	FILEFLAGS       0x0L       // VS_FF_DEBUG, VS_FF_PRERELEASE etc. (0x0L for release builds)
+	FILEOS          VOS_NT_WINDOWS32
+	FILETYPE        VFT_APP    // This is an Application! Very important.
+	FILESUBTYPE     VFT2_UNKNOWN
+BEGIN
+	BLOCK "StringFileInfo"
+	BEGIN
+		BLOCK "040904b0"        // Language ID: U.S. English, Unicode
+		BEGIN
+			VALUE "CompanyName",      "NukuHack\0"
+			VALUE "FileDescription",  "RustiCubes - A simple 3D game\0" // Critical: Tells Defender what it is
+			VALUE "FileVersion",      "0.4.9.0\0"
+			VALUE "InternalName",     "rusticubes.exe\0"
+			VALUE "LegalCopyright",   "Copyright (C) 2025, NukuHack.\0"
+			VALUE "OriginalFilename", "rusticubes.exe\0" // Critical: Helps identify the file
+			VALUE "ProductName",      "RustiCubes\0"
+			VALUE "ProductVersion",   "0.4.9.0\0"
+		END
+	END
+
+	BLOCK "VarFileInfo"
+	BEGIN
+		VALUE "Translation", 0x409, 1200 // U.S. English, Unicode
+	END
+END
