@@ -129,57 +129,61 @@ impl Default for RunningAverage {
 
 #[derive(Debug)]
 pub struct FPSCounter {
-	frame_count: u32,
-	last_update: Instant,
-	fps: f64,
-	frame_times: RunningAverage,
-	smoothing_factor: f64,
+    frame_count: u32,
+    last_update: Instant,
+    last_reset: Instant,
+    fps: f64,
+    frame_times: RunningAverage,
+    smoothing_factor: f64,
 }
 
 impl FPSCounter {
-	pub fn new() -> Self {
-		Self {
-			frame_count: 0,
-			last_update: Instant::now(),
-			fps: 0.0,
-			frame_times: RunningAverage::new(),
-			smoothing_factor: 0.95, // Exponential smoothing factor
-		}
-	}
-	
-	pub fn with_smoothing_factor(smoothing_factor: f64) -> Self {
-		Self {
-			smoothing_factor: smoothing_factor.clamp(0.0, 1.0),
-			..Self::new()
-		}
-	}
-	
-	pub fn update(&mut self) -> f64 {
-		let now = Instant::now();
-		let delta_time = now.duration_since(self.last_update).as_secs_f64();
-		self.last_update = now;
-		
-		self.frame_count += 1;
-		
-		// Calculate frame time in milliseconds
-		let frame_time_ms = delta_time * 1000.0;
-		self.frame_times.add(frame_time_ms);
-		
-		// Calculate FPS with exponential smoothing for smoother display
-		let current_fps = 1.0 / delta_time;
-		self.fps = if self.fps == 0.0 {
-			current_fps
-		} else {
-			self.smoothing_factor * self.fps + (1.0 - self.smoothing_factor) * current_fps
-		};
-		
-		// Reset counter every second for accurate average calculation
-		if now.duration_since(self.last_update).as_secs_f64() >= 1.0 {
-			self.frame_count = 0;
-		}
-		
-		self.fps
-	}
+    pub fn new() -> Self {
+        let now = Instant::now();
+        Self {
+            frame_count: 0,
+            last_update: now,
+            last_reset: now,
+            fps: 0.0,
+            frame_times: RunningAverage::new(),
+            smoothing_factor: 0.95,
+        }
+    }
+    
+    pub fn with_smoothing_factor(smoothing_factor: f64) -> Self {
+        Self {
+            smoothing_factor: smoothing_factor.clamp(0.0, 1.0),
+            ..Self::new()
+        }
+    }
+    
+    pub fn update(&mut self) -> f64 {
+        let now = Instant::now();
+        let delta_time = now.duration_since(self.last_update).as_secs_f64();
+        self.last_update = now;
+        
+        self.frame_count += 1;
+        
+        // Calculate frame time in milliseconds
+        let frame_time_ms = delta_time * 1000.0;
+        self.frame_times.add(frame_time_ms);
+        
+        // Calculate FPS with exponential smoothing for smoother display
+        let current_fps = 1.0 / delta_time;
+        self.fps = if self.fps == 0.0 {
+            current_fps
+        } else {
+            self.smoothing_factor * self.fps + (1.0 - self.smoothing_factor) * current_fps
+        };
+        
+        // Reset counter every second for accurate average calculation
+        if now.duration_since(self.last_reset).as_secs_f64() >= 1.0 {
+            self.frame_count = 0;
+            self.last_reset = now;
+        }
+        
+        self.fps
+    }
 	
 	pub fn fps(&self) -> f64 {
 		self.fps

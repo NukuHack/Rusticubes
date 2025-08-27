@@ -454,7 +454,7 @@ pub async fn run() {
 				last_tick += tick_iterval;
 			}
 			*/
-			let fps = state.fps(); if fps < 20.0 { println!("Fps: {:?}", fps); }
+			println!("Fps: {:.2}", state.fps());
 		}
 
 		let Event::WindowEvent { ref event, window_id } = event else { return; };
