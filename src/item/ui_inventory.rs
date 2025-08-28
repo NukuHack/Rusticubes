@@ -431,7 +431,7 @@ impl UIManager {
 	}
 
 	// New method to handle storage UI using actual storage container
-	fn create_storage_area(&mut self, layout: &InventoryLayout, inventory: &Inventory) {
+	#[inline] fn create_storage_area(&mut self, layout: &InventoryLayout, inventory: &Inventory) {
 		let Some(storage_area) = layout.areas.iter().find(|a| a.name == AreaType::Storage) else { return; };
 
 		// Get actual storage data from world
@@ -456,7 +456,7 @@ impl UIManager {
 		self.create_item_slots(&result_area, &result);
 	}
 	
-	fn add_main_panel(&mut self, layout: &InventoryLayout) {
+	#[inline] fn add_main_panel(&mut self, layout: &InventoryLayout) {
 		let inv_config = &ptr::get_settings().inv_config;
 		let panel = UIElement::panel(self.next_id())
 			.with_position(layout.panel_position)
@@ -543,7 +543,7 @@ impl UIManager {
 		self.set_focused_state(FocusState::CursorItem { id });
 	}
 
-	fn create_area_slots(&mut self, area: &AreaLayout) {
+	#[inline] fn create_area_slots(&mut self, area: &AreaLayout) {
 		if area.rows == 0 || area.cols == 0 { return; }
 		let config = &ptr::get_settings();
 		
@@ -560,7 +560,7 @@ impl UIManager {
 			}
 		}
 	}
-	fn create_item_slots(&mut self, area: &AreaLayout, items: &ItemContainer) {
+	#[inline] fn create_item_slots(&mut self, area: &AreaLayout, items: &ItemContainer) {
 		if area.rows == 0 || area.cols == 0 { return; }
 		
 		for row in 0..area.rows {
@@ -573,7 +573,7 @@ impl UIManager {
 		}
 	}
 
-	fn create_item_display(&mut self, x:f32, y:f32, item: &ItemStack, z:i32) -> usize {
+	#[inline] fn create_item_display(&mut self, x:f32, y:f32, item: &ItemStack, z:i32) -> usize {
 		let id = self.next_id();
 		let item_display = UIElement::image(id, item.icon_path().into())
 			.with_position(Vec2::new(x, y))
@@ -582,7 +582,7 @@ impl UIManager {
 			.with_z_index(z);
 		self.add_element(item_display);
 
-		// Add quantity display for stackable items
+		// Add quantity display for stacked items
 		if item.stack() == 1 { return id; }
 
 		let quantity_text = UIElement::label(self.next_id(), item.stack.to_string().into())
