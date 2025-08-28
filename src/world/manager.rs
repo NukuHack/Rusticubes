@@ -5,7 +5,7 @@ use crate::{
 		storage::BlockStorage,
 	},
 	ext::ptr,
-	fs::binary::{BinarySerializable, FixedBinarySerializable},
+	fs::binary::{BinarySerializable, FixedBinarySize},
 	world::main::World,
 };
 use std::{

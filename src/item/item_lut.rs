@@ -1,6 +1,6 @@
 
 use std::{
-	num::NonZeroU32,
+	num::NonZero,
 	cmp::PartialEq,
 	marker::PhantomData,
 };
@@ -156,7 +156,7 @@ impl ItemComp {
 /// All possible property types an item can have
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum PropertyValue {
-	Durability(NonZeroU32),
+	Durability(NonZero<u32>),
 	ToolData(ToolData),
 	ArmorData(ArmorData),
 	Hunger(i16),
@@ -262,7 +262,7 @@ impl<const N: usize> ItemExtendedData<N> {
 		self.set_property(value)
 	}
 
-	#[inline] pub const fn with_durability(self, value: NonZeroU32) -> Self {
+	#[inline] pub const fn with_durability(self, value: NonZero<u32>) -> Self {
 		self.set_property(PropertyValue::Durability(value))
 	}
 	#[inline] pub const fn with_tool(self, value: ToolData) -> Self {
@@ -328,7 +328,7 @@ impl<const N: usize> ItemExtendedData<N> {
 		None
 	}
 
-	#[inline] pub fn get_durability(&self) -> Option<NonZeroU32> {
+	#[inline] pub fn get_durability(&self) -> Option<NonZero<u32>> {
 		self.find_property(|v| match v {
 			PropertyValue::Durability(d) => Some(*d),
 			_ => None,

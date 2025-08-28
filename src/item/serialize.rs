@@ -7,8 +7,11 @@ use crate::item::item_lut::{
 	ItemComp, ItemFlags, ItemExtendedData, PropertyValue, PropertyType,
 	ToolData, ArmorData, EquipmentData, EquipmentSetStruct, BitStorage, TierStorage
 };
-use crate::fs::binary::{BinarySerializable, FixedBinarySerializable, BINARY_SIZE_STRING};
-use std::num::{NonZeroU16, NonZeroU32};
+use crate::fs::binary::{BinarySerializable, FixedBinarySize, BINARY_SIZE_STRING};
+use crate::impl_option_binary;
+use std::num::NonZero;
+
+impl_option_binary!(PropertyValue, PropertyType, CustomData, Box<CustomData>, ItemExtendedData, ItemFilter, ItemStack);
 
 impl BinarySerializable for ItemFlags {
 	fn to_binary(&self) -> Vec<u8> {
@@ -23,7 +26,7 @@ impl BinarySerializable for ItemFlags {
 		Self::BINARY_SIZE
 	}
 }
-impl FixedBinarySerializable for ItemFlags {
+impl FixedBinarySize for ItemFlags {
 	const BINARY_SIZE: usize = u32::BINARY_SIZE;
 }
 
@@ -39,7 +42,7 @@ impl BinarySerializable for MaterialLevel {
 		Self::BINARY_SIZE
 	}
 }
-impl FixedBinarySerializable for MaterialLevel {
+impl FixedBinarySize for MaterialLevel {
 	const BINARY_SIZE: usize = 1;
 }
 // ToolType and ArmorType serialization
@@ -54,7 +57,7 @@ impl BinarySerializable for ToolType {
 		Self::BINARY_SIZE
 	}
 }
-impl FixedBinarySerializable for ToolType {
+impl FixedBinarySize for ToolType {
 	const BINARY_SIZE: usize = 1;
 }
 impl BinarySerializable for ArmorType {
@@ -68,7 +71,7 @@ impl BinarySerializable for ArmorType {
 		Self::BINARY_SIZE
 	}
 }
-impl FixedBinarySerializable for ArmorType {
+impl FixedBinarySize for ArmorType {
 	const BINARY_SIZE: usize = 1;
 }
 // PropertyType serialization
@@ -83,7 +86,7 @@ impl BinarySerializable for PropertyType {
 		Self::BINARY_SIZE
 	}
 }
-impl FixedBinarySerializable for PropertyType {
+impl FixedBinarySize for PropertyType {
 	const BINARY_SIZE: usize = 1;
 }
 
@@ -93,8 +96,8 @@ impl FixedBinarySerializable for PropertyType {
 impl<T, S, TS> BinarySerializable for EquipmentSetStruct<T, S, TS>
 where
 	T: EquipmentType + BasicConversion<T>,
-	S: BitStorage + BinarySerializable + FixedBinarySerializable,
-	TS: TierStorage + BinarySerializable + FixedBinarySerializable,
+	S: BitStorage + BinarySerializable + FixedBinarySize,
+	TS: TierStorage + BinarySerializable + FixedBinarySize,
 {
 	fn to_binary(&self) -> Vec<u8> {
 		let mut data = Vec::new();
@@ -126,7 +129,7 @@ where
 // Fix EquipmentData serialization with proper trait bounds
 impl<T, S> BinarySerializable for EquipmentData<T, S>
 where
-	T: EquipmentType + BinarySerializable + FixedBinarySerializable,
+	T: EquipmentType + BinarySerializable + FixedBinarySize,
 	S: BinarySerializable,
 {
 	fn to_binary(&self) -> Vec<u8> {
@@ -183,7 +186,7 @@ impl BinarySerializable for PropertyValue {
 		data.extend_from_slice(&tag);
 		match self {
 			PropertyValue::Durability(value) => {
-				data.extend_from_slice(&value.get().to_binary());
+				data.extend_from_slice(&value.to_binary());
 			}
 			PropertyValue::ToolData(tool_data) => {
 				data.extend_from_slice(&tool_data.to_binary());
@@ -218,8 +221,7 @@ impl BinarySerializable for PropertyValue {
 		let rest_bytes = &bytes[PropertyType::BINARY_SIZE..];
 		match tag {
 			PropertyType::Durability => {
-				let value = u32::from_binary(rest_bytes)?;
-				let non_zero = NonZeroU32::new(value)?;
+				let non_zero = NonZero::<u32>::from_binary(rest_bytes)?;
 				Some(PropertyValue::Durability(non_zero))
 			}
 			PropertyType::ToolData => {
@@ -279,9 +281,7 @@ impl<const N: usize> BinarySerializable for ItemExtendedData<N> {
 		
 		// Store each property
 		for i in 0..self.len as usize {
-			if let Some(property) = &self.data[i] {
-				data.extend_from_slice(&property.to_binary());
-			}
+			data.extend_from_slice(&self.data[i].to_binary());
 		}
 		
 		data
@@ -300,11 +300,10 @@ impl<const N: usize> BinarySerializable for ItemExtendedData<N> {
 		for i in 0..len as usize {
 			if offset >= bytes.len() { return None; }
 			
-			let property = PropertyValue::from_binary(&bytes[offset..])?;
-			let property_size = property.binary_size();
+			let maybe_property = Option::<PropertyValue>::from_binary(&bytes[offset..])?;
+			offset += maybe_property.binary_size();
 			
-			result.data[i] = Some(property);
-			offset += property_size;
+			result.data[i] = maybe_property;
 		}
 		
 		Some(result)
@@ -313,9 +312,7 @@ impl<const N: usize> BinarySerializable for ItemExtendedData<N> {
 	fn binary_size(&self) -> usize {
 		let mut size = 1; // For the length byte
 		for i in 0..self.len as usize {
-			if let Some(property) = &self.data[i] {
-				size += property.binary_size();
-			}
+			size += self.data[i].binary_size();
 		}
 		size
 	}
@@ -333,15 +330,7 @@ impl BinarySerializable for ItemComp {
 		data.extend_from_slice(&self.flags.to_binary());
 		
 		// Serialize extended data
-		match &self.data {
-			Some(extended_data) => {
-				data.push(1); // Has data flag
-				data.extend_from_slice(&extended_data.to_binary());
-			}
-			None => {
-				data.push(0); // No data flag
-			}
-		}
+		data.extend_from_slice(&self.data.to_binary());
 		
 		data
 	}
@@ -363,13 +352,7 @@ impl BinarySerializable for ItemComp {
 		offset += ItemFlags::BINARY_SIZE;
 
 		// Deserialize extended data
-		let has_data = bytes[offset] != 0;
-		offset += 1;
-		let data = if has_data {
-			Some(ItemExtendedData::from_binary(&bytes[offset..])?)
-		} else {
-			None
-		};
+		let data = Option::<ItemExtendedData>::from_binary(&bytes[offset..])?;
 		
 		Some(ItemComp {
 			name: name.into(),
@@ -382,10 +365,7 @@ impl BinarySerializable for ItemComp {
 	fn binary_size(&self) -> usize {
 		let mut size = self.name.clone().to_string().binary_size(); // name
 		size += u32::BINARY_SIZE + ItemFlags::BINARY_SIZE; // max_stack + flags
-		size += 1; // has_data flag
-		if let Some(data) = &self.data {
-			size += data.binary_size();
-		}
+		size += self.data.binary_size(); // extended data
 		size
 	}
 }
@@ -394,13 +374,8 @@ impl BinarySerializable for CustomData {
 	fn to_binary(&self) -> Vec<u8> {
 		let mut data = Vec::new();
 		
-		// Serialize name (1 byte flag + optional string)
-		if let Some(name) = &self.name {
-			data.push(1); // Has name flag
-			data.extend_from_slice(&name.to_binary());
-		} else {
-			data.push(0); // No name flag
-		}
+		// Serialize name (optional string)
+		data.extend_from_slice(&self.name.to_binary());
 		
 		// Serialize durability (1 byte flag + optional u16)
 		if let Some(durability) = &self.durability {
@@ -419,28 +394,11 @@ impl BinarySerializable for CustomData {
 		let mut offset = 0;
 		
 		// Deserialize name
-		let has_name = bytes[offset] != 0;
-		offset += 1;
-		let name = if has_name {
-			let name_len = u16::from_binary(&bytes[offset..offset+2])? as usize;
-			let name = String::from_binary(&bytes[offset..offset+name_len+2])?;
-			offset += name_len + 2;
-			Some(name)
-		} else {
-			None
-		};
+		let name = Option::<String>::from_binary(&bytes[offset..])?;
+		offset += name.binary_size();
 		
 		// Deserialize durability
-		let has_durability = bytes[offset] != 0;
-		offset += 1;
-		let durability = if has_durability {
-			if bytes.len() < offset + 2 { return None; }
-			let value = u16::from_binary(&bytes[offset..offset+2])?;
-			//offset += 2;
-			NonZeroU16::new(value)
-		} else {
-			None
-		};
+		let durability = Option::<NonZero<u16>>::from_binary(&bytes[offset..])?;
 		
 		Some(CustomData {
 			name,
@@ -449,15 +407,9 @@ impl BinarySerializable for CustomData {
 	}
 	
 	fn binary_size(&self) -> usize {
-		let mut size = 2; // Flags for name and durability
-		
-		if let Some(name) = &self.name {
-			size += 2 + name.len(); // 2 bytes for length + string bytes
-		}
-		
-		if self.durability.is_some() {
-			size += 2; // u16 for durability
-		}
+		let mut size = 0;
+		size += self.name.binary_size(); // string bytes
+		size += self.durability.binary_size(); // u16 for durability
 		
 		size
 	}
@@ -473,13 +425,8 @@ impl BinarySerializable for ItemStack {
 		// Serialize stack count (4 bytes)
 		data.extend_from_slice(&self.stack.to_binary());
 		
-		// Serialize custom data (1 byte flag + optional data)
-		if let Some(custom_data) = &self.data {
-			data.push(1); // Has data flag
-			data.extend_from_slice(&custom_data.to_binary());
-		} else {
-			data.push(0); // No data flag
-		}
+		// Serialize custom data (optional data)
+		data.extend_from_slice(&self.data.to_binary());
 		
 		data
 	}
@@ -490,9 +437,8 @@ impl BinarySerializable for ItemStack {
 		let mut offset = 0;
 		
 		// Deserialize name
-		let name_len = u16::from_binary(&bytes[offset..offset+2])? as usize;
-		let name = String::from_binary(&bytes[offset..offset+name_len+2])?;
-		offset += name_len + 2;
+		let name = String::from_binary(&bytes[offset..])?;
+		offset += name.binary_size();
 		
 		// Deserialize stack count
 		if offset >= bytes.len() { return None; }
@@ -500,14 +446,7 @@ impl BinarySerializable for ItemStack {
 		offset += u32::BINARY_SIZE;
 		
 		// Deserialize custom data
-		if offset >= bytes.len() { return None; }
-		let has_data = bytes[offset] != 0;
-		offset += 1;
-		let data = if has_data {
-			Some(Box::new(CustomData::from_binary(&bytes[offset..])?))
-		} else {
-			None
-		};
+		let data = Option::<Box<CustomData>>::from_binary(&bytes[offset..])?;
 		
 		Some(ItemStack::create(name,stack,data))
 	}
@@ -515,10 +454,7 @@ impl BinarySerializable for ItemStack {
 	fn binary_size(&self) -> usize {
 		let mut size = self.name().to_string().binary_size(); // string bytes
 		size += u32::BINARY_SIZE; // stack count
-		size += 1; // has_data flag (1 byte)
-		if let Some(data) = &self.data {
-			size += data.binary_size();
-		}
+		size += self.data.binary_size(); // optional boxed data
 		size
 	}
 }
@@ -543,7 +479,7 @@ impl BinarySerializable for Slot {
 	}
 }
 
-impl FixedBinarySerializable for Slot {
+impl FixedBinarySize for Slot {
 	const BINARY_SIZE: usize = 2; // rows (1 byte) + cols (1 byte)
 }
 
@@ -570,7 +506,7 @@ impl BinarySerializable for AreaType {
 	}
 }
 
-impl FixedBinarySerializable for AreaType {
+impl FixedBinarySize for AreaType {
 	const BINARY_SIZE: usize = 1;
 }
 
@@ -584,13 +520,8 @@ impl BinarySerializable for ItemContainer {
 		
 		// Serialize items
 		data.extend_from_slice(&self.items().len().to_binary());
-		for item in self.iter() {
-			if let Some(item_stack) = item {
-				data.push(1); // Has item flag
-				data.extend_from_slice(&item_stack.to_binary());
-			} else {
-				data.push(0); // Empty slot flag
-			}
+		for maybe_item in self.iter() {
+			data.extend_from_slice(&maybe_item.to_binary());
 		}
 		
 		data
@@ -618,16 +549,9 @@ impl BinarySerializable for ItemContainer {
 		for _ in 0..item_count {
 			if offset >= bytes.len() { return None; }
 			
-			let has_item = bytes[offset] != 0;
-			offset += 1;
-			
-			if has_item {
-				let item_stack = ItemStack::from_binary(&bytes[offset..])?;
-				offset += item_stack.binary_size();
-				items.push(Some(item_stack));
-			} else {
-				items.push(None);
-			}
+			let maybe_item = Option::<ItemStack>::from_binary(&bytes[offset..])?;
+			offset += maybe_item.binary_size();
+			items.push(maybe_item);
 		}
 		
 		Some(ItemContainer::from_raw(size, items))
@@ -637,11 +561,8 @@ impl BinarySerializable for ItemContainer {
 		let mut size = Slot::BINARY_SIZE; // size
 		size += usize::BINARY_SIZE; // item count
 		
-		for item in self.iter() {
-			size += 1; // has_item flag
-			if let Some(item_stack) = item {
-				size += item_stack.binary_size();
-			}
+		for maybe_item in self.iter() {
+			size += maybe_item.binary_size();
 		}
 		
 		size
@@ -650,39 +571,37 @@ impl BinarySerializable for ItemContainer {
 
 
 impl BinarySerializable for ItemFilter {
-    fn to_binary(&self) -> Vec<u8> {
-        // Implement based on your ItemFilter structure
-        // This is a placeholder - adjust based on your actual ItemFilter implementation
-        Vec::new()
-    }
-    
-    fn from_binary(bytes: &[u8]) -> Option<Self> {
-        // Implement based on your ItemFilter structure
-        Some(ItemFilter::default()) // Placeholder
-    }
-    
-    fn binary_size(&self) -> usize {
-        // Implement based on your ItemFilter structure
-        0
-    }
+	fn to_binary(&self) -> Vec<u8> {
+		// Implement based on your ItemFilter structure
+		// This is a placeholder - adjust based on your actual ItemFilter implementation
+		Vec::new()
+	}
+	
+	fn from_binary(bytes: &[u8]) -> Option<Self> {
+		// Implement based on your ItemFilter structure
+		Some(ItemFilter::default()) // Placeholder
+	}
+	
+	fn binary_size(&self) -> usize {
+		// Implement based on your ItemFilter structure
+		0
+	}
 }
 
 // Implement BinarySerializable for Inventory
 impl BinarySerializable for Inventory {
 	fn to_binary(&self) -> Vec<u8> {
 		let mut data = Vec::new();
-				
+		
 		// Serialize containers
 		data.extend_from_slice(&self.armor().to_binary());
 		data.extend_from_slice(&self.inv().to_binary());
 		data.extend_from_slice(&self.hotbar().to_binary());
 		data.extend_from_slice(&self.crafting_def.to_binary());
-		
 		// Serialize layout (skip for now as it's complex UI data)
-		data.push(0); // Layout flag (not serialized)
 		
-		// Serialize storage pointer (we can't serialize raw pointers, so we'll use a marker)
-		data.push(if self.storage_ptr.is_some() { 1 } else { 0 });
+		// Serialize storage pointer (we can't serialize raw pointers)
+		// will update it to a World pos or something later
 		
 		data
 	}
@@ -705,29 +624,14 @@ impl BinarySerializable for Inventory {
 		
 		if offset >= bytes.len() { return None; }
 		let crafting_def = ItemContainer::from_binary(&bytes[offset..])?;
-		offset += crafting_def.binary_size();
+		//offset += crafting_def.binary_size();
 				
-		// Skip layout (1 byte flag)
-		if offset >= bytes.len() { return None; }
-		offset += 1;
-		
-		// Deserialize storage pointer flag
-		if offset >= bytes.len() { return None; }
-		let has_storage_ptr = bytes[offset] != 0;
-		//offset += 1;
-		
 		Some(Inventory::from_raw(
 			armor,
 			items,
 			hotbar,
 			crafting_def,
-			if has_storage_ptr {
-				// We can't reconstruct the pointer, so we'll set it to null
-				// In a real implementation, you might want to handle this differently
-				Some(std::ptr::null_mut())
-			} else {
-				None
-			}
+			None
 		))
 	}
 	
@@ -738,9 +642,6 @@ impl BinarySerializable for Inventory {
 		size += self.inv().binary_size();
 		size += self.hotbar().binary_size();
 		size += self.crafting_def.binary_size();
-		
-		size += 1; // layout flag (not serialized)
-		size += 1; // storage pointer flag
 		
 		size
 	}

@@ -1,7 +1,7 @@
 
 
 use crate::{
-	fs::binary::{BinarySerializable, FixedBinarySerializable},
+	fs::binary::{BinarySerializable, FixedBinarySize},
 	utils::time::Time,
 };
 use std::{

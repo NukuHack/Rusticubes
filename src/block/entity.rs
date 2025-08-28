@@ -32,15 +32,15 @@ pub enum StorageProperties {
 	None,
 	Push {
 		rate: u32,    // Items per tick
-		cooldown: u32, // Ticks between transfers
-		transfer_direction: IVec3,
+		cooldown: u16, // Ticks between transfers - max is nearly an hour
+		direction: IVec3,
 		filter: Option<ItemFilter>, // What items can transfer
 	},
 	Pull {
-		rate: u32,    // Items per tick
-		cooldown: u32, // Ticks between transfers
-		transfer_direction: IVec3,
-		filter: Option<ItemFilter>, // What items can transfer
+		rate: u32,
+		cooldown: u16,
+		direction: IVec3,
+		filter: Option<ItemFilter>,
 	},
 	
 }
@@ -56,7 +56,7 @@ impl StorageProperties {
 pub struct BlockEntity {
 	pub storage: ItemContainer,
 	pub properties: StorageProperties,
-	pub cooldown_ticks: u32, // Current cooldown counter
+	//pub cooldown: u32, // Current cooldown counter
 }
 
 impl BlockEntity {
@@ -64,7 +64,7 @@ impl BlockEntity {
 		Self {
 			storage: items,
 			properties: StorageProperties::default(),
-			cooldown_ticks: 0,
+			//cooldown: 0,
 		}
 	}
 }
