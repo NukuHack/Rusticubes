@@ -1,4 +1,5 @@
 
+use crate::item::filter::ItemFilter;
 use crate::item::items::{ItemStack, CustomData};
 use crate::item::inventory::{Inventory, ItemContainer, Slot, AreaType};
 use crate::item::material::{ArmorType, ToolType, MaterialLevel, EquipmentType, BasicConversion};
@@ -645,6 +646,25 @@ impl BinarySerializable for ItemContainer {
 		
 		size
 	}
+}
+
+
+impl BinarySerializable for ItemFilter {
+    fn to_binary(&self) -> Vec<u8> {
+        // Implement based on your ItemFilter structure
+        // This is a placeholder - adjust based on your actual ItemFilter implementation
+        Vec::new()
+    }
+    
+    fn from_binary(bytes: &[u8]) -> Option<Self> {
+        // Implement based on your ItemFilter structure
+        Some(ItemFilter::default()) // Placeholder
+    }
+    
+    fn binary_size(&self) -> usize {
+        // Implement based on your ItemFilter structure
+        0
+    }
 }
 
 // Implement BinarySerializable for Inventory

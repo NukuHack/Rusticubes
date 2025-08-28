@@ -3,6 +3,7 @@ use crate::{
 	block::{
 		math::{LocalPos, ChunkCoord},
 		main::{Block, Chunk},
+		entity::BlockEntity,
 	}, ptr,
 	world::threading::PriorityChunk,
 	item::inventory::ItemContainer,
@@ -12,9 +13,9 @@ use std::{
 	hash::BuildHasherDefault,
 	sync::{atomic::{AtomicBool, AtomicUsize}, Arc, Mutex},
 };
-use ahash::AHasher;
-use glam::{IVec3, Vec3};
 use crossbeam::channel::{bounded, Sender, Receiver};
+use glam::{IVec3, Vec3};
+use ahash::AHasher;
 
 // Type aliases for better readability
 type FastMap<K, V> = HashMap<K, V, BuildHasherDefault<AHasher>>;
@@ -66,7 +67,7 @@ impl World {
 		self.chunks.get_mut(coord)
 	}
 
-	#[inline] pub fn remove_storage(&mut self, world_pos: IVec3) -> Option<ItemContainer> {
+	#[inline] pub fn remove_storage(&mut self, world_pos: IVec3) -> Option<BlockEntity> {
 		let chunk_coord = ChunkCoord::from_world_pos(world_pos);
 		let local_pos: LocalPos = LocalPos::from(world_pos);
 

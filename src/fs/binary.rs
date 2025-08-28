@@ -1,5 +1,6 @@
 
 use crate::utils::time::Time;
+use glam::IVec3;
 
 // Trait for binary serialization
 
@@ -168,6 +169,38 @@ impl BinarySerializable for i32 {
 }
 impl FixedBinarySerializable for i32 {
 	const BINARY_SIZE: usize = 4;
+}
+
+
+
+
+// some glam types
+impl BinarySerializable for IVec3 {
+	fn to_binary(&self) -> Vec<u8> {
+		let mut data = Vec::new();
+		data.extend_from_slice(&self.x.to_binary());
+		data.extend_from_slice(&self.y.to_binary());
+		data.extend_from_slice(&self.z.to_binary());
+		data
+	}
+	
+	fn from_binary(bytes: &[u8]) -> Option<Self> {
+		if bytes.len() < 12 {
+			return None;
+		}
+		let x = i32::from_binary(&bytes[0..4])?;
+		let y = i32::from_binary(&bytes[4..8])?;
+		let z = i32::from_binary(&bytes[8..12])?;
+		Some(IVec3::new(x, y, z))
+	}
+	
+	fn binary_size(&self) -> usize {
+		12
+	}
+}
+
+impl FixedBinarySerializable for IVec3 {
+	const BINARY_SIZE: usize = 12;
 }
 
 

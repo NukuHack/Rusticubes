@@ -1,18 +1,79 @@
 // Block entity
 use crate::item::inventory::ItemContainer;
+use crate::item::filter::ItemFilter;
 use crate::block::math::LocalPos;
 use crate::block::main::Chunk;
 use std::collections::HashMap;
 use std::hash::BuildHasherDefault;
 use ahash::AHasher;
+use glam::IVec3;
 
 type FastMap<K, V> = HashMap<K, V, BuildHasherDefault<AHasher>>;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[repr(u8)]
+pub enum StorageAction {
+	None = 0,
+	Push = 1,
+	Pull = 2,
+}
+
+impl StorageAction {
+	#[inline] pub fn to_u8(&self) -> u8 {
+		*self as u8
+	}
+	#[inline] pub fn from_u8(value:u8) -> Self {
+		unsafe { std::mem::transmute(value) }
+	}
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum StorageProperties {
+	None,
+	Push {
+		rate: u32,    // Items per tick
+		cooldown: u32, // Ticks between transfers
+		transfer_direction: IVec3,
+		filter: Option<ItemFilter>, // What items can transfer
+	},
+	Pull {
+		rate: u32,    // Items per tick
+		cooldown: u32, // Ticks between transfers
+		transfer_direction: IVec3,
+		filter: Option<ItemFilter>, // What items can transfer
+	},
+	
+}
+
+impl StorageProperties {
+	pub fn default() -> Self {
+		Self::None
+	}
+}
+
+// Add to your block entity data
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct BlockEntity {
+	pub storage: ItemContainer,
+	pub properties: StorageProperties,
+	pub cooldown_ticks: u32, // Current cooldown counter
+}
+
+impl BlockEntity {
+	pub fn from_item(items: ItemContainer) -> Self {
+		Self {
+			storage: items,
+			properties: StorageProperties::default(),
+			cooldown_ticks: 0,
+		}
+	}
+}
 
 #[derive(Clone, PartialEq, Debug)]
 pub enum EntityStorage {
 	Empty, // 1 byte
-	Sparse(FastMap<LocalPos, ItemContainer>), // small storage
-	Dense(Box<[Option<ItemContainer>; Chunk::VOLUME]>), // For >25% density
+	Sparse(FastMap<LocalPos, BlockEntity>), // small storage
+	Dense(Box<[Option<BlockEntity>; Chunk::VOLUME]>), // For >25% density
 }
 
 impl EntityStorage {
@@ -22,7 +83,7 @@ impl EntityStorage {
 	pub fn is_some(&self) -> bool { !matches!(self, EntityStorage::Empty) }
 
 	/// Adds an entity at the given position
-	pub fn add(&mut self, pos: LocalPos, entity: ItemContainer) {
+	pub fn add(&mut self, pos: LocalPos, entity: BlockEntity) {
 		match self {
 			EntityStorage::Empty => {
 				let mut map = FastMap::with_capacity_and_hasher(5, BuildHasherDefault::<AHasher>::default());
@@ -43,7 +104,7 @@ impl EntityStorage {
 	}
 
 	/// Removes an entity at the given position
-	pub fn remove(&mut self, pos: LocalPos) -> Option<ItemContainer> {
+	pub fn remove(&mut self, pos: LocalPos) -> Option<BlockEntity> {
 		match self {
 			EntityStorage::Empty => None,
 			EntityStorage::Sparse(map) => {
@@ -65,7 +126,7 @@ impl EntityStorage {
 	}
 
 	/// Gets a reference to an entity at the given position
-	pub fn get(&self, pos: LocalPos) -> Option<&ItemContainer> {
+	pub fn get(&self, pos: LocalPos) -> Option<&BlockEntity> {
 		match self {
 			EntityStorage::Empty => None,
 			EntityStorage::Sparse(map) => map.get(&pos),
@@ -73,7 +134,7 @@ impl EntityStorage {
 		}
 	}
 	/// Gets a mutable reference to an entity at the given position
-	pub fn get_mut(&mut self, pos: LocalPos) -> Option<&mut ItemContainer> {
+	pub fn get_mut(&mut self, pos: LocalPos) -> Option<&mut BlockEntity> {
 		match self {
 			EntityStorage::Empty => None,
 			EntityStorage::Sparse(map) => map.get_mut(&pos),
@@ -132,7 +193,7 @@ impl EntityStorage {
 	}
 
 	/// Iterates over all entities with their positions
-	pub fn iter(&self) -> Box<dyn Iterator<Item = (LocalPos, &ItemContainer)> + '_> {
+	pub fn iter(&self) -> Box<dyn Iterator<Item = (LocalPos, &BlockEntity)> + '_> {
 		match self {
 			EntityStorage::Empty => Box::new(std::iter::empty()),
 			EntityStorage::Sparse(map) => Box::new(map.iter().map(|(pos, entity)| (*pos, entity))),
@@ -146,7 +207,7 @@ impl EntityStorage {
 		}
 	}
 	/// Iterates over all entities mutably with their positions
-	pub fn iter_mut(&mut self) -> Box<dyn Iterator<Item = (LocalPos, &mut ItemContainer)> + '_> {
+	pub fn iter_mut(&mut self) -> Box<dyn Iterator<Item = (LocalPos, &mut BlockEntity)> + '_> {
 		match self {
 			EntityStorage::Empty => Box::new(std::iter::empty()),
 			EntityStorage::Sparse(map) => Box::new(map.iter_mut().map(|(pos, entity)| (*pos, entity))),
@@ -166,11 +227,11 @@ impl EntityStorage {
 			EntityStorage::Empty => std::mem::size_of::<Self>(),
 			EntityStorage::Sparse(map) => {
 				std::mem::size_of::<Self>() + 
-				map.capacity() * (std::mem::size_of::<LocalPos>() + std::mem::size_of::<ItemContainer>())
+				map.capacity() * (std::mem::size_of::<LocalPos>() + std::mem::size_of::<BlockEntity>())
 			}
 			EntityStorage::Dense(_) => {
 				std::mem::size_of::<Self>() + 
-				Chunk::VOLUME * std::mem::size_of::<Option<ItemContainer>>()
+				Chunk::VOLUME * std::mem::size_of::<Option<BlockEntity>>()
 			}
 		}
 	}
@@ -205,26 +266,27 @@ impl EntityStorage {
 impl Chunk {
 	/// Adds an entity at the given position
 	#[inline]
-	pub fn add_entity(&mut self, pos: LocalPos, entity: ItemContainer) {
-		self.entities_mut().add(pos, entity);
+	pub fn add_entity(&mut self, pos: LocalPos, items: ItemContainer) {
+		let bentity = BlockEntity::from_item(items);
+		self.entities_mut().add(pos, bentity);
 	}
 
 	/// Removes an entity at the given position
 	#[inline]
-	pub fn remove_entity(&mut self, pos: LocalPos) -> Option<ItemContainer> {
+	pub fn remove_entity(&mut self, pos: LocalPos) -> Option<BlockEntity> {
 		self.entities_mut().remove(pos)
 	}
 
 	/// Gets a reference to an entity at the given position
 	#[inline]
 	pub fn get_entity(&self, pos: LocalPos) -> Option<&ItemContainer> {
-		self.entities().get(pos)
+		self.entities().get(pos).map(|inner| &inner.storage)
 	}
 
 	/// Gets a mutable reference to an entity at the given position
 	#[inline]
 	pub fn get_entity_mut(&mut self, pos: LocalPos) -> Option<&mut ItemContainer> {
-		self.entities_mut().get_mut(pos)
+		self.entities_mut().get_mut(pos).map(|inner| &mut inner.storage)
 	}
 
 	/// Checks if an entity exists at the given position

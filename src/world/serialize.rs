@@ -1,4 +1,8 @@
 
+use crate::block::entity::StorageAction;
+use crate::block::entity::BlockEntity;
+use crate::block::entity::StorageProperties;
+use crate::item::filter::ItemFilter;
 use crate::item::inventory::ItemContainer;
 use crate::block::entity::EntityStorage;
 use crate::block::math::{BlockRotation, ChunkCoord, LocalPos};
@@ -8,6 +12,7 @@ use crate::fs::binary::{BinarySerializable, FixedBinarySerializable};
 use std::collections::HashMap;
 use std::hash::BuildHasherDefault;
 use ahash::AHasher;
+use glam::IVec3;
 
 type FastMap<K, V> = HashMap<K, V, BuildHasherDefault<AHasher>>;
 
@@ -268,6 +273,7 @@ impl BinarySerializable for BlockStorage {
 	}
 }
 
+
 impl BinarySerializable for EntityStorage {
 	fn to_binary(&self) -> Vec<u8> {
 		let mut data = Vec::new();
@@ -329,7 +335,7 @@ impl BinarySerializable for EntityStorage {
 					let pos = LocalPos::from_binary(&bytes[offset..offset + LocalPos::BINARY_SIZE])?;
 					offset += LocalPos::BINARY_SIZE;
 					
-					let container = ItemContainer::from_binary(&bytes[offset..])?;
+					let container = BlockEntity::from_binary(&bytes[offset..])?;
 					offset += container.binary_size();
 					
 					map.insert(pos, container);
@@ -350,7 +356,7 @@ impl BinarySerializable for EntityStorage {
 					// Read presence marker
 					if bytes[offset] == 1 {
 						offset += 1;
-						let container = ItemContainer::from_binary(&bytes[offset..])?;
+						let container = BlockEntity::from_binary(&bytes[offset..])?;
 						offset += container.binary_size();
 						array[i] = Some(container);
 					} else {
@@ -391,6 +397,209 @@ impl BinarySerializable for EntityStorage {
 			}
 		}
 	}
+}
+
+impl BinarySerializable for BlockEntity {
+	fn to_binary(&self) -> Vec<u8> {
+		let mut data = Vec::new();
+		
+		data.extend_from_slice(&self.storage.to_binary());
+		data.extend_from_slice(&self.properties.to_binary());
+		data.extend_from_slice(&self.cooldown_ticks.to_binary());
+		
+		data
+	}
+	
+	fn from_binary(bytes: &[u8]) -> Option<Self> {
+		let mut offset = 0;
+		
+		let storage = ItemContainer::from_binary(&bytes[offset..])?;
+		offset += storage.binary_size();
+		
+		let properties = StorageProperties::from_binary(&bytes[offset..])?;
+		offset += properties.binary_size();
+		
+		let cooldown_ticks = u32::from_binary(&bytes[offset..offset + 4])?;
+		
+		Some(BlockEntity {
+			storage,
+			properties,
+			cooldown_ticks,
+		})
+	}
+	
+	fn binary_size(&self) -> usize {
+		self.storage.binary_size() + self.properties.binary_size() + 4
+	}
+}
+
+impl BinarySerializable for StorageProperties {
+	fn to_binary(&self) -> Vec<u8> {
+		let mut data = Vec::new();
+		
+		match self {
+			StorageProperties::None => {
+				data.push(0); // Variant tag for None
+			}
+			StorageProperties::Push {
+				rate,
+				cooldown,
+				transfer_direction,
+				filter,
+			} => {
+				data.push(1); // Variant tag for Push
+				data.extend_from_slice(&rate.to_binary());
+				data.extend_from_slice(&cooldown.to_binary());
+				data.extend_from_slice(&transfer_direction.to_binary());
+				
+				// Serialize filter (1 byte flag + optional filter data)
+				if let Some(f) = filter {
+					data.push(1); // Has filter flag
+					data.extend_from_slice(&f.to_binary());
+				} else {
+					data.push(0); // No filter flag
+				}
+			}
+			StorageProperties::Pull {
+				rate,
+				cooldown,
+				transfer_direction,
+				filter,
+			} => {
+				data.push(2); // Variant tag for Pull
+				data.extend_from_slice(&rate.to_binary());
+				data.extend_from_slice(&cooldown.to_binary());
+				data.extend_from_slice(&transfer_direction.to_binary());
+				
+				// Serialize filter
+				if let Some(f) = filter {
+					data.push(1); // Has filter flag
+					data.extend_from_slice(&f.to_binary());
+				} else {
+					data.push(0); // No filter flag
+				}
+			}
+		}
+		
+		data
+	}
+	
+	fn from_binary(bytes: &[u8]) -> Option<Self> {
+		if bytes.is_empty() {
+			return None;
+		}
+		
+		let variant = bytes[0];
+		let mut offset = 1;
+		
+		match variant {
+			0 => Some(StorageProperties::None),
+			1 => {
+				if bytes.len() < offset + 8 + IVec3::BINARY_SIZE + 1 {
+					return None;
+				}
+				
+				let rate = u32::from_binary(&bytes[offset..offset + 4])?;
+				offset += 4;
+				let cooldown = u32::from_binary(&bytes[offset..offset + 4])?;
+				offset += 4;
+				let transfer_direction = IVec3::from_binary(&bytes[offset..offset + IVec3::BINARY_SIZE])?;
+				offset += IVec3::BINARY_SIZE;
+				
+				let has_filter = bytes[offset] != 0;
+				offset += 1;
+				let filter = if has_filter {
+					Some(ItemFilter::from_binary(&bytes[offset..])?)
+				} else {
+					None
+				};
+				
+				Some(StorageProperties::Push {
+					rate,
+					cooldown,
+					transfer_direction,
+					filter,
+				})
+			}
+			2 => {
+				if bytes.len() < offset + 8 + IVec3::BINARY_SIZE + 1 {
+					return None;
+				}
+				
+				let rate = u32::from_binary(&bytes[offset..offset + 4])?;
+				offset += 4;
+				let cooldown = u32::from_binary(&bytes[offset..offset + 4])?;
+				offset += 4;
+				let transfer_direction = IVec3::from_binary(&bytes[offset..offset + IVec3::BINARY_SIZE])?;
+				offset += IVec3::BINARY_SIZE;
+				
+				let has_filter = bytes[offset] != 0;
+				offset += 1;
+				let filter = if has_filter {
+					Some(ItemFilter::from_binary(&bytes[offset..])?)
+				} else {
+					None
+				};
+				
+				Some(StorageProperties::Pull {
+					rate,
+					cooldown,
+					transfer_direction,
+					filter,
+				})
+			}
+			_ => None,
+		}
+	}
+	
+	fn binary_size(&self) -> usize {
+		let mut size = 1; // Variant tag
+		
+		match self {
+			StorageProperties::None => {}
+			StorageProperties::Push {
+				rate: _,
+				cooldown: _,
+				transfer_direction: _,
+				filter,
+			}
+			| StorageProperties::Pull {
+				rate: _,
+				cooldown: _,
+				transfer_direction: _,
+				filter,
+			} => {
+				size += 8; // rate + cooldown (u32 each)
+				size += IVec3::BINARY_SIZE; // transfer_direction
+				size += 1; // filter flag
+				if let Some(f) = filter {
+					size += f.binary_size();
+				}
+			}
+		}
+		
+		size
+	}
+}
+impl BinarySerializable for StorageAction {
+	fn to_binary(&self) -> Vec<u8> {
+		vec![self.to_u8()]
+	}
+	
+	fn from_binary(bytes: &[u8]) -> Option<Self> {
+		if bytes.is_empty() {
+			return None;
+		}
+		Some(Self::from_u8(bytes[0]))
+	}
+	
+	fn binary_size(&self) -> usize {
+		1
+	}
+}
+
+impl FixedBinarySerializable for StorageAction {
+	const BINARY_SIZE: usize = 1;
 }
 
 impl BinarySerializable for Chunk {

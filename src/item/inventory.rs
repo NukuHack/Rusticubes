@@ -10,7 +10,7 @@ pub enum AreaType {
 	Armor,  Storage, Output 
 }
 
-#[derive(PartialEq, Clone, Copy, Debug)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Slot { rows: u8, cols: u8 }
 
 impl Slot {
@@ -41,7 +41,7 @@ pub const DEFAULT_INV_ROWS: u8 = 3;
 pub const DEFAULT_INV_COLS: u8 = 7;
 
 /// A unified container for items that can handle both 1D and 2D layouts
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ItemContainer {
 	items: Vec<Option<ItemStack>>,
 	size: Slot,

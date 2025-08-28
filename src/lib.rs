@@ -66,6 +66,8 @@ pub mod item {
 	pub mod serialize;
 	/// Json de-serialization for items
 	pub mod item_json;
+	// Itemfilter
+	pub mod filter;
 	/// Basic corner-stone of the item system
 	pub mod material;
 	/// Main inventory implementation, and Item grid impl.
